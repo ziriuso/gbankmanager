@@ -1,5 +1,9 @@
 local assert = require("tests.helpers.assert")
 local addonName, ns, loaded = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
+local testContext = rawget(_G, "GBankManagerTestContext") or {}
+local store = testContext.store
+local permissions = testContext.permissions
+local db = store and store.CreateFreshDatabase("My Guild")
 
 assert.equal("GBankManager", addonName, "toc should load the addon by name")
 assert.equal("GBankManager", ns.addonName, "namespace should expose addon name")
@@ -12,3 +16,11 @@ assert.truthy(type(ns.modules.slash) == "table", "slash module should populate t
 assert.same(ns, loaded[1].value, "namespace chunk should return the shared namespace table")
 assert.same(ns.modules.events, loaded[4].value, "events chunk should return the shared events module")
 assert.same(ns.modules.slash, loaded[5].value, "slash chunk should return the shared slash module")
+assert.truthy(type(store) == "table", "store module should be loaded for specs")
+assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
+assert.truthy(type(db) == "table", "fresh db should be created")
+assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
+assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
+assert.truthy(db.requests ~= nil, "requests table should exist")
+assert.truthy(permissions.CanApproveRequests("OFFICER"), "officers should approve requests")
+assert.truthy(not permissions.CanViewInventory("MEMBER"), "members should not view inventory")
