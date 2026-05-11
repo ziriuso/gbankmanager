@@ -17,5 +17,11 @@ Domain/Exports.lua
 Domain/Requests.lua
 Bootstrap.lua
 Features/GuildBankScanner.lua
+UI/MainFrame.lua
+UI/DashboardView.lua
+UI/InventoryView.lua
+UI/HistoryView.lua
+UI/ExportsView.lua
+UI/ExportDialog.lua
 Core/Events.lua
 Core/SlashCommands.lua

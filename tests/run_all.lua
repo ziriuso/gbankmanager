@@ -12,6 +12,7 @@ local specs = {
     "tests/spec/planning_spec.lua",
     "tests/spec/requests_spec.lua",
     "tests/spec/store_spec.lua",
+    "tests/spec/ui_spec.lua",
 }
 
 for _, path in ipairs(specs) do
