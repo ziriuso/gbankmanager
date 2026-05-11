@@ -1,10 +1,11 @@
-local ns = dofile("GBankManager/Core/Namespace.lua")
+local _, ns = ...
 
-ns.constants = {
-    SCHEMA_VERSION = 1,
-    ADDON_PREFIX = "GBankManager",
-    INTERACTION_TYPE = 10,
-    SLOTS_PER_TAB = 98,
-}
+ns = ns or {}
+ns.constants = ns.constants or {}
+
+ns.constants.SCHEMA_VERSION = 1
+ns.constants.ADDON_PREFIX = "GBankManager"
+ns.constants.INTERACTION_TYPE = 10
+ns.constants.SLOTS_PER_TAB = 98
 
 return ns.constants

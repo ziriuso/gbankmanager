@@ -1,5 +1,7 @@
-local ns = dofile("GBankManager/Bootstrap.lua")
+local _, ns = ...
 
-ns.modules.slash = {}
+ns = ns or {}
+ns.modules = ns.modules or {}
+ns.modules.slash = ns.modules.slash or {}
 
 return ns.modules.slash
