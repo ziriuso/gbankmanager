@@ -6,6 +6,10 @@
 
 Core/Namespace.lua
 Core/Constants.lua
+Data/Defaults.lua
+Data/Migrations.lua
+Data/Store.lua
+Domain/Permissions.lua
 Bootstrap.lua
 Core/Events.lua
 Core/SlashCommands.lua
