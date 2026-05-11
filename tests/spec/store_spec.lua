@@ -23,6 +23,11 @@ local futureDb = {
 }
 local normalizedFuture = migrations and migrations.Apply(futureDb)
 
+local loadedByPath = {}
+for _, entry in ipairs(loaded) do
+    loadedByPath[entry.path] = entry.value
+end
+
 assert.equal("GBankManager", addonName, "toc should load the addon by name")
 assert.equal("GBankManager", ns.addonName, "namespace should expose addon name")
 assert.truthy(type(ns.modules) == "table", "namespace should expose module table")
@@ -31,12 +36,12 @@ assert.truthy(type(ns.constants) == "table", "constants should populate the shar
 assert.equal(1, ns.constants.SCHEMA_VERSION, "constants should expose schema version")
 assert.truthy(type(ns.modules.events) == "table", "events module should populate the shared namespace")
 assert.truthy(type(ns.modules.slash) == "table", "slash module should populate the shared namespace")
-assert.same(ns, loaded[1].value, "namespace chunk should return the shared namespace table")
-assert.same(ns.modules.store, loaded[5].value, "store chunk should return the shared store module")
-assert.same(ns.modules.permissions, loaded[6].value, "permissions chunk should return the shared permissions module")
-assert.same(ns, loaded[7].value, "bootstrap chunk should return the shared namespace table")
-assert.same(ns.modules.events, loaded[8].value, "events chunk should return the shared events module")
-assert.same(ns.modules.slash, loaded[9].value, "slash chunk should return the shared slash module")
+assert.same(ns, loadedByPath["GBankManager/Core/Namespace.lua"], "namespace chunk should return the shared namespace table")
+assert.same(ns.modules.store, loadedByPath["GBankManager/Data/Store.lua"], "store chunk should return the shared store module")
+assert.same(ns.modules.permissions, loadedByPath["GBankManager/Domain/Permissions.lua"], "permissions chunk should return the shared permissions module")
+assert.same(ns, loadedByPath["GBankManager/Bootstrap.lua"], "bootstrap chunk should return the shared namespace table")
+assert.same(ns.modules.events, loadedByPath["GBankManager/Core/Events.lua"], "events chunk should return the shared events module")
+assert.same(ns.modules.slash, loadedByPath["GBankManager/Core/SlashCommands.lua"], "slash chunk should return the shared slash module")
 assert.truthy(type(store) == "table", "store module should be loaded for specs")
 assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
 assert.truthy(type(migrations) == "table", "migrations module should be loaded for specs")

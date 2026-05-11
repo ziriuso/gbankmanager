@@ -11,10 +11,6 @@ end
 
 local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 
-load_module("GBankManager/Domain/Snapshots.lua", addonName, ns)
-load_module("GBankManager/Domain/Diff.lua", addonName, ns)
-load_module("GBankManager/Features/GuildBankScanner.lua", addonName, ns)
-
 local snapshots = ns.modules.snapshots
 local diff = ns.modules.diff
 local scanner = ns.modules.scanner
@@ -50,6 +46,8 @@ local previous = {
 
 local changes = diff.BuildChangeLog(previous, snapshot)
 
+assert.truthy(type(snapshots) == "table", "snapshots module should load from the toc")
+assert.truthy(type(diff) == "table", "diff module should load from the toc")
 assert.truthy(type(scanner) == "table", "scanner module should load")
 assert.equal(10, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
 assert.equal("QUANTITY_INCREASED", changes[1].type, "diff should report quantity increase")

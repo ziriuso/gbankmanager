@@ -8,6 +8,9 @@ dofile("tests/helpers/wow_stubs.lua")
 
 local specs = {
     "tests/spec/diff_spec.lua",
+    "tests/spec/exports_spec.lua",
+    "tests/spec/planning_spec.lua",
+    "tests/spec/requests_spec.lua",
     "tests/spec/store_spec.lua",
 }
 

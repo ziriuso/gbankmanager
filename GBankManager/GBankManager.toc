@@ -10,6 +10,12 @@ Data/Defaults.lua
 Data/Migrations.lua
 Data/Store.lua
 Domain/Permissions.lua
+Domain/Snapshots.lua
+Domain/Diff.lua
+Domain/Planning.lua
+Domain/Exports.lua
+Domain/Requests.lua
 Bootstrap.lua
+Features/GuildBankScanner.lua
 Core/Events.lua
 Core/SlashCommands.lua
