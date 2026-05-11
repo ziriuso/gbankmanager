@@ -23,6 +23,7 @@ function requests.Create(input)
 
     return {
         requestId = input.requestId or tostring(_G.time()),
+        requester = input.requester,
         role = input.role,
         itemID = input.itemID,
         itemName = input.itemName,
@@ -30,7 +31,27 @@ function requests.Create(input)
         note = input.note or "",
         approval = autoApproved and "APPROVED" or "PENDING",
         fulfillment = "OPEN",
+        createdAt = input.createdAt or _G.time(),
     }
+end
+
+function requests.Approve(request, approver, decidedAt)
+    request.approval = "APPROVED"
+    request.approvedBy = approver
+    request.decidedAt = decidedAt or _G.time()
+    return request
+end
+
+function requests.MarkSuggestedFulfilled(request, updatedAt)
+    request.fulfillment = "SUGGESTED_FULFILLED"
+    request.fulfillmentUpdatedAt = updatedAt or _G.time()
+    return request
+end
+
+function requests.Reopen(request, updatedAt)
+    request.fulfillment = "OPEN"
+    request.fulfillmentUpdatedAt = updatedAt or _G.time()
+    return request
 end
 
 ns.modules.requests = requests

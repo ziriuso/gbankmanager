@@ -16,19 +16,48 @@ local function ensure_row(plan, itemID, itemName)
                 ONE_TIME_TARGET = 0,
                 REQUEST = 0,
             },
+            details = {},
         }
     end
 
     return plan[itemID]
 end
 
-local function current_count(snapshot, itemID)
+local function current_total(snapshot, itemID)
     local item = snapshot.items[itemID]
     if item == nil then
         return 0
     end
 
     return item.totalCount or 0
+end
+
+local function current_scope_count(snapshot, itemID, rule)
+    if rule.scope ~= "TAB" then
+        return current_total(snapshot, itemID)
+    end
+
+    local item = snapshot.items[itemID]
+    if item == nil then
+        return 0
+    end
+
+    local tabs = item.tabs or {}
+    return tabs[rule.tabName] or 0
+end
+
+local function add_detail(row, source, amount, input)
+    if amount <= 0 then
+        return
+    end
+
+    table.insert(row.details, {
+        source = source,
+        quantity = amount,
+        scope = input.scope or "GLOBAL",
+        tabName = input.tabName,
+        note = input.note,
+    })
 end
 
 function planning.BuildDemandPlan(input)
@@ -39,18 +68,20 @@ function planning.BuildDemandPlan(input)
     snapshot.items = snapshot.items or {}
 
     for _, minimum in ipairs(input.minimums or {}) do
-        local shortage = math.max(0, (minimum.quantity or 0) - current_count(snapshot, minimum.itemID))
+        local shortage = math.max(0, (minimum.quantity or 0) - current_scope_count(snapshot, minimum.itemID, minimum))
         local row = ensure_row(plan, minimum.itemID, minimum.itemName)
         row.sources.RESTOCK = row.sources.RESTOCK + shortage
         row.totalToBuy = row.totalToBuy + shortage
+        add_detail(row, "RESTOCK", shortage, minimum)
     end
 
     for _, target in ipairs(input.oneTimeTargets or {}) do
         if target.status == "OPEN" then
-            local shortage = math.max(0, (target.quantity or 0) - current_count(snapshot, target.itemID))
+            local shortage = math.max(0, (target.quantity or 0) - current_scope_count(snapshot, target.itemID, target))
             local row = ensure_row(plan, target.itemID, target.itemName)
             row.sources.ONE_TIME_TARGET = row.sources.ONE_TIME_TARGET + shortage
             row.totalToBuy = row.totalToBuy + shortage
+            add_detail(row, "ONE_TIME_TARGET", shortage, target)
         end
     end
 
@@ -59,6 +90,7 @@ function planning.BuildDemandPlan(input)
             local row = ensure_row(plan, request.itemID, request.itemName)
             row.sources.REQUEST = row.sources.REQUEST + (request.quantity or 0)
             row.totalToBuy = row.totalToBuy + (request.quantity or 0)
+            add_detail(row, "REQUEST", request.quantity or 0, request)
         end
     end
 
