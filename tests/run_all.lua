@@ -7,6 +7,7 @@ package.path = table.concat({
 dofile("tests/helpers/wow_stubs.lua")
 
 local specs = {
+    "tests/spec/diff_spec.lua",
     "tests/spec/store_spec.lua",
 }
 
