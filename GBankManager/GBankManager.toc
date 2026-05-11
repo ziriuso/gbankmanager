@@ -1,0 +1,11 @@
+## Interface: 110100
+## Title: GBankManager
+## Notes: Guild bank inventory and procurement manager
+## Author: ziriuso
+## SavedVariables: GBankManagerDB
+
+Core/Namespace.lua
+Core/Constants.lua
+Bootstrap.lua
+Core/Events.lua
+Core/SlashCommands.lua
