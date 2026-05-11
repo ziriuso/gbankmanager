@@ -28,6 +28,61 @@ function scanner.BeginScan()
     scanner.waitingForTab = nil
 end
 
+function scanner.QueueAccessibleTabs()
+    scanner.tabsToScan = {}
+
+    local tabCount = 0
+    if type(_G.GetNumGuildBankTabs) == "function" then
+        tabCount = _G.GetNumGuildBankTabs() or 0
+    end
+
+    for tabIndex = 1, tabCount do
+        local _, _, isViewable = _G.GetGuildBankTabInfo(tabIndex)
+        if isViewable then
+            table.insert(scanner.tabsToScan, tabIndex)
+        end
+    end
+
+    return scanner.tabsToScan
+end
+
+function scanner.ReadCurrentTab(tabIndex)
+    local tabName = "Tab " .. tostring(tabIndex)
+    if type(_G.GetGuildBankTabInfo) == "function" then
+        tabName = (_G.GetGuildBankTabInfo(tabIndex)) or tabName
+    end
+
+    local tabData = {
+        index = tabIndex,
+        name = tabName,
+        slots = {},
+    }
+
+    for slot = 1, 98 do
+        local _, count = _G.GetGuildBankItemInfo(tabIndex, slot)
+        if (count or 0) > 0 then
+            local link = _G.GetGuildBankItemLink(tabIndex, slot)
+            local itemID = tonumber(string.match(tostring(link or ""), "item:(%d+)"))
+
+            if itemID ~= nil then
+                local itemName = "Item:" .. tostring(itemID)
+                if _G.C_Item and type(_G.C_Item.GetItemNameByID) == "function" then
+                    itemName = _G.C_Item.GetItemNameByID(itemID) or itemName
+                end
+
+                table.insert(tabData.slots, {
+                    itemID = itemID,
+                    name = itemName,
+                    count = count,
+                })
+            end
+        end
+    end
+
+    scanner.RecordTabScan(tabData)
+    return tabData
+end
+
 function scanner.RecordTabScan(tabData)
     scanner.rawTabs = scanner.rawTabs or {}
     table.insert(scanner.rawTabs, tabData)

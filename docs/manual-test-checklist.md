@@ -20,3 +20,7 @@
 18. Approve a request on one character, relay the sync payload, and confirm the second character records the incoming message state.
 19. Create conflicting request records and confirm officer authority wins over a newer member update.
 20. Capture a manual recovery payload and confirm it can be replayed without Lua errors after a `/reload`.
+21. With the guild bank open, verify a scan queues only tabs the current character can view.
+22. Change bank contents between scans and confirm the dashboard and history reflect the new snapshot.
+23. Generate Auctionator, spreadsheet, and custom export text from the same demand rows and confirm each preset formats correctly.
+24. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.

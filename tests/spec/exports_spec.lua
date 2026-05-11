@@ -45,3 +45,17 @@ local rows = exports.MaterializePlanRows({
 
 assert.equal("Flask Alpha", rows[1].itemName, "materialized rows should sort by item name")
 assert.equal("REQUEST:1|RESTOCK:4", rows[1].reason, "materialized rows should include sorted reason tags")
+assert.equal(1001, rows[1].itemID, "materialized rows should keep item ids for release exports")
+assert.equal(5, rows[1].totalToBuy, "materialized rows should keep purchase totals")
+
+local exportDialog = dofile("GBankManager/UI/ExportDialog.lua")
+local auctionatorState = exportDialog.BuildPresetState(rows, "Auctionator")
+local customState = exportDialog.BuildPresetState(rows, "Custom", {
+    delimiter = "|",
+    includeHeader = false,
+    fields = { "totalToBuy", "itemName" },
+})
+
+assert.equal("Auctionator", auctionatorState.presetName, "export dialog should preserve the selected preset")
+assert.equal("Flask Alpha x5; Potion Beta x2", auctionatorState.text, "auctionator preset should build compact output")
+assert.equal("5|Flask Alpha\n2|Potion Beta", customState.text, "custom preset should honor caller template settings")
