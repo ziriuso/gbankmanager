@@ -4,7 +4,7 @@
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Current HEAD: `7fcca18` `feat: add officer dashboard ui shell`
+- Current HEAD: `1313b06` `docs: refresh implementation handoff`
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 
 ## Read First
