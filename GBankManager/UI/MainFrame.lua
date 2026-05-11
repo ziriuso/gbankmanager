@@ -64,8 +64,20 @@ mainFrame.collapsedSidebar = false
 mainFrame.navItems = {
     { key = "DASHBOARD", label = "Dashboard" },
     { key = "INVENTORY", label = "Inventory" },
+    { key = "MINIMUMS", label = "Minimums" },
+    { key = "TARGETS", label = "Targets" },
+    { key = "REQUESTS", label = "Requests" },
     { key = "HISTORY", label = "History" },
     { key = "EXPORTS", label = "Exports" },
+}
+mainFrame.viewDescriptions = {
+    DASHBOARD = "Critical shortages, pending requests, and export readiness.",
+    INVENTORY = "Search the latest bank snapshot and inspect current counts.",
+    MINIMUMS = "Manage recurring stock floors by item, scope, and tab.",
+    TARGETS = "Track one-time buy-up goals and suggested fulfillment state.",
+    REQUESTS = "Review officer-first request queues and member-visible demand.",
+    HISTORY = "Audit scan-to-scan item changes with focused filters.",
+    EXPORTS = "Prepare Auctionator and spreadsheet-ready purchase output.",
 }
 
 mainFrame.sidebar = mainFrame.sidebar or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
@@ -123,6 +135,7 @@ end
 function mainFrame:SelectView(name)
     self.activeView = name or "DASHBOARD"
     self.viewTitle:SetText((name or "Dashboard"):gsub("^%l", string.upper):gsub("_", " "))
+    self.viewSubtitle:SetText(self.viewDescriptions[self.activeView] or self.viewDescriptions.DASHBOARD)
     self:ApplyTheme()
     self:Show()
     return self.activeView

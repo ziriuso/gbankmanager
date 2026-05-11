@@ -2,11 +2,35 @@ _G = _G or {}
 
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.UIParent = _G.UIParent or { children = {} }
+_G.C_ChatInfo = _G.C_ChatInfo or {
+    sentMessages = {},
+    registeredPrefixes = {},
+}
 
 if _G.time == nil then
     _G.time = function()
         return 0
     end
+end
+
+if _G.UnitName == nil then
+    _G.UnitName = function()
+        return "TestPlayer"
+    end
+end
+
+function _G.C_ChatInfo.RegisterAddonMessagePrefix(prefix)
+    table.insert(_G.C_ChatInfo.registeredPrefixes, prefix)
+    return true
+end
+
+function _G.C_ChatInfo.SendAddonMessage(prefix, payload, distribution, channel)
+    table.insert(_G.C_ChatInfo.sentMessages, {
+        prefix = prefix,
+        payload = payload,
+        distribution = distribution,
+        channel = channel,
+    })
 end
 
 if _G.CreateFrame == nil then

@@ -10,3 +10,13 @@
 8. Confirm inventory filtering returns matching items.
 9. Confirm history filtering can narrow by change type and actor.
 10. Confirm export text can be generated from the Exports view helpers.
+11. Confirm the sidebar includes Minimums, Targets, and Requests without changing the shell style.
+12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
+13. Add a one-time target and confirm it reaches suggested fulfilled status once inventory meets the target quantity.
+14. Submit a member request and confirm it begins as `PENDING`.
+15. Submit an officer request and confirm it begins as `APPROVED`.
+16. Confirm a member-scoped request list only shows rows for that requester.
+17. Log in on two addon-enabled guild characters and confirm a `SYNC_HELLO` is sent on login.
+18. Approve a request on one character, relay the sync payload, and confirm the second character records the incoming message state.
+19. Create conflicting request records and confirm officer authority wins over a newer member update.
+20. Capture a manual recovery payload and confirm it can be replayed without Lua errors after a `/reload`.
