@@ -6,10 +6,22 @@ _G.GBankManagerDB = {
 }
 
 local addonName, ns, loaded = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
-local testContext = rawget(_G, "GBankManagerTestContext") or {}
-local store = testContext.store
-local permissions = testContext.permissions
+local store = ns.modules.store
+local permissions = ns.modules.permissions
+local migrations = ns.modules.migrations
 local db = store and store.CreateFreshDatabase("My Guild")
+local normalizedMalformed = migrations and migrations.Apply({
+    meta = "broken",
+    syncState = "broken",
+})
+local futureDb = {
+    meta = {
+        schemaVersion = 99,
+        guildName = "Future Guild",
+    },
+    syncState = "broken",
+}
+local normalizedFuture = migrations and migrations.Apply(futureDb)
 
 assert.equal("GBankManager", addonName, "toc should load the addon by name")
 assert.equal("GBankManager", ns.addonName, "namespace should expose addon name")
@@ -27,6 +39,7 @@ assert.same(ns.modules.events, loaded[8].value, "events chunk should return the 
 assert.same(ns.modules.slash, loaded[9].value, "slash chunk should return the shared slash module")
 assert.truthy(type(store) == "table", "store module should be loaded for specs")
 assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
+assert.truthy(type(migrations) == "table", "migrations module should be loaded for specs")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
@@ -36,3 +49,9 @@ assert.truthy(not permissions.CanViewInventory("MEMBER"), "members should not vi
 assert.same(_G.GBankManagerDB, ns.state.db, "bootstrap should keep normalized db in addon state")
 assert.equal(1, _G.GBankManagerDB.meta.schemaVersion, "bootstrap should normalize schema version at runtime")
 assert.truthy(_G.GBankManagerDB.requests ~= nil, "bootstrap should normalize missing tables at runtime")
+assert.truthy(type(normalizedMalformed.meta) == "table", "migrations should repair malformed meta containers")
+assert.truthy(type(normalizedMalformed.syncState) == "table", "migrations should repair malformed sync state containers")
+assert.equal(1, normalizedMalformed.meta.schemaVersion, "migrations should apply v1 schema to malformed data")
+assert.same(futureDb, normalizedFuture, "migrations should return the same table for newer schemas")
+assert.equal(99, normalizedFuture.meta.schemaVersion, "migrations should preserve newer schema versions")
+assert.equal("Future Guild", normalizedFuture.meta.guildName, "migrations should preserve newer schema metadata")
