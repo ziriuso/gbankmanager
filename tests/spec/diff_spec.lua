@@ -107,11 +107,24 @@ _G.C_Item = {
     end,
 }
 
+_G.C_TradeSkillUI = {
+    GetItemCraftedQualityInfo = function(itemInfo)
+        if itemInfo == "item:1001:0:0:0" then
+            return {
+                quality = 3,
+                icon = "Professions-ChatIcon-Quality-Tier3",
+            }
+        end
+    end,
+}
+
 local tabData = scanner.ReadCurrentTab(1)
 
 assert.equal("Flasks", tabData.name, "scanner should label scanned tabs from guild bank metadata")
 assert.equal(2, #tabData.slots, "scanner should collect populated slots only")
 assert.equal(1001, tabData.slots[1].itemID, "scanner should parse item ids from links")
+assert.equal(3, tabData.slots[1].craftedQuality, "scanner should capture crafted quality tier when the API provides it")
+assert.equal("Professions-ChatIcon-Quality-Tier3", tabData.slots[1].craftedQualityIcon, "scanner should capture crafted quality atlas info for inventory display")
 assert.equal(1, #scanner.rawTabs, "scanner should append scanned tabs to the raw scan state")
 
 scanner.OnGuildBankSlotsChanged()

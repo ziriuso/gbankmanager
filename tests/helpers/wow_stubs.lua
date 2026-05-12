@@ -46,6 +46,7 @@ if _G.CreateFrame == nil then
             SetText = function(self, value) self.text = value end,
             GetText = function(self) return self.text end,
             SetVertexColor = function() end,
+            SetTextColor = function(self, r, g, b, a) self.textColor = { r, g, b, a } end,
             SetJustifyH = function(self, value) self.justifyH = value end,
             SetJustifyV = function(self, value) self.justifyV = value end,
             SetFontObject = function() end,
@@ -178,17 +179,41 @@ if _G.CreateFrame == nil then
         end
         function frame:SetNormalFontObject() end
         function frame:SetHighlightFontObject() end
+        function frame:SetAutoFocus(value)
+            self.autoFocus = value
+        end
+        function frame:SetTextInsets(left, right, top, bottom)
+            self.textInsets = { left, right, top, bottom }
+        end
+        function frame:SetFontObject(value)
+            self.fontObject = value
+        end
+        function frame:SetTextColor(r, g, b, a)
+            self.textColor = { r, g, b, a }
+        end
         function frame:SetAlpha(value)
             self.alpha = value
         end
         function frame:GetAlpha()
             return self.alpha
         end
-        function frame:SetText(text) self.text = text end
+        function frame:SetText(text)
+            self.text = text
+            local handler = self.scripts and self.scripts.OnTextChanged
+            if type(handler) == "function" then
+                handler(self, text)
+            end
+        end
         function frame:GetText() return self.text end
         function frame:SetStatusBarColor() end
         function frame:SetValue(value) self.value = value end
         function frame:GetValue() return self.value end
+        function frame:SetEnabled(enabled)
+            self.enabled = enabled and true or false
+        end
+        function frame:IsEnabled()
+            return self.enabled ~= false
+        end
 
         table.insert((parent or _G.UIParent).children, frame)
         return frame

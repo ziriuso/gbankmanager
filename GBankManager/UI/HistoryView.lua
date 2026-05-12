@@ -13,12 +13,19 @@ local action_labels = {
     REQUEST_REOPENED = "Reopened",
     MINIMUM_CREATED = "Created",
     MINIMUM_UPDATED = "Updated",
+    MINIMUM_ENABLED = "Enabled",
+    MINIMUM_DISABLED = "Disabled",
     MINIMUM_REMOVED = "Removed",
+    TARGET_CREATED = "Created",
+    TARGET_UPDATED = "Updated",
+    TARGET_CLOSED = "Closed",
+    TARGET_REOPENED = "Reopened",
 }
 
 local category_labels = {
     REQUEST = "Request",
     MINIMUM = "Minimum",
+    TARGET = "Target",
 }
 
 local function format_timestamp(timestamp)
@@ -34,6 +41,17 @@ local function format_timestamp(timestamp)
     return tostring(timestamp)
 end
 
+local function contains_text(haystack, needle)
+    haystack = string.lower(tostring(haystack or ""))
+    needle = string.lower(tostring(needle or ""))
+
+    if needle == "" then
+        return true
+    end
+
+    return string.find(haystack, needle, 1, true) ~= nil
+end
+
 function historyView.Filter(entries, filters)
     local out = {}
     filters = filters or {}
@@ -41,15 +59,23 @@ function historyView.Filter(entries, filters)
     for _, entry in ipairs(entries or {}) do
         local include = true
 
-        if filters.changeType and entry.type ~= filters.changeType then
+        if filters.changeType and filters.changeType ~= "" and entry.type ~= filters.changeType then
             include = false
         end
 
-        if filters.actor and entry.actor ~= filters.actor then
+        if filters.action and not contains_text(action_labels[entry.type] or entry.type, filters.action) then
             include = false
         end
 
-        if filters.itemName and (entry.itemName or entry.name) ~= filters.itemName then
+        if filters.category and not contains_text(category_labels[entry.category] or entry.category, filters.category) then
+            include = false
+        end
+
+        if filters.actor and filters.actor ~= "" and not contains_text(entry.actor, filters.actor) then
+            include = false
+        end
+
+        if filters.itemName and filters.itemName ~= "" and not contains_text(entry.itemName or entry.name, filters.itemName) then
             include = false
         end
 

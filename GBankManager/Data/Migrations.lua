@@ -7,6 +7,7 @@ ns.data = ns.data or {}
 
 local migrations = ns.data.migrations or ns.modules.migrations or {}
 local latestSchemaVersion = ns.constants.SCHEMA_VERSION or 1
+local defaults = ns.data.defaults or ns.modules.defaults or {}
 
 local function ensure_table(value)
     if type(value) == "table" then
@@ -31,6 +32,21 @@ local function ensure_v1_shape(db)
     db.oneTimeTargets = ensure_table(db.oneTimeTargets)
     db.requests = ensure_table(db.requests)
     db.exportTemplates = ensure_table(db.exportTemplates)
+    db.ui = ensure_table(db.ui)
+    db.ui.inventoryColumnWidths = ensure_table(db.ui.inventoryColumnWidths)
+    db.ui.exportSettings = ensure_table(db.ui.exportSettings)
+    db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"
+    db.ui.exportSettings.customTemplate = ensure_table(db.ui.exportSettings.customTemplate)
+    db.ui.exportSettings.customTemplate.delimiter = db.ui.exportSettings.customTemplate.delimiter or "|"
+    if db.ui.exportSettings.customTemplate.includeHeader == nil then
+        db.ui.exportSettings.customTemplate.includeHeader = true
+    end
+    if type(db.ui.exportSettings.customTemplate.fields) ~= "table" or #db.ui.exportSettings.customTemplate.fields == 0 then
+        local template = type(defaults.CreateDefaultExportTemplate) == "function" and defaults.CreateDefaultExportTemplate() or {
+            fields = { "itemID", "itemName", "totalToBuy" },
+        }
+        db.ui.exportSettings.customTemplate.fields = template.fields
+    end
     db.syncState = ensure_table(db.syncState)
     db.syncState.lastSyncAt = db.syncState.lastSyncAt or 0
     return db

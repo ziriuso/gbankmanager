@@ -26,12 +26,16 @@ function snapshots.FromTabScan(raw)
                     itemID = itemID,
                     name = item_name(slot),
                     quality = slot.quality,
+                    craftedQuality = slot.craftedQuality,
+                    craftedQualityIcon = slot.craftedQualityIcon,
                     totalCount = 0,
                     tabs = {},
                 }
 
                 entry.totalCount = entry.totalCount + count
                 entry.quality = entry.quality or slot.quality
+                entry.craftedQuality = entry.craftedQuality or slot.craftedQuality
+                entry.craftedQualityIcon = entry.craftedQualityIcon or slot.craftedQualityIcon
                 entry.tabs[tabName] = (entry.tabs[tabName] or 0) + count
                 items[itemID] = entry
             end

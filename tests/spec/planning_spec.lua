@@ -64,3 +64,27 @@ assert.equal(1, scopedPlan[1001].sources.REQUEST, "only approved open requests s
 assert.equal(3, #scopedPlan[1001].details, "plan should keep drill-down attribution details")
 assert.equal("TAB", scopedPlan[1001].details[1].scope, "detail rows should preserve scope")
 assert.equal("Raid night", scopedPlan[1001].details[3].note, "request details should preserve notes")
+
+local disabledMinimumPlan = planning.BuildDemandPlan({
+    snapshot = {
+        items = {
+            [3003] = {
+                itemID = 3003,
+                name = "Feast Gamma",
+                totalCount = 1,
+                tabs = {
+                    Food = 1,
+                },
+            },
+        },
+    },
+    minimums = {
+        { itemID = 3003, itemName = "Feast Gamma", quantity = 15, scope = "GLOBAL", enabled = false },
+        { itemID = 4004, itemName = "Rune Delta", quantity = 7, scope = "GLOBAL", enabled = true },
+    },
+    oneTimeTargets = {},
+    requests = {},
+})
+
+assert.truthy(disabledMinimumPlan[3003] == nil, "disabled minimum rules should not contribute to planning demand")
+assert.equal(7, disabledMinimumPlan[4004].sources.RESTOCK, "enabled minimum rules should still contribute to planning demand")

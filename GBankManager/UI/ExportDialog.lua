@@ -26,15 +26,15 @@ function exportDialog.BuildPresetState(rows, presetName, template)
         text = exports.BuildAuctionator(rows or {})
     elseif selectedPreset == "Custom" then
         text = exports.BuildDelimited(rows or {}, template or {
-            delimiter = ",",
+            delimiter = "|",
             includeHeader = true,
-            fields = { "itemName", "totalToBuy", "reason" },
+            fields = { "itemID", "itemName", "totalToBuy" },
         })
     else
         text = exports.BuildDelimited(rows or {}, {
             delimiter = ",",
             includeHeader = true,
-            fields = { "itemName", "totalToBuy", "reason" },
+            fields = { "itemName", "itemID", "currentQuantity", "restockQuantity", "targetQuantity", "requestQuantity", "totalToBuy", "scopeSummary", "reason" },
         })
     end
 

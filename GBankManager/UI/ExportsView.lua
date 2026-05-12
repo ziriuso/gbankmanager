@@ -14,8 +14,24 @@ function exportsView.BuildSpreadsheetText(rows)
     return exports.BuildDelimited(rows or {}, {
         delimiter = ",",
         includeHeader = true,
-        fields = { "itemName", "totalToBuy", "reason" },
+        fields = { "itemName", "itemID", "currentQuantity", "restockQuantity", "targetQuantity", "requestQuantity", "totalToBuy", "scopeSummary", "reason" },
     })
+end
+
+function exportsView.BuildAuctionatorText(rows)
+    return exports.BuildAuctionator(rows or {})
+end
+
+function exportsView.BuildCustomText(rows, template)
+    return exports.BuildDelimited(rows or {}, template or {
+        delimiter = "|",
+        includeHeader = true,
+        fields = { "itemID", "itemName", "totalToBuy" },
+    })
+end
+
+function exportsView.BuildTableRows(plan, snapshot)
+    return exports.MaterializePlanRows(plan, snapshot)
 end
 
 ns.modules.exportsView = exportsView

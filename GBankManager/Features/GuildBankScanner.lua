@@ -18,11 +18,19 @@ local scanner = ns.modules.scanner or {
 }
 
 local function current_db()
-    ns.state.db = ns.state.db or _G.GBankManagerDB or {}
-    _G.GBankManagerDB = ns.state.db
-    ns.state.db.snapshots = ns.state.db.snapshots or {}
-    ns.state.db.changeLog = ns.state.db.changeLog or {}
-    return ns.state.db
+    local store = ns.data.store or ns.modules.store
+    local runtime = _G.GBankManagerDB or ns.state.db or {}
+
+    if store and type(store.Normalize) == "function" then
+        runtime = store.Normalize(runtime)
+    else
+        runtime.snapshots = runtime.snapshots or {}
+        runtime.changeLog = runtime.changeLog or {}
+    end
+
+    _G.GBankManagerDB = runtime
+    ns.state.db = runtime
+    return runtime
 end
 
 local function push_status(text)
@@ -34,6 +42,37 @@ local function push_status(text)
     elseif mainFrame and mainFrame.statusText and type(mainFrame.statusText.SetText) == "function" then
         mainFrame.statusText:SetText(text)
     end
+end
+
+local function get_crafted_quality_info(itemInfo)
+    local tradeSkillUI = _G.C_TradeSkillUI
+    if type(itemInfo) ~= "string" or tradeSkillUI == nil then
+        return nil, nil
+    end
+
+    local info = nil
+    if type(tradeSkillUI.GetItemReagentQualityInfo) == "function" then
+        info = tradeSkillUI.GetItemReagentQualityInfo(itemInfo) or info
+    end
+
+    if info == nil and type(tradeSkillUI.GetItemCraftedQualityInfo) == "function" then
+        info = tradeSkillUI.GetItemCraftedQualityInfo(itemInfo)
+    end
+
+    if type(info) == "table" then
+        return info.quality, info.iconInventory or info.iconMixed or info.iconChat or info.iconSmall or info.icon
+    end
+
+    local quality = nil
+    if type(tradeSkillUI.GetItemReagentQualityByItemInfo) == "function" then
+        quality = tradeSkillUI.GetItemReagentQualityByItemInfo(itemInfo) or quality
+    end
+
+    if quality == nil and type(tradeSkillUI.GetItemCraftedQualityByItemInfo) == "function" then
+        quality = tradeSkillUI.GetItemCraftedQualityByItemInfo(itemInfo)
+    end
+
+    return quality, nil
 end
 
 local function finish_if_complete()
@@ -139,10 +178,14 @@ function scanner.ReadCurrentTab(tabIndex)
                     itemName = _G.C_Item.GetItemNameByID(itemID) or itemName
                 end
 
+                local craftedQuality, craftedQualityIcon = get_crafted_quality_info(link)
+
                 table.insert(tabData.slots, {
                     itemID = itemID,
                     name = itemName,
                     quality = _G.C_Item and type(_G.C_Item.GetItemQualityByID) == "function" and _G.C_Item.GetItemQualityByID(itemID) or nil,
+                    craftedQuality = craftedQuality,
+                    craftedQualityIcon = craftedQualityIcon,
                     count = count,
                 })
             end

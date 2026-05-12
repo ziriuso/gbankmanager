@@ -94,6 +94,9 @@ assert.equal("scan-old", persisted.currentSnapshotId, "normalize should preserve
 assert.equal(5, persisted.snapshots["scan-old"].items[1001].totalCount, "normalize should preserve scanned inventory rows across reloads")
 assert.equal(77, persisted.meta.updatedAt, "normalize should preserve last scan metadata across reloads")
 assert.truthy(type(persisted.auditLog) == "table", "normalize should preserve an audit log container for workflow history")
+assert.truthy(type(persisted.ui) == "table", "normalize should preserve a ui settings container")
+assert.truthy(type(persisted.ui.exportSettings) == "table", "normalize should preserve export ui settings")
+assert.truthy(type(persisted.ui.inventoryColumnWidths) == "table", "normalize should preserve inventory column width settings")
 
 _G.GBankManagerDB = persisted
 ns.state.db = _G.GBankManagerDB
@@ -114,3 +117,49 @@ assert.equal(newSnapshot.scanId, _G.GBankManagerDB.currentSnapshotId, "fresh sca
 assert.equal(5, _G.GBankManagerDB.snapshots["scan-old"].items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")
 assert.equal(8, _G.GBankManagerDB.snapshots[newSnapshot.scanId].items[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
 assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")
+
+_G.GBankManagerDB = store.Normalize({
+    meta = {
+        schemaVersion = 1,
+        guildName = "Persisted Guild",
+        updatedAt = 77,
+    },
+    currentSnapshotId = "scan-old",
+    snapshots = {
+        ["scan-old"] = {
+            scanId = "scan-old",
+            scannedAt = 77,
+            items = {
+                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 5, tabs = { Flasks = 5 } },
+            },
+        },
+    },
+    changeLog = {},
+    minimums = {},
+    oneTimeTargets = {},
+    requests = {},
+    exportTemplates = {},
+    syncState = {
+        lastSyncAt = 22,
+    },
+})
+ns.state.db = {
+    meta = {
+        guildName = "Detached Runtime",
+    },
+}
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 9 },
+        },
+    },
+}
+
+local reboundSnapshot = scanner.FinishScan("OfficerOne", "Persisted Guild")
+
+assert.same(_G.GBankManagerDB, ns.state.db, "scanner should rebind runtime state back onto the saved variables table before writing")
+assert.truthy(_G.GBankManagerDB.snapshots["scan-old"] ~= nil, "scanner should preserve prior saved snapshots even if runtime state drifted")
+assert.equal(9, _G.GBankManagerDB.snapshots[reboundSnapshot.scanId].items[1001].totalCount, "scanner should append the new snapshot onto the persisted saved-variables history")

@@ -6,6 +6,14 @@ ns.data = ns.data or {}
 
 local defaults = ns.data.defaults or ns.modules.defaults or {}
 
+function defaults.CreateDefaultExportTemplate()
+    return {
+        delimiter = "|",
+        includeHeader = true,
+        fields = { "itemID", "itemName", "totalToBuy" },
+    }
+end
+
 function defaults.CreateDatabase(guildName)
     return {
         meta = {
@@ -22,6 +30,13 @@ function defaults.CreateDatabase(guildName)
         oneTimeTargets = {},
         requests = {},
         exportTemplates = {},
+        ui = {
+            inventoryColumnWidths = {},
+            exportSettings = {
+                selectedPreset = "Spreadsheet",
+                customTemplate = defaults.CreateDefaultExportTemplate(),
+            },
+        },
         syncState = {
             lastSyncAt = 0,
         },

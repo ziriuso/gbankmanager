@@ -38,25 +38,62 @@ function exports.BuildAuctionator(rows)
     return table.concat(values, "; ")
 end
 
-function exports.MaterializePlanRows(plan)
-    local rows = {}
+local function current_total(snapshot, itemID)
+    local item = snapshot and snapshot.items and snapshot.items[itemID]
+    if item == nil then
+        return 0
+    end
 
-    for _, row in pairs(plan or {}) do
-        local reasons = {}
+    return item.totalCount or 0
+end
 
-        for reason, quantity in pairs(row.sources or {}) do
-            if quantity > 0 then
-                table.insert(reasons, string.format("%s:%d", reason, quantity))
-            end
+local function summarize_scopes(details)
+    local scopes = {}
+    local seen = {}
+
+    for _, detail in ipairs(details or {}) do
+        local label = detail.scope or "GLOBAL"
+        if detail.scope == "TAB" and detail.tabName and detail.tabName ~= "" then
+            label = detail.tabName
         end
 
-        table.sort(reasons)
-        table.insert(rows, {
-            itemID = row.itemID,
-            itemName = row.itemName,
-            totalToBuy = row.totalToBuy,
-            reason = table.concat(reasons, "|"),
-        })
+        if not seen[label] then
+            seen[label] = true
+            table.insert(scopes, label)
+        end
+    end
+
+    table.sort(scopes)
+    return #scopes > 0 and table.concat(scopes, "|") or "GLOBAL"
+end
+
+function exports.MaterializePlanRows(plan, snapshot)
+    local rows = {}
+    snapshot = snapshot or { items = {} }
+
+    for _, row in pairs(plan or {}) do
+        if (row.totalToBuy or 0) > 0 then
+            local reasons = {}
+
+            for reason, quantity in pairs(row.sources or {}) do
+                if quantity > 0 then
+                    table.insert(reasons, string.format("%s:%d", reason, quantity))
+                end
+            end
+
+            table.sort(reasons)
+            table.insert(rows, {
+                itemID = row.itemID,
+                itemName = row.itemName,
+                currentQuantity = current_total(snapshot, row.itemID),
+                restockQuantity = (row.sources and row.sources.RESTOCK) or 0,
+                targetQuantity = (row.sources and row.sources.ONE_TIME_TARGET) or 0,
+                requestQuantity = (row.sources and row.sources.REQUEST) or 0,
+                totalToBuy = row.totalToBuy,
+                scopeSummary = summarize_scopes(row.details or {}),
+                reason = table.concat(reasons, "|"),
+            })
+        end
     end
 
     table.sort(rows, function(left, right)

@@ -57,6 +57,7 @@ function requestsView.BuildTableRows(rows)
 
     for _, row in ipairs(queue) do
         table.insert(out, {
+            requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),

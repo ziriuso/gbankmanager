@@ -5,23 +5,68 @@ ns.modules = ns.modules or {}
 
 local inventoryView = ns.modules.inventoryView or {}
 
-local DEFAULT_COLUMNS = {
-    { key = "quality", label = "", width = 34, minWidth = 34, maxWidth = 34, justifyH = "CENTER" },
-    { key = "name", label = "Name", width = 220, minWidth = 180, maxWidth = 360, justifyH = "LEFT" },
-    { key = "quantity", label = "Quantity", width = 80, minWidth = 70, maxWidth = 120, justifyH = "LEFT" },
-    { key = "tab", label = "Tab", width = 176, minWidth = 120, maxWidth = 320, justifyH = "LEFT" },
-    { key = "restock", label = "Restock", width = 90, minWidth = 80, maxWidth = 120, justifyH = "LEFT" },
-    { key = "minimum", label = "Minimum", width = 90, minWidth = 80, maxWidth = 120, justifyH = "LEFT" },
+local QUALITY_RANK_BY_ATLAS = {
+    ["Professions-ChatIcon-Quality-Tier1"] = 1,
+    ["Professions-ChatIcon-Quality-Tier2"] = 2,
+    ["Professions-ChatIcon-Quality-Tier3"] = 3,
+    ["Professions-ChatIcon-Quality-Tier4"] = 4,
+    ["Professions-ChatIcon-Quality-Tier5"] = 5,
 }
 
-local QUALITY_ICONS = {
-    [0] = "",
-    [1] = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:14:14:0:0|t",
-    [2] = "|TInterface\\Buttons\\UI-GroupLoot-Green-Up:14:14:0:0|t",
-    [3] = "|TInterface\\Buttons\\UI-GroupLoot-Blue-Up:14:14:0:0|t",
-    [4] = "|TInterface\\Buttons\\UI-GroupLoot-Purple-Up:14:14:0:0|t",
-    [5] = "|TInterface\\Buttons\\UI-GroupLoot-Copper-Up:14:14:0:0|t",
+local DEFAULT_COLUMNS = {
+    { key = "quality", label = "Tier", width = 64, minWidth = 64, maxWidth = 76, justifyH = "CENTER", filterMode = "none", sortable = true },
+    { key = "name", label = "Name", width = 238, minWidth = 190, maxWidth = 360, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "tab", label = "Tab", width = 152, minWidth = 120, maxWidth = 280, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "restock", label = "Restock", width = 90, minWidth = 78, maxWidth = 116, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "quantity", label = "Qty", width = 84, minWidth = 72, maxWidth = 112, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "minimum", label = "Min", width = 92, minWidth = 80, maxWidth = 118, justifyH = "LEFT", filterMode = "none", sortable = true },
 }
+
+local function crafted_quality_markup(atlasName)
+    if atlasName == nil or atlasName == "" then
+        return ""
+    end
+
+    return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_rank(item)
+    item = item or {}
+
+    local atlasName = tostring(item.craftedQualityIcon or "")
+    if QUALITY_RANK_BY_ATLAS[atlasName] ~= nil then
+        return QUALITY_RANK_BY_ATLAS[atlasName]
+    end
+
+    local tierText = string.match(atlasName, "[Tt]ier%s*[_%-]?(%d+)")
+    local parsedTier = tonumber(tierText or "")
+    if parsedTier and parsedTier >= 1 and parsedTier <= 5 then
+        return parsedTier
+    end
+
+    local quality = tonumber(item.craftedQuality or 0) or 0
+    if quality < 1 or quality > 5 then
+        return 0
+    end
+
+    return quality
+end
+
+local function normalized_sort_value(key, value, direction)
+    if key == "quality" then
+        local rank = tonumber(value or 0) or 0
+        if rank <= 0 then
+            return direction == "desc" and -1 or 999
+        end
+        return rank
+    end
+
+    if type(value) == "string" then
+        return string.lower(tostring(value or ""))
+    end
+
+    return value or 0
+end
 
 local function copy_columns(columns)
     local out = {}
@@ -34,6 +79,8 @@ local function copy_columns(columns)
             minWidth = column.minWidth,
             maxWidth = column.maxWidth,
             justifyH = column.justifyH,
+            filterMode = column.filterMode,
+            sortable = column.sortable,
         }
     end
 
@@ -53,6 +100,10 @@ end
 local function clip_text(text, width)
     text = tostring(text or "")
     width = math.max(0, tonumber(width) or 0)
+
+    if string.sub(text, 1, 3) == "|A:" then
+        return text
+    end
 
     local maxChars = math.floor(math.max(0, width - 16) / 7)
     if maxChars <= 0 then
@@ -210,7 +261,7 @@ local function minimum_for_item(db, item)
     local matched = false
 
     for _, rule in ipairs((db or {}).minimums or {}) do
-        if rule.itemID == item.itemID then
+        if rule.itemID == item.itemID and rule.enabled ~= false then
             minimum = math.max(minimum, tonumber(rule.quantity or 0))
             matched = true
         end
@@ -243,17 +294,68 @@ function inventoryView.BuildTableRows(snapshot, db, query)
 
         local minimum, hasMinimum = minimum_for_item(db, item)
         table.insert(rows, {
-            quality = QUALITY_ICONS[tonumber(item.quality or 0)] or "",
-            qualityValue = tonumber(item.quality or 0),
+            quality = crafted_quality_markup(item.craftedQualityIcon),
+            qualityValue = crafted_quality_rank(item),
             name = tostring(item.name or "Unknown"),
             quantity = tostring(item.totalCount or 0),
+            quantityValue = tonumber(item.totalCount or 0),
             tab = #tabs > 0 and table.concat(tabs, ", ") or "-",
             restock = hasMinimum and ((item.totalCount or 0) < minimum and "Yes" or "No") or "No",
+            restockValue = hasMinimum and ((item.totalCount or 0) < minimum and 1 or 0) or 0,
             minimum = hasMinimum and tostring(minimum) or "-",
+            minimumValue = hasMinimum and minimum or 0,
         })
     end
 
     return inventoryView.ApplyColumnFilters(rows, filters)
+end
+
+local function compare_with_direction(left, right, direction)
+    if left == right then
+        return nil
+    end
+
+    if direction == "desc" then
+        return left > right
+    end
+
+    return left < right
+end
+
+function inventoryView.SortRows(rows, sortState)
+    rows = rows or {}
+    sortState = sortState or {}
+
+    local key = sortState.key
+    if key == nil or key == "" then
+        return rows
+    end
+
+    local direction = sortState.direction or "asc"
+    local valueKey = ({
+        quality = "qualityValue",
+        quantity = "quantityValue",
+        tab = "tab",
+        restock = "restockValue",
+        minimum = "minimumValue",
+    })[key] or key
+
+    table.sort(rows, function(left, right)
+        local leftValue = left[valueKey]
+        local rightValue = right[valueKey]
+
+        leftValue = normalized_sort_value(key, leftValue, direction)
+        rightValue = normalized_sort_value(key, rightValue, direction)
+
+        local ordered = compare_with_direction(leftValue, rightValue, direction)
+        if ordered ~= nil then
+            return ordered
+        end
+
+        return tostring(left.name or "") < tostring(right.name or "")
+    end)
+
+    return rows
 end
 
 function inventoryView.BuildDisplayRows(rows, columns)
