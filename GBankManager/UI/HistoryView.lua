@@ -6,10 +6,19 @@ ns.modules = ns.modules or {}
 local historyView = ns.modules.historyView or {}
 
 local action_labels = {
-    ITEM_ADDED = "Added",
-    ITEM_REMOVED = "Removed",
-    QUANTITY_INCREASED = "Deposited",
-    QUANTITY_DECREASED = "Withdrew",
+    REQUEST_CREATED = "Created",
+    REQUEST_APPROVED = "Approved",
+    REQUEST_REJECTED = "Rejected",
+    REQUEST_FULFILLED = "Fulfilled",
+    REQUEST_REOPENED = "Reopened",
+    MINIMUM_CREATED = "Created",
+    MINIMUM_UPDATED = "Updated",
+    MINIMUM_REMOVED = "Removed",
+}
+
+local category_labels = {
+    REQUEST = "Request",
+    MINIMUM = "Minimum",
 }
 
 local function format_timestamp(timestamp)
@@ -40,7 +49,7 @@ function historyView.Filter(entries, filters)
             include = false
         end
 
-        if filters.itemName and entry.name ~= filters.itemName then
+        if filters.itemName and (entry.itemName or entry.name) ~= filters.itemName then
             include = false
         end
 
@@ -56,12 +65,7 @@ function historyView.BuildLines(entries, filters)
     local rows = {}
 
     for _, entry in ipairs(historyView.Filter(entries, filters)) do
-        local suffix = ""
-        if entry.delta ~= nil then
-            suffix = string.format(" (+%s)", tostring(entry.delta))
-        end
-
-        table.insert(rows, string.format("%s %s%s", tostring(entry.type), tostring(entry.name), suffix))
+        table.insert(rows, string.format("%s %s", tostring(entry.type), tostring(entry.itemName or entry.name or "Unknown")))
     end
 
     if #rows == 0 then
@@ -75,17 +79,14 @@ function historyView.BuildTableRows(entries, filters)
     local rows = {}
 
     for _, entry in ipairs(historyView.Filter(entries, filters)) do
-        local quantity = tonumber(entry.delta or 0)
-        if entry.type == "ITEM_REMOVED" or entry.type == "QUANTITY_DECREASED" then
-            quantity = -quantity
-        end
-
         table.insert(rows, {
-            itemName = tostring(entry.name or "Unknown"),
+            category = category_labels[entry.category] or tostring(entry.category or "Unknown"),
+            itemName = tostring(entry.itemName or entry.name or "Unknown"),
             action = action_labels[entry.type] or tostring(entry.type or "Unknown"),
-            quantity = tostring(quantity),
             actor = tostring(entry.actor or "Unknown"),
-            date = format_timestamp(entry.scannedAt),
+            oldValue = entry.oldValue ~= nil and tostring(entry.oldValue) or "-",
+            newValue = entry.newValue ~= nil and tostring(entry.newValue) or "-",
+            date = format_timestamp(entry.timestamp or entry.scannedAt),
         })
     end
 

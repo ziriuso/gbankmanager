@@ -23,4 +23,13 @@
 21. With the guild bank open, verify a scan queues only tabs the current character can view.
 22. Change bank contents between scans and confirm the dashboard and history reflect the new snapshot.
 23. Generate Auctionator, spreadsheet, and custom export text from the same demand rows and confirm each preset formats correctly.
-24. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.
+24. Open the Inventory view with enough rows to overflow and confirm the scroll controls move through the table without blanking the header.
+25. Resize the inventory name column and confirm the wider width is reflected immediately while neighboring columns stay readable.
+26. Use the inline inventory column filters and confirm filtering by `Name`, `Tab`, and `Restock` narrows the visible rows immediately.
+27. Confirm the inventory quality column shows a quality marker for known uncommon-or-better items and stays blank for items without known quality.
+28. Confirm long item names and long tab lists clip with an ellipsis instead of spilling into adjacent inventory columns.
+29. Run a scan, `/reload`, and confirm both the inventory snapshot and last-scan status still appear before starting a fresh scan.
+30. Open the History tab and confirm request approvals and minimum changes render as audit-style rows with actor, old value, new value, and timestamp columns.
+31. Open the Requests tab and confirm pending requests appear ahead of approved-open requests, with requester, item, quantity, approval, fulfillment, and note columns rendered in the shared table shell.
+32. Confirm rejected requests and fulfilled requests transition correctly in the Requests flow once those actions are wired into the live controls.
+33. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.

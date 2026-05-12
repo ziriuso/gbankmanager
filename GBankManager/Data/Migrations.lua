@@ -26,6 +26,7 @@ local function ensure_v1_shape(db)
     db.snapshots = ensure_table(db.snapshots)
     db.currentSnapshotId = db.currentSnapshotId
     db.changeLog = ensure_table(db.changeLog)
+    db.auditLog = ensure_table(db.auditLog)
     db.minimums = ensure_table(db.minimums)
     db.oneTimeTargets = ensure_table(db.oneTimeTargets)
     db.requests = ensure_table(db.requests)

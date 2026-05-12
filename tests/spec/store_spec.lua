@@ -9,6 +9,7 @@ local addonName, ns, loaded = assert.load_addon_from_toc("GBankManager/GBankMana
 local store = ns.modules.store
 local permissions = ns.modules.permissions
 local migrations = ns.modules.migrations
+local scanner = ns.modules.scanner
 local db = store and store.CreateFreshDatabase("My Guild")
 local normalizedMalformed = migrations and migrations.Apply({
     meta = "broken",
@@ -45,6 +46,7 @@ assert.same(ns.modules.slash, loadedByPath["GBankManager/Core/SlashCommands.lua"
 assert.truthy(type(store) == "table", "store module should be loaded for specs")
 assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
 assert.truthy(type(migrations) == "table", "migrations module should be loaded for specs")
+assert.truthy(type(scanner) == "table", "scanner module should be loaded for specs")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
@@ -60,3 +62,55 @@ assert.equal(1, normalizedMalformed.meta.schemaVersion, "migrations should apply
 assert.same(futureDb, normalizedFuture, "migrations should return the same table for newer schemas")
 assert.equal(99, normalizedFuture.meta.schemaVersion, "migrations should preserve newer schema versions")
 assert.equal("Future Guild", normalizedFuture.meta.guildName, "migrations should preserve newer schema metadata")
+assert.truthy(_G.GBankManagerDB.auditLog ~= nil, "bootstrap should normalize the audit log container at runtime")
+
+local persisted = store.Normalize({
+    meta = {
+        schemaVersion = 1,
+        guildName = "Persisted Guild",
+        updatedAt = 77,
+    },
+    currentSnapshotId = "scan-old",
+    snapshots = {
+        ["scan-old"] = {
+            scanId = "scan-old",
+            scannedAt = 77,
+            items = {
+                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 5, tabs = { Flasks = 5 } },
+            },
+        },
+    },
+    changeLog = {},
+    minimums = {},
+    oneTimeTargets = {},
+    requests = {},
+    exportTemplates = {},
+    syncState = {
+        lastSyncAt = 22,
+    },
+})
+
+assert.equal("scan-old", persisted.currentSnapshotId, "normalize should preserve the current snapshot id across reloads")
+assert.equal(5, persisted.snapshots["scan-old"].items[1001].totalCount, "normalize should preserve scanned inventory rows across reloads")
+assert.equal(77, persisted.meta.updatedAt, "normalize should preserve last scan metadata across reloads")
+assert.truthy(type(persisted.auditLog) == "table", "normalize should preserve an audit log container for workflow history")
+
+_G.GBankManagerDB = persisted
+ns.state.db = _G.GBankManagerDB
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 8 },
+        },
+    },
+}
+
+local newSnapshot, changes = scanner.FinishScan("OfficerOne", "Persisted Guild")
+
+assert.truthy(newSnapshot.scanId ~= "scan-old", "a fresh scan should create a new snapshot id")
+assert.equal(newSnapshot.scanId, _G.GBankManagerDB.currentSnapshotId, "fresh scans should move the current snapshot pointer forward")
+assert.equal(5, _G.GBankManagerDB.snapshots["scan-old"].items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")
+assert.equal(8, _G.GBankManagerDB.snapshots[newSnapshot.scanId].items[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
+assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")

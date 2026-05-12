@@ -19,6 +19,7 @@ local scanner = ns.modules.scanner or {
 
 local function current_db()
     ns.state.db = ns.state.db or _G.GBankManagerDB or {}
+    _G.GBankManagerDB = ns.state.db
     ns.state.db.snapshots = ns.state.db.snapshots or {}
     ns.state.db.changeLog = ns.state.db.changeLog or {}
     return ns.state.db
@@ -141,6 +142,7 @@ function scanner.ReadCurrentTab(tabIndex)
                 table.insert(tabData.slots, {
                     itemID = itemID,
                     name = itemName,
+                    quality = _G.C_Item and type(_G.C_Item.GetItemQualityByID) == "function" and _G.C_Item.GetItemQualityByID(itemID) or nil,
                     count = count,
                 })
             end

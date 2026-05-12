@@ -4,7 +4,7 @@
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Current HEAD before this checkpoint: `d5899a7` `feat: complete task 8 scan and export integration`
+- Current HEAD before this checkpoint: `bfbd837` `feat: refine guild bank ui and refresh handoff`
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 
 ## Read First
@@ -17,128 +17,156 @@
 
 ## Current State
 
-- Task 1: complete
-- Task 2: complete
-- Task 3: complete
-- Task 4: complete at the domain layer
-- Task 5: complete as the base officer UI shell
-- Task 6: partially elevated beyond the original shell plan with working navigation and early management views
-- Task 7: sync foundation exists
-- Task 8: scan/export integration exists and the addon is loading in game
+- Addon loads in game
+- `/gbm ui` opens the shell
+- `Scan Bank` reports progress and completes
+- Latest scan snapshot and last-scan metadata now persist across reloads
+- Inventory has:
+  - column resizing
+  - inline column filters
+  - a quality column
+  - clipped text instead of column bleed
+  - improved viewport/scrollbar alignment
+- Dashboard has an added export-readiness / total-buy card
+- `History` is re-enabled, but now points at procurement audit data rather than bank diff data
+- `Requests` now renders a real officer queue table instead of a placeholder screen
 - Local Lua suite passes
 
-## What Landed Since The Prior Handoff
+## What Landed Since `bfbd837`
 
-- Runtime compatibility:
-  - Updated `GBankManager.toc` to a current retail interface value
-  - Added `## Category: Guild` so the addon appears under the Guild grouping in the in-game addon list
-  - Added `tests/spec/toc_spec.lua` to keep TOC metadata from regressing
+### Inventory and scan persistence
 
-- Task 6 and UI shell follow-up:
-  - Added `UI/MinimumsView.lua`, `UI/TargetsView.lua`, `UI/RequestsView.lua`, and `UI/RequestDialog.lua`
-  - Extended the shell navigation with `Minimums`, `Targets`, `Requests`, and `Options`
-  - Added a draggable shell, close button, sidebar collapse control, and transparency controls under `Options`
-  - Fixed multiple runtime shell issues:
-    - invisible startup mouse blocker
-    - slash command stale frame reference
-    - removed API usage for resize handling
-    - missing font inheritance on font strings
-    - collapsed sidebar label stacking
-  - Left-aligned view text while keeping button labels centered
+- Added a six-column inventory table with:
+  - quality marker column
+  - name
+  - quantity
+  - tab
+  - restock
+  - minimum
+- Added inline per-column filtering in the Inventory screen
+- Reworked table viewport sizing so the body aligns with the header and no longer overhangs the inner frame
+- Improved scrollbar structure and row framing in the shared shell
+- Added quality capture to scan snapshots and scanner item reads
+- Preserved latest snapshot, `currentSnapshotId`, and last-scan metadata through SavedVariables normalization and reloads
 
-- Task 7:
-  - Added `Sync/Codec.lua`, `Sync/Coordinator.lua`, and `Sync/Transport.lua`
-  - Wired login/addon-message event handling in `Core/Events.lua`
-  - Added authority-first conflict resolution coverage in `tests/spec/sync_spec.lua`
+### History redesign
 
-- Task 8 and scan progress:
-  - `Scan Bank` now starts a real scan loop instead of only changing a label
-  - Scanner now tracks:
-    - total tabs
-    - completed tabs
-    - waiting tab
-    - live status text
-  - Top-bar status now surfaces scan progress and completion
-  - Completed scans now update saved snapshot metadata in the DB
+- Re-enabled the `History` tab in sidebar navigation
+- Replaced old bank-diff-oriented history rows with audit-style rows shaped around:
+  - request events
+  - minimum changes
+  - actor
+  - old value
+  - new value
+  - timestamp
 
-- Current UI rendering:
-  - Dashboard now shows early card-style content
-  - Inventory now uses an early structured table layout with columns for:
-    - Name
-    - Quantity
-    - Tab
-    - Restock
-    - Minimum
-  - History rendering helpers still exist in code, but the `History` tab has now been hidden from sidebar navigation pending a redesign
+### Requests system progress
 
-## Important Commits
+- Expanded request lifecycle support in `Domain/Requests.lua`:
+  - approve
+  - reject
+  - fulfill
+  - reopen
+- Added stored mutation helpers that update DB state and append audit log rows:
+  - `CreateAndStore`
+  - `ApproveStored`
+  - `RejectStored`
+  - `MarkFulfilledStored`
+  - `ReopenStored`
+- Added request audit entry builders for History consumption
+- Added `RequestsView.BuildOfficerQueue`
+- Added `RequestsView.BuildTableRows`
+- Wired the Requests tab to render officer queue rows through the shared shell
 
-- `d5899a7` `feat: complete task 8 scan and export integration`
-- `a3a17db` `feat: add task 6 management ui and task 7 sync foundation`
-- `7fcca18` `feat: add officer dashboard ui shell`
-- `3ec8a6b` `feat: complete task 4 planning and request workflows`
-- `69bf502` `feat: add planning engine and export builders`
+### Minimum audit groundwork
 
-## Local Runner
+- Added `auditLog` to DB defaults and migrations
+- Added `MinimumsView.UpsertWithAudit`
+- Minimum upserts can now emit `MINIMUM_CREATED` / `MINIMUM_UPDATED` style audit rows into persisted state
 
-- Local LuaJIT runner is available at `tools/lua/lua.exe`
-- Verified command result at stop point:
+## Files Touched In This Checkpoint
+
+- `GBankManager/Data/Defaults.lua`
+- `GBankManager/Data/Migrations.lua`
+- `GBankManager/Domain/Requests.lua`
+- `GBankManager/Domain/Snapshots.lua`
+- `GBankManager/Features/GuildBankScanner.lua`
+- `GBankManager/UI/DashboardView.lua`
+- `GBankManager/UI/HistoryView.lua`
+- `GBankManager/UI/InventoryView.lua`
+- `GBankManager/UI/MainFrame.lua`
+- `GBankManager/UI/MinimumsView.lua`
+- `GBankManager/UI/RequestsView.lua`
+- `tests/spec/requests_spec.lua`
+- `tests/spec/store_spec.lua`
+- `tests/spec/ui_spec.lua`
+- `docs/manual-test-checklist.md`
+
+## Important Constraints
+
+- Keep the new History direction:
+  - request history
+  - minimum-setting changes
+  - who changed a minimum
+  - old vs new minimum values
+  - when the change happened
+- Do **not** revive the old visible history model based on guild-bank item add/remove diff rows
+- Preserve the steel/slate shell and left-aligned text style
+- Continue using TDD with the Lua runner before claiming completion
+
+## Verified State
+
+- Verified on `2026-05-12` with:
 
 ```text
+.\tools\lua\lua.exe .\tests\run_all.lua
 PASS tests/run_all.lua
 ```
 
-## Current UX Summary
+## Recommended Next Offline Step
 
-- Addon loads in game without the earlier interface/runtime errors
-- `/gbm ui` opens the main frame
-- `Scan Bank` reports progress and can complete a live scan
-- Dashboard scan timestamp is now being formatted rather than shown raw
-- Inventory and Dashboard are moving toward structured layouts
-- Column overlap is improved via explicit column widths, but true user-driven column resizing is not implemented yet
-
-## Direction Change
-
-### History Tab
-
-Do **not** continue the old `History` direction of showing guild-bank item adds/removes as a visible officer tab.
-
-New direction:
-
-- Re-enable `History` later only after redesigning it around:
-  - request history
-  - changes to restock settings
-  - who changed a minimum
-  - what the previous and new minimum values were
-  - when the setting/request change occurred
-
-In other words:
-
-- Move away from "bank diff audit log"
-- Move toward "procurement workflow and policy audit log"
-
-The current hidden/disabled `History` tab behavior should be treated as intentional until that redesign starts.
-
-## Recommended Next Step
-
-Continue the UI refinement pass rather than expanding system scope.
+Wire the live UI controls into the new stored request/minimum mutation helpers so the addon stops relying on passive helpers and starts producing real persisted workflow history from actual officer actions.
 
 Suggested order:
 
-1. Finish Inventory table polish:
-   - prevent remaining text overflow
-   - add real visible row framing if useful
-   - add true scroll behavior if needed
-   - add user-resizable columns if desired
-2. Continue Dashboard polish:
-   - improve card spacing and hierarchy
-   - make last scan metadata friendlier
-   - refine top-5-used logic if withdrawal semantics need tightening
-3. Keep `History` hidden
-4. If a new audit/history design starts, treat it as a requirements reset around requests/restock changes rather than reviving the current bank-diff UI
+1. Add request action handlers in the Requests UI path for:
+   - approve
+   - reject
+   - fulfill
+   - reopen
+2. Route those actions through the new stored helpers in `Domain/Requests.lua`
+3. Add minimum edit/create flows that call `MinimumsView.UpsertWithAudit`
+4. Refresh Requests and History views after each mutation
+5. Add tests proving the shared DB is updated and the visible tables refresh from persisted state
+
+## Next Offline Prompt
+
+Use this prompt for the next session:
+
+> Continue work on the WoW guild bank addon from the implementation worktree.  
+> Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`  
+>  
+> Read first:  
+> `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`  
+> `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`  
+> `docs/superpowers/specs/2026-05-11-wow-guild-bank-task-5-ui-shell-design.md`  
+> `docs/superpowers/handoffs/latest-handoff.md`  
+>  
+> Then run:  
+> `git status -sb`  
+> `.\tools\lua\lua.exe .\tests\run_all.lua`  
+>  
+> Resume from the current clean head on branch `codex/gbankmanager-v1`.  
+>  
+> Priority for this offline session:  
+> 1. Wire live Requests UI actions to persisted stored mutations for approve/reject/fulfill/reopen.  
+> 2. Wire minimum create/edit flows to `UpsertWithAudit` so History fills from real saved changes.  
+> 3. Make Requests and History refresh immediately after mutations.  
+> 4. Keep using TDD and verify with `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.  
+>  
+> Keep the History tab focused on procurement workflow audit events, not bank diff history.
 
 ## Notes
 
-- Main repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for` is intentionally left on `master` with docs commits only
-- Active implementation work remains isolated in this worktree branch
-- There are working-tree changes beyond `d5899a7` at this stop point; commit them together with this handoff refresh
+- WoW was down for maintenance during this checkpoint, so no new in-game/manual verification was performed after these changes
+- The best next work remains offline-safe request/minimum mutation wiring and additional Lua coverage

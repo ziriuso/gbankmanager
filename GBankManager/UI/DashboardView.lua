@@ -36,7 +36,7 @@ function dashboard.BuildSummary(db, planRows)
 
     local exportReadyCount = 0
     local totalPurchaseQuantity = 0
-    for _, row in ipairs(planRows or {}) do
+    for _, row in pairs(planRows or {}) do
         exportReadyCount = exportReadyCount + 1
         totalPurchaseQuantity = totalPurchaseQuantity + (row.totalToBuy or 0)
     end
@@ -119,6 +119,11 @@ function dashboard.BuildCards(db, planRows)
             title = "Pending Requests",
             value = tostring(summary.pendingRequestCount),
             note = string.format("%d suggested fulfillments", summary.suggestedFulfillmentCount),
+        },
+        {
+            title = "Ready To Buy",
+            value = tostring(summary.totalPurchaseQuantity),
+            note = string.format("%d export rows", summary.exportReadyCount),
         },
         {
             title = "Top 5 Most Used",

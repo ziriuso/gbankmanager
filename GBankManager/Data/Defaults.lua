@@ -17,6 +17,7 @@ function defaults.CreateDatabase(guildName)
         snapshots = {},
         currentSnapshotId = nil,
         changeLog = {},
+        auditLog = {},
         minimums = {},
         oneTimeTargets = {},
         requests = {},
