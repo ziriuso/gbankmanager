@@ -169,6 +169,98 @@
 PASS tests/run_all.lua
 ```
 
+## Latest Follow-Up 2026-05-12
+
+This section supersedes the older "Recommended Next Offline Step" block above.
+
+### Current Resume Point
+
+- Branch: `codex/gbankmanager-v1`
+- Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
+- Latest verified command:
+
+```text
+.\tools\lua\lua.exe .\tests\run_all.lua
+PASS tests/run_all.lua
+```
+
+### What Landed In The Latest Pass
+
+- Minimums edits now stage as pending changes instead of writing immediately
+- `Show All` rows can now be edited directly from the table instead of forcing the older top-editor path
+- The current footer flow is moving in the right direction, but it still needs another live-client UI cleanup pass
+
+### Next Priority
+
+Use the live-client screenshots as the primary reference and do this next:
+
+1. Fix Minimums column spacing and header overflow
+2. Rename `Restock From` to `Restock Source`
+3. Allow the `Restock Source` header to wrap to two lines if that helps spacing
+4. Remove the appended add-minimum-row UI at the bottom
+5. Replace it with footer buttons:
+   - `Add`
+   - `Save`
+   - `Undo`
+6. `Add` should open a modal with a clean search UI:
+   - `Item ID`
+   - `Item Name`
+   - item quality search fields
+   - user searches for item
+   - user clicks add
+   - modal closes
+   - new row is inserted into the table
+   - new row is highlighted so the user can fill in `Minimum`, `Restock`, and `Bank Tab`
+7. `Undo` should restore the original Minimums state from when the view was opened
+8. `Save` should commit all pending changes and update saved variables plus History correctly
+9. History timestamps should be stored in UTC and localized only for in-game display
+10. The stored last-scan value should also be UTC-at-rest and localized only for display
+11. Change the Minimums subtitle to:
+   - `Manage Guild Bank Item Minimum Stock Levels`
+12. After the Minimums footer/modal polish, return to the inventory quality issue in the live client
+
+### Important Carry-Forward Notes
+
+- Keep `History` focused on procurement workflow audit events only
+- Do not restore visible bank diff history into the History tab
+- Inventory tier sorting is still not fully correct in the live client
+- Continue to use the user screenshots as reference for:
+  - `Algari Mana Oil`
+  - `Potion Bomb of Speed`
+- Best remaining risk is still real in-game behavior, not the offline Lua suite
+
+### Next Offline Prompt
+
+> Continue work on the WoW guild bank addon from the implementation worktree.  
+> Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`  
+>  
+> Read first:  
+> `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`  
+> `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`  
+> `docs/superpowers/specs/2026-05-11-wow-guild-bank-task-5-ui-shell-design.md`  
+> `docs/superpowers/handoffs/latest-handoff.md`  
+>  
+> Then run:  
+> `git status -sb`  
+> `.\tools\lua\lua.exe .\tests\run_all.lua`  
+>  
+> Resume from branch `codex/gbankmanager-v1`.  
+>  
+> Priority for this offline session:  
+> 1. Fix Minimums column spacing and header overflow in the live client.  
+> 2. Change `Restock From` to `Restock Source`, and let it wrap to two lines if that helps spacing.  
+> 3. Remove the appended add-minimum-row view from the bottom.  
+> 4. Replace it with footer buttons: `Add`, `Save`, `Undo`.  
+> 5. `Add` should open a modal with `Item ID`, `Item Name`, and item-quality search fields. Searching and adding should close the modal and add a new highlighted row into the table so the user can fill `Minimum`, `Restock`, and `Bank Tab`.  
+> 6. `Undo` should restore the original state from when the Minimums view was opened.  
+> 7. `Save` should commit all pending changes and update both the database and History correctly.  
+> 8. Store History timestamps in UTC and localize only for display in game.  
+> 9. Store the last-scan value in UTC and localize only for display in game.  
+> 10. Change the Minimums subtitle to `Manage Guild Bank Item Minimum Stock Levels`.  
+> 11. After that, return to the inventory quality issue in the live client.  
+> 12. Keep `History` focused on procurement workflow audit events only.  
+> 13. Keep using TDD and verify with `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
+
 ## Recommended Next Offline Step
 
 Move from `Inventory` to a substantial `Minimums` redesign pass.

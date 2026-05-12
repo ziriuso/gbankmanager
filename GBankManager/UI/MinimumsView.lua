@@ -371,7 +371,7 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             local configuredTab = primary_tab(item)
             local currentCount = tonumber(((item.tabs or {})[configuredTab]) or item.totalCount or 0) or 0
             table.insert(out, {
-                rowKey = tostring(itemID),
+                rowKey = table.concat({ tostring(itemID or ""), "TAB", tostring(configuredTab or "") }, "|"),
                 itemID = tostring(itemID or ""),
                 itemName = tostring(item.name or "Unknown"),
                 tier = crafted_quality_markup(item.craftedQualityIcon),

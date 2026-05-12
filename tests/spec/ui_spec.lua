@@ -60,6 +60,7 @@ assert.truthy(type(mainFrame.requestCreateItemNameInput) == "table", "main frame
 assert.truthy(type(mainFrame.requestCreateQuantityInput) == "table", "main frame should expose a request quantity input")
 assert.truthy(type(mainFrame.minimumsPanel) == "table", "main frame should expose a minimums editor panel")
 assert.truthy(type(mainFrame.minimumSaveButton) == "table", "main frame should expose a minimum save button")
+assert.truthy(type(mainFrame.minimumSaveAllButton) == "table", "main frame should expose a minimum save-all button")
 assert.truthy(type(mainFrame.minimumItemNameInput) == "table", "main frame should expose a minimum item-name input")
 assert.truthy(type(mainFrame.minimumQuantityInput) == "table", "main frame should expose a minimum quantity input")
 assert.truthy(type(mainFrame.minimumNewButton) == "table", "main frame should expose a minimum new button")
@@ -677,9 +678,8 @@ mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowA
 assert.truthy(mainFrame.minimumShowAllRows == true, "minimum show-all toggle should reveal the full bank-backed minimum list")
 assert.equal("Feast Gamma", mainFrame.tableRows[2].columns[3]:GetText(), "minimum show-all toggle should reveal bank-only rows")
 mainFrame.tableRows[2]:GetScript("OnClick")(mainFrame.tableRows[2])
-assert.equal("3003", mainFrame.minimumItemIDInput:GetText(), "bank-only minimum rows should load item ids into the editor as drafts")
-assert.equal("Feast Gamma", mainFrame.minimumItemNameInput:GetText(), "bank-only minimum rows should load item names into the editor as drafts")
-assert.equal("Draft from bank item. Set restock and save to include it in planning.", mainFrame.minimumEditorStateText:GetText(), "bank-only minimum rows should explain that the editor is in draft mode")
+assert.truthy(mainFrame.tableRows[2].restockToggleButton:IsShown(), "bank-only minimum rows should still be editable directly from show-all mode")
+assert.truthy(mainFrame.tableRows[2].minimumValueInput:IsShown(), "bank-only minimum rows should expose direct quantity editing in the row")
 
 mainFrame.minimumSearchInput:SetText("feast")
 assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[3]:GetText(), "minimum search should narrow the expanded minimum list by item name")
@@ -697,23 +697,12 @@ assert.truthy(mainFrame.minimumShowAllRows == false, "minimum show-all toggle sh
 assert.truthy(mainFrame.minimumManualOnlyRows == false, "minimum manual-only toggle should return to all-source mode")
 
 mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
-assert.equal("1001", mainFrame.minimumItemIDInput:GetText(), "clicking a minimum row should load its item id into the editor")
-assert.equal("Flask Alpha", mainFrame.minimumItemNameInput:GetText(), "clicking a minimum row should load its item name into the editor")
-assert.equal("Editing saved minimum rule.", mainFrame.minimumEditorStateText:GetText(), "saved minimum rows should show an editing-state cue")
-
-mainFrame.minimumRestockToggleButton:GetScript("OnClick")(mainFrame.minimumRestockToggleButton)
-assert.truthy(ns.state.db.minimums[1].enabled == false, "minimum restock toggle should persist disabled state in the saved db")
-assert.equal("MINIMUM_DISABLED", ns.state.db.auditLog[1].type, "minimum restock toggle should append disabled audit rows")
-
-mainFrame:LoadMinimumRuleIntoEditor(ns.state.db.minimums[1])
-mainFrame.minimumQuantityInput:SetText("10")
-mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
-assert.equal(10, ns.state.db.minimums[1].quantity, "minimum save button should persist edited quantities into the saved db")
-assert.equal("MINIMUM_UPDATED", ns.state.db.auditLog[2].type, "minimum save button should append minimum audit rows")
-
-mainFrame.minimumRestockToggleButton:GetScript("OnClick")(mainFrame.minimumRestockToggleButton)
-assert.truthy(ns.state.db.minimums[1].enabled == true, "minimum restock toggle should re-enable saved minimum rules")
-assert.equal("MINIMUM_ENABLED", ns.state.db.auditLog[3].type, "minimum restock toggle should append enabled audit rows")
+assert.truthy(mainFrame.tableRows[1].minimumValueInput:IsShown(), "clicking a configured minimum row should edit the minimum in place")
+assert.truthy(mainFrame.tableRows[1].restockToggleButton:IsShown(), "clicking a configured minimum row should edit restock in place")
+mainFrame.tableRows[1].minimumValueInput:SetText("10")
+mainFrame.tableRows[1].restockToggleButton:GetScript("OnClick")(mainFrame.tableRows[1].restockToggleButton)
+assert.equal(8, ns.state.db.minimums[1].quantity, "minimum edits should stay pending until save-all is clicked")
+assert.truthy(ns.state.db.minimums[1].enabled == true, "restock edits should stay pending until save-all is clicked")
 
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
 assert.equal("", mainFrame.minimumItemIDInput:GetText(), "minimum new button should clear the editor item id")
@@ -725,10 +714,15 @@ mainFrame.minimumQuantityInput:SetText("16")
 mainFrame.minimumScopeInput:SetText("TAB")
 mainFrame.minimumTabNameInput:SetText("Overflow")
 mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
-assert.equal(2, #ns.state.db.minimums, "minimum save button should create new minimum rules from editor input")
-assert.truthy(ns.state.db.minimums[2].enabled == true, "manual minimum creation should persist enabled state for shopping list inclusion")
-assert.equal("Overflow", ns.state.db.minimums[2].tabName, "manual minimum creation should persist the required bank tab")
-assert.equal(4, #ns.state.db.auditLog, "minimum workflows should audit disable, update, enable, and creation paths")
+assert.equal(1, #ns.state.db.minimums, "minimum add-row changes should stay pending until save-all is clicked")
+
+mainFrame.minimumSaveAllButton:GetScript("OnClick")(mainFrame.minimumSaveAllButton)
+assert.equal(2, #ns.state.db.minimums, "save-all should persist both pending edits and newly drafted minimum rows")
+assert.equal(10, ns.state.db.minimums[1].quantity, "save-all should persist in-place edits for configured rows")
+assert.truthy(ns.state.db.minimums[1].enabled == false, "save-all should persist pending restock toggles")
+assert.truthy(ns.state.db.minimums[2].enabled == true, "save-all should persist drafted rows for shopping list inclusion")
+assert.equal("Overflow", ns.state.db.minimums[2].tabName, "save-all should persist the required bank tab on newly drafted rows")
+assert.equal(2, #ns.state.db.auditLog, "save-all should audit the finalized row changes only once they are committed")
 
 mainFrame:SelectView("MINIMUMS")
 mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
@@ -739,7 +733,7 @@ assert.equal("", mainFrame.minimumEmptyStateText:GetText(), "minimums view shoul
 
 mainFrame:SelectView("HISTORY")
 assert.equal("Minimum", mainFrame.tableRows[1].columns[1]:GetText(), "history should refresh to show minimum workflow audit rows")
-assert.equal("Disabled", mainFrame.tableRows[1].columns[3]:GetText(), "history should keep earlier minimum workflow actions visible after later mutations")
+assert.equal("Updated", mainFrame.tableRows[1].columns[3]:GetText(), "history should keep earlier minimum workflow actions visible after later mutations")
 mainFrame.tableFilterInputs[1]:SetText("Minimum")
 mainFrame.tableFilterInputs[4]:SetText("TestPlayer")
 mainFrame.tableFilterInputs[2]:SetText("Potion")
@@ -1209,18 +1203,31 @@ assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums sho
 assert.equal("Restock From", mainFrame.tableHeaderLabels[8]:GetText(), "minimums should add a restock-from column")
 assert.truthy(not mainFrame.tableFilterInputs[5]:IsShown(), "minimums should not expose a text filter for the current column")
 assert.truthy(not mainFrame.tableFilterInputs[7]:IsShown(), "minimums should not expose a text filter for the minimum column")
-local redesignedMinimumRowIndex = mainFrame.cachedMinimumRows[1] and mainFrame.cachedMinimumRows[1].itemName == "Potion Rank Two" and 1 or 2
-assert.equal("Overflow", mainFrame.cachedMinimumRows[redesignedMinimumRowIndex].restockFrom, "minimums table should render restock-from values from row shaping")
+local redesignedMinimumCachedRow = nil
+for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
+    if row.itemName == "Potion Rank Two" then
+        redesignedMinimumCachedRow = row
+        break
+    end
+end
+assert.equal("Overflow", redesignedMinimumCachedRow and redesignedMinimumCachedRow.restockFrom or nil, "minimums table should render restock-from values from row shaping")
 
+local redesignedMinimumRowIndex = nil
+for index, rowFrame in ipairs(mainFrame.tableRows) do
+    if rowFrame.columns[3]:GetText() == "Potion Rank Two" then
+        redesignedMinimumRowIndex = index
+        break
+    end
+end
 mainFrame.tableRows[redesignedMinimumRowIndex]:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex])
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:IsShown(), "minimum rows should expose inline numeric editing when selected for editing")
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:IsShown(), "minimum rows should expose inline restock editing when selected for editing")
-assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton:IsShown(), "minimum rows should show a per-row save button while editing")
+assert.equal("5", mainFrame.tableRows[redesignedMinimumRowIndex].columns[7]:GetText(), "minimum rows should keep the minimum value in the same cell position while editing")
+assert.equal("Yes", mainFrame.tableRows[redesignedMinimumRowIndex].columns[6]:GetText(), "minimum rows should keep the restock value in the same cell position while editing")
 mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:SetText("8")
 mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton)
-mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton)
-assert.equal(8, ns.state.db.minimums[1].quantity, "inline minimum save should persist edited quantities")
-assert.truthy(ns.state.db.minimums[1].enabled == false, "inline restock editing should persist yes-no restock state")
+assert.equal(5, ns.state.db.minimums[1].quantity, "inline row edits should stay pending until save-all is clicked")
+assert.truthy(ns.state.db.minimums[1].enabled == true, "inline restock edits should stay pending until save-all is clicked")
 
 mainFrame:SelectView("OPTIONS")
 assert.equal("100", mainFrame.defaultMinimumInput:GetText(), "options should expose the saved default minimum value")
@@ -1255,6 +1262,9 @@ _G.GBankManagerDB.snapshots["minimum-add"] = {
 }
 _G.GBankManagerDB.minimums = {}
 ns.state.db = _G.GBankManagerDB
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.selectedMinimumKey = nil
 
 mainFrame:SelectView("MINIMUMS")
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
@@ -1268,7 +1278,9 @@ assert.equal("7008", mainFrame.minimumAddItemIDInput:GetText(), "selecting a qua
 assert.equal("Algari Mana Oil", mainFrame.minimumAddItemNameInput:GetText(), "selecting a quality variant should keep the resolved item name")
 mainFrame.minimumAddBankTabInput:SetText("Alchemy")
 mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
-assert.equal(1, #ns.state.db.minimums, "bottom-row minimum creation should persist a new minimum rule")
+assert.equal(0, #ns.state.db.minimums, "bottom-row minimum creation should stay pending until save-all is clicked")
+mainFrame.minimumSaveAllButton:GetScript("OnClick")(mainFrame.minimumSaveAllButton)
+assert.equal(1, #ns.state.db.minimums, "save-all should persist a newly drafted bottom-row minimum rule")
 assert.equal("TAB", ns.state.db.minimums[1].scope, "new minimum rows should save as tab-scoped rules")
 assert.equal("Alchemy", ns.state.db.minimums[1].tabName, "new minimum rows should require and persist the chosen bank tab")
 assert.equal(250, ns.state.db.minimums[1].quantity, "new minimum rows should use the configured default minimum when the user keeps the seeded value")
