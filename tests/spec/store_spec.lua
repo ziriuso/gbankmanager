@@ -97,6 +97,9 @@ assert.truthy(type(persisted.auditLog) == "table", "normalize should preserve an
 assert.truthy(type(persisted.ui) == "table", "normalize should preserve a ui settings container")
 assert.truthy(type(persisted.ui.exportSettings) == "table", "normalize should preserve export ui settings")
 assert.truthy(type(persisted.ui.inventoryColumnWidths) == "table", "normalize should preserve inventory column width settings")
+assert.truthy(type(persisted.ui.minimumSettings) == "table", "normalize should preserve minimum ui settings")
+assert.equal(100, persisted.ui.minimumSettings.defaultQuantity, "normalize should seed the default minimum quantity setting")
+assert.equal(100, db.ui.minimumSettings.defaultQuantity, "fresh databases should default minimum quantity to 100")
 
 _G.GBankManagerDB = persisted
 ns.state.db = _G.GBankManagerDB

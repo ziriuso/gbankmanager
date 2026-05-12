@@ -32,6 +32,9 @@ function defaults.CreateDatabase(guildName)
         exportTemplates = {},
         ui = {
             inventoryColumnWidths = {},
+            minimumSettings = {
+                defaultQuantity = 100,
+            },
             exportSettings = {
                 selectedPreset = "Spreadsheet",
                 customTemplate = defaults.CreateDefaultExportTemplate(),

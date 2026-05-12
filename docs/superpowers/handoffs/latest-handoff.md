@@ -251,3 +251,25 @@ Suggested order:
 - The addon has strong offline coverage now for Inventory, Requests, Minimums, Targets, Planning, and Exports
 - Best remaining risk is real in-game behavior, especially item-specific crafted-quality atlas variants and UI behavior inside WoW itself
 - Inventory tier sorting should be revisited after the minimums pass with the user screenshots as reference, because the live client still disagrees with the current offline parser for at least `Algari Mana Oil` and `Potion Bomb of Speed`
+
+## Update 2026-05-12
+
+- The offline `Minimums` redesign is now implemented and covered in the Lua suite
+- The redesigned minimums workflow now includes:
+  - tier as the second column after item ID
+  - `Bank Tab` replacing `Source`
+  - tab-aware `Restock From` values that prefer another guild-bank tab before `Auction`
+  - inventory-style sortable headers in the minimums table
+  - no text filters for `Current` or `Minimum`
+  - inline row editing for `Restock` and `Minimum` with a row-level `Save`
+  - a default minimum quantity setting in `Options`
+  - a bottom add-row flow that resolves item IDs and offers quality-aware name matches
+- Carry-forward note:
+  - inventory tier sorting still needs another live-client fix pass for `Algari Mana Oil` and `Potion Bomb of Speed`
+  - use the user screenshots as reference when revisiting crafted-quality atlas/icon handling in the live client
+- Verified again with:
+
+```text
+.\tools\lua\lua.exe .\tests\run_all.lua
+PASS tests/run_all.lua
+```

@@ -372,7 +372,7 @@ mainFrame.tableHeaderFrame:SetSize(mainFrame.tableViewportWidth, mainFrame.table
 apply_panel_style(mainFrame.tableHeaderFrame, theme.colors.panel)
 
 mainFrame.tableHeaderLabels = mainFrame.tableHeaderLabels or {}
-for index = 1, 6 do
+for index = 1, 9 do
     local label = mainFrame.tableHeaderLabels[index] or make_label(mainFrame.tableHeaderFrame, "", "GameFontHighlight")
     mainFrame.tableHeaderLabels[index] = label
 end
@@ -384,7 +384,7 @@ mainFrame.tableFilterFrame:SetSize(mainFrame.tableViewportWidth, mainFrame.table
 apply_panel_style(mainFrame.tableFilterFrame, theme.colors.background)
 
 mainFrame.tableFilterInputs = mainFrame.tableFilterInputs or {}
-for index = 1, 6 do
+for index = 1, 9 do
     local input = mainFrame.tableFilterInputs[index] or make_input(mainFrame.tableFilterFrame, 80, 22)
     mainFrame.tableFilterInputs[index] = input
 end
@@ -404,6 +404,10 @@ mainFrame.tableColumnLayout = mainFrame.tableColumnLayout or {}
 mainFrame.tableColumnResizeHandles = mainFrame.tableColumnResizeHandles or {}
 mainFrame.cachedInventoryRows = mainFrame.cachedInventoryRows or {}
 mainFrame.inventorySortState = mainFrame.inventorySortState or {
+    key = nil,
+    direction = "asc",
+}
+mainFrame.minimumSortState = mainFrame.minimumSortState or {
     key = nil,
     direction = "asc",
 }
@@ -441,7 +445,7 @@ mainFrame.tableRows = mainFrame.tableRows or {}
         apply_panel_style(row, rowIndex % 2 == 1 and theme.colors.panel or theme.colors.panelAlt)
         row.columns = row.columns or {}
 
-        for columnIndex = 1, 6 do
+        for columnIndex = 1, 9 do
             local column = row.columns[columnIndex] or make_label(row, "", "GameFontNormal")
             row.columns[columnIndex] = column
         end
@@ -571,6 +575,19 @@ mainFrame.minimumNewButton:SetPoint("LEFT", mainFrame.minimumManualOnlyToggleBut
 mainFrame.minimumSaveButton = mainFrame.minimumSaveButton or make_button(mainFrame.minimumsPanel, 72, 28, "Save")
 mainFrame.minimumSaveButton:SetPoint("LEFT", mainFrame.minimumNewButton, "RIGHT", 8, 0)
 
+mainFrame.minimumAddItemIDInput = mainFrame.minimumAddItemIDInput or mainFrame.minimumItemIDInput
+mainFrame.minimumAddItemNameInput = mainFrame.minimumAddItemNameInput or mainFrame.minimumItemNameInput
+mainFrame.minimumAddQuantityInput = mainFrame.minimumAddQuantityInput or mainFrame.minimumQuantityInput
+mainFrame.minimumAddBankTabInput = mainFrame.minimumAddBankTabInput or mainFrame.minimumTabNameInput
+mainFrame.minimumAddButton = mainFrame.minimumAddButton or mainFrame.minimumSaveButton
+mainFrame.minimumAddMatchButtons = mainFrame.minimumAddMatchButtons or {}
+for index = 1, 3 do
+    local button = mainFrame.minimumAddMatchButtons[index] or make_button(mainFrame.minimumsPanel, 146, 24, "")
+    button:SetPoint("TOPLEFT", mainFrame.minimumRestockToggleButton, "BOTTOMLEFT", ((index - 1) * 154), -8)
+    button:Hide()
+    mainFrame.minimumAddMatchButtons[index] = button
+end
+
 mainFrame.targetsPanel = mainFrame.targetsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.targetsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.targetsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
@@ -676,6 +693,7 @@ end)
 
 mainFrame.minimumNewButton:SetScript("OnClick", function()
     mainFrame:ClearMinimumEditor()
+    mainFrame:ResetMinimumAddRow()
 end)
 
 mainFrame.minimumRestockToggleButton:SetScript("OnClick", function()
@@ -691,7 +709,11 @@ mainFrame.minimumManualOnlyToggleButton:SetScript("OnClick", function()
 end)
 
 mainFrame.minimumSaveButton:SetScript("OnClick", function()
-    mainFrame:SaveMinimumFromEditor()
+    if mainFrame.selectedMinimumKey then
+        mainFrame:SaveMinimumFromEditor()
+    else
+        mainFrame:CreateMinimumFromAddRow()
+    end
 end)
 
 mainFrame.targetNewButton:SetScript("OnClick", function()
@@ -741,6 +763,12 @@ mainFrame.transparencyUpButton:SetPoint("LEFT", mainFrame.transparencyDownButton
 mainFrame.transparencyValueText = mainFrame.transparencyValueText or make_label(mainFrame.optionsPanel, "", "GameFontNormal")
 mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencyUpButton, "RIGHT", 12, 0)
 
+mainFrame.defaultMinimumInput = mainFrame.defaultMinimumInput or make_input(mainFrame.optionsPanel, 72, 22)
+mainFrame.defaultMinimumInput:SetPoint("LEFT", mainFrame.transparencyValueText, "RIGHT", 24, 0)
+
+mainFrame.defaultMinimumSaveButton = mainFrame.defaultMinimumSaveButton or make_button(mainFrame.optionsPanel, 86, 28, "Save Min")
+mainFrame.defaultMinimumSaveButton:SetPoint("LEFT", mainFrame.defaultMinimumInput, "RIGHT", 8, 0)
+
 local function refresh_alpha_text()
     mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", math.floor(mainFrame.currentAlpha * 100 + 0.5)))
 end
@@ -753,6 +781,10 @@ end)
 mainFrame.transparencyUpButton:SetScript("OnClick", function()
     set_alpha(mainFrame.currentAlpha + 0.08)
     refresh_alpha_text()
+end)
+
+mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
+    mainFrame:SaveDefaultMinimumSetting()
 end)
 
 mainFrame.closeButton = mainFrame.closeButton or make_button(mainFrame.topBar, 96, 28, "Close")
@@ -823,6 +855,10 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumManualOnlyToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumNewButton, theme.colors.panel)
     apply_panel_style(self.minimumSaveButton, theme.colors.panelAlt)
+    apply_panel_style(self.defaultMinimumSaveButton, theme.colors.panelAlt)
+    for _, button in ipairs(self.minimumAddMatchButtons or {}) do
+        apply_panel_style(button, theme.colors.panel)
+    end
     apply_panel_style(self.targetStatusButton, theme.colors.panel)
     apply_panel_style(self.targetNewButton, theme.colors.panel)
     apply_panel_style(self.targetSaveButton, theme.colors.panelAlt)
@@ -860,6 +896,7 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumScopeInput, theme.colors.background)
     apply_panel_style(self.minimumTabNameInput, theme.colors.background)
     apply_panel_style(self.minimumSearchInput, theme.colors.background)
+    apply_panel_style(self.defaultMinimumInput, theme.colors.background)
     apply_panel_style(self.targetItemIDInput, theme.colors.background)
     apply_panel_style(self.targetItemNameInput, theme.colors.background)
     apply_panel_style(self.targetQuantityInput, theme.colors.background)
@@ -869,16 +906,25 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportFieldsInput, theme.colors.background)
 end
 
+function mainFrame:GetActiveSortState()
+    if self.activeView == "MINIMUMS" then
+        return self.minimumSortState
+    end
+
+    return self.inventorySortState
+end
+
 function mainFrame:ConfigureTable(columns, rows)
     self.isConfiguringTable = true
     self.tableColumnLayout = columns or {}
     self.tableColumnKeys = {}
     local offset = 4
+    local activeSortState = self:GetActiveSortState()
 
     for index = 1, #self.tableHeaderLabels do
         local label = self.tableHeaderLabels[index]
         local columnLayout = self.tableColumnLayout[index] or {}
-        local width = columnLayout.width or 120
+        local width = columnLayout.key and (columnLayout.width or 120) or 0
         self.tableColumnKeys[index] = columnLayout.key
 
         local headerButton = self.tableHeaderButtons[index] or _G.CreateFrame("Button", nil, self.tableHeaderFrame, "BackdropTemplate")
@@ -888,12 +934,17 @@ function mainFrame:ConfigureTable(columns, rows)
         headerButton:SetScript("OnClick", function()
             mainFrame:HandleHeaderClick(index)
         end)
+        if width == 0 then
+            headerButton:Hide()
+        else
+            headerButton:Show()
+        end
         self.tableHeaderButtons[index] = headerButton
 
         label:ClearAllPoints()
         label:SetPoint("TOPLEFT", self.tableHeaderFrame, "TOPLEFT", offset + 6, -8)
         label:SetWidth(width)
-        label:SetText(label_with_sort_marker(columnLayout, self.inventorySortState))
+        label:SetText(label_with_sort_marker(columnLayout, activeSortState))
         if type(label.SetJustifyH) == "function" then
             label:SetJustifyH(columnLayout.justifyH or "LEFT")
         end
@@ -903,6 +954,9 @@ function mainFrame:ConfigureTable(columns, rows)
         input:SetPoint("TOPLEFT", self.tableFilterFrame, "TOPLEFT", offset, -3)
         input:SetWidth(width)
         if columnLayout.filterMode == "none" then
+            input:SetText("")
+            input:Hide()
+        elseif width == 0 then
             input:SetText("")
             input:Hide()
         else
@@ -919,7 +973,7 @@ function mainFrame:ConfigureTable(columns, rows)
             end
         end
 
-        if index < #self.tableHeaderLabels then
+        if index < #self.tableHeaderLabels and width > 0 then
             local handle = self.tableColumnResizeHandles[index] or _G.CreateFrame("Button", nil, self.tableHeaderFrame, "BackdropTemplate")
             handle:SetPoint("TOPLEFT", self.tableHeaderFrame, "TOPLEFT", offset + width - 2, 4)
             handle:SetSize(4, self.tableHeaderHeight - 8)
@@ -930,6 +984,9 @@ function mainFrame:ConfigureTable(columns, rows)
                 mainFrame:ResizeInventoryColumn(index, 24)
             end)
             self.tableColumnResizeHandles[index] = handle
+            handle:Show()
+        elseif self.tableColumnResizeHandles[index] then
+            self.tableColumnResizeHandles[index]:Hide()
         end
 
         offset = offset + width
@@ -957,6 +1014,12 @@ function mainFrame:RefreshVisibleTableRows()
         rowFrame:SetScript("OnClick", function(frame)
             mainFrame:HandleTableRowClick(frame.rowData)
         end)
+
+        if self.activeView == "MINIMUMS" then
+            self:SyncMinimumInlineRow(rowFrame, row, rowIndex)
+        elseif type(self.HideMinimumInlineRow) == "function" then
+            self:HideMinimumInlineRow(rowFrame)
+        end
     end
 
     local maxRow = math.max(1, #self.tableRowsData)
@@ -1090,8 +1153,65 @@ function mainFrame:ApplyInventoryFilters()
     self:RefreshVisibleTableRows()
 end
 
+function mainFrame:GetMinimumSettings(db)
+    local minimumsView = ns.modules.minimumsView
+    if type(minimumsView) == "table" and type(minimumsView.GetMinimumSettings) == "function" then
+        return minimumsView.GetMinimumSettings(db or current_db())
+    end
+
+    db = db or current_db()
+    db.ui = db.ui or {}
+    db.ui.minimumSettings = db.ui.minimumSettings or { defaultQuantity = 100 }
+    db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
+    return db.ui.minimumSettings
+end
+
+function mainFrame:LoadMinimumSettingsFromDb(db)
+    local settings = self:GetMinimumSettings(db)
+    self.defaultMinimumInput:SetText(tostring(settings.defaultQuantity or 100))
+    if (self.minimumAddQuantityInput:GetText() or "") == "" then
+        self.minimumAddQuantityInput:SetText(tostring(settings.defaultQuantity or 100))
+    end
+    return settings
+end
+
+function mainFrame:SaveDefaultMinimumSetting()
+    local settings = self:GetMinimumSettings(current_db())
+    settings.defaultQuantity = parse_number(self.defaultMinimumInput:GetText() or "") or 100
+    self.defaultMinimumInput:SetText(tostring(settings.defaultQuantity))
+    return settings.defaultQuantity
+end
+
+function mainFrame:ApplyMinimumFilters()
+    local minimumsView = ns.modules.minimumsView
+    local db = current_db()
+    local snapshot = self:GetCurrentSnapshot()
+    local layout = minimumsView.GetDefaultColumns()
+    local rows = minimumsView.BuildTableRows(db.minimums or {}, snapshot, {
+        showAll = self.minimumShowAllRows,
+        search = self.minimumSearchInput:GetText() or "",
+        manualOnly = self.minimumManualOnlyRows,
+        columnFilters = self:GetSharedFilterState(),
+    })
+
+    rows = minimumsView.SortRows(rows, self.minimumSortState)
+    self.tableColumnLayout = layout
+    self.tableScrollOffset = 0
+    self.cachedMinimumRows = rows
+    self:ConfigureTable(layout, rows)
+    self:RefreshVisibleTableRows()
+
+    local emptyStateText = self:GetMinimumEmptyStateText(rows)
+    self.minimumEmptyStateText:SetText(emptyStateText)
+    if emptyStateText ~= "" then
+        self.minimumEmptyStateText:Show()
+    else
+        self.minimumEmptyStateText:Hide()
+    end
+end
+
 function mainFrame:HandleHeaderClick(index)
-    if self.activeView ~= "INVENTORY" then
+    if self.activeView ~= "INVENTORY" and self.activeView ~= "MINIMUMS" then
         return nil
     end
 
@@ -1100,15 +1220,21 @@ function mainFrame:HandleHeaderClick(index)
         return nil
     end
 
-    if self.inventorySortState.key == column.key then
-        self.inventorySortState.direction = self.inventorySortState.direction == "asc" and "desc" or "asc"
+    local sortState = self.activeView == "MINIMUMS" and self.minimumSortState or self.inventorySortState
+
+    if sortState.key == column.key then
+        sortState.direction = sortState.direction == "asc" and "desc" or "asc"
     else
-        self.inventorySortState.key = column.key
-        self.inventorySortState.direction = "asc"
+        sortState.key = column.key
+        sortState.direction = "asc"
     end
 
-    self:ApplyInventoryFilters()
-    return self.inventorySortState
+    if self.activeView == "MINIMUMS" then
+        self:ApplyMinimumFilters()
+    else
+        self:ApplyInventoryFilters()
+    end
+    return sortState
 end
 
 function mainFrame:HandleTableRowClick(row)
@@ -1298,6 +1424,193 @@ function mainFrame:ClearMinimumEditor()
     self.minimumTabNameInput:SetText("")
     self.minimumRestockToggleButton.labelText:SetText("Restock: No")
     self.minimumEditorStateText:SetText("Create or select a rule to start editing.")
+end
+
+function mainFrame:HideMinimumInlineRow(rowFrame)
+    if not rowFrame then
+        return
+    end
+
+    if rowFrame.minimumValueInput then
+        rowFrame.minimumValueInput:Hide()
+    end
+    if rowFrame.restockToggleButton then
+        rowFrame.restockToggleButton:Hide()
+    end
+    if rowFrame.minimumSaveButton then
+        rowFrame.minimumSaveButton:Hide()
+    end
+end
+
+function mainFrame:SyncMinimumInlineRow(rowFrame, row)
+    if not rowFrame then
+        return
+    end
+
+    rowFrame.minimumValueInput = rowFrame.minimumValueInput or make_input(rowFrame, 56, 20)
+    rowFrame.restockToggleButton = rowFrame.restockToggleButton or make_button(rowFrame, 62, 22, "Yes")
+    rowFrame.minimumSaveButton = rowFrame.minimumSaveButton or make_button(rowFrame, 54, 22, "Save")
+
+    rowFrame.minimumValueInput:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 620, -2)
+    rowFrame.restockToggleButton:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 538, -1)
+    rowFrame.minimumSaveButton:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 824, -1)
+
+    if not row or not row.configured or self.selectedMinimumKey ~= row.rowKey then
+        self:HideMinimumInlineRow(rowFrame)
+        return
+    end
+
+    local draft = self.minimumInlineDraft or {}
+    draft[row.rowKey] = draft[row.rowKey] or {
+        enabled = row.restock == "Yes",
+        quantity = tonumber(row.quantityValue or row.quantity or 0) or 0,
+    }
+    self.minimumInlineDraft = draft
+
+    local state = draft[row.rowKey]
+    rowFrame.minimumValueInput:SetText(tostring(state.quantity or 0))
+    rowFrame.restockToggleButton.labelText:SetText(state.enabled and "Yes" or "No")
+
+    rowFrame.minimumValueInput:Show()
+    rowFrame.restockToggleButton:Show()
+    rowFrame.minimumSaveButton:Show()
+
+    rowFrame.restockToggleButton:SetScript("OnClick", function()
+        local current = self.minimumInlineDraft[row.rowKey]
+        current.enabled = not current.enabled
+        rowFrame.restockToggleButton.labelText:SetText(current.enabled and "Yes" or "No")
+    end)
+
+    rowFrame.minimumSaveButton:SetScript("OnClick", function()
+        local current = self.minimumInlineDraft[row.rowKey]
+        current.quantity = parse_number(rowFrame.minimumValueInput:GetText() or "") or current.quantity or 0
+
+        local minimumsView = ns.modules.minimumsView
+        local db = current_db()
+        minimumsView.UpsertWithAudit(db, {
+            itemID = tonumber(row.itemID),
+            itemName = row.itemName,
+            quantity = current.quantity,
+            scope = row.scope or "TAB",
+            tabName = row.tabKey or row.bankTab,
+            enabled = current.enabled,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+        }, {
+            actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
+            timestamp = _G.time(),
+        })
+
+        self.selectedMinimumEnabled = current.enabled
+        self.minimumItemIDInput:SetText(row.itemID or "")
+        self.minimumItemNameInput:SetText(row.itemName or "")
+        self.minimumQuantityInput:SetText(tostring(current.quantity or 0))
+        self.minimumScopeInput:SetText("TAB")
+        self.minimumTabNameInput:SetText(row.tabKey or row.bankTab or "")
+        self.selectedMinimumKey = row.rowKey
+        self:RefreshView()
+    end)
+end
+
+function mainFrame:HideMinimumVariantButtons()
+    for _, button in ipairs(self.minimumAddMatchButtons or {}) do
+        button:Hide()
+    end
+end
+
+function mainFrame:ApplyMinimumResolvedItem(item)
+    if not item then
+        return nil
+    end
+
+    self.isResolvingMinimumAdd = true
+    self.minimumAddItemIDInput:SetText(tostring(item.itemID or ""))
+    self.minimumAddItemNameInput:SetText(item.name or "")
+    self.minimumScopeInput:SetText("TAB")
+    self.isResolvingMinimumAdd = false
+
+    return item
+end
+
+function mainFrame:ResolveMinimumAddByItemID()
+    local minimumsView = ns.modules.minimumsView
+    local resolution = minimumsView.ResolveItemQuery(self:GetCurrentSnapshot(), self.minimumAddItemIDInput:GetText() or "")
+    self:HideMinimumVariantButtons()
+
+    if resolution.status == "resolved" then
+        self:ApplyMinimumResolvedItem(resolution.item)
+        return resolution.item
+    end
+
+    return nil
+end
+
+function mainFrame:ResolveMinimumAddByName()
+    local minimumsView = ns.modules.minimumsView
+    local resolution = minimumsView.ResolveItemQuery(self:GetCurrentSnapshot(), self.minimumAddItemNameInput:GetText() or "")
+    self.minimumAddResolvedMatches = resolution.matches or {}
+    self:HideMinimumVariantButtons()
+
+    if resolution.status == "resolved" then
+        return self:ApplyMinimumResolvedItem(resolution.item)
+    end
+
+    if resolution.status == "multiple" then
+        for index, item in ipairs(self.minimumAddResolvedMatches) do
+            local button = self.minimumAddMatchButtons[index]
+            if button then
+                button.labelText:SetText(string.format("%s (%s)", item.name or "", tostring(item.itemID or "")))
+                button:SetScript("OnClick", function()
+                    self:ApplyMinimumResolvedItem(item)
+                    self:HideMinimumVariantButtons()
+                end)
+                button:Show()
+            end
+        end
+    end
+
+    return nil
+end
+
+function mainFrame:ResetMinimumAddRow()
+    self.selectedMinimumKey = nil
+    self.minimumAddItemIDInput:SetText("")
+    self.minimumAddItemNameInput:SetText("")
+    self.minimumAddBankTabInput:SetText("")
+    self.minimumAddQuantityInput:SetText(tostring((self:GetMinimumSettings(current_db()).defaultQuantity or 100)))
+    self.minimumScopeInput:SetText("TAB")
+    self.minimumRestockToggleButton.labelText:SetText("Restock: Yes")
+    self.selectedMinimumEnabled = true
+    self:HideMinimumVariantButtons()
+end
+
+function mainFrame:CreateMinimumFromAddRow()
+    local minimumsView = ns.modules.minimumsView
+    local db = current_db()
+    local itemID = parse_number(self.minimumAddItemIDInput:GetText() or "")
+    local quantity = parse_number(self.minimumAddQuantityInput:GetText() or "")
+    local itemName = self.minimumAddItemNameInput:GetText() or ""
+    local bankTab = self.minimumAddBankTabInput:GetText() or ""
+
+    if not itemID or itemName == "" or bankTab == "" or not quantity then
+        return nil
+    end
+
+    minimumsView.UpsertWithAudit(db, {
+        itemID = itemID,
+        itemName = itemName,
+        quantity = quantity,
+        scope = "TAB",
+        tabName = bankTab,
+        enabled = self.selectedMinimumEnabled ~= false,
+    }, {
+        actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
+        timestamp = _G.time(),
+    })
+
+    self:ResetMinimumAddRow()
+    self:RefreshView()
+    return db.minimums[#db.minimums]
 end
 
 function mainFrame:LoadTargetIntoEditor(target)
@@ -1803,28 +2116,8 @@ function mainFrame:RefreshView()
     elseif self.activeView == "MINIMUMS" then
         self.minimumShowAllToggleButton.labelText:SetText(self.minimumShowAllRows and "Enabled Only" or "Show All")
         self.minimumManualOnlyToggleButton.labelText:SetText(self.minimumManualOnlyRows and "All Sources" or "Manual Only")
-        local rows = minimumsView.BuildTableRows(db.minimums or {}, currentSnapshot or { items = {} }, {
-            showAll = self.minimumShowAllRows,
-            search = self.minimumSearchInput:GetText() or "",
-            manualOnly = self.minimumManualOnlyRows,
-        })
-        self.tableScrollOffset = 0
-        self:ConfigureTable({
-            { key = "itemID", label = "Item ID", width = 70, justifyH = "LEFT" },
-            { key = "itemName", label = "Item", width = 180, justifyH = "LEFT" },
-            { key = "current", label = "Current", width = 70, justifyH = "LEFT" },
-            { key = "restock", label = "Restock", width = 80, justifyH = "LEFT" },
-            { key = "quantity", label = "Minimum", width = 80, justifyH = "LEFT" },
-            { key = "source", label = "Source", width = 90, justifyH = "LEFT" },
-        }, rows)
-        self:RefreshVisibleTableRows()
-        local emptyStateText = self:GetMinimumEmptyStateText(rows)
-        self.minimumEmptyStateText:SetText(emptyStateText)
-        if emptyStateText ~= "" then
-            self.minimumEmptyStateText:Show()
-        else
-            self.minimumEmptyStateText:Hide()
-        end
+        self:LoadMinimumSettingsFromDb(db)
+        self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "TARGETS" then
         local rows = targetsView and type(targetsView.BuildTableRows) == "function" and targetsView.BuildTableRows(db.oneTimeTargets or {}, currentSnapshot or { items = {} }) or {}
@@ -1873,6 +2166,7 @@ function mainFrame:RefreshView()
         self:RefreshExportOutput(rows)
         showTable = true
     elseif self.activeView == "OPTIONS" then
+        self:LoadMinimumSettingsFromDb(db)
         bodyText = ""
     else
         bodyText = "Detailed content for this view is coming next."
@@ -1990,6 +2284,8 @@ for _, input in ipairs(mainFrame.tableFilterInputs) do
         end
         if mainFrame.activeView == "INVENTORY" then
             mainFrame:ApplyInventoryFilters()
+        elseif mainFrame.activeView == "MINIMUMS" then
+            mainFrame:ApplyMinimumFilters()
         elseif mainFrame.activeView == "HISTORY" then
             mainFrame:RefreshView()
         end
@@ -1998,7 +2294,19 @@ end
 
 mainFrame.minimumSearchInput:SetScript("OnTextChanged", function()
     if mainFrame.activeView == "MINIMUMS" then
-        mainFrame:RefreshView()
+        mainFrame:ApplyMinimumFilters()
+    end
+end)
+
+mainFrame.minimumAddItemIDInput:SetScript("OnTextChanged", function()
+    if mainFrame.activeView == "MINIMUMS" and not mainFrame.isResolvingMinimumAdd then
+        mainFrame:ResolveMinimumAddByItemID()
+    end
+end)
+
+mainFrame.minimumAddItemNameInput:SetScript("OnTextChanged", function()
+    if mainFrame.activeView == "MINIMUMS" and not mainFrame.isResolvingMinimumAdd then
+        mainFrame:ResolveMinimumAddByName()
     end
 end)
 

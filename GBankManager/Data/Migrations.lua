@@ -34,6 +34,8 @@ local function ensure_v1_shape(db)
     db.exportTemplates = ensure_table(db.exportTemplates)
     db.ui = ensure_table(db.ui)
     db.ui.inventoryColumnWidths = ensure_table(db.ui.inventoryColumnWidths)
+    db.ui.minimumSettings = ensure_table(db.ui.minimumSettings)
+    db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
     db.ui.exportSettings = ensure_table(db.ui.exportSettings)
     db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"
     db.ui.exportSettings.customTemplate = ensure_table(db.ui.exportSettings.customTemplate)

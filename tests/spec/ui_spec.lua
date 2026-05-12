@@ -182,7 +182,7 @@ assert.equal(152, mainFrame.tableHeaderLabels[3].width, "inventory tab column sh
 assert.equal(90, mainFrame.tableHeaderLabels[4].width, "inventory restock column should keep its header visible")
 assert.equal(84, mainFrame.tableHeaderLabels[5].width, "inventory quantity column should stay compact with the abbreviated header")
 assert.equal(92, mainFrame.tableHeaderLabels[6].width, "inventory minimum column should keep its header visible")
-assert.equal(6, #mainFrame.tableHeaderLabels, "inventory should render a dedicated quality column")
+assert.truthy(#mainFrame.tableHeaderLabels >= 6, "inventory should render a dedicated quality column")
 assert.truthy(type(mainFrame.tableFilterInputs[1]) == "table", "inventory should expose inline column filters")
 assert.truthy(type(mainFrame.tableHeaderButtons[1]) == "table", "inventory should expose clickable header controls for sorting")
 assert.equal("GameFontHighlightSmall", mainFrame.tableFilterInputs[1].fontObject, "inventory filters should use a visible font")
@@ -667,28 +667,28 @@ assert.truthy(mainFrame.minimumsPanel:IsShown(), "minimum editor should show in 
 assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request controls should hide outside the requests view")
 assert.truthy(not mainFrame.requestCreatePanel:IsShown(), "request create controls should hide outside the requests view")
 assert.truthy(mainFrame.minimumShowAllRows == false, "minimums view should default to showing only enabled rows")
-assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[2]:GetText(), "minimums view should sort enabled bank-backed rows to the top")
-assert.equal("", mainFrame.tableRows[2].columns[2]:GetText(), "minimums view should hide bank-only rows while show-all is off")
-assert.equal("10", mainFrame.tableRows[1].columns[3]:GetText(), "minimums view should show current quantity from the latest snapshot")
-assert.equal("Yes", mainFrame.tableRows[1].columns[4]:GetText(), "minimums view should show enabled restock state")
+assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[3]:GetText(), "minimums view should sort enabled bank-backed rows to the top")
+assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "minimums view should hide bank-only rows while show-all is off")
+assert.equal("10", mainFrame.tableRows[1].columns[5]:GetText(), "minimums view should show current quantity from the latest snapshot")
+assert.equal("Yes", mainFrame.tableRows[1].columns[6]:GetText(), "minimums view should show enabled restock state")
 assert.equal("", mainFrame.minimumEmptyStateText:GetText(), "minimums view should not show empty-state copy while rows are visible")
 
 mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
 assert.truthy(mainFrame.minimumShowAllRows == true, "minimum show-all toggle should reveal the full bank-backed minimum list")
-assert.equal("Feast Gamma", mainFrame.tableRows[2].columns[2]:GetText(), "minimum show-all toggle should reveal bank-only rows")
+assert.equal("Feast Gamma", mainFrame.tableRows[2].columns[3]:GetText(), "minimum show-all toggle should reveal bank-only rows")
 mainFrame.tableRows[2]:GetScript("OnClick")(mainFrame.tableRows[2])
 assert.equal("3003", mainFrame.minimumItemIDInput:GetText(), "bank-only minimum rows should load item ids into the editor as drafts")
 assert.equal("Feast Gamma", mainFrame.minimumItemNameInput:GetText(), "bank-only minimum rows should load item names into the editor as drafts")
 assert.equal("Draft from bank item. Set restock and save to include it in planning.", mainFrame.minimumEditorStateText:GetText(), "bank-only minimum rows should explain that the editor is in draft mode")
 
 mainFrame.minimumSearchInput:SetText("feast")
-assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[2]:GetText(), "minimum search should narrow the expanded minimum list by item name")
-assert.equal("", mainFrame.tableRows[2].columns[2]:GetText(), "minimum search should hide non-matching rows")
+assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[3]:GetText(), "minimum search should narrow the expanded minimum list by item name")
+assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "minimum search should hide non-matching rows")
 
 mainFrame.minimumSearchInput:SetText("")
 mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
 assert.truthy(mainFrame.minimumManualOnlyRows == true, "minimum manual-only toggle should switch the tab into manual-only mode")
-assert.equal("", mainFrame.tableRows[1].columns[2]:GetText(), "manual-only filter should hide bank-backed rows when no manual rows exist yet")
+assert.equal("", mainFrame.tableRows[1].columns[3]:GetText(), "manual-only filter should hide bank-backed rows when no manual rows exist yet")
 assert.equal("No manual items match the current minimum filters.", mainFrame.minimumEmptyStateText:GetText(), "manual-only filter should explain why the minimums table is empty")
 
 mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
@@ -722,19 +722,19 @@ assert.equal("", mainFrame.minimumItemNameInput:GetText(), "minimum new button s
 mainFrame.minimumItemIDInput:SetText("2002")
 mainFrame.minimumItemNameInput:SetText("Potion Beta")
 mainFrame.minimumQuantityInput:SetText("16")
-mainFrame.minimumScopeInput:SetText("GLOBAL")
-mainFrame.minimumTabNameInput:SetText("")
-mainFrame.minimumRestockToggleButton:GetScript("OnClick")(mainFrame.minimumRestockToggleButton)
+mainFrame.minimumScopeInput:SetText("TAB")
+mainFrame.minimumTabNameInput:SetText("Overflow")
 mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
 assert.equal(2, #ns.state.db.minimums, "minimum save button should create new minimum rules from editor input")
 assert.truthy(ns.state.db.minimums[2].enabled == true, "manual minimum creation should persist enabled state for shopping list inclusion")
+assert.equal("Overflow", ns.state.db.minimums[2].tabName, "manual minimum creation should persist the required bank tab")
 assert.equal(4, #ns.state.db.auditLog, "minimum workflows should audit disable, update, enable, and creation paths")
 
 mainFrame:SelectView("MINIMUMS")
 mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
 mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
-assert.equal("Potion Beta", mainFrame.tableRows[1].columns[2]:GetText(), "manual-only filter should show saved manual minimum rows after creation")
-assert.equal("", mainFrame.tableRows[2].columns[2]:GetText(), "manual-only filter should hide bank-backed rows once a manual match is present")
+assert.equal("Potion Beta", mainFrame.tableRows[1].columns[3]:GetText(), "manual-only filter should show saved manual minimum rows after creation")
+assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "manual-only filter should hide bank-backed rows once a manual match is present")
 assert.equal("", mainFrame.minimumEmptyStateText:GetText(), "minimums view should clear empty-state copy once rows match again")
 
 mainFrame:SelectView("HISTORY")
@@ -1109,3 +1109,166 @@ local replacementFrame = {
 ns.modules.mainFrame = replacementFrame
 slash.command("ui")
 assert.truthy(replacementFrame.shown == true, "slash command should resolve the current main frame module at call time")
+
+local tabAwareMinimumRows = minimumsView.BuildTableRows({
+    { itemID = 5005, itemName = "Potion Rank Two", quantity = 5, scope = "TAB", tabName = "Potions", enabled = true },
+    { itemID = 6006, itemName = "Feast Delta", quantity = 7, scope = "TAB", tabName = "Feasts", enabled = true },
+}, {
+    items = {
+        [5005] = {
+            itemID = 5005,
+            name = "Potion Rank Two",
+            craftedQuality = 2,
+            craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+            totalCount = 9,
+            tabs = {
+                Potions = 3,
+                Overflow = 6,
+            },
+        },
+        [6006] = {
+            itemID = 6006,
+            name = "Feast Delta",
+            totalCount = 1,
+            tabs = {
+                Feasts = 1,
+            },
+        },
+    },
+})
+
+local tabAwareRowsByName = {}
+for _, row in ipairs(tabAwareMinimumRows) do
+    tabAwareRowsByName[row.itemName] = row
+end
+
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", tabAwareRowsByName["Potion Rank Two"].tier, "minimum rows should surface crafted quality tier icons")
+assert.equal("Potions", tabAwareRowsByName["Potion Rank Two"].bankTab, "minimum rows should show the configured bank tab")
+assert.equal("3", tabAwareRowsByName["Potion Rank Two"].current, "minimum rows should use the configured bank-tab quantity instead of the global total")
+assert.equal("Overflow", tabAwareRowsByName["Potion Rank Two"].restockFrom, "minimum rows should point to another bank tab before the auction house when stock exists elsewhere")
+assert.equal("Auction", tabAwareRowsByName["Feast Delta"].restockFrom, "minimum rows should fall back to the auction house when no other bank tab has stock")
+
+_G.GBankManagerDB = {
+    requests = {},
+    auditLog = {},
+    currentSnapshotId = "minimums-redesign",
+    snapshots = {
+        ["minimums-redesign"] = {
+            items = {
+                [5005] = {
+                    itemID = 5005,
+                    name = "Potion Rank Two",
+                    craftedQuality = 2,
+                    craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+                    totalCount = 9,
+                    tabs = {
+                        Potions = 3,
+                        Overflow = 6,
+                    },
+                },
+                [6006] = {
+                    itemID = 6006,
+                    name = "Feast Delta",
+                    totalCount = 1,
+                    tabs = {
+                        Feasts = 1,
+                    },
+                },
+            },
+        },
+    },
+    minimums = {
+        { itemID = 5005, itemName = "Potion Rank Two", quantity = 5, scope = "TAB", tabName = "Potions", enabled = true },
+        { itemID = 6006, itemName = "Feast Delta", quantity = 7, scope = "TAB", tabName = "Feasts", enabled = true },
+    },
+    oneTimeTargets = {},
+    ui = {
+        inventoryColumnWidths = {},
+        exportSettings = {
+            selectedPreset = "Spreadsheet",
+            customTemplate = {
+                delimiter = "|",
+                includeHeader = true,
+                fields = { "itemID", "itemName", "totalToBuy" },
+            },
+        },
+        minimumSettings = {
+            defaultQuantity = 100,
+        },
+    },
+}
+ns.state.db = _G.GBankManagerDB
+
+mainFrame.minimumShowAllRows = true
+mainFrame.minimumManualOnlyRows = false
+mainFrame.minimumSearchInput:SetText("")
+mainFrame:ClearTableFilters()
+mainFrame:SelectView("MINIMUMS")
+assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should add crafting tier as the second column")
+assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should replace the old source column with bank tab")
+assert.equal("Restock From", mainFrame.tableHeaderLabels[8]:GetText(), "minimums should add a restock-from column")
+assert.truthy(not mainFrame.tableFilterInputs[5]:IsShown(), "minimums should not expose a text filter for the current column")
+assert.truthy(not mainFrame.tableFilterInputs[7]:IsShown(), "minimums should not expose a text filter for the minimum column")
+local redesignedMinimumRowIndex = mainFrame.cachedMinimumRows[1] and mainFrame.cachedMinimumRows[1].itemName == "Potion Rank Two" and 1 or 2
+assert.equal("Overflow", mainFrame.cachedMinimumRows[redesignedMinimumRowIndex].restockFrom, "minimums table should render restock-from values from row shaping")
+
+mainFrame.tableRows[redesignedMinimumRowIndex]:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex])
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:IsShown(), "minimum rows should expose inline numeric editing when selected for editing")
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:IsShown(), "minimum rows should expose inline restock editing when selected for editing")
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton:IsShown(), "minimum rows should show a per-row save button while editing")
+mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:SetText("8")
+mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton)
+mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex].minimumSaveButton)
+assert.equal(8, ns.state.db.minimums[1].quantity, "inline minimum save should persist edited quantities")
+assert.truthy(ns.state.db.minimums[1].enabled == false, "inline restock editing should persist yes-no restock state")
+
+mainFrame:SelectView("OPTIONS")
+assert.equal("100", mainFrame.defaultMinimumInput:GetText(), "options should expose the saved default minimum value")
+mainFrame.defaultMinimumInput:SetText("250")
+mainFrame.defaultMinimumSaveButton:GetScript("OnClick")(mainFrame.defaultMinimumSaveButton)
+assert.equal(250, ns.state.db.ui.minimumSettings.defaultQuantity, "options should persist the configured default minimum value")
+
+_G.GBankManagerDB.currentSnapshotId = "minimum-add"
+_G.GBankManagerDB.snapshots["minimum-add"] = {
+    items = {
+        [7007] = {
+            itemID = 7007,
+            name = "Algari Mana Oil",
+            craftedQuality = 1,
+            craftedQualityIcon = "Professions-ChatIcon-Quality-Tier1",
+            totalCount = 4,
+            tabs = {
+                Alchemy = 4,
+            },
+        },
+        [7008] = {
+            itemID = 7008,
+            name = "Algari Mana Oil",
+            craftedQuality = 2,
+            craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+            totalCount = 2,
+            tabs = {
+                Alchemy = 2,
+            },
+        },
+    },
+}
+_G.GBankManagerDB.minimums = {}
+ns.state.db = _G.GBankManagerDB
+
+mainFrame:SelectView("MINIMUMS")
+mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
+assert.equal("250", mainFrame.minimumAddQuantityInput:GetText(), "new minimum rows should start from the configured default minimum value")
+mainFrame.minimumAddItemIDInput:SetText("7007")
+assert.equal("Algari Mana Oil", mainFrame.minimumAddItemNameInput:GetText(), "entering an item id should resolve and fill the item name")
+mainFrame.minimumAddItemNameInput:SetText("Algari Mana Oil")
+assert.truthy(mainFrame.minimumAddMatchButtons[1]:IsShown(), "entering a name with multiple quality variants should offer selectable matches")
+mainFrame.minimumAddMatchButtons[2]:GetScript("OnClick")(mainFrame.minimumAddMatchButtons[2])
+assert.equal("7008", mainFrame.minimumAddItemIDInput:GetText(), "selecting a quality variant should fill the chosen item id")
+assert.equal("Algari Mana Oil", mainFrame.minimumAddItemNameInput:GetText(), "selecting a quality variant should keep the resolved item name")
+mainFrame.minimumAddBankTabInput:SetText("Alchemy")
+mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
+assert.equal(1, #ns.state.db.minimums, "bottom-row minimum creation should persist a new minimum rule")
+assert.equal("TAB", ns.state.db.minimums[1].scope, "new minimum rows should save as tab-scoped rules")
+assert.equal("Alchemy", ns.state.db.minimums[1].tabName, "new minimum rows should require and persist the chosen bank tab")
+assert.equal(250, ns.state.db.minimums[1].quantity, "new minimum rows should use the configured default minimum when the user keeps the seeded value")
