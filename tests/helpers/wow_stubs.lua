@@ -36,15 +36,21 @@ end
 if _G.CreateFrame == nil then
     local function make_region()
         return {
-            SetPoint = function() end,
+            points = {},
+            SetPoint = function(self, ...)
+                table.insert(self.points, { ... })
+            end,
+            ClearAllPoints = function(self)
+                self.points = {}
+            end,
             SetText = function(self, value) self.text = value end,
             GetText = function(self) return self.text end,
             SetVertexColor = function() end,
-            SetJustifyH = function() end,
-            SetJustifyV = function() end,
+            SetJustifyH = function(self, value) self.justifyH = value end,
+            SetJustifyV = function(self, value) self.justifyV = value end,
             SetFontObject = function() end,
-            SetWidth = function() end,
-            SetHeight = function() end,
+            SetWidth = function(self, value) self.width = value end,
+            SetHeight = function(self, value) self.height = value end,
             Show = function(self) self.shown = true end,
             Hide = function(self) self.shown = false end,
         }
@@ -89,6 +95,9 @@ if _G.CreateFrame == nil then
         function frame:SetPoint(...)
             table.insert(self.points, { ... })
         end
+        function frame:ClearAllPoints()
+            self.points = {}
+        end
 
         function frame:Hide()
             self.shown = false
@@ -114,8 +123,11 @@ if _G.CreateFrame == nil then
             return self.scripts[scriptName]
         end
 
-        function frame:CreateFontString()
+        function frame:CreateFontString(name, layer, inherits)
             local region = make_region()
+            region.name = name
+            region.layer = layer
+            region.fontObject = inherits
             table.insert(self.children, region)
             return region
         end
@@ -130,17 +142,48 @@ if _G.CreateFrame == nil then
 
         function frame:SetBackdropColor() end
         function frame:SetBackdropBorderColor() end
+        function frame:SetBackdrop(backdrop)
+            self.backdrop = backdrop
+        end
         function frame:SetMovable() end
-        function frame:EnableMouse() end
-        function frame:RegisterForDrag() end
+        function frame:EnableMouse(enabled)
+            self.mouseEnabled = enabled
+        end
+        function frame:RegisterForDrag(...)
+            self.dragButtons = { ... }
+        end
+        function frame:StartMoving()
+            self.moving = true
+        end
+        function frame:StopMovingOrSizing()
+            self.moving = false
+        end
         function frame:SetResizable() end
-        function frame:SetMinResize() end
-        function frame:SetMaxResize() end
+        function frame:SetResizeBounds(minWidth, minHeight, maxWidth, maxHeight)
+            self.resizeBounds = {
+                minWidth = minWidth,
+                minHeight = minHeight,
+                maxWidth = maxWidth,
+                maxHeight = maxHeight,
+            }
+        end
         function frame:SetClampedToScreen() end
         function frame:SetFrameStrata() end
         function frame:SetFrameLevel() end
+        function frame:SetScrollChild(child)
+            self.scrollChild = child
+        end
+        function frame:EnableMouseWheel(enabled)
+            self.mouseWheelEnabled = enabled
+        end
         function frame:SetNormalFontObject() end
         function frame:SetHighlightFontObject() end
+        function frame:SetAlpha(value)
+            self.alpha = value
+        end
+        function frame:GetAlpha()
+            return self.alpha
+        end
         function frame:SetText(text) self.text = text end
         function frame:GetText() return self.text end
         function frame:SetStatusBarColor() end

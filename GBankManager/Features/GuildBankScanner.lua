@@ -12,6 +12,9 @@ local scanner = ns.modules.scanner or {
     tabsToScan = {},
     rawTabs = {},
     waitingForTab = nil,
+    totalTabs = 0,
+    completedTabs = 0,
+    statusText = "No scan yet",
 }
 
 local function current_db()
@@ -21,11 +24,76 @@ local function current_db()
     return ns.state.db
 end
 
+local function push_status(text)
+    scanner.statusText = text
+
+    local mainFrame = ns.modules.mainFrame
+    if mainFrame and type(mainFrame.SetScanStatus) == "function" then
+        mainFrame:SetScanStatus(text)
+    elseif mainFrame and mainFrame.statusText and type(mainFrame.statusText.SetText) == "function" then
+        mainFrame.statusText:SetText(text)
+    end
+end
+
+local function finish_if_complete()
+    if scanner.completedTabs >= scanner.totalTabs and scanner.totalTabs > 0 then
+        scanner.FinishScan(_G.UnitName and _G.UnitName("player") or "Unknown", "Unknown Guild")
+        push_status(string.format("Scan complete: %d/%d tabs", scanner.completedTabs, scanner.totalTabs))
+        return true
+    end
+
+    return false
+end
+
+local function advance_scan()
+    if not scanner.scanInProgress or scanner.waitingForTab ~= nil then
+        return
+    end
+
+    local nextTab = table.remove(scanner.tabsToScan, 1)
+    if nextTab == nil then
+        finish_if_complete()
+        return
+    end
+
+    scanner.waitingForTab = nextTab
+    push_status(string.format("Scanning %d/%d tabs", scanner.completedTabs, scanner.totalTabs))
+
+    if type(_G.QueryGuildBankTab) == "function" then
+        _G.QueryGuildBankTab(nextTab)
+    else
+        scanner.ReadCurrentTab(nextTab)
+        scanner.completedTabs = scanner.completedTabs + 1
+        scanner.waitingForTab = nil
+        if not finish_if_complete() then
+            advance_scan()
+        end
+    end
+end
+
+function scanner.GetStatusText()
+    return scanner.statusText or "No scan yet"
+end
+
 function scanner.BeginScan()
     scanner.scanInProgress = true
     scanner.tabsToScan = {}
     scanner.rawTabs = {}
     scanner.waitingForTab = nil
+    scanner.totalTabs = 0
+    scanner.completedTabs = 0
+
+    scanner.QueueAccessibleTabs()
+    scanner.totalTabs = #scanner.tabsToScan
+
+    if scanner.totalTabs == 0 then
+        scanner.scanInProgress = false
+        push_status("Open guild bank to scan")
+        return scanner:GetStatusText()
+    end
+
+    advance_scan()
+    return scanner:GetStatusText()
 end
 
 function scanner.QueueAccessibleTabs()
@@ -89,13 +157,29 @@ function scanner.RecordTabScan(tabData)
 end
 
 function scanner.OnGuildBankSlotsChanged(tabIndex)
-    scanner.waitingForTab = tabIndex
-    return tabIndex
+    if not scanner.scanInProgress or scanner.waitingForTab == nil then
+        return tabIndex
+    end
+
+    local loadedTab = scanner.waitingForTab
+    scanner.ReadCurrentTab(loadedTab)
+    scanner.completedTabs = scanner.completedTabs + 1
+    scanner.waitingForTab = nil
+
+    if finish_if_complete() then
+        return loadedTab
+    end
+
+    push_status(string.format("Scanning %d/%d tabs", scanner.completedTabs, scanner.totalTabs))
+    advance_scan()
+    return loadedTab
 end
 
 function scanner.FinishScan(actor, guildName, previousSnapshot)
     local db = current_db()
     local baseline = previousSnapshot
+
+    db.meta = db.meta or {}
 
     if baseline == nil and db.currentSnapshotId ~= nil then
         baseline = db.snapshots[db.currentSnapshotId]
@@ -111,6 +195,8 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
 
     db.snapshots[currentSnapshot.scanId] = currentSnapshot
     db.currentSnapshotId = currentSnapshot.scanId
+    db.meta.updatedAt = currentSnapshot.scannedAt
+    db.meta.guildName = guildName or db.meta.guildName or "Unknown Guild"
 
     for _, change in ipairs(changes) do
         change.scanId = currentSnapshot.scanId
@@ -120,6 +206,7 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
 
     scanner.scanInProgress = false
     scanner.waitingForTab = nil
+    scanner.tabsToScan = {}
 
     return currentSnapshot, changes
 end

@@ -57,6 +57,11 @@ _G.GetNumGuildBankTabs = function()
     return 3
 end
 
+local queriedTabs = {}
+_G.QueryGuildBankTab = function(tabIndex)
+    table.insert(queriedTabs, tabIndex)
+end
+
 _G.GetGuildBankTabInfo = function(tabIndex)
     if tabIndex == 1 then
         return "Flasks", nil, true
@@ -68,11 +73,11 @@ _G.GetGuildBankTabInfo = function(tabIndex)
 end
 
 scanner.BeginScan()
-scanner.QueueAccessibleTabs()
-
-assert.equal(2, #scanner.tabsToScan, "scanner should queue only accessible tabs")
-assert.equal(1, scanner.tabsToScan[1], "scanner should queue the first accessible tab")
-assert.equal(3, scanner.tabsToScan[2], "scanner should queue later accessible tabs")
+assert.equal(2, scanner.totalTabs, "scanner should count only accessible tabs when a scan begins")
+assert.equal(1, #scanner.tabsToScan, "scanner should keep remaining tabs queued after requesting the first tab")
+assert.equal(3, scanner.tabsToScan[1], "scanner should leave later accessible tabs queued")
+assert.equal(1, queriedTabs[1], "scanner should request the first tab immediately")
+assert.equal("Scanning 0/2 tabs", scanner:GetStatusText(), "scanner should report queued scan progress")
 
 _G.GetGuildBankItemInfo = function(tabIndex, slot)
     if tabIndex == 1 and slot == 1 then
@@ -108,3 +113,7 @@ assert.equal("Flasks", tabData.name, "scanner should label scanned tabs from gui
 assert.equal(2, #tabData.slots, "scanner should collect populated slots only")
 assert.equal(1001, tabData.slots[1].itemID, "scanner should parse item ids from links")
 assert.equal(1, #scanner.rawTabs, "scanner should append scanned tabs to the raw scan state")
+
+scanner.OnGuildBankSlotsChanged()
+assert.equal(3, queriedTabs[2], "scanner should request the next queued tab after a tab finishes loading")
+assert.equal("Scanning 1/2 tabs", scanner:GetStatusText(), "scanner should report completed tab progress")

@@ -1,6 +1,7 @@
-## Interface: 110100
+## Interface: 120005
 ## Title: GBankManager
 ## Notes: Guild bank inventory and procurement manager
+## Category: Guild
 ## Author: ziriuso
 ## SavedVariables: GBankManagerDB
 

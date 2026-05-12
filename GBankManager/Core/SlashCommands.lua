@@ -5,7 +5,6 @@ ns.modules = ns.modules or {}
 ns.modules.slash = ns.modules.slash or {}
 
 local slash = ns.modules.slash
-local mainFrame = ns.modules.mainFrame
 
 local function trim(value)
     if type(_G.strtrim) == "function" then
@@ -19,9 +18,10 @@ _G.SLASH_GBANKMANAGER1 = "/gbm"
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.SlashCmdList.GBANKMANAGER = function(msg)
     local scanner = ns.modules.scanner
+    local mainFrame = ns.modules.mainFrame
     local command = trim(msg or ""):lower()
 
-    if command == "ui" and type(mainFrame) == "table" and type(mainFrame.ShowDashboard) == "function" then
+    if command == "ui" and mainFrame and type(mainFrame.ShowDashboard) == "function" then
         mainFrame:ShowDashboard()
     elseif (command == "" or command == "scan") and type(scanner) == "table" then
         scanner.BeginScan()
