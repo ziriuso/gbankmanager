@@ -28,14 +28,24 @@ local category_labels = {
     TARGET = "Target",
 }
 
+local function normalize_timestamp(timestamp)
+    local numeric = tonumber(timestamp)
+    if numeric ~= nil then
+        return numeric
+    end
+
+    return 0
+end
+
 local function format_timestamp(timestamp)
-    if not timestamp or timestamp == 0 then
+    timestamp = normalize_timestamp(timestamp)
+    if timestamp == 0 then
         return "-"
     end
 
     local formatter = _G.date or os.date
     if type(formatter) == "function" then
-        return formatter("%Y-%m-%d %H:%M", timestamp)
+        return formatter("%Y-%m-%d %H:%M %Z", timestamp)
     end
 
     return tostring(timestamp)

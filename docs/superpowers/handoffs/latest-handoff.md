@@ -355,7 +355,7 @@ Suggested order:
   - no text filters for `Current` or `Minimum`
   - inline row editing for `Restock` and `Minimum` with a row-level `Save`
   - a default minimum quantity setting in `Options`
-  - a bottom add-row flow that resolves item IDs and offers quality-aware name matches
+  - a bottom add-row flow that resolves item IDs, offers quality-aware name matches, and saves new rows directly instead of staging them behind `Save All`
 - Carry-forward note:
   - inventory tier sorting still needs another live-client fix pass for `Algari Mana Oil` and `Potion Bomb of Speed`
   - use the user screenshots as reference when revisiting crafted-quality atlas/icon handling in the live client

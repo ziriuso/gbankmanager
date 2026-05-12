@@ -9,6 +9,15 @@ local function item_name(slot)
     return slot.name or slot.itemName or slot.itemLink
 end
 
+local function normalize_utc_timestamp(value)
+    local numeric = tonumber(value)
+    if numeric ~= nil then
+        return numeric
+    end
+
+    return _G.time()
+end
+
 function snapshots.FromTabScan(raw)
     raw = raw or {}
 
@@ -47,7 +56,7 @@ function snapshots.FromTabScan(raw)
         guildName = raw.guildName,
         actor = raw.actor,
         scannedTabs = raw.scannedTabs or {},
-        scannedAt = raw.scannedAt or _G.time(),
+        scannedAt = normalize_utc_timestamp(raw.scannedAt),
         items = items,
     }
 end

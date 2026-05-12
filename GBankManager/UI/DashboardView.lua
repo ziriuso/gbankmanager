@@ -5,14 +5,24 @@ ns.modules = ns.modules or {}
 
 local dashboard = ns.modules.dashboardView or {}
 
+local function normalize_timestamp(timestamp)
+    local numeric = tonumber(timestamp)
+    if numeric ~= nil then
+        return numeric
+    end
+
+    return 0
+end
+
 local function format_timestamp(timestamp)
-    if not timestamp or timestamp == 0 then
+    timestamp = normalize_timestamp(timestamp)
+    if timestamp == 0 then
         return "No scan yet"
     end
 
     local formatter = _G.date or os.date
     if type(formatter) == "function" then
-        return formatter("%Y-%m-%d %H:%M", timestamp)
+        return formatter("%Y-%m-%d %H:%M %Z", timestamp)
     end
 
     return tostring(timestamp)
@@ -54,7 +64,7 @@ function dashboard.BuildLines(db, planRows)
     local summary = dashboard.BuildSummary(db, planRows)
 
     return {
-        string.format("Last scan: %s", tostring(summary.lastScanAt)),
+        string.format("Last scan: %s", format_timestamp(summary.lastScanAt)),
         string.format("Pending requests: %d", summary.pendingRequestCount),
         string.format("Suggested fulfillments: %d", summary.suggestedFulfillmentCount),
         string.format("Export rows ready: %d", summary.exportReadyCount),

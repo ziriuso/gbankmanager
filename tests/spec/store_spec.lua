@@ -113,12 +113,27 @@ scanner.rawTabs = {
     },
 }
 
+local originalTime = _G.time
+local capturedTimes = {
+    1715523300,
+    1715523360,
+}
+local capturedTimeIndex = 0
+_G.time = function()
+    capturedTimeIndex = capturedTimeIndex + 1
+    return capturedTimes[capturedTimeIndex] or capturedTimes[#capturedTimes]
+end
+
 local newSnapshot, changes = scanner.FinishScan("OfficerOne", "Persisted Guild")
+_G.time = originalTime
 
 assert.truthy(newSnapshot.scanId ~= "scan-old", "a fresh scan should create a new snapshot id")
+assert.equal("1715523300", newSnapshot.scanId, "fresh scans should derive the snapshot id from the captured UTC scan timestamp")
+assert.equal(1715523300, newSnapshot.scannedAt, "fresh scans should persist the captured UTC scan timestamp on the snapshot")
 assert.equal(newSnapshot.scanId, _G.GBankManagerDB.currentSnapshotId, "fresh scans should move the current snapshot pointer forward")
 assert.equal(5, _G.GBankManagerDB.snapshots["scan-old"].items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")
 assert.equal(8, _G.GBankManagerDB.snapshots[newSnapshot.scanId].items[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
+assert.equal(1715523300, _G.GBankManagerDB.meta.updatedAt, "fresh scans should persist the captured UTC scan timestamp as last-scan metadata")
 assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")
 
 _G.GBankManagerDB = store.Normalize({

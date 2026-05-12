@@ -16,13 +16,12 @@ local QUALITY_RANK_BY_ATLAS = {
 local DEFAULT_COLUMNS = {
     { key = "itemID", label = "Item ID", width = 72, justifyH = "LEFT", filterMode = "text", sortable = true },
     { key = "tier", label = "Tier", width = 60, justifyH = "CENTER", filterMode = "none", sortable = true },
-    { key = "itemName", label = "Item", width = 180, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "bankTab", label = "Bank Tab", width = 110, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "current", label = "Current", width = 72, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restock", label = "Restock", width = 82, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "quantity", label = "Minimum", width = 78, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restockFrom", label = "Restock From", width = 132, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "save", label = "Save", width = 64, justifyH = "CENTER", filterMode = "none", sortable = false },
+    { key = "itemName", label = "Item", width = 196, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "bankTab", label = "Bank Tab", width = 116, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "current", label = "Current", width = 64, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "restock", label = "Restock", width = 70, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "quantity", label = "Minimum", width = 70, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "restockFrom", label = "Restock\nSource", width = 100, justifyH = "LEFT", filterMode = "text", sortable = true },
 }
 
 local function copy_columns(columns)
@@ -77,6 +76,10 @@ local function normalize_rule(rule, previous)
         enabled = enabled,
         craftedQuality = rule.craftedQuality or previous.craftedQuality,
         craftedQualityIcon = rule.craftedQualityIcon or previous.craftedQualityIcon,
+        draftKey = rule.draftKey or previous.draftKey,
+        originalItemID = rule.originalItemID or previous.originalItemID,
+        originalScope = rule.originalScope or previous.originalScope,
+        originalTabName = rule.originalTabName ~= nil and rule.originalTabName or previous.originalTabName,
     }
 end
 
@@ -236,7 +239,10 @@ function minimumsView.Upsert(list, rule)
 
     local updated = false
     for index, existing in ipairs(list) do
-        if existing.itemID == rule.itemID and existing.scope == rule.scope and existing.tabName == rule.tabName then
+        local sameDraft = existing.draftKey ~= nil and rule.draftKey ~= nil and existing.draftKey == rule.draftKey
+        local sameRule = existing.itemID == rule.itemID and existing.scope == rule.scope and existing.tabName == rule.tabName
+
+        if sameDraft or sameRule then
             list[index] = normalize_rule(rule, existing)
             updated = true
             break
@@ -257,15 +263,27 @@ function minimumsView.UpsertWithAudit(db, rule, metadata)
     metadata = metadata or {}
 
     local previous = nil
-    for _, existing in ipairs(db.minimums) do
-        if existing.itemID == rule.itemID and existing.scope == rule.scope and existing.tabName == rule.tabName then
+    local previousIndex = nil
+    for index, existing in ipairs(db.minimums) do
+        local originalItemID = rule.originalItemID or rule.itemID
+        local originalScope = rule.originalScope or rule.scope
+        local originalTabName = rule.originalTabName
+        local sameCurrent = existing.itemID == rule.itemID and existing.scope == rule.scope and existing.tabName == rule.tabName
+        local sameOriginal = existing.itemID == originalItemID and existing.scope == originalScope and existing.tabName == originalTabName
+
+        if sameCurrent or sameOriginal then
             previous = existing
+            previousIndex = index
             break
         end
     end
 
     local normalizedRule = normalize_rule(rule, previous)
-    db.minimums = minimumsView.Upsert(db.minimums, normalizedRule)
+    if previousIndex ~= nil then
+        db.minimums[previousIndex] = normalizedRule
+    else
+        db.minimums = minimumsView.Upsert(db.minimums, normalizedRule)
+    end
 
     table.insert(db.auditLog, {
         category = "MINIMUM",
@@ -337,7 +355,7 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
         local qualitySource = item or row
 
         table.insert(out, {
-            rowKey = rule_key(row),
+            rowKey = row.draftKey or rule_key(row),
             itemID = tostring(row.itemID or ""),
             itemName = tostring(row.itemName or "Unknown"),
             tier = crafted_quality_markup(qualitySource.craftedQualityIcon),
@@ -345,6 +363,9 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             quantity = tostring(minimumCount),
             quantityValue = minimumCount,
             scope = tostring(row.scope or "TAB"),
+            originalScope = row.scope or "TAB",
+            originalItemID = row.itemID,
+            originalTabName = row.tabName,
             tabName = configuredTab,
             tabKey = row.tabName or "",
             bankTab = configuredTab,
@@ -359,7 +380,6 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             enabledSort = row.enabled ~= false and 0 or 1,
             configuredSort = 0,
             configured = true,
-            save = "",
             craftedQuality = qualitySource.craftedQuality,
             craftedQualityIcon = qualitySource.craftedQualityIcon,
         })
@@ -379,6 +399,9 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
                 quantity = "-",
                 quantityValue = 0,
                 scope = "TAB",
+                originalScope = "TAB",
+                originalItemID = itemID,
+                originalTabName = configuredTab,
                 tabName = configuredTab,
                 tabKey = configuredTab,
                 bankTab = configuredTab,
@@ -393,7 +416,6 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
                 enabledSort = 1,
                 configuredSort = 1,
                 configured = false,
-                save = "",
                 craftedQuality = item.craftedQuality,
                 craftedQualityIcon = item.craftedQualityIcon,
             })

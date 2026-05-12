@@ -14,6 +14,8 @@ local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc"
 local snapshots = ns.modules.snapshots
 local diff = ns.modules.diff
 local scanner = ns.modules.scanner
+local dashboard = ns.modules.dashboardView
+local historyView = ns.modules.historyView
 
 local snapshot = snapshots.FromTabScan({
     scanId = "scan-2",
@@ -49,9 +51,56 @@ local changes = diff.BuildChangeLog(previous, snapshot)
 assert.truthy(type(snapshots) == "table", "snapshots module should load from the toc")
 assert.truthy(type(diff) == "table", "diff module should load from the toc")
 assert.truthy(type(scanner) == "table", "scanner module should load")
+assert.truthy(type(dashboard) == "table", "dashboard view should load from the toc")
+assert.truthy(type(historyView) == "table", "history view should load from the toc")
 assert.equal(10, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
 assert.equal("QUANTITY_INCREASED", changes[1].type, "diff should report quantity increase")
 assert.equal(7, changes[1].delta, "diff should capture quantity delta")
+
+local originalDate = _G.date
+local dateCalls = {}
+_G.date = function(format, timestamp)
+    table.insert(dateCalls, {
+        format = format,
+        timestamp = timestamp,
+    })
+
+    return "2026-05-12 08:15 EDT"
+end
+
+local dashboardLines = dashboard.BuildLines({
+    meta = {
+        updatedAt = 1715523300,
+    },
+    requests = {},
+}, {})
+local dashboardCards = dashboard.BuildCards({
+    meta = {
+        updatedAt = 1715523300,
+    },
+    changeLog = {},
+    snapshots = {},
+    requests = {},
+}, {})
+local historyRows = historyView.BuildTableRows({
+    {
+        type = "REQUEST_APPROVED",
+        category = "REQUEST",
+        actor = "GuildLead",
+        itemName = "Flask Alpha",
+        oldValue = "PENDING",
+        newValue = "APPROVED",
+        timestamp = 1715523300,
+    },
+}, {})
+
+_G.date = originalDate
+
+assert.equal("Last scan: 2026-05-12 08:15 EDT", dashboardLines[1], "dashboard lines should localize stored UTC scan timestamps for display")
+assert.equal("2026-05-12 08:15 EDT", dashboardCards[1].value, "dashboard cards should localize stored UTC scan timestamps for display")
+assert.equal("2026-05-12 08:15 EDT", historyRows[1].date, "history rows should localize stored UTC audit timestamps for display")
+assert.equal("%Y-%m-%d %H:%M %Z", dateCalls[1].format, "dashboard timestamp display should include the player's local timezone")
+assert.equal(1715523300, dateCalls[1].timestamp, "dashboard timestamp display should format the stored UTC timestamp directly")
 
 _G.GetNumGuildBankTabs = function()
     return 3

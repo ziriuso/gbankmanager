@@ -22,25 +22,62 @@ local DEFAULT_COLUMNS = {
     { key = "minimum", label = "Min", width = 92, minWidth = 80, maxWidth = 118, justifyH = "LEFT", filterMode = "none", sortable = true },
 }
 
-local function crafted_quality_markup(atlasName)
-    if atlasName == nil or atlasName == "" then
+local function crafted_quality_icon_text(icon)
+    if type(icon) == "table" then
+        for _, key in ipairs({ "atlas", "iconInventory", "iconMixed", "iconChat", "iconSmall", "icon", "texture", "markup" }) do
+            local nested = crafted_quality_icon_text(icon[key])
+            if nested ~= "" then
+                return nested
+            end
+        end
+
         return ""
+    end
+
+    if icon == nil then
+        return ""
+    end
+
+    return tostring(icon)
+end
+
+local function crafted_quality_markup(icon)
+    local atlasName = crafted_quality_icon_text(icon)
+    if atlasName == "" then
+        return ""
+    end
+
+    if string.sub(atlasName, 1, 3) == "|A:" or string.sub(atlasName, 1, 2) == "|T" then
+        return atlasName
     end
 
     return string.format("|A:%s:22:22|a", tostring(atlasName))
 end
 
-local function crafted_quality_rank(item)
-    item = item or {}
-
-    local atlasName = tostring(item.craftedQualityIcon or "")
+local function parsed_quality_tier(icon)
+    local atlasName = crafted_quality_icon_text(icon)
     if QUALITY_RANK_BY_ATLAS[atlasName] ~= nil then
         return QUALITY_RANK_BY_ATLAS[atlasName]
     end
 
     local tierText = string.match(atlasName, "[Tt]ier%s*[_%-]?(%d+)")
+    if tierText == nil then
+        tierText = string.match(atlasName, "[Qq]uality%s*[_%-]?(%d+)")
+    end
+
     local parsedTier = tonumber(tierText or "")
     if parsedTier and parsedTier >= 1 and parsedTier <= 5 then
+        return parsedTier
+    end
+
+    return nil
+end
+
+local function crafted_quality_rank(item)
+    item = item or {}
+
+    local parsedTier = parsed_quality_tier(item.craftedQualityIcon)
+    if parsedTier ~= nil then
         return parsedTier
     end
 

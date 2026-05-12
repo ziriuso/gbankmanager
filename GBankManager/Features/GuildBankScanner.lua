@@ -223,6 +223,7 @@ end
 function scanner.FinishScan(actor, guildName, previousSnapshot)
     local db = current_db()
     local baseline = previousSnapshot
+    local scannedAtUtc = _G.time()
 
     db.meta = db.meta or {}
 
@@ -231,10 +232,11 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
     end
 
     local currentSnapshot = snapshots.FromTabScan({
-        scanId = tostring(_G.time()),
+        scanId = tostring(scannedAtUtc),
         actor = actor,
         guildName = guildName,
         scannedTabs = scanner.rawTabs,
+        scannedAt = scannedAtUtc,
     })
     local changes = diff.BuildChangeLog(baseline, currentSnapshot)
 
