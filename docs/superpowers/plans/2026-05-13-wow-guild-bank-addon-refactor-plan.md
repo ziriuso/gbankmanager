@@ -140,10 +140,10 @@ Files likely:
 
 Tasks:
 
-- [ ] Reduce direct feature branching inside `Core/Events.lua`
-- [ ] Move feature-specific event handling closer to the owning feature module
-- [ ] Keep event registration centralized only where it improves clarity
-- [ ] Prefer clear dispatch helpers over long event-condition chains
+- [x] Reduce direct feature branching inside `Core/Events.lua`
+- [x] Move feature-specific event handling closer to the owning feature module
+- [x] Keep event registration centralized only where it improves clarity
+- [x] Prefer clear dispatch helpers over long event-condition chains
 
 Success criteria:
 
@@ -242,4 +242,4 @@ Tasks:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Priority for this session: begin Phase 3 by thinning `GBankManager/Core/Events.lua` and moving feature-specific event handling closer to the owning modules while preserving current behavior and keeping tests green.
+> Priority for this session: begin Phase 4 by standardizing state and persistence flow, especially around `Data/Defaults.lua`, `Data/Migrations.lua`, `Data/Store.lua`, and repeated DB access patterns in UI/domain modules.
