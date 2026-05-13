@@ -163,10 +163,10 @@ Files likely:
 
 Tasks:
 
-- [ ] Audit which state belongs in SavedVariables vs transient runtime state
-- [ ] Centralize normalization and defaulting patterns
-- [ ] Reduce ad hoc DB shape assumptions inside UI code
-- [ ] Introduce explicit helper accessors where UI repeatedly reaches into nested DB tables
+- [x] Audit which state belongs in SavedVariables vs transient runtime state
+- [x] Centralize normalization and defaulting patterns
+- [x] Reduce ad hoc DB shape assumptions inside UI code
+- [x] Introduce explicit helper accessors where UI repeatedly reaches into nested DB tables
 
 Success criteria:
 
@@ -242,4 +242,4 @@ Tasks:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Priority for this session: begin Phase 4 by standardizing state and persistence flow, especially around `Data/Defaults.lua`, `Data/Migrations.lua`, `Data/Store.lua`, and repeated DB access patterns in UI/domain modules.
+> Priority for this session: begin Phase 5 by sharpening domain/UI separation, especially where UI modules still compute business rules that can move into `Domain/`.
