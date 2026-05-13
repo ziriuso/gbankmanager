@@ -186,14 +186,21 @@ Files likely:
 
 Tasks:
 
-- [ ] Move non-rendering logic out of UI files when it does not require frame state
-- [ ] Keep formatting builders and row-shaping logic in well-defined places
-- [ ] Remove duplicated logic between UI modules and domain helpers where possible
+- [x] Move non-rendering logic out of UI files when it does not require frame state
+- [x] Keep formatting builders and row-shaping logic in well-defined places
+- [x] Remove duplicated logic between UI modules and domain helpers where possible
 
 Success criteria:
 
 - UI modules consume domain outputs rather than recomputing rules
 - domain modules become easier to test in isolation
+
+Completed in this phase:
+
+- export demand-plan assembly moved behind `Domain/Planning.lua` and `Domain/Exports.lua` database-facing helpers
+- `UI/MainFrame.lua` now consumes prebuilt export rows instead of rebuilding planning inputs and quality enrichment inline
+- procurement-only history filtering moved into `UI/HistoryView.lua` so the shell no longer hardcodes allowed audit categories
+- new isolated tests now cover planning-from-database, export-row materialization-from-database, and procurement-history filtering
 
 ### Phase 6: Naming, Documentation, and Final Polish
 
@@ -242,4 +249,4 @@ Tasks:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Priority for this session: begin Phase 5 by sharpening domain/UI separation, especially where UI modules still compute business rules that can move into `Domain/`.
+> Priority for this session: complete Phase 6 by tightening naming/docs polish, refreshing implementation notes, and capturing deferred TODOs like offline item indexing.
