@@ -76,6 +76,36 @@ local function summarize_scopes(details)
     return #scopes > 0 and table.concat(scopes, "|") or "GLOBAL"
 end
 
+local function quality_for_item(db, snapshot, itemID)
+    db = db or {}
+    snapshot = snapshot or { items = {} }
+
+    local snapshotItem = snapshot.items and snapshot.items[itemID]
+    if snapshotItem then
+        local snapshotQuality = tonumber(snapshotItem.craftedQuality or 0) or 0
+        if snapshotQuality > 0 then
+            return snapshotQuality
+        end
+    end
+
+    for _, source in ipairs({
+        db.minimums,
+        db.oneTimeTargets,
+        db.requests,
+    }) do
+        for _, entry in ipairs(source or {}) do
+            if entry.itemID == itemID then
+                local quality = tonumber(entry.quality or entry.craftedQuality or 0) or 0
+                if quality > 0 then
+                    return quality
+                end
+            end
+        end
+    end
+
+    return 0
+end
+
 function exports.MaterializePlanRows(plan, snapshot)
     local rows = {}
     snapshot = snapshot or { items = {} }
@@ -112,6 +142,32 @@ function exports.MaterializePlanRows(plan, snapshot)
     end)
 
     return rows
+end
+
+function exports.BuildRowsFromDatabase(db)
+    db = db or {}
+
+    local planning = ns.modules.planning
+    if planning == nil and type(_G.dofile) == "function" then
+        planning = _G.dofile("GBankManager/Domain/Planning.lua")
+    end
+
+    local demandPlan = {}
+    local snapshot = { items = {} }
+
+    if planning and type(planning.BuildDemandPlanFromDatabase) == "function" then
+        demandPlan, snapshot = planning.BuildDemandPlanFromDatabase(db)
+    end
+
+    local rows = exports.MaterializePlanRows(demandPlan, snapshot)
+
+    for _, row in ipairs(rows) do
+        if (tonumber(row.quality or 0) or 0) <= 0 then
+            row.quality = quality_for_item(db, snapshot, row.itemID)
+        end
+    end
+
+    return rows, snapshot
 end
 
 ns.modules.exports = exports

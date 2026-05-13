@@ -28,6 +28,11 @@ local category_labels = {
     TARGET = "Target",
 }
 
+local procurement_categories = {
+    REQUEST = true,
+    MINIMUM = true,
+}
+
 local function normalize_timestamp(timestamp)
     local numeric = tonumber(timestamp)
     if numeric ~= nil then
@@ -122,6 +127,18 @@ function historyView.Filter(entries, filters)
     end
 
     return out
+end
+
+function historyView.FilterProcurementEntries(entries)
+    local filtered = {}
+
+    for _, entry in ipairs(entries or {}) do
+        if procurement_categories[entry.category] then
+            table.insert(filtered, entry)
+        end
+    end
+
+    return filtered
 end
 
 function historyView.BuildLines(entries, filters)

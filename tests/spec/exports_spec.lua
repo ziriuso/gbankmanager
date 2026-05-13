@@ -124,3 +124,26 @@ local customText = exportsView.BuildCustomText(enrichedRows, {
 
 assert.equal("itemName,itemID,currentQuantity,restockQuantity,targetQuantity,requestQuantity,totalToBuy,scopeSummary,reason\nFlask Alpha,1001,10,4,0,1,5,GLOBAL,REQUEST:1|RESTOCK:4", spreadsheetText, "spreadsheet preset should expose export audit columns")
 assert.equal("1001|Flask Alpha|5", customText, "custom view helper should pass templates through to the export domain")
+
+local dbRows = exports.BuildRowsFromDatabase({
+    currentSnapshotId = "scan-1",
+    snapshots = {
+        ["scan-1"] = {
+            items = {
+                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 3 },
+            },
+        },
+    },
+    minimums = {
+        { itemID = 1001, itemName = "Flask Alpha", quantity = 5, scope = "GLOBAL" },
+    },
+    oneTimeTargets = {},
+    requests = {
+        { itemID = 2002, itemName = "Potion Beta", quantity = 2, approval = "APPROVED", fulfillment = "OPEN" },
+    },
+})
+
+assert.equal(2, #dbRows, "database export rows should be materialized from planning inputs in one domain call")
+assert.equal("Flask Alpha", dbRows[1].itemName, "database export rows should stay sorted for UI consumers")
+assert.equal(2, dbRows[1].totalToBuy, "database export rows should compute shortages from minimums")
+assert.equal(2, dbRows[2].requestQuantity, "database export rows should include approved open requests")

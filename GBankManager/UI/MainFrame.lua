@@ -111,36 +111,6 @@ local function count_lines(text)
     return lineCount
 end
 
-local function export_quality_for_item(db, itemID)
-    db = db or {}
-    local snapshots = db.snapshots or {}
-    local currentSnapshot = db.currentSnapshotId and snapshots[db.currentSnapshotId] or nil
-    local snapshotItems = (currentSnapshot and currentSnapshot.items) or {}
-    local sources = {
-        db.minimums,
-        db.oneTimeTargets,
-        db.requests,
-    }
-
-    local snapshotItem = snapshotItems[itemID]
-    if snapshotItem and tonumber(snapshotItem.craftedQuality or 0) and tonumber(snapshotItem.craftedQuality or 0) > 0 then
-        return tonumber(snapshotItem.craftedQuality or 0) or 0
-    end
-
-    for _, source in ipairs(sources) do
-        for _, entry in ipairs(source or {}) do
-            if entry.itemID == itemID then
-                local quality = tonumber(entry.quality or entry.craftedQuality or 0) or 0
-                if quality > 0 then
-                    return quality
-                end
-            end
-        end
-    end
-
-    return 0
-end
-
 local function format_timestamp(timestamp)
     if not timestamp or timestamp == 0 then
         return "No scan yet"
@@ -209,22 +179,6 @@ local function current_db()
     _G.GBankManagerDB = runtime
     ns.state.db = runtime
     return runtime
-end
-
-local function procurement_audit_entries(entries)
-    local filtered = {}
-    local allowedCategories = {
-        REQUEST = true,
-        MINIMUM = true,
-    }
-
-    for _, entry in ipairs(entries or {}) do
-        if allowedCategories[entry.category] then
-            table.insert(filtered, entry)
-        end
-    end
-
-    return filtered
 end
 
 mainFrame.collapsedSidebar = mainFrame.collapsedSidebar and true or false
@@ -662,36 +616,13 @@ function mainFrame:IsSelectedTableRow(row)
 end
 
 function mainFrame:BuildExportRows()
-    local exportsView = ns.modules.exportsView
     local db = current_db()
-    local currentSnapshot = nil
-    local planning = ns.modules.planning
-
-    if db.currentSnapshotId ~= nil then
-        currentSnapshot = (db.snapshots or {})[db.currentSnapshotId]
-    end
-    currentSnapshot = currentSnapshot or { items = {} }
-
-    local demandPlan = {}
-    if planning and type(planning.BuildDemandPlan) == "function" then
-        demandPlan = planning.BuildDemandPlan({
-            snapshot = currentSnapshot,
-            minimums = db.minimums or {},
-            oneTimeTargets = db.oneTimeTargets or {},
-            requests = db.requests or {},
-        })
+    local exports = ns.modules.exports
+    if exports and type(exports.BuildRowsFromDatabase) == "function" then
+        return exports.BuildRowsFromDatabase(db)
     end
 
-    local rows = exportsView and type(exportsView.BuildTableRows) == "function" and exportsView.BuildTableRows(demandPlan, currentSnapshot) or {}
-    local db = current_db()
-
-    for _, row in ipairs(rows) do
-        if (tonumber(row.quality or 0) or 0) <= 0 then
-            row.quality = export_quality_for_item(db, row.itemID)
-        end
-    end
-
-    return rows, currentSnapshot
+    return {}, { items = {} }
 end
 
 function mainFrame:GetCurrentSnapshot()
@@ -715,18 +646,10 @@ function mainFrame:RefreshView()
 
     self:UpdateSharedTableLayout()
 
-    if db.currentSnapshotId ~= nil then
-        currentSnapshot = (db.snapshots or {})[db.currentSnapshotId]
-    end
-
     local demandPlan = {}
-    if planning and type(planning.BuildDemandPlan) == "function" then
-        demandPlan = planning.BuildDemandPlan({
-            snapshot = currentSnapshot or { items = {} },
-            minimums = db.minimums or {},
-            oneTimeTargets = db.oneTimeTargets or {},
-            requests = db.requests or {},
-        })
+    currentSnapshot = self:GetCurrentSnapshot()
+    if planning and type(planning.BuildDemandPlanFromDatabase) == "function" then
+        demandPlan, currentSnapshot = planning.BuildDemandPlanFromDatabase(db)
     end
 
     if dashboardView and type(dashboardView.BuildSummary) == "function" then
@@ -779,7 +702,8 @@ function mainFrame:RefreshView()
         self:ApplyInventoryFilters()
         showTable = true
     elseif self.activeView == "HISTORY" then
-        local rows = historyView.BuildTableRows(procurement_audit_entries(db.auditLog or {}), self:GetSharedFilterState())
+        local procurementEntries = historyView.FilterProcurementEntries(db.auditLog or {})
+        local rows = historyView.BuildTableRows(procurementEntries, self:GetSharedFilterState())
         self.tableScrollOffset = 0
         self:ConfigureTable({
             { key = "date", label = "When", width = 150, justifyH = "LEFT" },

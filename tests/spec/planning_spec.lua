@@ -88,3 +88,29 @@ local disabledMinimumPlan = planning.BuildDemandPlan({
 
 assert.truthy(disabledMinimumPlan[3003] == nil, "disabled minimum rules should not contribute to planning demand")
 assert.equal(7, disabledMinimumPlan[4004].sources.RESTOCK, "enabled minimum rules should still contribute to planning demand")
+
+local databasePlan, databaseSnapshot = planning.BuildDemandPlanFromDatabase({
+    currentSnapshotId = "scan-1",
+    snapshots = {
+        ["scan-1"] = {
+            items = {
+                [5005] = {
+                    itemID = 5005,
+                    name = "Oil Epsilon",
+                    totalCount = 1,
+                    tabs = {
+                        Oils = 1,
+                    },
+                },
+            },
+        },
+    },
+    minimums = {
+        { itemID = 5005, itemName = "Oil Epsilon", quantity = 3, scope = "GLOBAL" },
+    },
+    oneTimeTargets = {},
+    requests = {},
+})
+
+assert.equal(2, databasePlan[5005].totalToBuy, "database planning should derive shortages from persisted snapshots and rules")
+assert.equal(1, databaseSnapshot.items[5005].totalCount, "database planning should return the snapshot used to build the plan")

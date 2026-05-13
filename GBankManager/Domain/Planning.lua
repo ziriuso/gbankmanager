@@ -46,6 +46,17 @@ local function current_scope_count(snapshot, itemID, rule)
     return tabs[rule.tabName] or 0
 end
 
+local function current_snapshot_from_db(db)
+    db = db or {}
+    local snapshots = db.snapshots or {}
+
+    if db.currentSnapshotId ~= nil then
+        return snapshots[db.currentSnapshotId] or { items = {} }
+    end
+
+    return { items = {} }
+end
+
 local function add_detail(row, source, amount, input)
     if amount <= 0 then
         return
@@ -97,6 +108,19 @@ function planning.BuildDemandPlan(input)
     end
 
     return plan
+end
+
+function planning.BuildDemandPlanFromDatabase(db)
+    db = db or {}
+    local snapshot = current_snapshot_from_db(db)
+    local plan = planning.BuildDemandPlan({
+        snapshot = snapshot,
+        minimums = db.minimums or {},
+        oneTimeTargets = db.oneTimeTargets or {},
+        requests = db.requests or {},
+    })
+
+    return plan, snapshot
 end
 
 ns.modules.planning = planning
