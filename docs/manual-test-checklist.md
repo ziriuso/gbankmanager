@@ -12,7 +12,7 @@
 10. Confirm selecting each export preset opens the export modal instead of trapping output inline in the Exports panel.
 11. Confirm the sidebar includes Minimums, Requests, Exports, About, and Options without changing the shell style.
 12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
-13. Add a one-time target and confirm it reaches suggested fulfilled status once inventory meets the target quantity.
+13. Confirm the dashboard purchase summary changes when minimums and approved open requests change.
 14. Submit a member request and confirm it begins as `PENDING`.
 15. Submit an officer request and confirm it begins as `APPROVED`.
 16. Confirm a member-scoped request list only shows rows for that requester.
@@ -49,3 +49,4 @@
 47. Click a saved minimum row without editing it and confirm the row does not immediately show an undo state until a real change is made.
 48. While editing an existing row, confirm the inline `Restock` and `Minimum` controls stay vertically aligned with the original row text instead of dropping lower in the cell.
 49. Search for a non-bank item using a partial name after it has been seen through a prior exact resolution or saved catalog entry and confirm the add modal can still surface it outside the current guild bank snapshot.
+50. Open the shell tabs after a `/reload` and confirm the current navigation remains `Dashboard`, `Inventory`, `History`, `Minimums`, `Requests`, `Exports`, `About`, and `Options` with no `Targets` tab returning.

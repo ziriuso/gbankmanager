@@ -2,28 +2,41 @@
 
 ## Resume Here
 
-- Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
+- Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Latest code commit: `186f353` (`fix: tighten minimums inline editing and search`)
-- Prior feature commit: `b879872` (`feat: finish exports workflow and minimums polish`)
+- Latest code commit: `551ffb0` (`refactor: sharpen domain ui separation`)
+- Latest docs commit: `034d290` (`docs: close out phase 5 refactor plan`)
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
 ## Read First
 
-1. `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`
-2. `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
-3. `docs/superpowers/specs/2026-05-11-wow-guild-bank-task-5-ui-shell-design.md`
-4. `docs/superpowers/handoffs/latest-handoff.md`
-5. `git status -sb`
-6. `.\tools\lua\lua.exe .\tests\run_all.lua`
+1. `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
+2. `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
+3. `docs/superpowers/handoffs/latest-handoff.md`
+4. `git status -sb`
+5. `.\tools\lua\lua.exe .\tests\run_all.lua`
 
 ## Current Repo State
 
-- Worktree is expected to be clean after commit `186f353`
+- Worktree is expected to be clean after commit `034d290`
 - If anything is dirty when resuming, inspect before changing behavior because the current handoff assumes a clean baseline
 
 ## Current Product State
+
+### Architecture
+
+- `Core/` is now a thin bootstrap, event-registration, and slash-command layer
+- `Data/` owns defaults, migrations, and store-backed DB access
+- `Domain/` owns snapshots, diffing, planning, exports, requests, and permissions
+- `Features/` owns live scan workflows and feature-owned event adapters
+- `UI/` is split into shell plus focused controllers:
+  - `MainFrameShell.lua`
+  - `MainTableController.lua`
+  - `MainRequestsController.lua`
+  - `MainExportsController.lua`
+  - `MainMinimumsController.lua`
+  - `MainFrame.lua`
 
 ### Shell
 
@@ -38,15 +51,15 @@
 
 ### Exports
 
-- Export generation is still grounded in the planning model
+- Export generation is grounded in the planning model
 - Officer-facing `Spreadsheet` has been renamed to `CSV`
 - Selecting an export preset opens a modal with:
   - scrollable output
   - `Select All`
   - `Copy`
   - `Close`
-- Auctionator now has an editable shopping-list name field
-- Auctionator output was rebuilt to the screenshot-driven caret/semicolon format and should be treated as the current source of truth unless the user supplies a newer sample
+- Auctionator has an editable shopping-list name field
+- Auctionator output follows the screenshot-driven caret/semicolon format and should stay the source of truth unless the user supplies a newer sample
 
 ### Minimums
 
@@ -68,56 +81,54 @@
 - Keep exports as outputs of planning, not a separate source of truth
 - Keep using TDD for follow-up fixes
 
-## Outstanding Tomorrow
+## Deferred TODO
 
-These are the real next-session checks, in priority order.
+- Offline/global item discovery for Minimums add-item search remains intentionally deferred
+- Do not reintroduce Auction House requirements as the primary search path
+- If broader item discovery work resumes later, prefer a self-owned persisted item index or other explicit design rather than fragile reads from other addons
 
-1. Re-verify the new Minimums draft/highlight treatment in the live WoW client
-2. Confirm the inline `Restock` and `Minimum` editors still feel visually aligned with the original text baseline at WoW scale
-3. Recheck the staged-row `Bank Tab` dropdown visibility and usability in live client
-4. Recheck non-bank add-item search with real user flows and decide whether the current remembered-item catalog behavior is sufficient
-5. If live-client QA still finds Minimums rendering issues, keep the fixes focused and do not reopen unrelated shell or export work
+## Best Next Work
 
-## Known Behavior Notes
-
-- Non-bank partial-name search is broader than before, but it is still limited by item data the addon already knows locally through saved data or prior exact resolution
-- That means it is not yet a guaranteed universal WoW-wide substring search for unseen items
-- If the user wants fully broader discovery later, that will likely need a separate design decision around how far to lean on client item APIs and cached item info
+1. Finish any remaining Phase 6 naming/docs polish if a later session finds stale references
+2. Re-verify the new Minimums draft/highlight treatment in the live WoW client
+3. Confirm the inline `Restock` and `Minimum` editors still feel visually aligned with the original text baseline at WoW scale
+4. Recheck the staged-row `Bank Tab` dropdown visibility and usability in live client
+5. Recheck non-bank add-item search with real user flows and decide whether the current remembered-item catalog behavior is sufficient
+6. If live-client QA still finds Minimums rendering issues, keep the fixes focused and do not reopen unrelated shell or export work
 
 ## Docs Updated In The Latest Work
 
+- `README.md`
+  - refreshed feature wording and architecture overview to match the refactored module split
 - `docs/manual-test-checklist.md`
-  - added export modal QA coverage
-  - added Auctionator naming/format QA coverage
-  - added Minimums follow-up QA coverage
-- `docs/superpowers/handoffs/latest-handoff.md`
-  - refreshed to the current post-exports, post-Minimums-follow-up state
+  - refreshed phase-6 QA wording and removed stale target-focused language
+- `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
+  - should be treated through its delta sections, not the original target-era task list
+- `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
+  - phase tracker for the completed refactor slices
 
 ## Suggested Next Prompt
 
 > Continue work on the WoW guild bank addon from the implementation worktree.
-> Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
+> Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 > Branch: `codex/gbankmanager-v1`
 >
 > Read first:
-> `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`
 > `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
-> `docs/superpowers/specs/2026-05-11-wow-guild-bank-task-5-ui-shell-design.md`
+> `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
 > `docs/superpowers/handoffs/latest-handoff.md`
 >
 > Then run:
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume from commit `186f353`.
+> Resume from commit `551ffb0`.
 >
-> Priority for this session: live-client QA and focused follow-up fixes for Minimums.
+> Priority for this session: return to live-client Minimums QA follow-up or new feature work from the refactored baseline.
 >
 > Required outcomes:
-> 1. Verify the visible row-highlighting behavior in live client and strengthen it if needed.
-> 2. Verify inline editor alignment in live client and tighten it if needed.
-> 3. Verify staged-row `Bank Tab` dropdown visibility/usability and improve it if needed.
-> 4. Re-test add-item search outside current bank snapshot and decide whether the current remembered-item catalog approach is sufficient.
-> 5. Keep `History` procurement-audit-only and do not reintroduce `Targets`.
-> 6. Keep exports grounded in the planning model.
-> 7. Use TDD for any follow-up fixes and rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
+> 1. Keep `History` procurement-audit-only and do not reintroduce `Targets`.
+> 2. Keep exports grounded in the planning model.
+> 3. Re-verify Minimums live-client behavior only if the session is reopening QA follow-up work.
+> 4. Treat offline/global item discovery as a separate explicit design task.
+> 5. Use TDD for any follow-up fixes and rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.

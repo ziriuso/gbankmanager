@@ -208,10 +208,17 @@ Completed in this phase:
 
 Tasks:
 
-- [ ] Normalize file/module naming where it improves ownership clarity
-- [ ] Refresh implementation docs to match the refactored architecture
-- [ ] Update manual QA checklist for any workflow movement
-- [ ] Add clear TODO notes for deferred work like offline item indexing
+- [x] Normalize file/module naming where it improves ownership clarity
+- [x] Refresh implementation docs to match the refactored architecture
+- [x] Update manual QA checklist for any workflow movement
+- [x] Add clear TODO notes for deferred work like offline item indexing
+
+Completed in this phase:
+
+- kept the current controller filenames stable and documented their ownership explicitly instead of doing cosmetic rename churn
+- refreshed `README.md` so its feature list and architecture summary match the post-refactor addon shape
+- refreshed the implementation delta, manual QA checklist, and latest handoff to match the new `GBankManager` root and the current shell/navigation truth
+- captured offline/global item discovery as an explicit deferred design task instead of implied future behavior
 
 ---
 
@@ -249,4 +256,4 @@ Tasks:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Priority for this session: complete Phase 6 by tightening naming/docs polish, refreshing implementation notes, and capturing deferred TODOs like offline item indexing.
+> Priority for this session: return to live-client QA follow-up or new feature work from the refactored baseline without reopening removed `Targets` or non-planning export logic.

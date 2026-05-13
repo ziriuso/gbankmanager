@@ -1690,3 +1690,59 @@ Requirements:
 - Do not expand History back into raw inventory diff UI
 - Keep export generation grounded in the planning model
 - Prefer small, verifiable UI changes with test coverage before live-client polish
+
+---
+
+## Current Delta 2026-05-13
+
+The structural refactor is now complete through Phase 5. Treat the original task list in this document as historical implementation context, not the authoritative current module map.
+
+### Current Root And Branch
+
+- Root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager`
+- Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+- Branch: `codex/gbankmanager-v1`
+
+### Current Refactored Shape
+
+- `Core/`
+  - thin bootstrap, slash commands, and event registration
+- `Data/`
+  - defaults, migrations, and normalized store access
+- `Domain/`
+  - snapshots, diff, planning, exports, requests, permissions
+- `Features/`
+  - guild-bank scan workflow and feature-owned event adapters
+- `UI/`
+  - `MainFrameShell.lua`
+  - `MainTableController.lua`
+  - `MainRequestsController.lua`
+  - `MainExportsController.lua`
+  - `MainMinimumsController.lua`
+  - `MainFrame.lua`
+  - view helpers for dashboard, inventory, requests, history, exports, and minimums
+
+### Current Product Truth
+
+- `Targets` is removed from the shell and must not be restored
+- `History` stays procurement-audit-only
+- `Spreadsheet` has been renamed to `CSV`
+- Minimums uses direct draft rows with row-level undo and explicit remove actions
+- Exports remain outputs of the planning model, not an independent source of truth
+
+### Deferred Work
+
+- Offline/global item discovery for Minimums add-item search remains deferred
+- Do not treat Auction House lookup as a required dependency for normal addon use
+- If this work resumes, prefer an explicit self-owned item index design over fragile reads from other addons
+
+### Latest Verified Baseline
+
+- Refactor phase-5 code commit: `551ffb0`
+- Refactor phase-5 docs commit: `034d290`
+- Verified command:
+
+```text
+.\tools\lua\lua.exe .\tests\run_all.lua
+PASS tests/run_all.lua
+```
