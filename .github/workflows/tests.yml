@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+jobs:
+  unit:
+    name: Lua Unit Lane
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit lane
+        shell: pwsh
+        run: .\tools\test\run-unit.ps1
+
+  ui:
+    name: Lua UI Lane
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run UI lane
+        shell: pwsh
+        run: .\tools\test\run-ui.ps1
+
+  integration:
+    name: Lua Integration Lane
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run integration lane
+        shell: pwsh
+        run: .\tools\test\run-integration.ps1

@@ -45,6 +45,14 @@ local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function default_rank_name(rankIndex)
+    if tonumber(rankIndex) == 0 then
+        return "Guild Master"
+    end
+
+    return string.format("Rank %d", tonumber(rankIndex) or 0)
+end
+
 function permissions.GetCapabilityList()
     local capabilities = {}
 
@@ -97,6 +105,26 @@ function permissions.NormalizeCharacterKey(value, realmName)
     return permissions.BuildCharacterKey(normalized, realmName)
 end
 
+function permissions.DisplayCharacterKey(characterKey)
+    local normalized = trim(characterKey)
+    if normalized == "" then
+        return ""
+    end
+
+    local delimiterIndex = string.find(normalized, "-", 1, true)
+    if not delimiterIndex then
+        return normalized
+    end
+
+    local realmName = string.sub(normalized, 1, delimiterIndex - 1)
+    local characterName = string.sub(normalized, delimiterIndex + 1)
+    if characterName == "" or realmName == "" then
+        return normalized
+    end
+
+    return string.format("%s-%s", characterName, realmName)
+end
+
 function permissions.GetGuildRankMetadata()
     local metadata = {}
     local count = type(_G.GuildControlGetNumRanks) == "function" and (_G.GuildControlGetNumRanks() or 0) or 0
@@ -104,7 +132,7 @@ function permissions.GetGuildRankMetadata()
     for zeroBasedIndex = 0, math.max(0, count - 1) do
         local displayName = type(_G.GuildControlGetRankName) == "function" and _G.GuildControlGetRankName(zeroBasedIndex + 1) or nil
         metadata[zeroBasedIndex] = {
-            name = trim(displayName) ~= "" and trim(displayName) or string.format("Rank %d", zeroBasedIndex),
+            name = trim(displayName) ~= "" and trim(displayName) or default_rank_name(zeroBasedIndex),
             order = zeroBasedIndex,
         }
     end
@@ -152,8 +180,8 @@ function permissions.NormalizePolicy(policy, liveRankMetadata)
 
     for rankIndex, metadata in pairs(liveRankMetadata or {}) do
         normalized.rankMetadata[rankIndex] = normalized.rankMetadata[rankIndex] or {}
-        normalized.rankMetadata[rankIndex].name = normalized.rankMetadata[rankIndex].name or metadata.name
-        normalized.rankMetadata[rankIndex].order = normalized.rankMetadata[rankIndex].order or metadata.order or rankIndex
+        normalized.rankMetadata[rankIndex].name = metadata.name or normalized.rankMetadata[rankIndex].name or default_rank_name(rankIndex)
+        normalized.rankMetadata[rankIndex].order = metadata.order or normalized.rankMetadata[rankIndex].order or rankIndex
     end
 
     return normalized
@@ -196,7 +224,7 @@ function permissions.GetSortedRankMetadata(policy)
     for rankIndex, metadata in pairs(policy.rankMetadata or {}) do
         table.insert(ranks, {
             rankIndex = rankIndex,
-            name = metadata.name or string.format("Rank %d", rankIndex),
+            name = metadata.name or default_rank_name(rankIndex),
             order = metadata.order or rankIndex,
         })
     end

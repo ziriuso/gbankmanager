@@ -38,6 +38,10 @@ local db = store.CreateFreshDatabase("Guild Testers")
 assert.truthy(type(db.auth) == "table", "fresh databases should include an auth policy container")
 assert.truthy(type(db.auth.capabilities) == "table", "fresh databases should include capability allowlists")
 assert.truthy(type(db.auth.blacklist) == "table", "fresh databases should include a blacklist table")
+assert.equal("GuildLead-Stormrage", permissions.DisplayCharacterKey("Stormrage-GuildLead"), "auth display formatting should render Character-Realm for UI text")
+db.auth.rankMetadata[0] = { name = "Rank 0", order = 0 }
+permissions.NormalizePolicy(db.auth, permissions.GetGuildRankMetadata())
+assert.equal("Guild Master", db.auth.rankMetadata[0].name, "live guild rank metadata should overwrite stale saved rank labels")
 
 local guildmasterContext = permissions.GetLivePlayerContext(db)
 

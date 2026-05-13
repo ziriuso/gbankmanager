@@ -16,7 +16,8 @@ local make_label = mainFrameShell.MakeLabel
 local make_button = mainFrameShell.MakeButton
 local set_button_icon = mainFrameShell.SetButtonIcon
 local make_input = mainFrameShell.MakeInput
-local make_slider = mainFrameShell.MakeSlider
+local make_slim_scroll_bar = mainFrameShell.MakeSlimScrollBar
+local create_page_overflow_viewport = mainFrameShell.CreatePageOverflowViewport
 local set_frame_shown = mainFrameShell.SetFrameShown
 
 local function parse_number(value)
@@ -156,6 +157,26 @@ local function format_timestamp(timestamp)
     end
 
     return tostring(timestamp)
+end
+
+local function display_character_key(characterKey)
+    local auth = ns.modules.auth or ns.modules.permissions
+    if auth and type(auth.DisplayCharacterKey) == "function" then
+        return auth.DisplayCharacterKey(characterKey)
+    end
+
+    return tostring(characterKey or "")
+end
+
+local function auth_metadata_text(policy)
+    policy = policy or {}
+    local updatedAt = format_timestamp(policy.updatedAt)
+    local updatedBy = display_character_key(policy.updatedBy)
+    if updatedBy == "" then
+        updatedBy = "Unknown"
+    end
+
+    return string.format("Last Update: %s by %s", tostring(updatedAt), tostring(updatedBy))
 end
 
 local function build_about_stamp()
@@ -334,6 +355,9 @@ mainTableController.Attach(mainFrame, {
     makeLabel = make_label,
     makeButton = make_button,
     makeInput = make_input,
+    makeSlimScrollBar = make_slim_scroll_bar,
+    createTableOverflowViewport = mainFrameShell.CreateTableOverflowViewport,
+    attachScrollBehavior = mainFrameShell.AttachScrollBehavior,
     theme = theme,
     labelWithSortMarker = label_with_sort_marker,
     applyTableRowStyle = apply_table_row_style,
@@ -402,40 +426,65 @@ mainFrame.minimumEmptyStateText:Hide()
 
 mainFrame.optionsPanel = mainFrame.optionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.optionsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
-mainFrame.optionsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.optionsPanel:SetHeight(520)
+mainFrame.optionsPanel:SetPoint("BOTTOMRIGHT", mainFrame.content, "BOTTOMRIGHT", -24, 0)
 apply_panel_style(mainFrame.optionsPanel, theme.colors.panel)
 mainFrame.optionsPanel:Hide()
 
-mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
-mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsPanel, "TOPLEFT", 0, 0)
-mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsPanel, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(96)
+mainFrame.optionsScrollUpButton = nil
+mainFrame.optionsScrollDownButton = nil
+mainFrame.optionsScrollStatusText = nil
+local optionsOverflow = create_page_overflow_viewport and create_page_overflow_viewport(mainFrame.optionsPanel, {
+    viewportFrame = mainFrame.optionsViewportFrame,
+    scrollFrame = mainFrame.optionsScrollFrame,
+    scrollChild = mainFrame.optionsScrollChild,
+    scrollBar = mainFrame.optionsScrollBar,
+    controllerOptions = {
+        wheelStep = 24,
+    },
+}) or nil
+mainFrame.optionsViewportFrame = optionsOverflow and optionsOverflow.viewportFrame or mainFrame.optionsViewportFrame
+mainFrame.optionsScrollFrame = optionsOverflow and optionsOverflow.scrollFrame or mainFrame.optionsScrollFrame
+mainFrame.optionsScrollChild = optionsOverflow and optionsOverflow.scrollChild or mainFrame.optionsScrollChild
+mainFrame.optionsScrollBar = optionsOverflow and optionsOverflow.scrollBar or (mainFrame.optionsScrollBar or make_slim_scroll_bar(mainFrame.optionsPanel, 14))
+mainFrame.optionsScrollController = optionsOverflow and optionsOverflow.controller or mainFrame.optionsScrollController
+
+mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsAppearancePanel:SetHeight(92)
 apply_panel_style(mainFrame.optionsAppearancePanel, theme.colors.panelAlt)
 
-mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsRestockPanel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "BOTTOMLEFT", 0, -16)
 mainFrame.optionsRestockPanel:SetPoint("TOPRIGHT", mainFrame.optionsAppearancePanel, "BOTTOMRIGHT", 0, -16)
 mainFrame.optionsRestockPanel:SetHeight(96)
 apply_panel_style(mainFrame.optionsRestockPanel, theme.colors.panelAlt)
 
-mainFrame.optionsAuthPanel = mainFrame.optionsAuthPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsAuthPanel = mainFrame.optionsAuthPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAuthPanel:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "BOTTOMLEFT", 0, -16)
 mainFrame.optionsAuthPanel:SetPoint("TOPRIGHT", mainFrame.optionsRestockPanel, "BOTTOMRIGHT", 0, -16)
-mainFrame.optionsAuthPanel:SetHeight(296)
+mainFrame.optionsAuthPanel:SetHeight(560)
 apply_panel_style(mainFrame.optionsAuthPanel, theme.colors.panelAlt)
 
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Window Transparency", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Adjust shell opacity with a slider and keep the percentage visible.", "GameFontHighlightSmall")
+mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Adjust shell opacity with simple buttons and keep the percentage visible.", "GameFontHighlightSmall")
 mainFrame.optionsHint:SetPoint("TOPLEFT", mainFrame.optionsTitle, "BOTTOMLEFT", 0, -8)
 
-mainFrame.transparencySlider = mainFrame.transparencySlider or make_slider(mainFrame.optionsAppearancePanel, 220, 18, 55, 100, math.floor(mainFrame.currentAlpha * 100 + 0.5))
-mainFrame.transparencySlider:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -18)
+if mainFrame.transparencySlider then
+    mainFrame.transparencySlider:Hide()
+end
+mainFrame.transparencySlider = nil
+
+mainFrame.transparencyDecreaseButton = mainFrame.transparencyDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 32, 24, "-")
+mainFrame.transparencyDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -16)
+
+mainFrame.transparencyIncreaseButton = mainFrame.transparencyIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 32, 24, "+")
+mainFrame.transparencyIncreaseButton:SetPoint("LEFT", mainFrame.transparencyDecreaseButton, "RIGHT", 92, 0)
 
 mainFrame.transparencyValueText = mainFrame.transparencyValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
-mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencySlider, "RIGHT", 16, 0)
+mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencyDecreaseButton, "RIGHT", 14, 0)
 
 mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsRestockPanel, "Restock Default", "GameFontHighlight")
 mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "TOPLEFT", 16, -16)
@@ -461,69 +510,222 @@ mainFrame.optionsAuthMetadataText:SetPoint("TOPLEFT", mainFrame.optionsAuthHint,
 mainFrame.optionsAccessPreviewText = mainFrame.optionsAccessPreviewText or make_label(mainFrame.optionsAuthPanel, "", "GameFontNormal")
 mainFrame.optionsAccessPreviewText:SetPoint("TOPLEFT", mainFrame.optionsAuthMetadataText, "BOTTOMLEFT", 0, -10)
 
-mainFrame.optionsRankPreviewText = mainFrame.optionsRankPreviewText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
-mainFrame.optionsRankPreviewText:SetPoint("TOPLEFT", mainFrame.optionsAccessPreviewText, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsRankPickerLabel = mainFrame.optionsRankPickerLabel or make_label(mainFrame.optionsAuthPanel, "Selected Rank", "GameFontHighlightSmall")
+mainFrame.optionsRankPickerLabel:SetPoint("TOPLEFT", mainFrame.optionsAccessPreviewText, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsAuthRankButton = mainFrame.optionsAuthRankButton or make_button(mainFrame.optionsAuthPanel, 180, 24, "")
+mainFrame.optionsAuthRankButton:SetPoint("TOPLEFT", mainFrame.optionsRankPickerLabel, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsAuthRankDropdown = mainFrame.optionsAuthRankDropdown or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsAuthRankDropdown:SetPoint("TOPLEFT", mainFrame.optionsAuthRankButton, "BOTTOMLEFT", 0, -4)
+mainFrame.optionsAuthRankDropdown:SetSize(196, 88)
+apply_panel_style(mainFrame.optionsAuthRankDropdown, theme.colors.panel)
+if type(mainFrame.optionsAuthRankDropdown.SetBackdropColor) == "function" then
+    mainFrame.optionsAuthRankDropdown:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
+end
+if type(mainFrame.optionsAuthRankDropdown.SetFrameStrata) == "function" then
+    mainFrame.optionsAuthRankDropdown:SetFrameStrata("DIALOG")
+end
+if type(mainFrame.optionsAuthRankDropdown.SetFrameLevel) == "function" then
+    mainFrame.optionsAuthRankDropdown:SetFrameLevel(30)
+end
+mainFrame.optionsAuthRankDropdown:Hide()
+
+mainFrame.optionsAuthRankDropdownBackdrop = mainFrame.optionsAuthRankDropdownBackdrop or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthRankDropdown, "BackdropTemplate")
+mainFrame.optionsAuthRankDropdownBackdrop:SetPoint("TOPLEFT", mainFrame.optionsAuthRankDropdown, "TOPLEFT", 0, 0)
+mainFrame.optionsAuthRankDropdownBackdrop:SetPoint("BOTTOMRIGHT", mainFrame.optionsAuthRankDropdown, "BOTTOMRIGHT", 0, 0)
+apply_panel_style(mainFrame.optionsAuthRankDropdownBackdrop, theme.colors.background)
+if type(mainFrame.optionsAuthRankDropdownBackdrop.SetBackdropColor) == "function" then
+    mainFrame.optionsAuthRankDropdownBackdrop:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
+end
+
+mainFrame.optionsAuthRankButtons = mainFrame.optionsAuthRankButtons or {}
+for index = 1, 8 do
+    local button = mainFrame.optionsAuthRankButtons[index] or make_button(mainFrame.optionsAuthRankDropdown, 180, 20, "")
+    button:SetPoint("TOPLEFT", mainFrame.optionsAuthRankDropdown, "TOPLEFT", 6, -6 - ((index - 1) * 22))
+    mainFrame.optionsAuthRankButtons[index] = button
+end
+
+mainFrame.optionsAllowedPermissionTitle = mainFrame.optionsAllowedPermissionTitle or make_label(mainFrame.optionsAuthPanel, "Allowed Permissions", "GameFontHighlight")
+mainFrame.optionsAllowedPermissionTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthRankButton, "BOTTOMLEFT", 0, -18)
+
+mainFrame.optionsAllowedPermissionPanel = mainFrame.optionsAllowedPermissionPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsAllowedPermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionTitle, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsAllowedPermissionPanel:SetSize(250, 138)
+apply_panel_style(mainFrame.optionsAllowedPermissionPanel, theme.colors.panel)
+
+mainFrame.optionsAvailablePermissionTitle = mainFrame.optionsAvailablePermissionTitle or make_label(mainFrame.optionsAuthPanel, "Available Permissions", "GameFontHighlight")
+mainFrame.optionsAvailablePermissionTitle:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 126, 6)
+
+mainFrame.optionsAvailablePermissionPanel = mainFrame.optionsAvailablePermissionPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsAvailablePermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionTitle, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsAvailablePermissionPanel:SetSize(250, 138)
+apply_panel_style(mainFrame.optionsAvailablePermissionPanel, theme.colors.panel)
+
+mainFrame.optionsAuthRemovePermissionButton = mainFrame.optionsAuthRemovePermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "<< Remove")
+mainFrame.optionsAuthRemovePermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 16, -36)
+
+mainFrame.optionsAuthAddPermissionButton = mainFrame.optionsAuthAddPermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "Add >>")
+mainFrame.optionsAuthAddPermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAuthRemovePermissionButton, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsAllowedPermissionButtons = mainFrame.optionsAllowedPermissionButtons or {}
+mainFrame.optionsAvailablePermissionButtons = mainFrame.optionsAvailablePermissionButtons or {}
+for index = 1, 11 do
+    local allowedButton = mainFrame.optionsAllowedPermissionButtons[index] or make_button(mainFrame.optionsAllowedPermissionPanel, 114, 18, "")
+    allowedButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPLEFT", 8, -8 - ((index - 1) * 20))
+    mainFrame.optionsAllowedPermissionButtons[index] = allowedButton
+
+    local availableButton = mainFrame.optionsAvailablePermissionButtons[index] or make_button(mainFrame.optionsAvailablePermissionPanel, 114, 18, "")
+    availableButton:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionPanel, "TOPLEFT", 8, -8 - ((index - 1) * 20))
+    mainFrame.optionsAvailablePermissionButtons[index] = availableButton
+end
+
+mainFrame.optionsBlacklistTitle = mainFrame.optionsBlacklistTitle or make_label(mainFrame.optionsAuthPanel, "Blacklist", "GameFontHighlight")
+mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionPanel, "BOTTOMLEFT", 0, -18)
+
+mainFrame.optionsBlacklistCharacterLabel = mainFrame.optionsBlacklistCharacterLabel or make_label(mainFrame.optionsAuthPanel, "Character", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistCharacterLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsBlacklistNameInput = mainFrame.optionsBlacklistNameInput or make_input(mainFrame.optionsAuthPanel, 220, 22)
+mainFrame.optionsBlacklistNameInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistCharacterLabel, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsBlacklistReasonLabel = mainFrame.optionsBlacklistReasonLabel or make_label(mainFrame.optionsAuthPanel, "Reason", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistReasonLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistNameInput, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsBlacklistReasonInput = mainFrame.optionsBlacklistReasonInput or make_input(mainFrame.optionsAuthPanel, 220, 22)
+mainFrame.optionsBlacklistReasonInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistReasonLabel, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsBlacklistAddButton = mainFrame.optionsBlacklistAddButton or make_button(mainFrame.optionsAuthPanel, 96, 24, "Add / Update")
+mainFrame.optionsBlacklistAddButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistReasonInput, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsBlacklistRemoveButton = mainFrame.optionsBlacklistRemoveButton or make_button(mainFrame.optionsAuthPanel, 74, 24, "Remove")
+mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
+
+mainFrame.optionsBlacklistListTitle = mainFrame.optionsBlacklistListTitle or make_label(mainFrame.optionsAuthPanel, "Blacklisted Entries", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistAddButton, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsBlacklistListPanel = mainFrame.optionsBlacklistListPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
+mainFrame.optionsBlacklistListPanel:SetSize(324, 74)
+apply_panel_style(mainFrame.optionsBlacklistListPanel, theme.colors.panel)
+
+mainFrame.optionsBlacklistButtons = mainFrame.optionsBlacklistButtons or {}
+for index = 1, 3 do
+    local button = mainFrame.optionsBlacklistButtons[index] or make_button(mainFrame.optionsBlacklistListPanel, 308, 18, "")
+    button:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "TOPLEFT", 8, -8 - ((index - 1) * 22))
+    mainFrame.optionsBlacklistButtons[index] = button
+end
 
 mainFrame.optionsPolicyStringLabel = mainFrame.optionsPolicyStringLabel or make_label(mainFrame.optionsAuthPanel, "Policy String", "GameFontHighlightSmall")
-mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsRankPreviewText, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "BOTTOMLEFT", 0, -18)
 
-mainFrame.optionsPolicyStringInput = mainFrame.optionsPolicyStringInput or make_input(mainFrame.optionsAuthPanel, 360, 22)
-mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -6)
-
-mainFrame.optionsAuthWriteButton = mainFrame.optionsAuthWriteButton or make_button(mainFrame.optionsAuthPanel, 84, 24, "Write")
-mainFrame.optionsAuthWriteButton:SetPoint("LEFT", mainFrame.optionsPolicyStringInput, "RIGHT", 8, 0)
-
-mainFrame.optionsAuthReadButton = mainFrame.optionsAuthReadButton or make_button(mainFrame.optionsAuthPanel, 84, 24, "Refresh")
-mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthWriteButton, "RIGHT", 8, 0)
+mainFrame.optionsPolicyStringInput = mainFrame.optionsPolicyStringInput or make_input(mainFrame.optionsAuthPanel, 250, 22)
+mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -4)
 
 mainFrame.optionsAuthStatusText = mainFrame.optionsAuthStatusText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
 mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -8)
 
-mainFrame.optionsCapabilityRows = mainFrame.optionsCapabilityRows or {}
-mainFrame.optionsCapabilityButtons = mainFrame.optionsCapabilityButtons or {}
+mainFrame.optionsAuthSaveButton = mainFrame.optionsAuthSaveButton or make_button(mainFrame.optionsAuthPanel, 88, 24, "Save")
+mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "BOTTOMLEFT", 236, -16)
 
-mainFrame.optionsBlacklistTitle = mainFrame.optionsBlacklistTitle or make_label(mainFrame.optionsAuthPanel, "Blacklist", "GameFontHighlight")
-mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -238)
+mainFrame.optionsAuthWriteButton = mainFrame.optionsAuthWriteButton or make_button(mainFrame.optionsAuthPanel, 112, 24, "Write Guild Info")
+mainFrame.optionsAuthWriteButton:SetPoint("RIGHT", mainFrame.optionsAuthSaveButton, "LEFT", -8, 0)
 
-mainFrame.optionsBlacklistNameInput = mainFrame.optionsBlacklistNameInput or make_input(mainFrame.optionsAuthPanel, 180, 22)
-mainFrame.optionsBlacklistNameInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsAuthReadButton = mainFrame.optionsAuthReadButton or make_button(mainFrame.optionsAuthPanel, 128, 24, "Refresh Guild Info")
+mainFrame.optionsAuthReadButton:SetPoint("RIGHT", mainFrame.optionsAuthWriteButton, "LEFT", -8, 0)
 
-mainFrame.optionsBlacklistReasonInput = mainFrame.optionsBlacklistReasonInput or make_input(mainFrame.optionsAuthPanel, 200, 22)
-mainFrame.optionsBlacklistReasonInput:SetPoint("LEFT", mainFrame.optionsBlacklistNameInput, "RIGHT", 8, 0)
-
-mainFrame.optionsBlacklistAddButton = mainFrame.optionsBlacklistAddButton or make_button(mainFrame.optionsAuthPanel, 88, 28, "Add/Update")
-mainFrame.optionsBlacklistAddButton:SetPoint("LEFT", mainFrame.optionsBlacklistReasonInput, "RIGHT", 8, 0)
-
-mainFrame.optionsBlacklistRemoveButton = mainFrame.optionsBlacklistRemoveButton or make_button(mainFrame.optionsAuthPanel, 74, 28, "Remove")
-mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
-
-mainFrame.optionsBlacklistButtons = mainFrame.optionsBlacklistButtons or {}
-for index = 1, 3 do
-    local button = mainFrame.optionsBlacklistButtons[index] or make_button(mainFrame.optionsAuthPanel, 560, 24, "")
-    button:SetPoint("TOPLEFT", mainFrame.optionsBlacklistNameInput, "BOTTOMLEFT", 0, -12 - ((index - 1) * 28))
-    mainFrame.optionsBlacklistButtons[index] = button
-end
-
-mainFrame.optionsAuthSaveButton = mainFrame.optionsAuthSaveButton or make_button(mainFrame.optionsAuthPanel, 88, 28, "Save Auth")
-mainFrame.optionsAuthSaveButton:SetPoint("BOTTOMRIGHT", mainFrame.optionsAuthPanel, "BOTTOMRIGHT", -16, 16)
-
-mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 28, "Revert")
-mainFrame.optionsAuthResetButton:SetPoint("RIGHT", mainFrame.optionsAuthSaveButton, "LEFT", -8, 0)
+mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 24, "Revert")
+mainFrame.optionsAuthResetButton:SetPoint("RIGHT", mainFrame.optionsAuthReadButton, "LEFT", -8, 0)
 
 local function refresh_alpha_text()
     local percentage = math.floor(mainFrame.currentAlpha * 100 + 0.5)
     mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", percentage))
 end
 
-mainFrame.transparencySlider:SetScript("OnValueChanged", function(_, value)
-    set_alpha((value or 100) / 100)
+local function adjust_alpha(delta)
+    local currentPercent = math.floor((mainFrame.currentAlpha or 1) * 100 + 0.5)
+    local nextPercent = math.max(55, math.min(100, currentPercent + (delta or 0)))
+    set_alpha(nextPercent / 100)
     refresh_alpha_text()
+end
+refresh_alpha_text()
+
+mainFrame.transparencyDecreaseButton:SetScript("OnClick", function()
+    adjust_alpha(-1)
 end)
-mainFrame.transparencySlider:SetValue(math.floor(mainFrame.currentAlpha * 100 + 0.5))
+
+mainFrame.transparencyIncreaseButton:SetScript("OnClick", function()
+    adjust_alpha(1)
+end)
 
 mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
     mainFrame:SaveDefaultMinimumSetting()
 end)
+
+function mainFrame:ScrollOptionsBy(delta)
+    local controller = self.optionsScrollController
+    if not controller then
+        return 0
+    end
+
+    return controller:ScrollBy(delta or 0)
+end
+
+function mainFrame:SetOptionsScrollProgress(progress)
+    local controller = self.optionsScrollController
+    if not controller then
+        return 0
+    end
+
+    return controller:SetProgress(progress or 0)
+end
+
+function mainFrame:UpdateOptionsCanvasHeight()
+    local spacing = 16
+    local contentHeight = 0
+    contentHeight = contentHeight + (self.optionsAppearancePanel and (self.optionsAppearancePanel:GetHeight() or 0) or 0)
+    contentHeight = contentHeight + spacing
+    contentHeight = contentHeight + (self.optionsRestockPanel and (self.optionsRestockPanel:GetHeight() or 0) or 0)
+    contentHeight = contentHeight + spacing
+    contentHeight = contentHeight + (self.optionsAuthPanel and (self.optionsAuthPanel:GetHeight() or 0) or 0)
+    contentHeight = contentHeight + 16
+    if self.optionsScrollChild then
+        self.optionsScrollChild:SetWidth(math.max(0, (self.optionsScrollFrame and (self.optionsScrollFrame:GetWidth() or 0) or 0) - 4))
+        self.optionsScrollChild:SetHeight(contentHeight)
+    end
+
+    if self.optionsScrollFrame then
+        self.optionsScrollFrame.verticalScrollRange = math.max(0, contentHeight - (self.optionsScrollFrame:GetHeight() or 0))
+        self.optionsScrollFrame.verticalScroll = math.max(0, math.min(self.optionsScrollFrame.verticalScroll or 0, self.optionsScrollFrame.verticalScrollRange))
+        self.optionsScrollFrame:SetVerticalScroll(self.optionsScrollFrame.verticalScroll)
+    end
+
+    if self.optionsScrollController then
+        self.optionsScrollController:Refresh(contentHeight, self.optionsScrollFrame and (self.optionsScrollFrame:GetHeight() or 0) or 0)
+    end
+
+    return contentHeight
+end
+
+function mainFrame:SyncOptionsScrollVisuals()
+    local controller = self.optionsScrollController
+    if not controller then
+        return
+    end
+
+    controller:Refresh()
+end
+
+function mainFrame:UpdateOptionsAuthLayout(allowedCount, availableCount)
+    local visibleCount = math.max(allowedCount or 0, availableCount or 0)
+    local rowCount = math.min(6, math.max(1, visibleCount))
+    local permissionPanelHeight = math.max(74, 18 + (rowCount * 20))
+
+    self.optionsAllowedPermissionPanel:SetHeight(permissionPanelHeight)
+    self.optionsAvailablePermissionPanel:SetHeight(permissionPanelHeight)
+    self.optionsAuthPanel:SetHeight(560 + math.max(0, permissionPanelHeight - 118))
+    self:UpdateOptionsCanvasHeight()
+end
 
 function mainFrame:GetAuthDraftPolicy(db)
     db = db or current_db()
@@ -544,6 +746,10 @@ function mainFrame:LoadAuthOptionsFromDb(db)
     db = db or current_db()
     self.authDraftPolicy = clone_table((db or {}).auth or {})
     self.authBlacklistSelectedKey = nil
+    self.authRankDropdownShown = false
+    self.selectedAllowedCapability = nil
+    self.selectedAvailableCapability = nil
+    self.selectedAuthRankIndex = nil
     self:RefreshAuthOptions()
 end
 
@@ -555,6 +761,75 @@ function mainFrame:GetAuthRankList()
     end
 
     return {}
+end
+
+function mainFrame:GetSelectedAuthRankIndex()
+    local ranks = self:GetAuthRankList()
+    if self.selectedAuthRankIndex ~= nil then
+        return self.selectedAuthRankIndex
+    end
+
+    if ranks[1] then
+        self.selectedAuthRankIndex = ranks[1].rankIndex
+        return self.selectedAuthRankIndex
+    end
+
+    return nil
+end
+
+function mainFrame:SelectAuthRank(rankIndex)
+    self.selectedAuthRankIndex = tonumber(rankIndex)
+    self.authRankDropdownShown = false
+    self.selectedAllowedCapability = nil
+    self.selectedAvailableCapability = nil
+    self:RefreshAuthOptions()
+    return self.selectedAuthRankIndex
+end
+
+function mainFrame:ToggleAuthRankDropdown()
+    self.authRankDropdownShown = not self.authRankDropdownShown
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:SelectAuthCapability(listKind, capability)
+    if listKind == "allowed" then
+        self.selectedAllowedCapability = capability
+        self.selectedAvailableCapability = nil
+    else
+        self.selectedAvailableCapability = capability
+        self.selectedAllowedCapability = nil
+    end
+
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:MoveSelectedAuthCapability(listKind)
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local context = current_auth_context(db)
+    local policy = self:GetAuthDraftPolicy(db)
+    local rankIndex = self:GetSelectedAuthRankIndex()
+    local capability = listKind == "allowed" and self.selectedAllowedCapability or self.selectedAvailableCapability
+
+    if not can_access(context, "auth_manage", current_policy(db)) then
+        self.optionsAuthStatusText:SetText("You do not have permission to manage auth settings.")
+        return false
+    end
+
+    if rankIndex == nil or capability == nil or capability == "" then
+        self.optionsAuthStatusText:SetText("Select a rank and permission first.")
+        return false
+    end
+
+    if permissions and type(permissions.SetCapabilityRank) == "function" then
+        permissions.SetCapabilityRank(policy, capability, rankIndex, listKind ~= "allowed")
+    end
+
+    self.selectedAllowedCapability = nil
+    self.selectedAvailableCapability = nil
+    self.optionsAuthStatusText:SetText(string.format("Staged %s for %s.", capability_label(capability), listKind == "allowed" and "removal" or "grant"))
+    self:RefreshAuthOptions()
+    return true
 end
 
 function mainFrame:SelectBlacklistEntry(characterKey)
@@ -749,78 +1024,87 @@ function mainFrame:RefreshAuthOptions()
     local context = current_auth_context(db)
     local profile = current_access_profile(db)
     local canManage = can_access(context, "auth_manage", current_policy(db))
-    local capabilityRows = self.optionsCapabilityRows or {}
-    local capabilityButtons = self.optionsCapabilityButtons or {}
-    local rowAnchor = self.optionsAuthStatusText
+    local selectedRankIndex = self:GetSelectedAuthRankIndex()
+    local selectedRankName = "Select Rank"
+
+    for _, rank in ipairs(ranks) do
+        if rank.rankIndex == selectedRankIndex then
+            selectedRankName = rank.name
+            break
+        end
+    end
 
     self.optionsAccessPreviewText:SetText(string.format("Current Access: %s (%s)", profile, actor_summary_text(context)))
-    self.optionsRankPreviewText:SetText("Ranks: " .. table.concat((function()
-        local labels = {}
-        for _, rank in ipairs(ranks) do
-            labels[#labels + 1] = string.format("%d=%s", rank.rankIndex, rank.name)
-        end
-        return labels
-    end)(), ", "))
-    self.optionsAuthMetadataText:SetText(string.format("Last Update: %s by %s", tostring(policy.updatedAt or 0), tostring(policy.updatedBy or "Unknown")))
+    self.optionsAuthMetadataText:SetText(auth_metadata_text(policy))
+    self.optionsAuthRankButton.labelText:SetText(selectedRankName)
     if self.optionsAuthStatusText:GetText() == "" then
         self.optionsAuthStatusText:SetText(canManage and "Guildmaster and delegated auth managers can save policy changes." or "Read-only auth preview. You do not have auth-manage access.")
     end
 
-    for _, row in ipairs(capabilityRows) do
-        row:Hide()
-        if row.label then
-            row.label:Hide()
-        end
-    end
+    local dropdownHeight = math.max(28, (#ranks * 22) + 12)
+    self.optionsAuthRankDropdown:SetHeight(dropdownHeight)
 
-    for _, rankButtons in pairs(capabilityButtons) do
-        for _, button in pairs(rankButtons) do
+    for index, button in ipairs(self.optionsAuthRankButtons or {}) do
+        local rank = ranks[index]
+        if rank then
+            button.labelText:SetText(rank.name)
+            button:SetEnabled(true)
+            button:Show()
+            button:SetScript("OnClick", function()
+                self:SelectAuthRank(rank.rankIndex)
+            end)
+        else
             button:Hide()
         end
     end
 
-    local capabilityList = (permissions and permissions.GetCapabilityList and permissions.GetCapabilityList()) or {}
-    local columnAnchors = {
-        { x = 0, y = -118 },
-        { x = 300, y = -118 },
-    }
-    for index, capability in ipairs(capabilityList) do
-        local column = index <= math.ceil(#capabilityList / 2) and 1 or 2
-        local rowIndex = column == 1 and index or (index - math.ceil(#capabilityList / 2))
-        local row = capabilityRows[index] or _G.CreateFrame("Frame", nil, self.optionsAuthPanel, "BackdropTemplate")
-        if type(row.ClearAllPoints) == "function" then
-            row:ClearAllPoints()
-        end
-        row:SetPoint("TOPLEFT", self.optionsAuthPanel, "TOPLEFT", 16 + columnAnchors[column].x, columnAnchors[column].y - ((rowIndex - 1) * 22))
-        row:SetSize(270, 20)
-        row.label = row.label or make_label(row, capability_label(capability), "GameFontHighlightSmall")
-        row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
-        row.label:SetText(capability_label(capability))
-        row:Show()
-        row.label:Show()
-        capabilityRows[index] = row
-        capabilityButtons[capability] = capabilityButtons[capability] or {}
+    if self.authRankDropdownShown then
+        self.optionsAuthRankDropdown:Show()
+    else
+        self.optionsAuthRankDropdown:Hide()
+    end
 
-        local previousButton = row.label
-        for rankPosition, rank in ipairs(ranks) do
-            local button = capabilityButtons[capability][rank.rankIndex] or make_button(row, 54, 18, "")
-            if type(button.ClearAllPoints) == "function" then
-                button:ClearAllPoints()
-            end
-            button:SetPoint("LEFT", previousButton, "RIGHT", rankPosition == 1 and 8 or 4, 0)
-            button.labelText:SetText(string.format("%d:%s", rank.rankIndex, ((policy.capabilities[capability] or {})[rank.rankIndex] == true) and "On" or "Off"))
-            button:SetEnabled(canManage)
-            button:Show()
-            button:SetScript("OnClick", function()
-                self:ToggleAuthCapabilityRank(capability, rank.rankIndex)
-            end)
-            capabilityButtons[capability][rank.rankIndex] = button
-            previousButton = button
+    local capabilityList = (permissions and permissions.GetCapabilityList and permissions.GetCapabilityList()) or {}
+    local allowedCapabilities = {}
+    local availableCapabilities = {}
+    for _, capability in ipairs(capabilityList) do
+        local allowlist = (policy.capabilities[capability] or {})
+        if selectedRankIndex ~= nil and allowlist[selectedRankIndex] == true then
+            allowedCapabilities[#allowedCapabilities + 1] = capability
+        else
+            availableCapabilities[#availableCapabilities + 1] = capability
         end
     end
 
-    self.optionsCapabilityRows = capabilityRows
-    self.optionsCapabilityButtons = capabilityButtons
+    self:UpdateOptionsAuthLayout(#allowedCapabilities, #availableCapabilities)
+
+    local function bind_permission_buttons(buttons, parentFrame, capabilities, selectedCapability, listKind)
+        for index, button in ipairs(buttons or {}) do
+            local capability = capabilities[index]
+            if capability then
+                local rowIndex = ((index - 1) % 6)
+                local columnIndex = math.floor((index - 1) / 6)
+                if type(button.ClearAllPoints) == "function" then
+                    button:ClearAllPoints()
+                end
+                button:SetPoint("TOPLEFT", parentFrame, "TOPLEFT", 8 + (columnIndex * 116), -8 - (rowIndex * 20))
+                button:SetSize(110, 18)
+                button.labelText:SetText(capability_label(capability))
+                button:SetEnabled(true)
+                button:Show()
+                apply_panel_style(button, selectedCapability == capability and theme.colors.accent or theme.colors.panel)
+                button:SetScript("OnClick", function()
+                    self:SelectAuthCapability(listKind, capability)
+                end)
+            else
+                button.labelText:SetText("")
+                button:Hide()
+            end
+        end
+    end
+
+    bind_permission_buttons(self.optionsAllowedPermissionButtons, self.optionsAllowedPermissionPanel, allowedCapabilities, self.selectedAllowedCapability, "allowed")
+    bind_permission_buttons(self.optionsAvailablePermissionButtons, self.optionsAvailablePermissionPanel, availableCapabilities, self.selectedAvailableCapability, "available")
 
     local blacklistEntries = {}
     for characterKey, entry in pairs(policy.blacklist or {}) do
@@ -851,6 +1135,9 @@ function mainFrame:RefreshAuthOptions()
 
     self.optionsPolicyStringInput:SetText(policy.guildPolicyString or "")
 
+    self.optionsAuthAddPermissionButton:SetEnabled(canManage and self.selectedAvailableCapability ~= nil and selectedRankIndex ~= nil)
+    self.optionsAuthRemovePermissionButton:SetEnabled(canManage and self.selectedAllowedCapability ~= nil and selectedRankIndex ~= nil)
+    self.optionsAuthRankButton:SetEnabled(#ranks > 0)
     self.optionsBlacklistAddButton:SetEnabled(canManage)
     self.optionsBlacklistRemoveButton:SetEnabled(canManage and (self.authBlacklistSelectedKey ~= nil))
     self.optionsAuthSaveButton:SetEnabled(canManage)
@@ -861,6 +1148,18 @@ end
 
 mainFrame.optionsBlacklistAddButton:SetScript("OnClick", function()
     mainFrame:StageBlacklistEntry()
+end)
+
+mainFrame.optionsAuthRankButton:SetScript("OnClick", function()
+    mainFrame:ToggleAuthRankDropdown()
+end)
+
+mainFrame.optionsAuthAddPermissionButton:SetScript("OnClick", function()
+    mainFrame:MoveSelectedAuthCapability("available")
+end)
+
+mainFrame.optionsAuthRemovePermissionButton:SetScript("OnClick", function()
+    mainFrame:MoveSelectedAuthCapability("allowed")
 end)
 
 mainFrame.optionsBlacklistRemoveButton:SetScript("OnClick", function()
@@ -932,9 +1231,36 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.topBar, theme.colors.panelAlt)
     apply_panel_style(self.content, theme.colors.background)
     apply_panel_style(self.optionsPanel, theme.colors.panel)
+    apply_panel_style(self.optionsViewportFrame, theme.colors.background)
+    if type(self.optionsScrollBar.SetBackdrop) == "function" then
+        self.optionsScrollBar:SetBackdrop(nil)
+    end
+    if type(self.optionsScrollBar.track.SetBackdrop) == "function" then
+        self.optionsScrollBar.track:SetBackdrop(nil)
+    end
+    if type(self.optionsScrollBar.thumb.SetBackdrop) == "function" then
+        self.optionsScrollBar.thumb:SetBackdrop(nil)
+    end
+    if type(self.optionsScrollFrame.SetBackdrop) == "function" then
+        self.optionsScrollFrame:SetBackdrop(nil)
+    end
+    if type(self.optionsScrollChild.SetBackdrop) == "function" then
+        self.optionsScrollChild:SetBackdrop(nil)
+    end
     apply_panel_style(self.optionsAppearancePanel, theme.colors.panelAlt)
     apply_panel_style(self.optionsRestockPanel, theme.colors.panelAlt)
     apply_panel_style(self.optionsAuthPanel, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthRankDropdown, theme.colors.panel)
+    apply_panel_style(self.optionsAuthRankDropdownBackdrop, theme.colors.background)
+    if type(self.optionsAuthRankDropdown.SetBackdropColor) == "function" then
+        self.optionsAuthRankDropdown:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
+    end
+    if type(self.optionsAuthRankDropdownBackdrop.SetBackdropColor) == "function" then
+        self.optionsAuthRankDropdownBackdrop:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
+    end
+    apply_panel_style(self.optionsAllowedPermissionPanel, theme.colors.panel)
+    apply_panel_style(self.optionsAvailablePermissionPanel, theme.colors.panel)
+    apply_panel_style(self.optionsBlacklistListPanel, theme.colors.panel)
     apply_panel_style(self.requestActionsPanel, theme.colors.panel)
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
@@ -945,6 +1271,7 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportModalScrollChild, theme.colors.background)
     apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
     apply_panel_style(self.tableFilterFrame, theme.colors.background)
+    apply_panel_style(self.tableViewportFrame, theme.colors.background)
     apply_panel_style(self.tableScrollFrame, theme.colors.background)
 
     for _, card in ipairs(self.dashboardCards) do
@@ -992,6 +1319,8 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.closeButton, theme.colors.panel)
     apply_panel_style(self.scanButton, theme.colors.panelAlt)
     apply_panel_style(self.collapseButton, theme.colors.panel)
+    apply_panel_style(self.transparencyDecreaseButton, theme.colors.panel)
+    apply_panel_style(self.transparencyIncreaseButton, theme.colors.panel)
     apply_panel_style(self.requestApproveButton, theme.colors.panelAlt)
     apply_panel_style(self.requestRejectButton, theme.colors.panel)
     apply_panel_style(self.requestFulfillButton, theme.colors.panelAlt)
@@ -1006,6 +1335,9 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumAddButton, theme.colors.panelAlt)
     apply_panel_style(self.minimumAddCancelButton, theme.colors.panel)
     apply_panel_style(self.defaultMinimumSaveButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthRankButton, theme.colors.panel)
+    apply_panel_style(self.optionsAuthAddPermissionButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthRemovePermissionButton, theme.colors.panel)
     apply_panel_style(self.optionsBlacklistAddButton, theme.colors.panelAlt)
     apply_panel_style(self.optionsBlacklistRemoveButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthSaveButton, theme.colors.panelAlt)
@@ -1018,11 +1350,16 @@ function mainFrame:ApplyTheme()
     for _, button in ipairs(self.optionsBlacklistButtons or {}) do
         apply_panel_style(button, theme.colors.panel)
     end
-    for _, row in ipairs(self.optionsCapabilityRows or {}) do
-        apply_panel_style(row, theme.colors.panelAlt)
+    for _, button in ipairs(self.optionsAuthRankButtons or {}) do
+        apply_panel_style(button, theme.colors.panel)
     end
-    for _, rankButtons in pairs(self.optionsCapabilityButtons or {}) do
-        for _, button in pairs(rankButtons) do
+    for _, button in ipairs(self.optionsAllowedPermissionButtons or {}) do
+        if button:IsShown() then
+            apply_panel_style(button, theme.colors.panel)
+        end
+    end
+    for _, button in ipairs(self.optionsAvailablePermissionButtons or {}) do
+        if button:IsShown() then
             apply_panel_style(button, theme.colors.panel)
         end
     end
@@ -1034,12 +1371,15 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportModalSelectAllButton, theme.colors.panel)
     apply_panel_style(self.exportModalCopyButton, theme.colors.panelAlt)
     apply_panel_style(self.exportModalCloseButton, theme.colors.panel)
-    apply_panel_style(self.transparencySlider, theme.colors.background)
-    apply_panel_style(self.tableScrollBar, theme.colors.panel)
-    apply_panel_style(self.tableScrollBar.track, theme.colors.background)
-    apply_panel_style(self.tableScrollBar.thumb, theme.colors.accent)
-    apply_panel_style(self.tableScrollBar.scrollUpButton, theme.colors.panelAlt)
-    apply_panel_style(self.tableScrollBar.scrollDownButton, theme.colors.panelAlt)
+    if type(self.tableScrollBar.SetBackdrop) == "function" then
+        self.tableScrollBar:SetBackdrop(nil)
+    end
+    if self.tableScrollBar.track and type(self.tableScrollBar.track.SetBackdrop) == "function" then
+        self.tableScrollBar.track:SetBackdrop(nil)
+    end
+    if self.tableScrollBar.thumb and type(self.tableScrollBar.thumb.SetBackdrop) == "function" then
+        self.tableScrollBar.thumb:SetBackdrop(nil)
+    end
 
     for index, row in ipairs(self.tableRows) do
         apply_table_row_style(row, index, row.isSelected == true)
@@ -1243,6 +1583,7 @@ function mainFrame:RefreshView()
     end
     self.tableHeaderFrame:Hide()
     self.tableFilterFrame:Hide()
+    self.tableViewportFrame:Hide()
     self.tableScrollFrame:Hide()
     self.tableScrollBar:Hide()
     self.requestActionsPanel:Hide()
@@ -1350,6 +1691,10 @@ function mainFrame:RefreshView()
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
         self:LoadAuthOptionsFromDb(db)
+        self:UpdateOptionsCanvasHeight()
+        self.optionsScrollFrame.verticalScroll = 0
+        self.optionsScrollFrame:SetVerticalScroll(0)
+        self:SyncOptionsScrollVisuals()
         bodyText = ""
     elseif self.activeView == "ABOUT" then
         bodyText = table.concat({
@@ -1401,11 +1746,13 @@ function mainFrame:RefreshView()
         else
             self.tableFilterFrame:Hide()
         end
+        self.tableViewportFrame:Show()
         self.tableScrollFrame:Show()
         self.tableScrollBar:Show()
     else
         self.tableHeaderFrame:Hide()
         self.tableFilterFrame:Hide()
+        self.tableViewportFrame:Hide()
         self.tableScrollFrame:Hide()
         self.tableScrollBar:Hide()
     end
@@ -1445,8 +1792,10 @@ function mainFrame:RefreshView()
 
     if self.activeView == "OPTIONS" then
         self.optionsPanel:Show()
+        self.optionsViewportFrame:Show()
     else
         self.optionsPanel:Hide()
+        self.optionsViewportFrame:Hide()
     end
 end
 
