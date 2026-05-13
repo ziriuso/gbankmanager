@@ -116,12 +116,12 @@ Likely new files:
 
 Tasks:
 
-- [ ] Extract shell construction and shared visual helpers from `MainFrame.lua`
-- [ ] Extract shared table layout / scrolling / header control logic into a table controller
-- [ ] Extract Minimums modal and inline edit orchestration into a dedicated UI controller
-- [ ] Extract Exports preset/modal orchestration into a dedicated UI controller
-- [ ] Extract Requests action-panel orchestration into a dedicated UI controller
-- [ ] Leave `MainFrame.lua` as a coordinator rather than a monolith
+- [x] Extract shell construction and shared visual helpers from `MainFrame.lua`
+- [x] Extract shared table layout / scrolling / header control logic into a table controller
+- [x] Extract Minimums modal and inline edit orchestration into a dedicated UI controller
+- [x] Extract Exports preset/modal orchestration into a dedicated UI controller
+- [x] Extract Requests action-panel orchestration into a dedicated UI controller
+- [x] Leave `MainFrame.lua` as a coordinator rather than a monolith
 
 Success criteria:
 
@@ -242,4 +242,4 @@ Tasks:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Priority for this session: begin Phase 2 by breaking `GBankManager/UI/MainFrame.lua` into thinner shell/controller responsibilities while preserving current behavior and keeping tests green.
+> Priority for this session: begin Phase 3 by thinning `GBankManager/Core/Events.lua` and moving feature-specific event handling closer to the owning modules while preserving current behavior and keeping tests green.
