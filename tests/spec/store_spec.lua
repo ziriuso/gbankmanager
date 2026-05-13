@@ -10,6 +10,7 @@ local store = ns.modules.store
 local permissions = ns.modules.permissions
 local migrations = ns.modules.migrations
 local scanner = ns.modules.scanner
+local events = ns.modules.events
 local db = store and store.CreateFreshDatabase("My Guild")
 local normalizedMalformed = migrations and migrations.Apply({
     meta = "broken",
@@ -60,16 +61,17 @@ assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
 assert.truthy(db.requests ~= nil, "requests table should exist")
 assert.truthy(permissions.CanApproveRequests("OFFICER"), "officers should approve requests")
 assert.truthy(not permissions.CanViewInventory("MEMBER"), "members should not view inventory")
-assert.same(_G.GBankManagerDB, ns.state.db, "bootstrap should keep normalized db in addon state")
-assert.equal(1, _G.GBankManagerDB.meta.schemaVersion, "bootstrap should normalize schema version at runtime")
-assert.truthy(_G.GBankManagerDB.requests ~= nil, "bootstrap should normalize missing tables at runtime")
+events:GetScript("OnEvent")(events, "ADDON_LOADED", "GBankManager")
+assert.same(_G.GBankManagerDB, ns.state.db, "addon loaded should keep normalized db in addon state")
+assert.equal(1, _G.GBankManagerDB.meta.schemaVersion, "addon loaded should normalize schema version at runtime")
+assert.truthy(_G.GBankManagerDB.requests ~= nil, "addon loaded should normalize missing tables at runtime")
 assert.truthy(type(normalizedMalformed.meta) == "table", "migrations should repair malformed meta containers")
 assert.truthy(type(normalizedMalformed.syncState) == "table", "migrations should repair malformed sync state containers")
 assert.equal(1, normalizedMalformed.meta.schemaVersion, "migrations should apply v1 schema to malformed data")
 assert.same(futureDb, normalizedFuture, "migrations should return the same table for newer schemas")
 assert.equal(99, normalizedFuture.meta.schemaVersion, "migrations should preserve newer schema versions")
 assert.equal("Future Guild", normalizedFuture.meta.guildName, "migrations should preserve newer schema metadata")
-assert.truthy(_G.GBankManagerDB.auditLog ~= nil, "bootstrap should normalize the audit log container at runtime")
+assert.truthy(_G.GBankManagerDB.auditLog ~= nil, "addon loaded should normalize the audit log container at runtime")
 
 local persisted = store.Normalize({
     meta = {

@@ -32,6 +32,33 @@ local function ensure_v1_shape(db)
     db.oneTimeTargets = ensure_table(db.oneTimeTargets)
     db.requests = ensure_table(db.requests)
     db.exportTemplates = ensure_table(db.exportTemplates)
+    db.auth = ensure_table(db.auth)
+    db.auth.version = tonumber(db.auth.version or 1) or 1
+    db.auth.revision = tonumber(db.auth.revision or 0) or 0
+    db.auth.updatedAt = tonumber(db.auth.updatedAt or 0) or 0
+    db.auth.updatedBy = db.auth.updatedBy or ""
+    db.auth.updatedByRankIndex = db.auth.updatedByRankIndex
+    db.auth.guildPolicyString = db.auth.guildPolicyString or ""
+    db.auth.guildPolicySource = db.auth.guildPolicySource or "local"
+    db.auth.rankMetadata = ensure_table(db.auth.rankMetadata)
+    db.auth.capabilities = ensure_table(db.auth.capabilities)
+    for _, capability in ipairs({
+        "full_ui",
+        "request_submit",
+        "request_approve",
+        "request_reject",
+        "request_edit",
+        "request_fulfill",
+        "request_reopen",
+        "minimum_add",
+        "minimum_edit",
+        "minimum_delete",
+        "auth_manage",
+    }) do
+        db.auth.capabilities[capability] = ensure_table(db.auth.capabilities[capability])
+    end
+    db.auth.blacklist = ensure_table(db.auth.blacklist)
+    db.auth.blacklistHashes = ensure_table(db.auth.blacklistHashes)
     db.ui = ensure_table(db.ui)
     db.ui.inventoryColumnWidths = ensure_table(db.ui.inventoryColumnWidths)
     db.ui.minimumSettings = ensure_table(db.ui.minimumSettings)

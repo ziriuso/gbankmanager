@@ -1,5 +1,17 @@
 local assert = require("tests.helpers.assert")
 
+_G.UnitName = function()
+    return "OfficerOne"
+end
+
+_G.GetRealmName = function()
+    return "Stormrage"
+end
+
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Officer", 1
+end
+
 local function load_module(path, addonName, ns)
     local chunk, loadError = loadfile(path)
     if not chunk then

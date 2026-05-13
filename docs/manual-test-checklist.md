@@ -50,3 +50,9 @@
 48. While editing an existing row, confirm the inline `Restock` and `Minimum` controls stay vertically aligned with the original row text instead of dropping lower in the cell.
 49. Search for a non-bank item using a partial name after it has been seen through a prior exact resolution or saved catalog entry and confirm the add modal can still surface it outside the current guild bank snapshot.
 50. Open the shell tabs after a `/reload` and confirm the current navigation remains `Dashboard`, `Inventory`, `History`, `Minimums`, `Requests`, `Exports`, `About`, and `Options` with no `Targets` tab returning.
+51. Log in as Guildmaster and confirm `/gbm ui` opens the full shell, `/gbm request` opens the request view, and the `Options` auth panel can save rank capability changes.
+52. Configure a member rank with no `full_ui` access but with `request_submit`, then confirm `/gbm ui` opens the lightweight Requests surface with no officer action controls.
+53. Remove `request_submit` from a member rank and confirm the lightweight Requests surface becomes read-only with the `You do not have permission to submit requests.` banner.
+54. Blacklist a guild member from the auth panel and confirm both `/gbm ui` and `/gbm request` deny access for that character after `/reload`.
+55. Create a request from a request-only member and confirm an officer/guildmaster client receives it through addon comms and can act on it from the full Requests shell.
+56. Save an auth-policy change on one officer-authorized client and confirm a second addon-enabled guild client receives the updated rank policy and blacklist snapshot.

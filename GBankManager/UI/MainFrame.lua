@@ -38,6 +38,19 @@ local function copy_list(list)
     return output
 end
 
+local function clone_table(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local cloned = {}
+    for key, child in pairs(value) do
+        cloned[key] = clone_table(child)
+    end
+
+    return cloned
+end
+
 local function clone_export_template(template)
     template = template or {}
 
@@ -63,6 +76,27 @@ local function normalize_shopping_list_name(value)
     end
 
     return value
+end
+
+local function title_case_words(value)
+    local words = {}
+    for part in tostring(value or ""):gmatch("[^_]+") do
+        words[#words + 1] = part:gsub("^%l", string.upper)
+    end
+
+    return table.concat(words, " ")
+end
+
+local function capability_label(capability)
+    if capability == "full_ui" then
+        return "Full UI"
+    end
+
+    if capability == "auth_manage" then
+        return "Auth Manage"
+    end
+
+    return title_case_words(capability)
 end
 
 local function make_export_output_input(parent, width, height)
@@ -179,6 +213,58 @@ local function current_db()
     _G.GBankManagerDB = runtime
     ns.state.db = runtime
     return runtime
+end
+
+local function current_auth_context(db)
+    local auth = ns.modules.auth or ns.modules.permissions
+    if auth and type(auth.GetLivePlayerContext) == "function" then
+        return auth.GetLivePlayerContext(db)
+    end
+
+    return {}
+end
+
+local function current_policy(db)
+    local store = ns.modules.store or ns.data.store
+    if store and type(store.GetAuthPolicy) == "function" then
+        return store.GetAuthPolicy(db)
+    end
+
+    return (db or {}).auth or {}
+end
+
+local function can_access(context, capability, policy)
+    local auth = ns.modules.auth or ns.modules.permissions
+    if auth and type(auth.Can) == "function" then
+        return auth.Can(context, capability, policy)
+    end
+
+    return true
+end
+
+local function actor_summary_text(context)
+    local name = tostring((context or {}).name or "Unknown")
+    local rankName = tostring((context or {}).guildRankName or "")
+    if rankName ~= "" then
+        return string.format("%s (%s)", name, rankName)
+    end
+
+    return name
+end
+
+local function current_access_profile(db)
+    local auth = ns.modules.auth or ns.modules.permissions
+    local context = current_auth_context(db)
+    local policy = current_policy(db)
+    if auth and type(auth.GetEffectiveAccessProfile) == "function" then
+        return auth.GetEffectiveAccessProfile(context, policy), context
+    end
+
+    return "full_shell", context
+end
+
+local function request_only_layout(mainFrame)
+    return mainFrame.requestOnlyMode == true and mainFrame.activeView == "REQUESTS"
 end
 
 mainFrame.collapsedSidebar = mainFrame.collapsedSidebar and true or false
@@ -317,7 +403,7 @@ mainFrame.minimumEmptyStateText:Hide()
 mainFrame.optionsPanel = mainFrame.optionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.optionsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.optionsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.optionsPanel:SetHeight(224)
+mainFrame.optionsPanel:SetHeight(520)
 apply_panel_style(mainFrame.optionsPanel, theme.colors.panel)
 mainFrame.optionsPanel:Hide()
 
@@ -332,6 +418,12 @@ mainFrame.optionsRestockPanel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePan
 mainFrame.optionsRestockPanel:SetPoint("TOPRIGHT", mainFrame.optionsAppearancePanel, "BOTTOMRIGHT", 0, -16)
 mainFrame.optionsRestockPanel:SetHeight(96)
 apply_panel_style(mainFrame.optionsRestockPanel, theme.colors.panelAlt)
+
+mainFrame.optionsAuthPanel = mainFrame.optionsAuthPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsAuthPanel:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "BOTTOMLEFT", 0, -16)
+mainFrame.optionsAuthPanel:SetPoint("TOPRIGHT", mainFrame.optionsRestockPanel, "BOTTOMRIGHT", 0, -16)
+mainFrame.optionsAuthPanel:SetHeight(296)
+apply_panel_style(mainFrame.optionsAuthPanel, theme.colors.panelAlt)
 
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Window Transparency", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
@@ -357,6 +449,67 @@ mainFrame.defaultMinimumInput:SetPoint("TOPLEFT", mainFrame.optionsRestockHint, 
 mainFrame.defaultMinimumSaveButton = mainFrame.defaultMinimumSaveButton or make_button(mainFrame.optionsRestockPanel, 86, 28, "Save Min")
 mainFrame.defaultMinimumSaveButton:SetPoint("LEFT", mainFrame.defaultMinimumInput, "RIGHT", 8, 0)
 
+mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
+mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -16)
+
+mainFrame.optionsAuthHint = mainFrame.optionsAuthHint or make_label(mainFrame.optionsAuthPanel, "Configure rank-based access, request submission, and blacklist entries.", "GameFontHighlightSmall")
+mainFrame.optionsAuthHint:SetPoint("TOPLEFT", mainFrame.optionsAuthTitle, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsAuthMetadataText = mainFrame.optionsAuthMetadataText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsAuthMetadataText:SetPoint("TOPLEFT", mainFrame.optionsAuthHint, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsAccessPreviewText = mainFrame.optionsAccessPreviewText or make_label(mainFrame.optionsAuthPanel, "", "GameFontNormal")
+mainFrame.optionsAccessPreviewText:SetPoint("TOPLEFT", mainFrame.optionsAuthMetadataText, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsRankPreviewText = mainFrame.optionsRankPreviewText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsRankPreviewText:SetPoint("TOPLEFT", mainFrame.optionsAccessPreviewText, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsPolicyStringLabel = mainFrame.optionsPolicyStringLabel or make_label(mainFrame.optionsAuthPanel, "Policy String", "GameFontHighlightSmall")
+mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsRankPreviewText, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsPolicyStringInput = mainFrame.optionsPolicyStringInput or make_input(mainFrame.optionsAuthPanel, 360, 22)
+mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsAuthWriteButton = mainFrame.optionsAuthWriteButton or make_button(mainFrame.optionsAuthPanel, 84, 24, "Write")
+mainFrame.optionsAuthWriteButton:SetPoint("LEFT", mainFrame.optionsPolicyStringInput, "RIGHT", 8, 0)
+
+mainFrame.optionsAuthReadButton = mainFrame.optionsAuthReadButton or make_button(mainFrame.optionsAuthPanel, 84, 24, "Refresh")
+mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthWriteButton, "RIGHT", 8, 0)
+
+mainFrame.optionsAuthStatusText = mainFrame.optionsAuthStatusText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsCapabilityRows = mainFrame.optionsCapabilityRows or {}
+mainFrame.optionsCapabilityButtons = mainFrame.optionsCapabilityButtons or {}
+
+mainFrame.optionsBlacklistTitle = mainFrame.optionsBlacklistTitle or make_label(mainFrame.optionsAuthPanel, "Blacklist", "GameFontHighlight")
+mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -238)
+
+mainFrame.optionsBlacklistNameInput = mainFrame.optionsBlacklistNameInput or make_input(mainFrame.optionsAuthPanel, 180, 22)
+mainFrame.optionsBlacklistNameInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsBlacklistReasonInput = mainFrame.optionsBlacklistReasonInput or make_input(mainFrame.optionsAuthPanel, 200, 22)
+mainFrame.optionsBlacklistReasonInput:SetPoint("LEFT", mainFrame.optionsBlacklistNameInput, "RIGHT", 8, 0)
+
+mainFrame.optionsBlacklistAddButton = mainFrame.optionsBlacklistAddButton or make_button(mainFrame.optionsAuthPanel, 88, 28, "Add/Update")
+mainFrame.optionsBlacklistAddButton:SetPoint("LEFT", mainFrame.optionsBlacklistReasonInput, "RIGHT", 8, 0)
+
+mainFrame.optionsBlacklistRemoveButton = mainFrame.optionsBlacklistRemoveButton or make_button(mainFrame.optionsAuthPanel, 74, 28, "Remove")
+mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
+
+mainFrame.optionsBlacklistButtons = mainFrame.optionsBlacklistButtons or {}
+for index = 1, 3 do
+    local button = mainFrame.optionsBlacklistButtons[index] or make_button(mainFrame.optionsAuthPanel, 560, 24, "")
+    button:SetPoint("TOPLEFT", mainFrame.optionsBlacklistNameInput, "BOTTOMLEFT", 0, -12 - ((index - 1) * 28))
+    mainFrame.optionsBlacklistButtons[index] = button
+end
+
+mainFrame.optionsAuthSaveButton = mainFrame.optionsAuthSaveButton or make_button(mainFrame.optionsAuthPanel, 88, 28, "Save Auth")
+mainFrame.optionsAuthSaveButton:SetPoint("BOTTOMRIGHT", mainFrame.optionsAuthPanel, "BOTTOMRIGHT", -16, 16)
+
+mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 28, "Revert")
+mainFrame.optionsAuthResetButton:SetPoint("RIGHT", mainFrame.optionsAuthSaveButton, "LEFT", -8, 0)
+
 local function refresh_alpha_text()
     local percentage = math.floor(mainFrame.currentAlpha * 100 + 0.5)
     mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", percentage))
@@ -370,6 +523,365 @@ mainFrame.transparencySlider:SetValue(math.floor(mainFrame.currentAlpha * 100 + 
 
 mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
     mainFrame:SaveDefaultMinimumSetting()
+end)
+
+function mainFrame:GetAuthDraftPolicy(db)
+    db = db or current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+
+    if not self.authDraftPolicy then
+        self.authDraftPolicy = clone_table((db or {}).auth or {})
+    end
+
+    if permissions and type(permissions.NormalizePolicy) == "function" then
+        self.authDraftPolicy = permissions.NormalizePolicy(self.authDraftPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    end
+
+    return self.authDraftPolicy
+end
+
+function mainFrame:LoadAuthOptionsFromDb(db)
+    db = db or current_db()
+    self.authDraftPolicy = clone_table((db or {}).auth or {})
+    self.authBlacklistSelectedKey = nil
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:GetAuthRankList()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local policy = self:GetAuthDraftPolicy(current_db())
+    if permissions and type(permissions.GetSortedRankMetadata) == "function" then
+        return permissions.GetSortedRankMetadata(policy)
+    end
+
+    return {}
+end
+
+function mainFrame:SelectBlacklistEntry(characterKey)
+    local policy = self:GetAuthDraftPolicy(current_db())
+    self.authBlacklistSelectedKey = characterKey
+    local entry = characterKey and (policy.blacklist or {})[characterKey] or nil
+    self.optionsBlacklistNameInput:SetText(characterKey or "")
+    self.optionsBlacklistReasonInput:SetText(entry and entry.reason or "")
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:StageBlacklistEntry()
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local policy = self:GetAuthDraftPolicy(db)
+    local context = current_auth_context(db)
+    local rawName = self.optionsBlacklistNameInput:GetText() or ""
+    local reason = self.optionsBlacklistReasonInput:GetText() or ""
+    local realmName = context.realmName or (type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
+    local characterKey = permissions and type(permissions.NormalizeCharacterKey) == "function" and permissions.NormalizeCharacterKey(rawName, realmName) or rawName
+
+    if characterKey == "" then
+        self.optionsAuthStatusText:SetText("Enter a character name or Realm-Character key.")
+        return nil
+    end
+
+    if context.isGuildMaster and characterKey == context.characterKey then
+        self.optionsAuthStatusText:SetText("Guildmaster access cannot be blacklisted.")
+        return nil
+    end
+
+    if permissions and type(permissions.UpsertBlacklist) == "function" then
+        permissions.UpsertBlacklist(policy, characterKey, rawName, reason, _G.time and _G.time() or 0)
+    else
+        policy.blacklist[characterKey] = {
+            name = rawName,
+            reason = reason,
+            updatedAt = _G.time and _G.time() or 0,
+        }
+    end
+
+    self.authBlacklistSelectedKey = characterKey
+    self.optionsAuthStatusText:SetText(string.format("Staged blacklist entry for %s.", characterKey))
+    self:RefreshAuthOptions()
+    return characterKey
+end
+
+function mainFrame:RemoveSelectedBlacklistEntry()
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local policy = self:GetAuthDraftPolicy(db)
+    local characterKey = self.authBlacklistSelectedKey or (self.optionsBlacklistNameInput:GetText() or "")
+
+    if characterKey == "" then
+        self.optionsAuthStatusText:SetText("Select a blacklist entry first.")
+        return nil
+    end
+
+    if permissions and type(permissions.RemoveBlacklist) == "function" then
+        permissions.RemoveBlacklist(policy, characterKey)
+    else
+        policy.blacklist[characterKey] = nil
+    end
+
+    self.authBlacklistSelectedKey = nil
+    self.optionsBlacklistNameInput:SetText("")
+    self.optionsBlacklistReasonInput:SetText("")
+    self.optionsAuthStatusText:SetText(string.format("Removed blacklist entry for %s.", characterKey))
+    self:RefreshAuthOptions()
+    return characterKey
+end
+
+function mainFrame:ToggleAuthCapabilityRank(capability, rankIndex)
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local context = current_auth_context(db)
+    local policy = self:GetAuthDraftPolicy(db)
+
+    if not can_access(context, "auth_manage", current_policy(db)) then
+        self.optionsAuthStatusText:SetText("You do not have permission to manage auth settings.")
+        return false
+    end
+
+    local allowed = false
+    if permissions and type(permissions.ToggleCapabilityRank) == "function" then
+        allowed = permissions.ToggleCapabilityRank(policy, capability, rankIndex)
+    end
+
+    self.optionsAuthStatusText:SetText(string.format("Staged %s for rank %d: %s", capability_label(capability), rankIndex, allowed and "allowed" or "denied"))
+    self:RefreshAuthOptions()
+    return allowed
+end
+
+function mainFrame:SaveAuthPolicy()
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local transport = ns.modules.syncTransport
+    local authPolicyCodec = ns.modules.authPolicyCodec
+    local context = current_auth_context(db)
+    local draft = self:GetAuthDraftPolicy(db)
+
+    if not can_access(context, "auth_manage", current_policy(db)) then
+        self.optionsAuthStatusText:SetText("You do not have permission to manage auth settings.")
+        return nil
+    end
+
+    if permissions and type(permissions.NormalizePolicy) == "function" then
+        draft = permissions.NormalizePolicy(draft, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    end
+
+    if permissions and type(permissions.StampPolicy) == "function" then
+        permissions.StampPolicy(draft, context, _G.time and _G.time() or 0)
+    end
+
+    if authPolicyCodec and type(authPolicyCodec.EncodePolicy) == "function" then
+        draft.guildPolicyString = authPolicyCodec.EncodePolicy(draft)
+    end
+
+    db.auth = draft
+    self.authDraftPolicy = clone_table(draft)
+    self.optionsAuthStatusText:SetText("Saved guild auth policy.")
+
+    if transport and type(transport.Send) == "function" then
+        transport.Send("GUILD", "GUILD", {
+            type = "AUTH_POLICY_SNAPSHOT",
+            updatedAt = draft.updatedAt or (_G.time and _G.time() or 0),
+            payload = {
+                actorContext = context,
+                policy = draft,
+            },
+        })
+    end
+
+    self:RefreshAuthOptions()
+    return draft
+end
+
+function mainFrame:WriteAuthPolicyToGuildInfo()
+    local db = current_db()
+    local authPolicyCodec = ns.modules.authPolicyCodec
+    if not authPolicyCodec then
+        self.optionsAuthStatusText:SetText("Auth policy codec is unavailable.")
+        return nil
+    end
+
+    local draft = self:SaveAuthPolicy()
+    if not draft then
+        return nil
+    end
+
+    local policyString = draft.guildPolicyString or ""
+    self.optionsPolicyStringInput:SetText(policyString)
+
+    if not (authPolicyCodec.CanWriteGuildInfo and authPolicyCodec.CanWriteGuildInfo()) then
+        self.optionsAuthStatusText:SetText("Policy saved locally. Copy the policy string into Guild Info manually.")
+        return policyString
+    end
+
+    local currentText = _G.C_GuildInfo and type(_G.C_GuildInfo.GetInfoText) == "function" and _G.C_GuildInfo.GetInfoText() or ""
+    local nextText = type(authPolicyCodec.InjectPolicyString) == "function" and authPolicyCodec.InjectPolicyString(currentText, policyString) or policyString
+    if string.len(nextText or "") > 499 then
+        self.optionsAuthStatusText:SetText("Guild Info would exceed 499 characters. Reduce blacklist size or manual notes.")
+        return nil
+    end
+
+    if _G.C_GuildInfo and type(_G.C_GuildInfo.SetInfoText) == "function" then
+        _G.C_GuildInfo.SetInfoText(nextText)
+        db.auth.guildPolicySource = "guild_info"
+        self.optionsAuthStatusText:SetText("Saved auth policy and wrote compact string to Guild Info.")
+    end
+
+    self:RefreshAuthOptions()
+    return policyString
+end
+
+function mainFrame:RefreshAuthPolicyFromGuildInfo()
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    if permissions and type(permissions.RefreshPolicyFromGuild) == "function" then
+        permissions.RefreshPolicyFromGuild(db)
+    end
+    self.authDraftPolicy = clone_table(db.auth or {})
+    self.optionsAuthStatusText:SetText("Reloaded auth policy from Guild Info and local cache.")
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:RefreshAuthOptions()
+    local db = current_db()
+    local permissions = ns.modules.auth or ns.modules.permissions
+    local policy = self:GetAuthDraftPolicy(db)
+    local ranks = self:GetAuthRankList()
+    local context = current_auth_context(db)
+    local profile = current_access_profile(db)
+    local canManage = can_access(context, "auth_manage", current_policy(db))
+    local capabilityRows = self.optionsCapabilityRows or {}
+    local capabilityButtons = self.optionsCapabilityButtons or {}
+    local rowAnchor = self.optionsAuthStatusText
+
+    self.optionsAccessPreviewText:SetText(string.format("Current Access: %s (%s)", profile, actor_summary_text(context)))
+    self.optionsRankPreviewText:SetText("Ranks: " .. table.concat((function()
+        local labels = {}
+        for _, rank in ipairs(ranks) do
+            labels[#labels + 1] = string.format("%d=%s", rank.rankIndex, rank.name)
+        end
+        return labels
+    end)(), ", "))
+    self.optionsAuthMetadataText:SetText(string.format("Last Update: %s by %s", tostring(policy.updatedAt or 0), tostring(policy.updatedBy or "Unknown")))
+    if self.optionsAuthStatusText:GetText() == "" then
+        self.optionsAuthStatusText:SetText(canManage and "Guildmaster and delegated auth managers can save policy changes." or "Read-only auth preview. You do not have auth-manage access.")
+    end
+
+    for _, row in ipairs(capabilityRows) do
+        row:Hide()
+        if row.label then
+            row.label:Hide()
+        end
+    end
+
+    for _, rankButtons in pairs(capabilityButtons) do
+        for _, button in pairs(rankButtons) do
+            button:Hide()
+        end
+    end
+
+    local capabilityList = (permissions and permissions.GetCapabilityList and permissions.GetCapabilityList()) or {}
+    local columnAnchors = {
+        { x = 0, y = -118 },
+        { x = 300, y = -118 },
+    }
+    for index, capability in ipairs(capabilityList) do
+        local column = index <= math.ceil(#capabilityList / 2) and 1 or 2
+        local rowIndex = column == 1 and index or (index - math.ceil(#capabilityList / 2))
+        local row = capabilityRows[index] or _G.CreateFrame("Frame", nil, self.optionsAuthPanel, "BackdropTemplate")
+        if type(row.ClearAllPoints) == "function" then
+            row:ClearAllPoints()
+        end
+        row:SetPoint("TOPLEFT", self.optionsAuthPanel, "TOPLEFT", 16 + columnAnchors[column].x, columnAnchors[column].y - ((rowIndex - 1) * 22))
+        row:SetSize(270, 20)
+        row.label = row.label or make_label(row, capability_label(capability), "GameFontHighlightSmall")
+        row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        row.label:SetText(capability_label(capability))
+        row:Show()
+        row.label:Show()
+        capabilityRows[index] = row
+        capabilityButtons[capability] = capabilityButtons[capability] or {}
+
+        local previousButton = row.label
+        for rankPosition, rank in ipairs(ranks) do
+            local button = capabilityButtons[capability][rank.rankIndex] or make_button(row, 54, 18, "")
+            if type(button.ClearAllPoints) == "function" then
+                button:ClearAllPoints()
+            end
+            button:SetPoint("LEFT", previousButton, "RIGHT", rankPosition == 1 and 8 or 4, 0)
+            button.labelText:SetText(string.format("%d:%s", rank.rankIndex, ((policy.capabilities[capability] or {})[rank.rankIndex] == true) and "On" or "Off"))
+            button:SetEnabled(canManage)
+            button:Show()
+            button:SetScript("OnClick", function()
+                self:ToggleAuthCapabilityRank(capability, rank.rankIndex)
+            end)
+            capabilityButtons[capability][rank.rankIndex] = button
+            previousButton = button
+        end
+    end
+
+    self.optionsCapabilityRows = capabilityRows
+    self.optionsCapabilityButtons = capabilityButtons
+
+    local blacklistEntries = {}
+    for characterKey, entry in pairs(policy.blacklist or {}) do
+        blacklistEntries[#blacklistEntries + 1] = {
+            characterKey = characterKey,
+            name = entry.name or characterKey,
+            reason = entry.reason or "",
+        }
+    end
+    table.sort(blacklistEntries, function(left, right)
+        return left.characterKey < right.characterKey
+    end)
+
+    for index, button in ipairs(self.optionsBlacklistButtons or {}) do
+        local entry = blacklistEntries[index]
+        if entry then
+            button.labelText:SetText(string.format("%s - %s", entry.characterKey, entry.reason ~= "" and entry.reason or "No reason"))
+            button:SetEnabled(true)
+            button:Show()
+            button:SetScript("OnClick", function()
+                self:SelectBlacklistEntry(entry.characterKey)
+            end)
+        else
+            button.labelText:SetText("")
+            button:Hide()
+        end
+    end
+
+    self.optionsPolicyStringInput:SetText(policy.guildPolicyString or "")
+
+    self.optionsBlacklistAddButton:SetEnabled(canManage)
+    self.optionsBlacklistRemoveButton:SetEnabled(canManage and (self.authBlacklistSelectedKey ~= nil))
+    self.optionsAuthSaveButton:SetEnabled(canManage)
+    self.optionsAuthWriteButton:SetEnabled(canManage)
+    self.optionsAuthReadButton:SetEnabled(true)
+    self.optionsAuthResetButton:SetEnabled(true)
+end
+
+mainFrame.optionsBlacklistAddButton:SetScript("OnClick", function()
+    mainFrame:StageBlacklistEntry()
+end)
+
+mainFrame.optionsBlacklistRemoveButton:SetScript("OnClick", function()
+    mainFrame:RemoveSelectedBlacklistEntry()
+end)
+
+mainFrame.optionsAuthSaveButton:SetScript("OnClick", function()
+    mainFrame:SaveAuthPolicy()
+end)
+
+mainFrame.optionsAuthWriteButton:SetScript("OnClick", function()
+    mainFrame:WriteAuthPolicyToGuildInfo()
+end)
+
+mainFrame.optionsAuthReadButton:SetScript("OnClick", function()
+    mainFrame:RefreshAuthPolicyFromGuildInfo()
+end)
+
+mainFrame.optionsAuthResetButton:SetScript("OnClick", function()
+    mainFrame.optionsAuthStatusText:SetText("")
+    mainFrame:LoadAuthOptionsFromDb(current_db())
 end)
 
 mainFrame.closeButton = mainFrame.closeButton or make_button(mainFrame.topBar, 96, 28, "Close")
@@ -394,8 +906,27 @@ for index, item in ipairs(mainFrame.navItems) do
 end
 
 function mainFrame:ApplyTheme()
+    local compactRequestMode = request_only_layout(self)
     local sidebarWidth = self.collapsedSidebar and theme.spacing.sidebarCollapsed or theme.spacing.sidebarExpanded
     self.sidebar:SetWidth(sidebarWidth)
+    if type(self.topBar.ClearAllPoints) == "function" then
+        self.topBar:ClearAllPoints()
+    end
+    if type(self.content.ClearAllPoints) == "function" then
+        self.content:ClearAllPoints()
+    end
+    if compactRequestMode then
+        self.topBar:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
+        self.topBar:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, 0)
+        self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
+        self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
+    else
+        self.topBar:SetPoint("TOPLEFT", self.sidebar, "TOPRIGHT", 0, 0)
+        self.topBar:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, 0)
+        self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
+        self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
+    end
+    self.topBar:SetHeight(compactRequestMode and 44 or theme.spacing.topBarHeight)
     apply_panel_style(self, theme.colors.background)
     apply_panel_style(self.sidebar, theme.colors.panel)
     apply_panel_style(self.topBar, theme.colors.panelAlt)
@@ -403,6 +934,7 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsPanel, theme.colors.panel)
     apply_panel_style(self.optionsAppearancePanel, theme.colors.panelAlt)
     apply_panel_style(self.optionsRestockPanel, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthPanel, theme.colors.panelAlt)
     apply_panel_style(self.requestActionsPanel, theme.colors.panel)
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
@@ -424,9 +956,34 @@ function mainFrame:ApplyTheme()
         apply_panel_style(button, isActive and theme.colors.panelAlt or theme.colors.panel)
         button:SetWidth(self.collapsedSidebar and 40 or (theme.spacing.sidebarExpanded - 32))
         button.labelText:SetText(self.collapsedSidebar and "" or button.key:sub(1, 1) .. string.lower(button.key:sub(2)))
+        if compactRequestMode then
+            button:Hide()
+        else
+            button:Show()
+        end
     end
 
     self.collapseButton.labelText:SetText(self.collapsedSidebar and ">" or "<")
+    if compactRequestMode then
+        self.sidebar:Hide()
+        self.collapseButton:Hide()
+        self.scanButton:Hide()
+        self.statusText:Hide()
+        self.subtitleText:Hide()
+        self.titleText:Hide()
+    else
+        self.sidebar:Show()
+        self.collapseButton:Show()
+        self.scanButton:Show()
+        self.statusText:Show()
+        self.subtitleText:Show()
+        self.titleText:Show()
+        self.titleText:SetText("Guild Bank Manager")
+    end
+    if type(self.closeButton.ClearAllPoints) == "function" then
+        self.closeButton:ClearAllPoints()
+    end
+    self.closeButton:SetPoint("TOPRIGHT", self.topBar, "TOPRIGHT", -16, compactRequestMode and -8 or -16)
     if self.activeView == "OPTIONS" then
         self.optionsPanel:Show()
     else
@@ -449,8 +1006,25 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumAddButton, theme.colors.panelAlt)
     apply_panel_style(self.minimumAddCancelButton, theme.colors.panel)
     apply_panel_style(self.defaultMinimumSaveButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsBlacklistAddButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsBlacklistRemoveButton, theme.colors.panel)
+    apply_panel_style(self.optionsAuthSaveButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthWriteButton, theme.colors.panelAlt)
+    apply_panel_style(self.optionsAuthReadButton, theme.colors.panel)
+    apply_panel_style(self.optionsAuthResetButton, theme.colors.panel)
     for _, button in ipairs(self.minimumAddMatchButtons or {}) do
         apply_panel_style(button, theme.colors.panel)
+    end
+    for _, button in ipairs(self.optionsBlacklistButtons or {}) do
+        apply_panel_style(button, theme.colors.panel)
+    end
+    for _, row in ipairs(self.optionsCapabilityRows or {}) do
+        apply_panel_style(row, theme.colors.panelAlt)
+    end
+    for _, rankButtons in pairs(self.optionsCapabilityButtons or {}) do
+        for _, button in pairs(rankButtons) do
+            apply_panel_style(button, theme.colors.panel)
+        end
     end
     apply_panel_style(self.exportPresetSpreadsheetButton, theme.colors.panelAlt)
     apply_panel_style(self.exportPresetAuctionatorButton, theme.colors.panel)
@@ -489,6 +1063,9 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumTabNameInput, theme.colors.background)
     apply_panel_style(self.minimumSearchInput, theme.colors.background)
     apply_panel_style(self.defaultMinimumInput, theme.colors.background)
+    apply_panel_style(self.optionsPolicyStringInput, theme.colors.background)
+    apply_panel_style(self.optionsBlacklistNameInput, theme.colors.background)
+    apply_panel_style(self.optionsBlacklistReasonInput, theme.colors.background)
     apply_panel_style(self.exportAuctionatorListNameInput, theme.colors.background)
     apply_panel_style(self.exportDelimiterInput, theme.colors.background)
     apply_panel_style(self.exportFieldsInput, theme.colors.background)
@@ -643,6 +1220,8 @@ function mainFrame:RefreshView()
     local historyView = ns.modules.historyView
     local minimumsView = ns.modules.minimumsView
     local requestsView = ns.modules.requestsView
+    local accessProfile, authContext = current_access_profile(db)
+    local compactRequestMode = request_only_layout(self)
 
     self:UpdateSharedTableLayout()
 
@@ -725,20 +1304,31 @@ function mainFrame:RefreshView()
         self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "REQUESTS" then
-        local rows = requestsView.BuildTableRows(db.requests or {})
+        local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile)
         if not self:GetSelectedRequest() then
             self:SelectFirstActionableRequest()
         end
         self:RefreshRequestActionButtons()
         self.tableScrollOffset = 0
-        self:ConfigureTable({
-            { key = "requester", label = "Requester", width = 110, justifyH = "LEFT" },
-            { key = "itemName", label = "Item", width = 170, justifyH = "LEFT" },
-            { key = "quantity", label = "Qty", width = 50, justifyH = "LEFT" },
-            { key = "approval", label = "Approval", width = 90, justifyH = "LEFT" },
-            { key = "fulfillment", label = "Fulfillment", width = 100, justifyH = "LEFT" },
-            { key = "note", label = "Note", width = 110, justifyH = "LEFT" },
-        }, rows)
+        if compactRequestMode then
+            self:ConfigureTable({
+                { key = "createdAt", label = "Submitted", width = 130, justifyH = "LEFT" },
+                { key = "itemName", label = "Item", width = 190, justifyH = "LEFT" },
+                { key = "quantity", label = "Qty", width = 60, justifyH = "LEFT" },
+                { key = "approval", label = "Approval", width = 95, justifyH = "LEFT" },
+                { key = "fulfillment", label = "Fulfillment", width = 105, justifyH = "LEFT" },
+                { key = "note", label = "Note", width = 170, justifyH = "LEFT" },
+            }, rows)
+        else
+            self:ConfigureTable({
+                { key = "requester", label = "Requester", width = 110, justifyH = "LEFT" },
+                { key = "itemName", label = "Item", width = 170, justifyH = "LEFT" },
+                { key = "quantity", label = "Qty", width = 50, justifyH = "LEFT" },
+                { key = "approval", label = "Approval", width = 90, justifyH = "LEFT" },
+                { key = "fulfillment", label = "Fulfillment", width = 100, justifyH = "LEFT" },
+                { key = "note", label = "Note", width = 110, justifyH = "LEFT" },
+            }, rows)
+        end
         self:RefreshVisibleTableRows()
         showTable = true
     elseif self.activeView == "EXPORTS" then
@@ -759,6 +1349,7 @@ function mainFrame:RefreshView()
         showTable = true
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
+        self:LoadAuthOptionsFromDb(db)
         bodyText = ""
     elseif self.activeView == "ABOUT" then
         bodyText = table.concat({
@@ -778,6 +1369,29 @@ function mainFrame:RefreshView()
         else
             card:Hide()
         end
+    end
+
+    if type(self.requestActionsPanel.ClearAllPoints) == "function" then
+        self.requestActionsPanel:ClearAllPoints()
+    end
+    self.requestActionsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+    self.requestActionsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+    if type(self.requestCreatePanel.ClearAllPoints) == "function" then
+        self.requestCreatePanel:ClearAllPoints()
+    end
+    if compactRequestMode then
+        self.requestCreatePanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+    else
+        self.requestCreatePanel:SetPoint("TOPLEFT", self.requestActionsPanel, "BOTTOMLEFT", 0, -12)
+    end
+    self.requestCreatePanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+    if type(self.tableHeaderFrame.ClearAllPoints) == "function" then
+        self.tableHeaderFrame:ClearAllPoints()
+    end
+    if self.activeView == "REQUESTS" then
+        self.tableHeaderFrame:SetPoint("TOPLEFT", self.requestCreatePanel, "BOTTOMLEFT", 0, -16)
+    else
+        self.tableHeaderFrame:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
     end
 
     if showTable then
@@ -804,7 +1418,7 @@ function mainFrame:RefreshView()
         self.contentBodyText:Hide()
     end
 
-    if self.activeView == "REQUESTS" then
+    if self.activeView == "REQUESTS" and not compactRequestMode then
         self.requestActionsPanel:Show()
     else
         self.requestActionsPanel:Hide()
@@ -867,7 +1481,22 @@ function mainFrame:SelectView(name)
 end
 
 function mainFrame:ShowDashboard()
+    self.requestOnlyMode = false
     return self:SelectView("DASHBOARD")
+end
+
+function mainFrame:ShowRequestOnly()
+    self.requestOnlyMode = true
+    return self:SelectView("REQUESTS")
+end
+
+function mainFrame:ShowBlockedAccess(message)
+    self.requestOnlyMode = false
+    self:SetStatusSummary({})
+    self.statusText:SetText(message or "Access blocked")
+    self:EnableMouse(false)
+    self:Hide()
+    return false
 end
 
 function mainFrame:ToggleSidebar()

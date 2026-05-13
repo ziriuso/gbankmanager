@@ -4,8 +4,8 @@
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Latest code commit: `551ffb0` (`refactor: sharpen domain ui separation`)
-- Latest docs commit: `034d290` (`docs: close out phase 5 refactor plan`)
+- Latest code commit: `88b38ef` (`docs: complete phase 6 refactor polish`)
+- Latest docs commit: `88b38ef` (`docs: complete phase 6 refactor polish`)
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
@@ -38,11 +38,71 @@
   - `MainMinimumsController.lua`
   - `MainFrame.lua`
 
-### Shell
+### Shell And Auth
 
-- `/gbm ui` opens the officer shell
+- `/gbm ui` is now auth-aware:
+  - `full_ui` users open the full shell
+  - non-blacklisted guild members without `full_ui` open a lightweight Requests surface
+  - blacklisted users are denied
+- `/gbm request` opens the lightweight Requests surface for non-blacklisted guild members
+- `/gbm scan` requires `full_ui`
 - Current tabs are `Dashboard`, `Inventory`, `History`, `Minimums`, `Requests`, `Exports`, `About`, and `Options`
 - `Targets` has been removed and should not come back
+
+### Auth And Permissions
+
+- Auth policy now lives in saved state under `db.auth`
+- A compact durable auth-policy carrier now exists for guild-wide sharing via Guild Info text
+- Addon chat sync is now a fast path, not the only source of truth
+- Policy stores:
+  - `version`
+  - `revision`
+  - `updatedAt`
+  - `updatedBy`
+  - `updatedByRankIndex`
+  - `guildPolicyString`
+  - `guildPolicySource`
+  - `rankMetadata`
+  - per-capability allowlists
+  - blacklist entries keyed by `Realm-Character`
+  - blacklist hashes for compact durable distribution
+- `Guildmaster` remains implicitly allowed for all capabilities and cannot be locked out by blacklist
+- Capabilities currently implemented:
+  - `full_ui`
+  - `request_submit`
+  - `request_approve`
+  - `request_reject`
+  - `request_edit`
+  - `request_fulfill`
+  - `request_reopen`
+  - `minimum_add`
+  - `minimum_edit`
+  - `minimum_delete`
+  - `auth_manage`
+- `Options` now includes an auth-management panel with:
+  - rank preview
+  - current-access preview
+  - compact per-capability rank toggles
+  - blacklist add/remove staging
+  - auth save / revert actions
+  - policy string preview
+  - Guild Info write / refresh actions
+- Request creation no longer trusts typed requester/role fields; it derives actor identity from live WoW guild context
+- Officer workflow buttons in Requests now gate on live permissions instead of editable role text
+- Request creation now uses labeled fields and visible validation messages instead of silent failure
+- Request-only mode now uses a compact shell layout without the dead sidebar gutter or last-scan clutter
+
+### Sync
+
+- `ADDON_LOADED` now refreshes auth rank metadata before UI use
+- Guild auth rereads now also react to guild-state events such as roster/rank/motd updates
+- Sync payloads now support nested table payloads for:
+  - `AUTH_POLICY_SNAPSHOT`
+  - `REQUEST_CREATED`
+  - `REQUEST_UPDATED`
+- Incoming auth snapshots merge through `ResolveAuthConflict`
+- Incoming request sync validates capability intent locally before applying
+- Addon comms remain guild-wide and should still be treated as authorization, not secrecy
 
 ### History
 
@@ -89,19 +149,18 @@
 
 ## Best Next Work
 
-1. Finish any remaining Phase 6 naming/docs polish if a later session finds stale references
-2. Re-verify the new Minimums draft/highlight treatment in the live WoW client
-3. Confirm the inline `Restock` and `Minimum` editors still feel visually aligned with the original text baseline at WoW scale
-4. Recheck the staged-row `Bank Tab` dropdown visibility and usability in live client
-5. Recheck non-bank add-item search with real user flows and decide whether the current remembered-item catalog behavior is sufficient
-6. If live-client QA still finds Minimums rendering issues, keep the fixes focused and do not reopen unrelated shell or export work
+1. Run a second live-client auth regression using `docs/auth-manual-test-plan.md` against the new Guild Info-backed policy flow
+2. Verify Guildmaster `Write` and `Refresh` behavior from the auth panel with real guild permissions
+3. Recheck member request creation now that the form has labeled fields and visible validation
+4. Confirm request sync behaves correctly across two logged-in guild clients for create, approve, reject, fulfill, and reopen
+5. Re-verify the newer Minimums live-client behavior from the refactored/auth-enabled baseline
 
 ## Docs Updated In The Latest Work
 
 - `README.md`
   - refreshed feature wording and architecture overview to match the refactored module split
 - `docs/manual-test-checklist.md`
-  - refreshed phase-6 QA wording and removed stale target-focused language
+  - now includes auth-role-system manual QA coverage in addition to the earlier phase-6 QA wording
 - `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
   - should be treated through its delta sections, not the original target-era task list
 - `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
@@ -122,13 +181,13 @@
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume from commit `551ffb0`.
+> Resume from commit `88b38ef`.
 >
-> Priority for this session: return to live-client Minimums QA follow-up or new feature work from the refactored baseline.
+> Priority for this session: live-client auth and request-sync QA from the refactored baseline.
 >
 > Required outcomes:
 > 1. Keep `History` procurement-audit-only and do not reintroduce `Targets`.
 > 2. Keep exports grounded in the planning model.
-> 3. Re-verify Minimums live-client behavior only if the session is reopening QA follow-up work.
+> 3. Re-verify auth, blacklist, and request-sync behavior across at least two guild clients before broadening scope again.
 > 4. Treat offline/global item discovery as a separate explicit design task.
 > 5. Use TDD for any follow-up fixes and rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.

@@ -10,7 +10,10 @@ Core/Constants.lua
 Data/Defaults.lua
 Data/Migrations.lua
 Data/Store.lua
+Domain/AuthPolicyCodec.lua
+Domain/AuthPolicySource.lua
 Domain/Permissions.lua
+Domain/AuthPolicySource.lua
 Domain/Snapshots.lua
 Domain/Diff.lua
 Domain/Planning.lua

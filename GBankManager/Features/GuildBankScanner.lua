@@ -17,6 +17,15 @@ local scanner = ns.modules.scanner or {
     statusText = "No scan yet",
 }
 
+local function current_context(db)
+    local auth = ns.modules.auth or ns.modules.permissions
+    if auth and type(auth.GetLivePlayerContext) == "function" then
+        return auth.GetLivePlayerContext(db)
+    end
+
+    return {}
+end
+
 local function current_db()
     local store = ns.data.store or ns.modules.store
     if store and type(store.GetDatabase) == "function" then
@@ -114,6 +123,14 @@ function scanner.GetStatusText()
 end
 
 function scanner.BeginScan()
+    local db = current_db()
+    local auth = ns.modules.auth or ns.modules.permissions
+    if auth and type(auth.Can) == "function" and not auth.Can(current_context(db), "full_ui", db.auth) then
+        scanner.scanInProgress = false
+        push_status("Permission denied")
+        return scanner:GetStatusText()
+    end
+
     scanner.scanInProgress = true
     scanner.tabsToScan = {}
     scanner.rawTabs = {}

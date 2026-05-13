@@ -2,8 +2,14 @@ local assert = require("tests.helpers.assert")
 local requests = dofile("GBankManager/Domain/Requests.lua")
 
 local memberRequest = requests.Create({
-    requester = "MemberOne",
-    role = "MEMBER",
+    actorContext = {
+        characterKey = "Stormrage-MemberOne",
+        name = "MemberOne",
+        guildRankName = "Member",
+        guildRankIndex = 4,
+        isGuildMaster = false,
+        inGuild = true,
+    },
     itemID = 1001,
     itemName = "Flask Alpha",
     quantity = 3,
@@ -13,11 +19,35 @@ local memberRequest = requests.Create({
 assert.equal("PENDING", memberRequest.approval, "member requests should start pending")
 assert.equal("OPEN", memberRequest.fulfillment, "new requests should start open")
 assert.equal("MemberOne", memberRequest.requester, "requester should be stored")
+assert.equal("Stormrage-MemberOne", memberRequest.requesterCharacterKey, "requests should store the full requester character key")
+assert.equal(4, memberRequest.requesterRankIndex, "requests should store the live requester rank index")
 assert.equal("Need for alt raid", memberRequest.note, "request note should be preserved")
 
 local officerRequest = requests.Create({
-    requester = "OfficerOne",
-    role = "OFFICER",
+    actorContext = {
+        characterKey = "Stormrage-OfficerOne",
+        name = "OfficerOne",
+        guildRankName = "Officer",
+        guildRankIndex = 1,
+        isGuildMaster = false,
+        inGuild = true,
+    },
+    auth = {
+        capabilities = {
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            full_ui = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
     itemID = 1001,
     itemName = "Flask Alpha",
     quantity = 3,
@@ -88,3 +118,46 @@ assert.equal("REQUEST_APPROVED", requestDb.auditLog[2].type, "approve stored sho
 requests.MarkFulfilledStored(requestDb, storedRequest.requestId, "OfficerOne", 95)
 assert.equal("FULFILLED", requestDb.requests[1].fulfillment, "fulfill stored should update the saved request")
 assert.equal("REQUEST_FULFILLED", requestDb.auditLog[3].type, "fulfill stored should append a fulfillment audit row")
+
+local deniedDb = {
+    auth = {
+        capabilities = {
+            full_ui = { [1] = true },
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "request-1",
+            requester = "MemberOne",
+            itemID = 1001,
+            itemName = "Flask Alpha",
+            quantity = 2,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+        },
+    },
+    auditLog = {},
+}
+
+local deniedApproval = requests.ApproveStored(deniedDb, "request-1", {
+    characterKey = "Stormrage-MemberOne",
+    name = "MemberOne",
+    guildRankIndex = 2,
+    guildRankName = "Raider",
+    inGuild = true,
+}, 111)
+
+assert.truthy(deniedApproval == nil, "request approvals should be denied when the actor lacks request-approve permission")
+assert.equal("PENDING", deniedDb.requests[1].approval, "denied request approvals should leave the saved request unchanged")
+assert.equal(0, #deniedDb.auditLog, "denied request approvals should not write audit entries")

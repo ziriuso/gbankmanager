@@ -71,6 +71,50 @@ function requestsView.BuildTableRows(rows)
     return out
 end
 
+function requestsView.BuildOwnRows(rows, characterKey, requesterName)
+    local out = {}
+
+    for _, row in ipairs(rows or {}) do
+        if row.requesterCharacterKey == characterKey or row.requester == requesterName then
+            table.insert(out, row)
+        end
+    end
+
+    table.sort(out, function(left, right)
+        return tonumber(left.createdAt or 0) > tonumber(right.createdAt or 0)
+    end)
+
+    return out
+end
+
+function requestsView.BuildVisibleRows(rows, viewerContext, accessProfile)
+    if accessProfile == "request_only" then
+        return requestsView.BuildOwnRows(rows or {}, viewerContext and viewerContext.characterKey, viewerContext and viewerContext.name)
+    end
+
+    return requestsView.BuildOfficerQueue(rows or {})
+end
+
+function requestsView.BuildTableRows(rows, viewerContext, accessProfile)
+    local queue = requestsView.BuildVisibleRows(rows or {}, viewerContext or {}, accessProfile)
+    local out = {}
+
+    for _, row in ipairs(queue) do
+        table.insert(out, {
+            requestId = row.requestId,
+            requester = tostring(row.requester or "Unknown"),
+            itemName = tostring(row.itemName or "Unknown"),
+            quantity = tostring(row.quantity or 0),
+            approval = tostring(row.approval or "UNKNOWN"),
+            fulfillment = tostring(row.fulfillment or "UNKNOWN"),
+            note = tostring(row.note or ""),
+            createdAt = format_timestamp(row.createdAt),
+        })
+    end
+
+    return out
+end
+
 ns.modules.requestsView = requestsView
 
 return requestsView

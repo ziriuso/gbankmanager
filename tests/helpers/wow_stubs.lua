@@ -6,6 +6,11 @@ _G.C_ChatInfo = _G.C_ChatInfo or {
     sentMessages = {},
     registeredPrefixes = {},
 }
+_G.C_GuildInfo = _G.C_GuildInfo or {
+    infoText = "",
+    motd = "",
+    canEditGuildInfo = true,
+}
 
 if _G.time == nil then
     _G.time = function()
@@ -31,6 +36,22 @@ function _G.C_ChatInfo.SendAddonMessage(prefix, payload, distribution, channel)
         distribution = distribution,
         channel = channel,
     })
+end
+
+function _G.C_GuildInfo.GetInfoText()
+    return _G.C_GuildInfo.infoText or ""
+end
+
+function _G.C_GuildInfo.SetInfoText(text)
+    _G.C_GuildInfo.infoText = text or ""
+end
+
+function _G.C_GuildInfo.GetMOTD()
+    return _G.C_GuildInfo.motd or ""
+end
+
+function _G.C_GuildInfo.CanEditGuildInfo()
+    return _G.C_GuildInfo.canEditGuildInfo == true
 end
 
 if _G.CreateFrame == nil then

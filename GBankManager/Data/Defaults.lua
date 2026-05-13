@@ -14,6 +14,34 @@ function defaults.CreateDefaultExportTemplate()
     }
 end
 
+function defaults.CreateDefaultAuthPolicy()
+    return {
+        version = 1,
+        revision = 0,
+        updatedAt = 0,
+        updatedBy = "",
+        updatedByRankIndex = nil,
+        guildPolicyString = "",
+        guildPolicySource = "local",
+        rankMetadata = {},
+        capabilities = {
+            full_ui = {},
+            request_submit = {},
+            request_approve = {},
+            request_reject = {},
+            request_edit = {},
+            request_fulfill = {},
+            request_reopen = {},
+            minimum_add = {},
+            minimum_edit = {},
+            minimum_delete = {},
+            auth_manage = {},
+        },
+        blacklist = {},
+        blacklistHashes = {},
+    }
+end
+
 function defaults.CreateDatabase(guildName)
     return {
         meta = {
@@ -30,6 +58,7 @@ function defaults.CreateDatabase(guildName)
         oneTimeTargets = {},
         requests = {},
         exportTemplates = {},
+        auth = defaults.CreateDefaultAuthPolicy(),
         ui = {
             inventoryColumnWidths = {},
             minimumSettings = {

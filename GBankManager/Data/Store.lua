@@ -98,6 +98,11 @@ function store.GetCurrentSnapshot(db)
     return { items = {} }
 end
 
+function store.GetAuthPolicy(db)
+    db = store.Normalize(db or store.GetDatabase())
+    return db.auth
+end
+
 ns.data.store = store
 ns.modules.store = store
 

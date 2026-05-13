@@ -1,5 +1,31 @@
 local assert = require("tests.helpers.assert")
 
+_G.UnitName = function()
+    return "OfficerOne"
+end
+
+_G.GetRealmName = function()
+    return "Stormrage"
+end
+
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Officer", 1
+end
+
+_G.GuildControlGetNumRanks = function()
+    return 3
+end
+
+_G.GuildControlGetRankName = function(index)
+    local names = {
+        [1] = "Guild Master",
+        [2] = "Officer",
+        [3] = "Raider",
+    }
+
+    return names[index]
+end
+
 local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local mainFrame = ns.modules.mainFrame
 local mainFrameShell = ns.modules.mainFrameShell
@@ -100,6 +126,11 @@ assert.truthy(type(mainFrame.exportModalCopyButton) == "table", "export modal sh
 assert.truthy(type(mainFrame.exportModalCloseButton) == "table", "export modal should expose a close action")
 assert.truthy(type(mainFrame.optionsAppearancePanel) == "table", "options view should split appearance settings into a dedicated box")
 assert.truthy(type(mainFrame.optionsRestockPanel) == "table", "options view should split minimum defaults into a dedicated box")
+assert.truthy(type(mainFrame.optionsAuthPanel) == "table", "options view should expose a dedicated auth panel")
+assert.truthy(type(mainFrame.optionsAuthSaveButton) == "table", "options auth should expose a save action")
+assert.truthy(type(mainFrame.optionsBlacklistNameInput) == "table", "options auth should expose a blacklist character input")
+assert.truthy(type(mainFrame.optionsBlacklistReasonInput) == "table", "options auth should expose a blacklist reason input")
+assert.truthy(type(mainFrame.optionsAccessPreviewText) == "table", "options auth should expose a current access preview")
 assert.truthy(type(mainFrame.transparencySlider) == "table", "options panel should expose an opacity slider")
 assert.truthy(type(mainFrame.optionsRestockHint) == "table", "options panel should explain the saved minimum setting")
 assert.truthy(type(mainFrame:GetScript("OnDragStart")) == "function", "main frame should be draggable")
@@ -123,8 +154,10 @@ assert.equal("Scanning 0/2 tabs", mainFrame.statusText:GetText(), "scan button s
 mainFrame:SelectView("OPTIONS")
 assert.equal("OPTIONS", mainFrame.activeView, "options tab should be selectable")
 assert.truthy(mainFrame.optionsPanel:IsShown(), "options panel should show in the options view")
+assert.truthy(mainFrame.optionsAuthPanel:IsShown(), "options view should include the auth management panel")
 assert.equal("", mainFrame.contentBodyText:GetText(), "options view should rely on its panel copy instead of overlapping body text")
 assert.equal("Options", mainFrame.viewTitle:GetText(), "options view title should render in title case")
+assert.truthy(string.find(mainFrame.optionsAccessPreviewText:GetText(), "full_shell", 1, true) ~= nil, "options auth should preview the current player's effective access")
 
 local alphaAfterDown
 mainFrame.transparencySlider:SetValue(88)
@@ -494,8 +527,29 @@ assert.equal(1, #resolvedMatches, "request dialog should match by item id")
 assert.equal("Flask Alpha", resolvedMatches[1].name, "request dialog should return the matching item")
 
 local officerRequest = requestDialog.Submit({
-    requester = "OfficerOne",
-    role = "OFFICER",
+    actorContext = {
+        characterKey = "Stormrage-OfficerOne",
+        name = "OfficerOne",
+        guildRankName = "Officer",
+        guildRankIndex = 1,
+        inGuild = true,
+    },
+    auth = {
+        capabilities = {
+            full_ui = { [1] = true },
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
     itemID = 1001,
     itemName = "Flask Alpha",
     quantity = 3,
@@ -531,6 +585,19 @@ assert.equal("MemberOne", requestRows[1].requester, "request table rows should e
 assert.equal("PENDING", requestRows[1].approval, "request table rows should expose approval state")
 assert.equal("Raid night", requestRows[1].note, "request table rows should preserve notes")
 
+local requestOnlyRows = requestsView.BuildVisibleRows({
+    { requestId = "req-1", requester = "OfficerOne", requesterCharacterKey = "Stormrage-OfficerOne", itemName = "Flask Alpha", quantity = 2, approval = "PENDING", fulfillment = "OPEN", note = "Raid night", createdAt = 42 },
+    { requestId = "req-2", requester = "MemberTwo", requesterCharacterKey = "Stormrage-MemberTwo", itemName = "Potion Beta", quantity = 1, approval = "APPROVED", fulfillment = "OPEN", note = "", createdAt = 43 },
+    { requestId = "req-3", requester = "OfficerOne", requesterCharacterKey = "Stormrage-OfficerOne", itemName = "Feast Gamma", quantity = 4, approval = "REJECTED", fulfillment = "OPEN", note = "Weekend raid", createdAt = 44 },
+}, {
+    name = "OfficerOne",
+    characterKey = "Stormrage-OfficerOne",
+}, "request_only")
+
+assert.equal(2, #requestOnlyRows, "request-only visibility should keep only the viewer's own requests")
+assert.equal("Feast Gamma", requestOnlyRows[1].itemName, "request-only visibility should sort the viewer's requests newest first")
+assert.equal("Flask Alpha", requestOnlyRows[2].itemName, "request-only visibility should preserve older matching requests after newer ones")
+
 mainFrame:SelectView("REQUESTS")
 assert.equal("REQUESTS", mainFrame.activeView, "task 6 views should be selectable from the shell")
 assert.equal("MemberOne", mainFrame.tableRows[1].columns[1]:GetText(), "requests tab should render requester names in the shared table shell")
@@ -560,6 +627,8 @@ mainFrame:SelectView("REQUESTS")
 assert.truthy(mainFrame.requestActionsPanel:IsShown(), "request controls should show in the requests view")
 assert.truthy(not mainFrame.minimumsPanel:IsShown(), "minimum editor should stay hidden outside the minimums view")
 assert.truthy(mainFrame.requestCreatePanel:IsShown(), "request create controls should show in the requests view")
+assert.same(mainFrame.requestActionsPanel, (mainFrame.requestCreatePanel.points[1] or {})[2], "full request mode should stack the create panel beneath the actions panel")
+assert.same(mainFrame.requestCreatePanel, (mainFrame.tableHeaderFrame.points[1] or {})[2], "requests view should anchor the shared table directly beneath the create panel")
 assert.equal("req-3", mainFrame.selectedRequestId, "requests view should auto-select the first actionable request")
 assert.truthy(mainFrame.requestApproveButton:IsEnabled(), "pending requests should allow approval")
 assert.truthy(mainFrame.requestRejectButton:IsEnabled(), "pending requests should allow rejection")
@@ -605,8 +674,25 @@ assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[2]:GetText(), "reques
 assert.equal("APPROVED", mainFrame.tableRows[1].columns[4]:GetText(), "requests view should show updated approval state after stored mutations")
 assert.equal("Potion Beta", mainFrame.tableRows[2].columns[2]:GetText(), "requests view should keep reopened approved requests in the officer queue")
 
-mainFrame.requestCreateRequesterInput:SetText("OfficerOne")
-mainFrame.requestCreateRoleInput:SetText("OFFICER")
+assert.truthy(not mainFrame.requestCreateRequesterInput:IsShown(), "request create should no longer trust a free-text requester field")
+assert.truthy(not mainFrame.requestCreateRoleInput:IsShown(), "request create should no longer trust a free-text role field")
+assert.truthy(string.find(mainFrame.requestCreateActorText:GetText(), "OfficerOne", 1, true) ~= nil, "request create should show the derived acting player instead of an editable requester")
+assert.equal("Requester", mainFrame.requestCreateRequesterLabel:GetText(), "request create should show a dedicated requester label")
+assert.equal("OfficerOne", mainFrame.requestCreateRequesterValueText:GetText(), "request create should display the live requester identity as read-only text")
+assert.equal("Role", mainFrame.requestCreateRoleLabel:GetText(), "request create should show a dedicated role label")
+assert.equal("Officer", mainFrame.requestCreateRoleValueText:GetText(), "request create should display the live guild role as read-only text")
+assert.equal("Item ID", mainFrame.requestCreateItemIDLabel:GetText(), "request create should label the item-id field explicitly")
+assert.equal("Item Name", mainFrame.requestCreateItemNameLabel:GetText(), "request create should label the item-name field explicitly")
+assert.equal("Quantity", mainFrame.requestCreateQuantityLabel:GetText(), "request create should label the quantity field explicitly")
+assert.equal("Note", mainFrame.requestCreateNoteLabel:GetText(), "request create should label the note field explicitly")
+assert.equal("Decision Note", mainFrame.requestActionNoteLabel:GetText(), "request actions should label the note field explicitly")
+mainFrame.requestCreateItemIDInput:SetText("")
+mainFrame.requestCreateItemNameInput:SetText("Rune Delta")
+mainFrame.requestCreateQuantityInput:SetText("6")
+mainFrame.requestCreateNoteInput:SetText("Emergency stock")
+mainFrame.requestCreateButton:GetScript("OnClick")(mainFrame.requestCreateButton)
+assert.equal(3, #ns.state.db.requests, "invalid request create attempts should not append saved requests")
+assert.equal("Item ID is required.", mainFrame.requestCreateStatusText:GetText(), "request create should show a visible validation message instead of failing silently")
 mainFrame.requestCreateItemIDInput:SetText("4004")
 mainFrame.requestCreateItemNameInput:SetText("Rune Delta")
 mainFrame.requestCreateQuantityInput:SetText("6")
@@ -614,8 +700,11 @@ mainFrame.requestCreateNoteInput:SetText("Emergency stock")
 mainFrame.requestCreateButton:GetScript("OnClick")(mainFrame.requestCreateButton)
 assert.equal(4, #ns.state.db.requests, "request create button should append a saved request")
 assert.equal("APPROVED", ns.state.db.requests[4].approval, "officer-created requests should auto-approve through the stored create flow")
+assert.equal("OfficerOne", ns.state.db.requests[4].requester, "request create should derive requester identity from the live player context")
+assert.equal("Stormrage-OfficerOne", ns.state.db.requests[4].requesterCharacterKey, "request create should persist the live requester's character key")
 assert.equal("Rune Delta", ns.state.db.requests[4].itemName, "request create button should persist new request item names")
 assert.equal("REQUEST_CREATED", ns.state.db.auditLog[5].type, "request create button should append a request-created audit row")
+assert.equal("Created request for Rune Delta x6.", mainFrame.requestCreateStatusText:GetText(), "request create should surface a visible success message after saving")
 
 mainFrame:SelectView("REQUESTS")
 assert.equal("Potion Beta", mainFrame.tableRows[2].columns[2]:GetText(), "request create flow should preserve approved-row sort order when refreshing")
@@ -634,6 +723,59 @@ mainFrame.tableFilterInputs[2]:SetText("")
 mainFrame.tableFilterInputs[5]:SetText("")
 mainFrame.tableFilterInputs[3]:SetText("")
 assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[3]:GetText(), "clearing history filters should restore the full audit list")
+
+local originalUnitName = _G.UnitName
+local originalGetGuildInfo = _G.GetGuildInfo
+_G.UnitName = function()
+    return "MemberOne"
+end
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Member", 4
+end
+_G.GBankManagerDB = {
+    auth = {
+        capabilities = {
+            full_ui = {},
+            request_submit = {},
+            request_approve = {},
+            request_reject = {},
+            request_fulfill = {},
+            request_reopen = {},
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        { requestId = "req-own-1", requester = "MemberOne", requesterCharacterKey = "Stormrage-MemberOne", itemID = 1001, itemName = "Flask Alpha", quantity = 2, approval = "PENDING", fulfillment = "OPEN", note = "Raid night", createdAt = 10 },
+        { requestId = "req-other-1", requester = "OfficerOne", requesterCharacterKey = "Stormrage-OfficerOne", itemID = 2002, itemName = "Potion Beta", quantity = 1, approval = "APPROVED", fulfillment = "OPEN", note = "", createdAt = 11 },
+        { requestId = "req-own-2", requester = "MemberOne", requesterCharacterKey = "Stormrage-MemberOne", itemID = 3003, itemName = "Feast Gamma", quantity = 4, approval = "REJECTED", fulfillment = "OPEN", note = "Weekend raid", createdAt = 12 },
+    },
+    auditLog = {},
+    minimums = {},
+    oneTimeTargets = {},
+    snapshots = {},
+}
+ns.state.db = _G.GBankManagerDB
+
+mainFrame:ShowRequestOnly()
+assert.truthy(mainFrame.requestOnlyMode == true, "request-only mode should mark the shell as request-only")
+assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only mode should hide officer-only workflow actions")
+assert.truthy(mainFrame.requestCreatePanel:IsShown(), "request-only mode should still show the request entry panel")
+assert.truthy(not mainFrame.sidebar:IsShown(), "request-only mode should hide the sidebar")
+assert.truthy(mainFrame.statusText.shown ~= true, "request-only mode should hide the last-scan status text")
+assert.truthy(mainFrame.subtitleText.shown ~= true, "request-only mode should hide the shell subtitle clutter")
+assert.same(mainFrame, (mainFrame.topBar.points[1] or {})[2], "request-only mode should anchor the top bar directly to the frame instead of the hidden sidebar")
+assert.same(mainFrame.viewSubtitle, (mainFrame.requestCreatePanel.points[1] or {})[2], "request-only mode should place request entry directly below the request subtitle")
+assert.same(mainFrame.requestCreatePanel, (mainFrame.tableHeaderFrame.points[1] or {})[2], "request-only mode should place the request table directly below the entry panel")
+assert.equal("Submitted", mainFrame.tableHeaderLabels[1]:GetText(), "request-only mode should replace the requester column with a submitted-date column")
+assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[2]:GetText(), "request-only mode should show the viewer's newest request first")
+assert.equal("Flask Alpha", mainFrame.tableRows[2].columns[2]:GetText(), "request-only mode should keep only the viewer's own requests visible")
+assert.equal("", mainFrame.tableRows[3].columns[2]:GetText(), "request-only mode should hide requests from other guild members")
+mainFrame:SelectRequestById("missing-request")
+mainFrame.requestApproveButton:GetScript("OnClick")(mainFrame.requestApproveButton)
+assert.equal("Select a request first.", mainFrame.requestActionStatusText:GetText(), "request actions should show a visible validation message when nothing is selected")
+_G.UnitName = originalUnitName
+_G.GetGuildInfo = originalGetGuildInfo
 
 _G.GBankManagerDB = {
     requests = {},
@@ -781,7 +923,7 @@ mainFrame:SelectView("HISTORY")
 assert.equal("Minimum", mainFrame.tableRows[1].columns[2]:GetText(), "history should refresh to show minimum workflow audit rows")
 assert.equal("Updated", mainFrame.tableRows[1].columns[4]:GetText(), "history should keep earlier minimum workflow actions visible after later mutations")
 mainFrame.tableFilterInputs[2]:SetText("Minimum")
-mainFrame.tableFilterInputs[5]:SetText("TestPlayer")
+mainFrame.tableFilterInputs[5]:SetText("OfficerOne")
 mainFrame.tableFilterInputs[3]:SetText("Potion")
 assert.equal("Potion Beta", mainFrame.tableRows[1].columns[3]:GetText(), "history filters should also work for minimum audit rows")
 assert.equal("Created", mainFrame.tableRows[1].columns[4]:GetText(), "filtered history should show manual minimum creation actions from saved mutations")

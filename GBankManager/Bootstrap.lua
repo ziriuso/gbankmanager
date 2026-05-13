@@ -8,8 +8,4 @@ ns.data = ns.data or {}
 
 local store = ns.data.store or ns.modules.store
 
-if store then
-    store.GetDatabase()
-end
-
 return ns
