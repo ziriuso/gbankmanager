@@ -1588,3 +1588,162 @@ Plan complete and saved to `docs/superpowers/plans/2026-05-11-wow-guild-bank-add
 **2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
 
 **Which approach?**
+
+---
+
+## Current Delta 2026-05-12
+
+The original task breakdown above is now partially stale. Current product direction and worker scope should follow this delta instead of re-introducing removed features.
+
+### Scope Corrections
+
+- `Targets` has been removed from the shell and should not be restored.
+- Officer-facing `History` is procurement audit history only.
+- `Spreadsheet` is now `CSV` in the officer-facing export UX.
+- `About` is now a real shell tab.
+- `Minimums` now uses direct in-table drafts with row-level undo and explicit remove actions.
+
+### Current Verified Baseline
+
+- Branch: `codex/gbankmanager-v1`
+- Latest implementation commit before the next export pass: `2b710c7`
+- Verified command:
+
+```text
+.\tools\lua\lua.exe .\tests\run_all.lua
+PASS tests/run_all.lua
+```
+
+### Next Worker Task Pack: Export Workflow Completion
+
+Use this section as the active implementation checklist for the next worker session.
+
+**Files expected:**
+
+- Modify: `GBankManager/UI/MainFrame.lua`
+- Modify: `GBankManager/UI/ExportsView.lua`
+- Modify: `GBankManager/UI/ExportDialog.lua`
+- Modify: `GBankManager/Domain/Exports.lua`
+- Modify: `tests/spec/ui_spec.lua`
+- Modify: `tests/spec/exports_spec.lua` if needed
+- Modify: `docs/manual-test-checklist.md`
+
+- [ ] **Task A: Replace inline export-only output with a copy-friendly modal**
+
+Requirements:
+
+- Selecting an export preset should open or refresh a modal dialog
+- The modal should contain:
+  - a scrollable text area
+  - `Select All` button
+  - `Copy` button
+  - `Close` button
+- The modal should make the full export content visible and easy to copy/paste
+- The Exports tab may still show preset controls, but generated text should no longer be trapped only in the inline panel
+
+- [ ] **Task B: Rename officer-facing `Spreadsheet` preset to `CSV`**
+
+Requirements:
+
+- Button labels and visible preset titles should say `CSV`
+- Existing CSV/delimited generation behavior should remain Excel-friendly
+- Any saved preset migration should keep working if prior UI state stored `Spreadsheet`
+
+- [ ] **Task C: Correct the Auctionator format**
+
+Requirements:
+
+- Generated Auctionator text must follow the user-provided screenshot/sample format
+- `GBankManager` in that format is the shopping-list name only
+- Add a field when Auctionator is selected so the officer can set the shopping-list name
+- Default shopping-list name may remain `GBankManager`, but it must be editable
+- Tests should lock the expected formatting once the exact sample format is encoded
+
+- [ ] **Task D: Keep exports copy flow testable**
+
+Requirements:
+
+- Add failing tests first for:
+  - modal visibility and content routing
+  - `CSV` label rename
+  - Auctionator shopping-list name field behavior
+  - select-all/copy button wiring as far as local stubs can verify
+- Rerun `.\tools\lua\lua.exe .\tests\run_all.lua` for red/green proof
+
+- [ ] **Task E: Update manual QA checklist**
+
+Add explicit manual checks for:
+
+- CSV preset naming
+- Auctionator shopping-list naming
+- modal scroll behavior
+- Select All and Copy actions
+- copy/paste into external tools
+
+### Additional Minimums Polish Follow-Up
+
+These issues were confirmed after the large Minimums rewrite and should be treated as required follow-up work alongside or immediately after the export task pack.
+
+**Files expected:**
+
+- Modify: `GBankManager/UI/MainFrame.lua`
+- Modify: `GBankManager/UI/MinimumsView.lua`
+- Modify: `tests/spec/ui_spec.lua`
+- Modify: `docs/manual-test-checklist.md`
+
+- [ ] **Task F: Make Minimums draft highlighting visibly work in the live client**
+
+Requirements:
+
+- Verify changed rows actually show yellow tint
+- Verify deleted rows actually show red tint
+- Verify added rows actually show green tint
+- If the current backdrop-color approach is insufficient in WoW, replace it with a stronger live-client-visible rendering approach
+
+- [ ] **Task G: Replace placeholder remove and undo row controls with real icons**
+
+Requirements:
+
+- Do not keep bare `-` and `>` controls
+- Use cleaner iconography that reads clearly at WoW scale
+- Keep remove and per-row undo semantics unchanged
+
+- [ ] **Task H: Lock saved-row Bank Tab and improve new-row tab entry**
+
+Requirements:
+
+- Existing saved minimum rows must not allow `Bank Tab` editing
+- New staged rows must still allow tab selection
+- For new rows, `Bank Tab` should use a dropdown of known guild bank tab names rather than freeform typing
+
+- [ ] **Task I: Eliminate ghosted underlying cell text behind inline editors**
+
+Requirements:
+
+- Active inline edit fields must not show the old static cell text behind them
+- This applies especially to Minimum quantity and Bank Tab cells
+- Treat this as a real bug, not a visual nit
+
+- [ ] **Task J: Clean up add-item modal layout and search UX**
+
+Requirements:
+
+- Fix current modal text overflow
+- Clearly label modal fields
+- Render search results in a clean dropdown or list below the field
+- Stop the current jumbled-under-the-boxes result layout
+- Ensure the search path is WoW item database or client item-info based, not bank-only
+
+- [ ] **Task K: Fix Minimums control-frame overflow and labeling**
+
+Requirements:
+
+- `Enabled Only` / `Show All` toggle text must fit cleanly in both states
+- The search input in the Minimums control frame must have a visible label
+
+### Worker Guardrails
+
+- Do not reintroduce `Targets`
+- Do not expand History back into raw inventory diff UI
+- Keep export generation grounded in the planning model
+- Prefer small, verifiable UI changes with test coverage before live-client polish

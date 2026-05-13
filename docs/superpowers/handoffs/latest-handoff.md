@@ -4,6 +4,7 @@
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
+- Latest feature commit: `2b710c7` (`feat: polish minimums workflow and shell`)
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result in this handoff: `PASS tests/run_all.lua`
 
@@ -15,224 +16,161 @@
 4. `docs/superpowers/handoffs/latest-handoff.md`
 5. `git status -sb`
 
-## Current State
+## Current Repo State
 
-- `/gbm ui` shell is active and procurement-focused
-- `History` stays focused on workflow audit events, not bank diff history
-- `Inventory` is now in a strong place:
-  - columns are ordered `Tier`, `Name`, `Tab`, `Restock`, `Qty`, `Min`
-  - `Tier`, `Name`, `Tab`, `Restock`, `Qty`, and `Min` all support header click sorting
-  - `Name`, `Tab`, and `Restock` keep text filtering while also supporting sort
-  - active sort headers use ASCII markers `^` and `v`
-  - crafted quality icons are larger
-  - quality sorting now tries to parse more than one atlas naming pattern and pushes unranked rows after ranked tiers
-  - inventory rendering rebinds to the saved variables DB before drawing
-- `Requests` has persisted approve/reject/fulfill/reopen flows plus create flow
-- `Minimums` has:
-  - persisted enabled/disabled state
-  - merged bank + saved/manual rows
-  - enabled-only default
-  - `Show All`
-  - search
-  - manual-only filter
-  - row selection
-  - draft cue for bank-only rows
-- `Targets` now has a real editor flow with saved create/update and open/closed status changes
-- `Exports` now uses planning output instead of placeholder text
-- Custom export output is adjustable from the shell by delimiter, field list, and header on/off
-- Local Lua suite passes
+- Current dirty file expected at handoff time:
+  - `M docs/superpowers/handoffs/latest-handoff.md`
+- Code and tests are otherwise clean after commit `2b710c7`
 
-## What Landed In This Session Range
+## Current Product State
 
-### Inventory polish and persistence hardening
+### Shell
 
-- Inventory header layout was cleaned up and the shared table now supports cleaner header interactions
-- Inventory now supports sort markers in the header and per-column sort toggles
-- Text filtering remains on `Name`, `Tab`, and `Restock`
-- Crafted-quality sorting now prefers parsed atlas tier names before falling back to raw numeric quality
-- The tier parser now recognizes more than one atlas naming pattern, including older or expansion-specific strings that still embed `Tier1` to `Tier5`
-- Unknown or noisy crafted quality values are pushed after ranked tiers instead of breaking the `1..5` ordering
-- Inventory rendering and scanner writes both now rebind to the active saved variables DB before use to reduce detached-state persistence bugs
-- Local Lua coverage was extended around:
-  - saved-variable rebinding
-  - inventory column order
-  - header sort markers
-  - tier parsing from multiple atlas-name variants
+- `/gbm ui` opens the current officer shell
+- Top bar title/subtitle are generalized to `Guild Bank Manager` / `Guild Bank Management`
+- `Dashboard`, `Inventory`, `History`, `Minimums`, `Requests`, `Exports`, `About`, and `Options` are current shell tabs
+- `Targets` has been removed from the shell and should stay removed
 
-### Requests and audit wiring
+### Dashboard
 
-- Requests actions now route through persisted stored mutations
-- Request creation also uses stored state and fills History immediately
-- Requests and History refresh after workflow mutations
+- Last scan formatting now abbreviates timezone names such as `Eastern Daylight Time` to `EDT`
 
-### Minimums workflow completion
+### History
 
-- Minimum rules persist explicit `enabled` state instead of being removed on disable
-- Disabled minimums no longer contribute to planning or inventory restock signaling
-- Minimums table merges:
-  - latest bank snapshot rows
-  - saved rules
-  - manual-only rules
-- Enabled rows sort first
-- In `Show All`, configured rows now stay ahead of raw bank-only rows
-- Minimums defaults to enabled-only view, with:
-  - `Show All`
-  - search
-  - manual-only toggle
-- Selected rows are visually tracked in the shared table
-- Empty states now explain why the table is blank
-- Clicking a bank-only row loads a draft into the editor so it can be turned into a real saved rule
+- `History` is procurement audit history only
+- Visible history table now includes an explicit timestamp column labeled `When`
+- Do not restore raw bank diff history into this view
 
-### Exports made real
+### Inventory
 
-- `Domain/Exports.lua` now materializes planning rows from the active demand model
-- Zero-demand rows are omitted from exports
-- Export rows now include:
-  - `itemID`
-  - `itemName`
-  - `currentQuantity`
-  - `restockQuantity`
-  - `targetQuantity`
-  - `requestQuantity`
-  - `totalToBuy`
-  - `scopeSummary`
-  - `reason`
-- Exports tab now supports:
-  - `Spreadsheet`
-  - `Auctionator`
-  - `Custom`
-- Custom export controls now allow:
-  - delimiter change
-  - field selection/order
-  - header on/off
-
-### Targets brought into the procurement flow
-
-- `TargetsView.lua` now includes saved helpers for:
-  - upsert with audit
-  - status change with audit
-- Targets table rows now show:
-  - current bank quantity
-  - status
-  - target quantity
-  - scope
-- Open targets can surface `Suggested` when current bank quantity already meets the target
-- Targets tab now supports:
-  - row selection
-  - save/update
-  - close
-  - reopen
-  - create new target
-- Target audit events now appear in History
-
-## Files Touched In The Current Working State
-
-- `GBankManager/Domain/Exports.lua`
-- `GBankManager/Domain/Planning.lua`
-- `GBankManager/UI/ExportDialog.lua`
-- `GBankManager/UI/ExportsView.lua`
-- `GBankManager/UI/HistoryView.lua`
-- `GBankManager/UI/InventoryView.lua`
-- `GBankManager/UI/MainFrame.lua`
-- `GBankManager/UI/MinimumsView.lua`
-- `GBankManager/UI/RequestsView.lua`
-- `GBankManager/UI/TargetsView.lua`
-- `GBankManager/Features/GuildBankScanner.lua`
-- `tests/helpers/wow_stubs.lua`
-- `tests/spec/diff_spec.lua`
-- `tests/spec/exports_spec.lua`
-- `tests/spec/planning_spec.lua`
-- `tests/spec/store_spec.lua`
-- `tests/spec/ui_spec.lua`
-
-## Important Constraints
-
-- Keep `History` focused on procurement workflow audit events
-- Do **not** restore visible bank diff history into the History tab
-- Minimum disable should remain a persisted disabled state, not deletion
-- Exports should remain outputs of the planning model, not a separate source of truth
-- Inventory is considered in good shape overall, but real in-game tier sorting is still not fully fixed
-- Known unresolved inventory tier-sorting follow-up:
-  - `Algari Mana Oil` is still appearing in the wrong tier grouping in the live client
-  - `Potion Bomb of Speed` is still not reliably sorting as rank 1 in the live client
-  - this likely means there are still crafted-quality atlas/icon variants in-game that the current offline parser does not yet recognize
-  - use the user-provided screenshots as reference when coming back to this after the minimums pass
-- Continue using TDD and rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion
-- No in-game validation was available in this session range
-
-## Verified State
-
-- Verified on `2026-05-12` with:
-
-```text
-.\tools\lua\lua.exe .\tests\run_all.lua
-PASS tests/run_all.lua
-```
-
-## Latest Follow-Up 2026-05-12
-
-This section supersedes the older "Recommended Next Offline Step" block above.
-
-### Current Resume Point
-
-- Branch: `codex/gbankmanager-v1`
-- Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`
-- Latest verified command:
-
-```text
-.\tools\lua\lua.exe .\tests\run_all.lua
-PASS tests/run_all.lua
-```
-
-### What Landed In The Latest Pass
-
-- Minimums edits now stage as pending changes instead of writing immediately
-- `Show All` rows can now be edited directly from the table instead of forcing the older top-editor path
-- The current footer flow is moving in the right direction, but it still needs another live-client UI cleanup pass
-
-### Next Priority
-
-Use the live-client screenshots as the primary reference and do this next:
-
-1. Fix Minimums column spacing and header overflow
-2. Rename `Restock From` to `Restock Source`
-3. Allow the `Restock Source` header to wrap to two lines if that helps spacing
-4. Remove the appended add-minimum-row UI at the bottom
-5. Replace it with footer buttons:
-   - `Add`
-   - `Save`
-   - `Undo`
-6. `Add` should open a modal with a clean search UI:
-   - `Item ID`
-   - `Item Name`
-   - item quality search fields
-   - user searches for item
-   - user clicks add
-   - modal closes
-   - new row is inserted into the table
-   - new row is highlighted so the user can fill in `Minimum`, `Restock`, and `Bank Tab`
-7. `Undo` should restore the original Minimums state from when the view was opened
-8. `Save` should commit all pending changes and update saved variables plus History correctly
-9. History timestamps should be stored in UTC and localized only for in-game display
-10. The stored last-scan value should also be UTC-at-rest and localized only for display
-11. Change the Minimums subtitle to:
-   - `Manage Guild Bank Item Minimum Stock Levels`
-12. After the Minimums footer/modal polish, return to the inventory quality issue in the live client
-
-### Important Carry-Forward Notes
-
-- Keep `History` focused on procurement workflow audit events only
-- Do not restore visible bank diff history into the History tab
-- Inventory tier sorting is still not fully correct in the live client
-- Continue to use the user screenshots as reference for:
+- Inventory quality sorting is improved and covered offline
+- Parser now handles `Tier`, `Quality`, and `Rank`-style crafted-quality icon variants
+- Remaining real-client risk still exists for:
   - `Algari Mana Oil`
   - `Potion Bomb of Speed`
-- Best remaining risk is still real in-game behavior, not the offline Lua suite
 
-### Next Offline Prompt
+### Minimums
+
+- Minimums has been rewritten into a direct in-table draft flow
+- Key current behavior:
+  - row-level direct editing
+  - row-level `Undo`
+  - explicit row-level remove control
+  - bottom `Save All`
+  - yellow tint for changed rows
+  - red tint for deleted rows
+  - green tint for added rows
+  - no draft-actions text box
+  - no `All Sources` filter
+  - `Show All` anchored below the table at bottom-right
+- Add modal now renders above the table stack
+- Add-item lookup falls back beyond snapshot-only resolution using available client item info
+
+### Confirmed Minimums Follow-Up Bugs
+
+These came from live review and should be treated as active bugs, not optional polish:
+
+- row highlighting is not visibly happening in the live client
+- remove and undo row controls still need real icon treatment instead of placeholder glyphs
+- existing saved rows should not allow `Bank Tab` editing
+- new rows should use a `Bank Tab` dropdown of real guild bank tab names
+- inline editors still show ghosted underlying cell values behind the active inputs
+- add modal still has text overflow
+- add search results still jumble under the fields instead of using a clean dropdown/list
+- add search still appears too bank-driven and needs to behave like WoW item database or client item-info search
+- modal fields need clearer labels
+- `Enabled Only` / `Show All` text still overflows in at least one state
+- the Minimums search box in the control frame still needs a visible label
+
+### Exports
+
+- Export generation is still planning-backed
+- Current officer-facing gap:
+  - preset buttons still route output into text display without a true copy-friendly modal flow
+  - there is not yet a proper copy/paste workflow for long outputs
+- Officer-facing rename needed:
+  - `Spreadsheet` should be `CSV`
+- Auctionator remains incomplete:
+  - current format is not yet the user-approved Auctionator sample format
+  - shopping-list name should be officer-editable instead of effectively hardcoded
+
+## Latest User-Confirmed Export Requirements
+
+These are the active requirements for the next worker.
+
+### Export Modal
+
+- Selecting an export should open a modal
+- The modal should include:
+  - scrollable content area
+  - `Select All` button
+  - `Copy` button
+  - `Close` button
+- The modal must make it practical to copy the full generated output
+
+### CSV Preset
+
+- Rename `Spreadsheet` to `CSV`
+
+### Auctionator Preset
+
+- Output must match the user-provided screenshot/sample format
+- `GBankManager` in that format is only the shopping-list name
+- Add a field when Auctionator is selected so the officer can set the shopping-list name
+- The shopping-list name should default reasonably, but remain editable
+
+## Next Worker Must Also Address
+
+These Minimums items are now explicitly required in the next work set:
+
+1. Make row highlight colors visibly work in the live client
+2. Replace placeholder remove and undo controls with real icons
+3. Prevent `Bank Tab` editing on existing saved rows
+4. Add a real `Bank Tab` dropdown for newly staged rows
+5. Eliminate ghosted underlying cell text behind inline editors
+6. Fix add-modal text overflow
+7. Replace the current jumbled search-results layout with a clean dropdown/list
+8. Make add-item search behave like WoW item database or client item-info search rather than bank-only lookup
+9. Add clear labels to modal fields
+10. Fix `Enabled Only` / `Show All` overflow
+11. Add a visible label for the Minimums search field
+
+## Docs Updated In This Session
+
+- `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`
+  - removed stale Targets-first product assumptions
+  - updated History/Exports/About/CSV/Auctionator requirements
+- `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
+  - added `Current Delta 2026-05-12`
+  - added a focused next-worker export task pack
+- `docs/superpowers/handoffs/latest-handoff.md`
+  - fully refreshed to current product state
+
+## Next Worker Task List
+
+1. Implement a true export modal flow instead of relying on inline text only
+2. Rename `Spreadsheet` to `CSV` everywhere user-facing
+3. Add Auctionator shopping-list name input
+4. Rebuild Auctionator output to match the user-provided sample
+5. Fix the confirmed Minimums live-client issues listed above
+6. Add or update tests for export modal visibility, export content routing, preset naming, Auctionator formatting, and Minimums constraints where stubs can verify them
+7. Rerun `.\tools\lua\lua.exe .\tests\run_all.lua`
+8. Update `docs/manual-test-checklist.md` for export modal copy/paste QA and Minimums follow-up QA
+9. Refresh addon files into WoW `AddOns` for manual testing after code changes
+
+## Constraints
+
+- Keep `History` focused on procurement audit events only
+- Do not reintroduce `Targets`
+- Keep exports as outputs of planning, not a separate source of truth
+- Keep using TDD
+- Verify with fresh `.\tools\lua\lua.exe .\tests\run_all.lua` output before claiming completion
+
+## Suggested Next Prompt
 
 > Continue work on the WoW guild bank addon from the implementation worktree.  
 > Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`  
+> Branch: `codex/gbankmanager-v1`  
 >  
 > Read first:  
 > `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`  
@@ -244,124 +182,28 @@ Use the live-client screenshots as the primary reference and do this next:
 > `git status -sb`  
 > `.\tools\lua\lua.exe .\tests\run_all.lua`  
 >  
-> Resume from branch `codex/gbankmanager-v1`.  
+> Resume from commit `2b710c7`.  
 >  
-> Priority for this offline session:  
-> 1. Fix Minimums column spacing and header overflow in the live client.  
-> 2. Change `Restock From` to `Restock Source`, and let it wrap to two lines if that helps spacing.  
-> 3. Remove the appended add-minimum-row view from the bottom.  
-> 4. Replace it with footer buttons: `Add`, `Save`, `Undo`.  
-> 5. `Add` should open a modal with `Item ID`, `Item Name`, and item-quality search fields. Searching and adding should close the modal and add a new highlighted row into the table so the user can fill `Minimum`, `Restock`, and `Bank Tab`.  
-> 6. `Undo` should restore the original state from when the Minimums view was opened.  
-> 7. `Save` should commit all pending changes and update both the database and History correctly.  
-> 8. Store History timestamps in UTC and localize only for display in game.  
-> 9. Store the last-scan value in UTC and localize only for display in game.  
-> 10. Change the Minimums subtitle to `Manage Guild Bank Item Minimum Stock Levels`.  
-> 11. After that, return to the inventory quality issue in the live client.  
-> 12. Keep `History` focused on procurement workflow audit events only.  
-> 13. Keep using TDD and verify with `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
-
-## Recommended Next Offline Step
-
-Move from `Inventory` to a substantial `Minimums` redesign pass.
-
-Suggested order:
-
-1. Add crafting tier as the second column after item ID
-2. Replace the `Source` column with:
-   - `Bank Tab`
-   - a new `Restock From` column
-3. Shift minimum logic from global-first to tab-aware behavior:
-   - minimums should be based on the configured bank tab
-   - if an item is under minimum in that tab but exists in a different tab, show `Restock From: <Tab Name>`
-   - if no stock exists in other tabs, show `Restock From: Auction`
-4. Bring the same sortable-header behavior from inventory into minimums
-5. Remove text filters for `Current` and `Minimum`, but keep other useful text filters
-6. Replace the top editor with inline table editing:
-   - `Restock` becomes an inline `Yes` / `No`
-   - `Minimum` becomes inline numeric editing
-   - a `Save` button should appear on the far right for the edited row
-7. Add a configurable default minimum value in `Options`
-   - default value should be `100`
-8. Replace the old top editor with a new-row flow at the bottom of the table:
-   - adding by item ID should resolve and fill item name + quality
-   - adding by item name should offer a quality-aware selection list when multiple variants exist
-   - selecting an item should fill item ID and item name
-   - `Bank Tab` and `Minimum` are required for new rows
-9. Keep using TDD and extend offline coverage around:
-   - minimum row shaping
-   - tab-aware restock source calculation
-   - sortable minimum columns
-   - inline-edit persistence
-   - add-row item resolution behavior
-10. After the minimums pass, come back to the unresolved live-client inventory tier sorting bug for items like `Algari Mana Oil` and `Potion Bomb of Speed`
-
-## Next Offline Prompt
-
-> Continue work on the WoW guild bank addon from the implementation worktree.  
-> Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\superpower-i-want-to-brainstorm-for\.worktrees\gbankmanager-v1`  
+> Priority for this session: finish the Exports workflow.  
 >  
-> Read first:  
-> `docs/superpowers/specs/2026-05-11-wow-guild-bank-addon-design.md`  
-> `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`  
-> `docs/superpowers/specs/2026-05-11-wow-guild-bank-task-5-ui-shell-design.md`  
-> `docs/superpowers/handoffs/latest-handoff.md`  
->  
-> Then run:  
-> `git status -sb`  
-> `.\tools\lua\lua.exe .\tests\run_all.lua`  
->  
-> Resume from branch `codex/gbankmanager-v1`.  
->  
-> Priority for this offline session:  
-> Inventory is in a good place. Move next to `Minimums` and implement this redesign:
-> 1. Add crafting tier to the view as the 2nd column after `Item ID`.
-> 2. Remove `Source` and replace it with `Bank Tab`.
-> 3. Add a new `Restock From` column:
->    - minimums should be based on the configured bank tab, not global
->    - if under minimum and stock exists in another bank tab, show `Restock From: <Tab Name>`
->    - if no stock exists in another tab, show `Restock From: Auction`
-> 4. Bring over the same sortable column-header behavior from `Inventory`.
-> 5. Remove filter text search from `Current` and `Minimum`.
-> 6. Replace the top editor with inline editing in the table:
->    - `Restock` is inline `Yes` / `No`
->    - `Minimum` is inline numeric editing
->    - when editing a row, show a `Save` button on the far right of that row
-> 7. Add an `Options` setting for the default minimum value. Default it to `100`.
-> 8. Replace the old top editor area with a new-row flow at the bottom:
->    - entering item ID should resolve and fill item name + quality
->    - entering item name should offer a dropdown/selection when multiple quality variants exist
->    - selecting a variant should fill item ID and item name
->    - `Bank Tab` and `Minimum` are required when adding a new item
-> 9. Keep `History` focused on procurement workflow audit events only.
-> 10. Leave a carry-forward note that inventory tier sorting still needs another live-client fix pass for items such as `Algari Mana Oil` and `Potion Bomb of Speed`; use the user’s screenshots as reference.
-> 11. Keep using TDD and verify with `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
-
-## Notes
-
-- The worktree is currently dirty with in-progress, uncommitted addon changes
-- The addon has strong offline coverage now for Inventory, Requests, Minimums, Targets, Planning, and Exports
-- Best remaining risk is real in-game behavior, especially item-specific crafted-quality atlas variants and UI behavior inside WoW itself
-- Inventory tier sorting should be revisited after the minimums pass with the user screenshots as reference, because the live client still disagrees with the current offline parser for at least `Algari Mana Oil` and `Potion Bomb of Speed`
-
-## Update 2026-05-12
-
-- The offline `Minimums` redesign is now implemented and covered in the Lua suite
-- The redesigned minimums workflow now includes:
-  - tier as the second column after item ID
-  - `Bank Tab` replacing `Source`
-  - tab-aware `Restock From` values that prefer another guild-bank tab before `Auction`
-  - inventory-style sortable headers in the minimums table
-  - no text filters for `Current` or `Minimum`
-  - inline row editing for `Restock` and `Minimum` with a row-level `Save`
-  - a default minimum quantity setting in `Options`
-  - a bottom add-row flow that resolves item IDs, offers quality-aware name matches, and saves new rows directly instead of staging them behind `Save All`
-- Carry-forward note:
-  - inventory tier sorting still needs another live-client fix pass for `Algari Mana Oil` and `Potion Bomb of Speed`
-  - use the user screenshots as reference when revisiting crafted-quality atlas/icon handling in the live client
-- Verified again with:
-
-```text
-.\tools\lua\lua.exe .\tests\run_all.lua
-PASS tests/run_all.lua
-```
+> Required outcomes:  
+> 1. Rename `Spreadsheet` to `CSV`.  
+> 2. When an export preset is selected, open a modal with a scrollable output area.  
+> 3. Add `Select All`, `Copy`, and `Close` actions to that export modal.  
+> 4. Add an editable shopping-list name field for Auctionator.  
+> 5. Rebuild the Auctionator output to match the user-provided screenshot/sample format exactly.  
+> 6. Fix the confirmed Minimums live-client issues from the handoff:
+>    - visible row highlighting
+>    - real remove/undo icons
+>    - no Bank Tab editing on saved rows
+>    - Bank Tab dropdown for new rows
+>    - no ghosted underlying inline cell text
+>    - add-modal text overflow
+>    - clean search dropdown/list
+>    - non-bank-only add-item search behavior
+>    - clearer modal field labels
+>    - toggle overflow fix
+>    - labeled Minimums search field
+> 7. Keep exports grounded in the planning model.  
+> 8. Keep `History` procurement-audit-only and do not reintroduce `Targets`.  
+> 9. Use TDD and verify with `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
