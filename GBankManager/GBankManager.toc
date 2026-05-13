@@ -21,6 +21,7 @@ Features/GuildBankScanner.lua
 Sync/Codec.lua
 Sync/Coordinator.lua
 Sync/Transport.lua
+UI/MainFrameShell.lua
 UI/MainFrame.lua
 UI/DashboardView.lua
 UI/InventoryView.lua

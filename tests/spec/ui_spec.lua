@@ -2,6 +2,7 @@ local assert = require("tests.helpers.assert")
 
 local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local mainFrame = ns.modules.mainFrame
+local mainFrameShell = ns.modules.mainFrameShell
 local dashboard = ns.modules.dashboardView
 local inventory = ns.modules.inventoryView
 local history = ns.modules.historyView
@@ -13,6 +14,9 @@ local slash = ns.modules.slash
 local scanner = ns.modules.scanner
 
 assert.truthy(type(mainFrame) == "table", "main frame should load from the toc")
+assert.truthy(type(mainFrameShell) == "table", "main frame shell should load from the toc")
+assert.truthy(type(mainFrameShell.EnsureShell) == "function", "main frame shell should expose a shell builder")
+assert.same(mainFrame, mainFrameShell.EnsureShell(mainFrame), "main frame shell should idempotently configure the shared main frame")
 assert.truthy(type(dashboard) == "table", "dashboard view should load from the toc")
 assert.truthy(type(inventory) == "table", "inventory view should load from the toc")
 assert.truthy(type(history) == "table", "history view should load from the toc")

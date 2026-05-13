@@ -4,150 +4,16 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 ns.ui = ns.ui or {}
 
-local mainFrame = ns.modules.mainFrame
-
-if type(mainFrame) ~= "table" or type(mainFrame.SetSize) ~= "function" then
-    mainFrame = _G.CreateFrame("Frame", "GBankManagerFrame", _G.UIParent, "BackdropTemplate")
-end
-
-ns.ui.theme = ns.ui.theme or {
-    colors = {
-        background = { 0.07, 0.09, 0.13, 0.96 },
-        panel = { 0.10, 0.14, 0.20, 0.98 },
-        panelAlt = { 0.13, 0.17, 0.24, 0.98 },
-        border = { 0.24, 0.31, 0.40, 0.90 },
-        accent = { 0.58, 0.67, 0.78, 1.00 },
-        accentStrong = { 0.85, 0.89, 0.94, 1.00 },
-        muted = { 0.56, 0.65, 0.76, 1.00 },
-    },
-    spacing = {
-        sidebarExpanded = 212,
-        sidebarCollapsed = 72,
-        frameWidth = 1040,
-        frameHeight = 640,
-        topBarHeight = 64,
-    },
-}
-
-local theme = ns.ui.theme
-local backdrop = {
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    edgeSize = 16,
-    insets = {
-        left = 3,
-        right = 3,
-        top = 3,
-        bottom = 3,
-    },
-}
-
-local function apply_panel_style(frame, color)
-    if not frame then
-        return
-    end
-
-    if type(frame.SetBackdrop) == "function" then
-        frame:SetBackdrop(backdrop)
-    end
-
-    if type(frame.SetBackdropColor) == "function" then
-        frame:SetBackdropColor(unpack(color))
-    end
-
-    if type(frame.SetBackdropBorderColor) == "function" then
-        frame:SetBackdropBorderColor(unpack(theme.colors.border))
-    end
-end
-
-local function make_label(parent, text, fontObject)
-    local label = parent:CreateFontString(nil, "OVERLAY", fontObject or "GameFontNormal")
-    if type(label.SetJustifyH) == "function" then
-        label:SetJustifyH("LEFT")
-    end
-    label:SetText(text or "")
-    return label
-end
-
-local function make_button(parent, width, height, text)
-    local button = _G.CreateFrame("Button", nil, parent, "BackdropTemplate")
-    button:SetSize(width, height)
-    apply_panel_style(button, theme.colors.panel)
-    button.labelText = button.labelText or make_label(button, text, "GameFontNormal")
-    if type(button.labelText.SetJustifyH) == "function" then
-        button.labelText:SetJustifyH("CENTER")
-    end
-    button.labelText:SetPoint("CENTER", button, "CENTER", 0, 0)
-    return button
-end
-
-local function set_button_icon(button, kind)
-    if not button then
-        return
-    end
-
-    button.iconKind = kind
-    if button.labelText then
-        button.labelText:SetText("")
-    end
-
-    button.iconTexture = button.iconTexture or button:CreateTexture()
-    if type(button.iconTexture.SetAllPoints) == "function" then
-        button.iconTexture:SetAllPoints()
-    end
-    if type(button.iconTexture.SetAtlas) == "function" then
-        button.iconTexture:SetAtlas(kind == "remove" and "common-icon-redx" or "common-icon-undo", true)
-    end
-
-    button.iconLabel = button.iconLabel or make_label(button, "", "GameFontHighlightSmall")
-    button.iconLabel:ClearAllPoints()
-    button.iconLabel:SetPoint("CENTER", button, "CENTER", 0, 0)
-    button.iconLabel:SetText(kind == "remove" and "X" or "U")
-end
-
-local function make_input(parent, width, height)
-    local input = _G.CreateFrame("EditBox", nil, parent, "BackdropTemplate")
-    input:SetSize(width, height)
-    apply_panel_style(input, theme.colors.background)
-    if type(input.SetAutoFocus) == "function" then
-        input:SetAutoFocus(false)
-    end
-    if type(input.SetFontObject) == "function" then
-        input:SetFontObject("GameFontHighlightSmall")
-    end
-    if type(input.SetTextColor) == "function" then
-        input:SetTextColor(unpack(theme.colors.accentStrong))
-    end
-    if type(input.EnableMouse) == "function" then
-        input:EnableMouse(true)
-    end
-    if type(input.SetTextInsets) == "function" then
-        input:SetTextInsets(6, 6, 0, 0)
-    end
-    input:SetText("")
-    return input
-end
-
-local function make_slider(parent, width, height, minValue, maxValue, initialValue)
-    local slider = _G.CreateFrame("Slider", nil, parent, "BackdropTemplate")
-    slider:SetSize(width, height)
-    slider.minValue = minValue or 0
-    slider.maxValue = maxValue or 1
-    slider.value = initialValue or slider.minValue
-    apply_panel_style(slider, theme.colors.background)
-
-    local baseSetValue = slider.SetValue
-    function slider:SetValue(value)
-        value = math.max(self.minValue, math.min(self.maxValue, value or self.minValue))
-        baseSetValue(self, value)
-        local handler = self.scripts and self.scripts.OnValueChanged
-        if type(handler) == "function" then
-            handler(self, value)
-        end
-    end
-
-    return slider
-end
+local mainFrameShell = ns.modules.mainFrameShell or {}
+local mainFrame = mainFrameShell.EnsureShell and mainFrameShell.EnsureShell(ns.modules.mainFrame) or ns.modules.mainFrame
+local theme = mainFrameShell.GetTheme and mainFrameShell.GetTheme() or (ns.ui.theme or {})
+local apply_panel_style = mainFrameShell.ApplyPanelStyle
+local make_label = mainFrameShell.MakeLabel
+local make_button = mainFrameShell.MakeButton
+local set_button_icon = mainFrameShell.SetButtonIcon
+local make_input = mainFrameShell.MakeInput
+local make_slider = mainFrameShell.MakeSlider
+local set_frame_shown = mainFrameShell.SetFrameShown
 
 local function parse_number(value)
     local parsed = tonumber(value)
@@ -220,18 +86,6 @@ local function make_export_output_input(parent, width, height)
     end
 
     return input
-end
-
-local function set_frame_shown(frame, shouldShow)
-    if not frame then
-        return
-    end
-
-    if shouldShow then
-        frame:Show()
-    else
-        frame:Hide()
-    end
 end
 
 local function uses_auctionator_controls(presetName)
@@ -417,86 +271,7 @@ local function procurement_audit_entries(entries)
     return filtered
 end
 
-mainFrame:SetSize(theme.spacing.frameWidth, theme.spacing.frameHeight)
-mainFrame:SetPoint("CENTER")
-mainFrame:SetClampedToScreen(true)
-mainFrame:SetMovable(true)
-mainFrame:EnableMouse(false)
-mainFrame:RegisterForDrag("LeftButton")
-mainFrame:SetResizable(true)
-mainFrame:SetResizeBounds(920, 560, 1280, 760)
-mainFrame:SetFrameStrata("DIALOG")
-mainFrame.currentAlpha = mainFrame.currentAlpha or 0.96
-mainFrame:SetAlpha(mainFrame.currentAlpha)
-apply_panel_style(mainFrame, theme.colors.background)
-mainFrame:SetScript("OnDragStart", function(self)
-    self:StartMoving()
-end)
-mainFrame:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-end)
-
-mainFrame.activeView = mainFrame.activeView or "DASHBOARD"
-mainFrame.collapsedSidebar = false
-mainFrame.navItems = {
-    { key = "DASHBOARD", label = "Dashboard" },
-    { key = "INVENTORY", label = "Inventory" },
-    { key = "HISTORY", label = "History" },
-    { key = "MINIMUMS", label = "Minimums" },
-    { key = "REQUESTS", label = "Requests" },
-    { key = "EXPORTS", label = "Exports" },
-    { key = "ABOUT", label = "About" },
-    { key = "OPTIONS", label = "Options" },
-}
-mainFrame.viewDescriptions = {
-    DASHBOARD = "Critical shortages, pending requests, and export readiness.",
-    INVENTORY = "Search the latest bank snapshot and inspect current counts.",
-    HISTORY = "Review procurement audit events with explicit timestamps and before/after values.",
-    MINIMUMS = "Manage Guild Bank Item Minimum Stock Levels",
-    REQUESTS = "Review officer-first request queues and member-visible demand.",
-    EXPORTS = "Prepare Auctionator and spreadsheet-ready purchase output.",
-    ABOUT = "Reference addon ownership, guild identity, runtime build info, and support notes.",
-    OPTIONS = "Adjust shell behavior like transparency without cluttering the main toolbar.",
-}
-
-mainFrame.sidebar = mainFrame.sidebar or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-mainFrame.sidebar:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", 0, 0)
-mainFrame.sidebar:SetPoint("BOTTOMLEFT", mainFrame, "BOTTOMLEFT", 0, 0)
-mainFrame.sidebar:SetWidth(theme.spacing.sidebarExpanded)
-apply_panel_style(mainFrame.sidebar, theme.colors.panel)
-
-mainFrame.topBar = mainFrame.topBar or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-mainFrame.topBar:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPRIGHT", 0, 0)
-mainFrame.topBar:SetPoint("TOPRIGHT", mainFrame, "TOPRIGHT", 0, 0)
-mainFrame.topBar:SetHeight(theme.spacing.topBarHeight)
-apply_panel_style(mainFrame.topBar, theme.colors.panelAlt)
-
-mainFrame.content = mainFrame.content or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
-mainFrame.content:SetPoint("TOPLEFT", mainFrame.topBar, "BOTTOMLEFT", 0, 0)
-mainFrame.content:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", 0, 0)
-apply_panel_style(mainFrame.content, theme.colors.background)
-
-mainFrame.titleText = mainFrame.titleText or make_label(mainFrame.topBar, "Guild Bank Manager", "GameFontHighlightLarge")
-mainFrame.titleText:SetPoint("TOPLEFT", mainFrame.topBar, "TOPLEFT", 36, -14)
-mainFrame.subtitleText = mainFrame.subtitleText or make_label(mainFrame.topBar, "Guild Bank Management", "GameFontHighlightSmall")
-mainFrame.subtitleText:SetPoint("TOPLEFT", mainFrame.titleText, "BOTTOMLEFT", 0, -6)
-mainFrame.statusText = mainFrame.statusText or make_label(mainFrame.topBar, "No scan yet", "GameFontNormal")
-mainFrame.statusText:SetPoint("RIGHT", mainFrame.topBar, "RIGHT", -152, 0)
-
-mainFrame.collapseButton = mainFrame.collapseButton or make_button(mainFrame.sidebar, 28, 28, "<")
-mainFrame.collapseButton:SetPoint("TOPRIGHT", mainFrame.sidebar, "TOPRIGHT", -10, -10)
-mainFrame.collapseButton:SetScript("OnClick", function()
-    mainFrame:ToggleSidebar()
-end)
-
-mainFrame.scanButton = mainFrame.scanButton or make_button(mainFrame.topBar, 120, 28, "Scan Bank")
-mainFrame.scanButton:SetPoint("TOP", mainFrame.topBar, "TOP", 0, -16)
-mainFrame.scanButton:SetScript("OnClick", function()
-    local scanner = ns.modules.scanner
-    if scanner and type(scanner.BeginScan) == "function" then
-        scanner.BeginScan()
-    end
-end)
+mainFrame.collapsedSidebar = mainFrame.collapsedSidebar and true or false
 
 local function set_alpha(nextAlpha)
     mainFrame.currentAlpha = math.max(0.55, math.min(1.0, nextAlpha))
