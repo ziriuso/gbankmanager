@@ -5,6 +5,7 @@ local mainFrame = ns.modules.mainFrame
 local mainFrameShell = ns.modules.mainFrameShell
 local mainTableController = ns.modules.mainTableController
 local mainRequestsController = ns.modules.mainRequestsController
+local mainExportsController = ns.modules.mainExportsController
 local dashboard = ns.modules.dashboardView
 local inventory = ns.modules.inventoryView
 local history = ns.modules.historyView
@@ -23,6 +24,8 @@ assert.truthy(type(mainTableController) == "table", "main table controller shoul
 assert.truthy(type(mainTableController.Attach) == "function", "main table controller should expose a table attachment workflow")
 assert.truthy(type(mainRequestsController) == "table", "main requests controller should load from the toc")
 assert.truthy(type(mainRequestsController.Attach) == "function", "main requests controller should expose a request attachment workflow")
+assert.truthy(type(mainExportsController) == "table", "main exports controller should load from the toc")
+assert.truthy(type(mainExportsController.Attach) == "function", "main exports controller should expose an export attachment workflow")
 assert.truthy(type(dashboard) == "table", "dashboard view should load from the toc")
 assert.truthy(type(inventory) == "table", "inventory view should load from the toc")
 assert.truthy(type(history) == "table", "history view should load from the toc")
