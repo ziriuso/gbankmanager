@@ -22,6 +22,7 @@ Sync/Codec.lua
 Sync/Coordinator.lua
 Sync/Transport.lua
 UI/MainFrameShell.lua
+UI/MainTableController.lua
 UI/MainFrame.lua
 UI/DashboardView.lua
 UI/InventoryView.lua
