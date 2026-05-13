@@ -37,9 +37,24 @@ assert.equal("SYNC_HELLO|55|GuildLead", _G.C_ChatInfo.sentMessages[1].payload, "
 
 local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local events = ns.modules.events
+local syncEvents = ns.modules.syncEvents
+local scannerEvents = ns.modules.guildBankScannerEvents
 
 assert.truthy(type(events) == "table", "events module should load from the toc")
 assert.truthy(type(events.GetScript) == "function", "events module should expose frame scripts")
+assert.truthy(type(syncEvents) == "table", "sync events module should load from the toc")
+assert.truthy(type(syncEvents.GetRegisteredEvents) == "function", "sync events module should expose its registered events")
+assert.truthy(type(syncEvents.HandleEvent) == "function", "sync events module should expose a sync event handler")
+assert.truthy(type(scannerEvents) == "table", "scanner events module should load from the toc")
+assert.truthy(type(scannerEvents.GetRegisteredEvents) == "function", "scanner events module should expose its registered events")
+assert.truthy(type(scannerEvents.HandleEvent) == "function", "scanner events module should expose a scanner event handler")
+
+local scannerRegisteredEvents = scannerEvents.GetRegisteredEvents()
+assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[1], "scanner event adapter should own the guild bank slot event")
+
+local syncRegisteredEvents = syncEvents.GetRegisteredEvents()
+assert.equal("PLAYER_LOGIN", syncRegisteredEvents[1], "sync event adapter should own player login")
+assert.equal("CHAT_MSG_ADDON", syncRegisteredEvents[2], "sync event adapter should own addon-message events")
 
 local hasPlayerLogin = false
 local hasChatMsgAddon = false
@@ -63,3 +78,16 @@ onEvent(events, "PLAYER_LOGIN")
 assert.equal("GBankManager", _G.C_ChatInfo.registeredPrefixes[1], "player login should register the addon message prefix")
 assert.equal(1, #_G.C_ChatInfo.sentMessages, "player login should send a sync hello")
 assert.equal("SYNC_HELLO|0|TestPlayer", _G.C_ChatInfo.sentMessages[1].payload, "sync hello should include the current player")
+
+local scanner = ns.modules.scanner
+local scannerCalls = 0
+local originalOnGuildBankSlotsChanged = scanner.OnGuildBankSlotsChanged
+scanner.OnGuildBankSlotsChanged = function(...)
+    scannerCalls = scannerCalls + 1
+    return originalOnGuildBankSlotsChanged(...)
+end
+scanner.scanInProgress = true
+onEvent(events, "GUILDBANKBAGSLOTS_CHANGED", 2)
+scanner.OnGuildBankSlotsChanged = originalOnGuildBankSlotsChanged
+
+assert.equal(1, scannerCalls, "central event dispatcher should forward guild bank slot events to the scanner event adapter")

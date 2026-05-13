@@ -18,9 +18,11 @@ Domain/Exports.lua
 Domain/Requests.lua
 Bootstrap.lua
 Features/GuildBankScanner.lua
+Features/GuildBankScannerEvents.lua
 Sync/Codec.lua
 Sync/Coordinator.lua
 Sync/Transport.lua
+Sync/SyncEvents.lua
 UI/MainFrameShell.lua
 UI/MainTableController.lua
 UI/MainRequestsController.lua

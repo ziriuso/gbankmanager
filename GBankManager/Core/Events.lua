@@ -2,39 +2,53 @@ local _, ns = ...
 
 ns = ns or {}
 ns.modules = ns.modules or {}
-ns.modules.events = ns.modules.events or {}
 ns.state = ns.state or {}
 
-local events = ns.modules.events
-local transport = ns.modules.syncTransport or {}
-local codec = ns.modules.syncCodec or {}
+local events = ns.modules.events or {}
+local registeredEventNames = {}
+local eventHandlers = {
+    ns.modules.guildBankScannerEvents,
+    ns.modules.syncEvents,
+}
+
+local function register_handler_events(frame, handler)
+    if type(frame) ~= "table" or type(frame.RegisterEvent) ~= "function" then
+        return
+    end
+
+    if type(handler) ~= "table" or type(handler.GetRegisteredEvents) ~= "function" then
+        return
+    end
+
+    for _, eventName in ipairs(handler.GetRegisteredEvents() or {}) do
+        if not registeredEventNames[eventName] then
+            frame:RegisterEvent(eventName)
+            registeredEventNames[eventName] = true
+        end
+    end
+end
+
+local function dispatch_event(_, event, ...)
+    for _, handler in ipairs(eventHandlers) do
+        if type(handler) == "table" and type(handler.HandleEvent) == "function" then
+            local handled = handler.HandleEvent(event, ...)
+            if handled then
+                return true
+            end
+        end
+    end
+
+    return false
+end
 
 if type(_G.CreateFrame) == "function" and type(events.RegisterEvent) ~= "function" then
     events = _G.CreateFrame("Frame")
-    events:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
-    events:RegisterEvent("PLAYER_LOGIN")
-    events:RegisterEvent("CHAT_MSG_ADDON")
-    events:SetScript("OnEvent", function(_, event, ...)
-        local scanner = ns.modules.scanner
 
-        if event == "GUILDBANKBAGSLOTS_CHANGED" and type(scanner) == "table" and scanner.scanInProgress then
-            scanner.OnGuildBankSlotsChanged(...)
-        elseif event == "PLAYER_LOGIN" then
-            _G.C_ChatInfo.RegisterAddonMessagePrefix("GBankManager")
-            transport.Send("GUILD", "GUILD", {
-                type = "SYNC_HELLO",
-                updatedAt = _G.time(),
-                payload = _G.UnitName("player"),
-            })
-        elseif event == "CHAT_MSG_ADDON" then
-            local prefix, payload, distribution, sender = ...
-            if prefix == "GBankManager" then
-                ns.state.lastSyncMessage = codec.DecodeTable(payload)
-                ns.state.lastSyncMessage.distribution = distribution
-                ns.state.lastSyncMessage.sender = sender
-            end
-        end
-    end)
+    for _, handler in ipairs(eventHandlers) do
+        register_handler_events(events, handler)
+    end
+
+    events:SetScript("OnEvent", dispatch_event)
 end
 
 ns.modules.events = events
