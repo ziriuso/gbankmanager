@@ -647,6 +647,8 @@ assert.truthy(mainFrame.minimumShowAllRows == false, "minimums view should defau
 assert.truthy(type(mainFrame.minimumSearchLabel) == "table", "minimums should expose a visible label for the search field")
 assert.equal("Search", mainFrame.minimumSearchLabel:GetText(), "minimums should label the search field clearly")
 assert.truthy(mainFrame.minimumShowAllToggleButton:GetWidth() >= 104, "minimums should widen the show-all toggle so Enabled Only fits without overflow")
+assert.same(mainFrame.minimumsPanel, (mainFrame.minimumSearchInput.points[1] or {})[2], "minimums should anchor the search input to the panel instead of chaining it into the show-all button")
+assert.same(mainFrame.minimumsPanel, (mainFrame.minimumSearchLabel.points[1] or {})[2], "minimums should anchor the search label to the panel instead of a neighboring control")
 assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[3]:GetText(), "minimums view should sort enabled bank-backed rows to the top")
 assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "minimums view should hide bank-only rows while show-all is off")
 assert.equal("10", mainFrame.tableRows[1].columns[5]:GetText(), "minimums view should show current quantity from the latest snapshot")
@@ -679,6 +681,7 @@ mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
 assert.truthy(mainFrame.tableRows[1].minimumValueInput:IsShown(), "clicking a configured minimum row should edit the minimum in place")
 assert.truthy(mainFrame.tableRows[1].restockToggleButton:IsShown(), "clicking a configured minimum row should edit restock in place")
 assert.truthy(mainFrame.tableRows[1].bankTabValueInput:IsShown() ~= true, "saved minimum rows should keep bank tab read-only in the table")
+assert.truthy(mainFrame.tableRows[1].undoButton:IsShown() ~= true, "clicking a minimum row without edits should not mark it as undoable")
 assert.equal("", mainFrame.tableRows[1].columns[6]:GetText(), "configured minimum rows should hide underlying restock text while inline editors are active")
 assert.equal("", mainFrame.tableRows[1].columns[7]:GetText(), "configured minimum rows should hide underlying quantity text while inline editors are active")
 mainFrame.tableRows[1].minimumValueInput:SetText("10")
@@ -1284,6 +1287,9 @@ local mixedMinimumResolution = minimumsView.ResolveItemQuery({
             },
         },
     },
+    searchCatalog = {
+        { itemID = 9009, name = "Algari Mana Oil" },
+    },
 }, "Algari Mana Oil")
 _G.GetItemInfo = originalGetItemInfo
 assert.equal("multiple", mixedMinimumResolution.status, "minimum add search should keep multi-match behavior when bank variants exist")
@@ -1295,6 +1301,15 @@ for _, item in ipairs(mixedMinimumResolution.matches or {}) do
     end
 end
 assert.truthy(sawClientResolvedMatch, "minimum add search should keep client-cached item matches available even when bank matches exist")
+
+local catalogMinimumResolution = minimumsView.ResolveItemQuery({
+    items = {},
+    searchCatalog = {
+        { itemID = 9010, name = "Flask of Tempered Swiftness" },
+    },
+}, "flask")
+assert.equal("resolved", catalogMinimumResolution.status, "minimum add search should support non-bank partial-name matches from the local search catalog")
+assert.equal(9010, catalogMinimumResolution.item.itemID, "minimum add search should return the catalog-backed item when the guild bank has no match")
 
 _G.GBankManagerDB = {
     requests = {},
@@ -1364,7 +1379,7 @@ assert.equal("Manage Guild Bank Item Minimum Stock Levels", mainFrame.viewSubtit
 assert.truthy(not mainFrame.tableFilterFrame:IsShown(), "minimums should hide the shared header filter row to avoid header crowding")
 assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should add crafting tier as the second column")
 assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should replace the old source column with bank tab")
-assert.equal("Restock\nSource", mainFrame.tableHeaderLabels[8]:GetText(), "minimums should rename restock-from to a wrapped restock-source header")
+assert.equal("", mainFrame.tableHeaderLabels[8]:GetText(), "minimums should hide the restock-source column for now")
 assert.truthy(not mainFrame.tableFilterInputs[1]:IsShown(), "minimums should remove the shared header text filters")
 assert.truthy(not mainFrame.tableFilterInputs[3]:IsShown(), "minimums should remove the shared header text filters for item columns too")
 assert.truthy(not mainFrame.tableFilterInputs[8]:IsShown(), "minimums should remove the shared header text filters for restock source")
@@ -1388,7 +1403,6 @@ for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
         break
     end
 end
-assert.equal("Overflow", redesignedMinimumCachedRow and redesignedMinimumCachedRow.restockFrom or nil, "minimums table should render restock-from values from row shaping")
 
 local redesignedMinimumRowIndex = nil
 for index, rowFrame in ipairs(mainFrame.tableRows) do
@@ -1405,16 +1419,21 @@ assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueIn
 assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].removeButton) == "table", "minimum rows should expose an explicit remove control at the far end of existing rows")
 assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].undoButton) == "table", "minimum rows should expose a per-row undo control beside delete")
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].removeButton:IsShown(), "minimum rows should keep the explicit remove control visible for existing enabled rows")
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].undoButton:IsShown() ~= true, "minimum rows should not expose undo until a real edit happens")
 assert.equal("", mainFrame.tableRows[redesignedMinimumRowIndex].columns[7]:GetText(), "minimum rows should hide the underlying minimum text while editing")
 assert.equal("", mainFrame.tableRows[redesignedMinimumRowIndex].columns[6]:GetText(), "minimum rows should hide the underlying restock text while editing")
 assert.equal("", mainFrame.tableRows[redesignedMinimumRowIndex].removeButton.labelText:GetText(), "minimum rows should replace the remove placeholder glyph with an icon-only button")
 assert.equal("", mainFrame.tableRows[redesignedMinimumRowIndex].undoButton.labelText:GetText(), "minimum rows should replace the undo placeholder glyph with an icon-only button")
 assert.equal("remove", mainFrame.tableRows[redesignedMinimumRowIndex].removeButton.iconKind, "minimum rows should expose a remove icon")
 assert.equal("undo", mainFrame.tableRows[redesignedMinimumRowIndex].undoButton.iconKind, "minimum rows should expose an undo icon")
+assert.equal("LEFT", (mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput.points[1] or {})[1], "minimum quantity editor should align to the original text baseline instead of dropping lower in the cell")
+assert.equal("LEFT", (mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton.points[1] or {})[1], "minimum restock editor should align to the original text baseline instead of dropping lower in the cell")
 mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:SetText("8")
 mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:GetScript("OnEditFocusLost")(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput)
 assert.equal("changed", mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftState, "minimum rows should mark edited drafts with a changed state")
 assert.equal("yellow", mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftTint, "minimum rows should tint edited drafts yellow before save")
+assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftIndicator) == "table", "minimum rows should expose a dedicated draft indicator for stronger live-client highlighting")
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftIndicator:IsShown(), "minimum rows should keep the draft indicator visible once a row is dirty")
 assert.equal(0.34, (mainFrame.tableRows[redesignedMinimumRowIndex].backdropColor or {})[1], "minimum rows should show a visible changed-row highlight tint in the live row frame")
 assert.equal(0.31, (mainFrame.tableRows[redesignedMinimumRowIndex].backdropColor or {})[2], "minimum rows should show a visible changed-row highlight tint in the live row frame")
 assert.equal(0.12, (mainFrame.tableRows[redesignedMinimumRowIndex].backdropColor or {})[3], "minimum rows should show a visible changed-row highlight tint in the live row frame")
@@ -1516,6 +1535,8 @@ assert.truthy(type(mainFrame.minimumAddResultsLabel) == "table", "minimum add mo
 assert.equal("Matches", mainFrame.minimumAddResultsLabel:GetText(), "minimum add modal should expose a results label instead of unlabeled match buttons")
 assert.truthy(type(mainFrame.minimumAddResultsPanel) == "table", "minimum add modal should render a dedicated results list panel")
 assert.truthy(not mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep the results list hidden until there are matches")
+assert.equal((mainFrame.minimumAddItemIDInput.points[1] or {})[5], (mainFrame.minimumAddItemNameInput.points[1] or {})[5], "minimum add modal should keep the Item ID and Item Name inputs aligned on the same row")
+assert.equal((mainFrame.minimumAddItemNameInput.points[1] or {})[5], (mainFrame.minimumAddQuantityInput.points[1] or {})[5], "minimum add modal should keep the Item Name and Minimum inputs aligned on the same row")
 local originalGetItemInfo = _G.GetItemInfo
 _G.GetItemInfo = function(query)
     if tonumber(query) == 9009 or query == "Deepstone Serum" then
@@ -1574,6 +1595,8 @@ end
 mainFrame.tableRows[stagedMinimumRowIndex]:GetScript("OnClick")(mainFrame.tableRows[stagedMinimumRowIndex])
 assert.truthy(type(mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownButton) == "table", "modal-staged minimum rows should expose a bank-tab dropdown")
 assert.equal("", mainFrame.tableRows[stagedMinimumRowIndex].columns[4]:GetText(), "modal-staged minimum rows should hide underlying bank-tab text while the dropdown is active")
+assert.truthy(mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownButton:GetWidth() >= 96, "modal-staged minimum rows should keep the bank-tab dropdown wide enough to remain visible")
+assert.equal("Select Bank Tab", mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownButton.labelText:GetText(), "modal-staged minimum rows should use a clearer bank-tab dropdown label before selection")
 mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownButton:GetScript("OnClick")(mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownButton)
 for _, option in ipairs(mainFrame.tableRows[stagedMinimumRowIndex].bankTabDropdownOptions or {}) do
     local label = option.value or (option.labelText and option.labelText:GetText()) or option:GetText()

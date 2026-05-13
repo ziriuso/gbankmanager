@@ -46,3 +46,6 @@
 44. Save an edited existing minimum row and confirm quantity and restock changes persist without changing the saved row's original `Bank Tab` scope.
 45. Save a newly staged minimum row and confirm the chosen `Bank Tab` dropdown value persists as a tab-scoped minimum.
 46. Use the Minimums search box with and without matches and confirm the empty-state message remains clear when filters hide all rows.
+47. Click a saved minimum row without editing it and confirm the row does not immediately show an undo state until a real change is made.
+48. While editing an existing row, confirm the inline `Restock` and `Minimum` controls stay vertically aligned with the original row text instead of dropping lower in the cell.
+49. Search for a non-bank item using a partial name after it has been seen through a prior exact resolution or saved catalog entry and confirm the add modal can still surface it outside the current guild bank snapshot.

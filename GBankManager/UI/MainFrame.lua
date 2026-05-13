@@ -733,7 +733,7 @@ mainFrame.requestCreateButton:SetPoint("LEFT", mainFrame.requestCreateNoteInput,
 mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.minimumsPanel:SetHeight(72)
+mainFrame.minimumsPanel:SetHeight(80)
 apply_panel_style(mainFrame.minimumsPanel, theme.colors.panel)
 mainFrame.minimumsPanel:Hide()
 
@@ -753,10 +753,10 @@ mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or m
 mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, 12)
 
 mainFrame.minimumSearchLabel = mainFrame.minimumSearchLabel or make_label(mainFrame.minimumsPanel, "Search", "GameFontHighlightSmall")
-mainFrame.minimumSearchLabel:SetPoint("TOPRIGHT", mainFrame.minimumsPanel, "TOPRIGHT", -16, -14)
+mainFrame.minimumSearchLabel:SetPoint("TOPLEFT", mainFrame.minimumsPanel, "TOPLEFT", 16, -14)
 
 mainFrame.minimumSearchInput = mainFrame.minimumSearchInput or make_input(mainFrame.minimumsPanel, 120, 22)
-mainFrame.minimumSearchInput:SetPoint("TOPRIGHT", mainFrame.minimumsPanel, "TOPRIGHT", -16, -32)
+mainFrame.minimumSearchInput:SetPoint("TOPLEFT", mainFrame.minimumsPanel, "TOPLEFT", 16, -32)
 
 mainFrame.minimumManualOnlyToggleButton = mainFrame.minimumManualOnlyToggleButton or make_button(mainFrame.minimumsPanel, 86, 28, "Manual Only")
 mainFrame.minimumManualOnlyToggleButton:SetPoint("RIGHT", mainFrame.minimumSearchInput, "LEFT", -8, 0)
@@ -807,10 +807,10 @@ mainFrame.minimumAddItemIDInput = mainFrame.minimumAddItemIDInput or make_input(
 mainFrame.minimumAddItemIDInput:SetPoint("TOPLEFT", mainFrame.minimumAddItemIDLabel, "BOTTOMLEFT", 0, -4)
 
 mainFrame.minimumAddItemNameInput = mainFrame.minimumAddItemNameInput or make_input(mainFrame.minimumAddModal, 196, 22)
-mainFrame.minimumAddItemNameInput:SetPoint("LEFT", mainFrame.minimumAddItemIDInput, "RIGHT", 8, 0)
+mainFrame.minimumAddItemNameInput:SetPoint("TOPLEFT", mainFrame.minimumAddItemNameLabel, "BOTTOMLEFT", 0, -4)
 
 mainFrame.minimumAddQuantityInput = mainFrame.minimumAddQuantityInput or make_input(mainFrame.minimumAddModal, 64, 22)
-mainFrame.minimumAddQuantityInput:SetPoint("LEFT", mainFrame.minimumAddItemNameInput, "RIGHT", 8, 0)
+mainFrame.minimumAddQuantityInput:SetPoint("TOPLEFT", mainFrame.minimumAddQuantityLabel, "BOTTOMLEFT", 0, -4)
 
 mainFrame.minimumAddButton = mainFrame.minimumAddButton or make_button(mainFrame.minimumAddModal, 64, 28, "Add")
 mainFrame.minimumAddButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumAddModal, "BOTTOMRIGHT", -16, 16)
@@ -1727,7 +1727,7 @@ function mainFrame:BuildMinimumRuleFromRow(row)
     if row.configured ~= true then
         quantity = self:GetMinimumSettings(current_db()).defaultQuantity or 100
         scope = "TAB"
-        tabName = row.bankTab
+        tabName = nil
     end
 
     return {
@@ -1839,14 +1839,22 @@ function mainFrame:ApplyMinimumDraftStyle(rowFrame, rowIndex, draftState)
 
     rowFrame.minimumDraftState = draftState
     rowFrame.minimumDraftTint = tintByState[draftState]
+    rowFrame.minimumDraftIndicator = rowFrame.minimumDraftIndicator or _G.CreateFrame("Frame", nil, rowFrame, "BackdropTemplate")
+    rowFrame.minimumDraftIndicator:ClearAllPoints()
+    rowFrame.minimumDraftIndicator:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 1, -1)
+    rowFrame.minimumDraftIndicator:SetPoint("BOTTOMLEFT", rowFrame, "BOTTOMLEFT", 1, 1)
+    rowFrame.minimumDraftIndicator:SetWidth(8)
 
     if draftState and MINIMUM_DRAFT_ROW_COLORS[draftState] then
         apply_panel_style(rowFrame, MINIMUM_DRAFT_ROW_COLORS[draftState])
+        apply_panel_style(rowFrame.minimumDraftIndicator, MINIMUM_DRAFT_ROW_COLORS[draftState])
+        rowFrame.minimumDraftIndicator:Show()
         rowFrame.isSelected = self:IsSelectedTableRow(rowFrame.rowData)
         return
     end
 
     rowFrame.minimumDraftTint = nil
+    rowFrame.minimumDraftIndicator:Hide()
     apply_table_row_style(rowFrame, rowIndex, self:IsSelectedTableRow(rowFrame.rowData))
 end
 
@@ -1923,20 +1931,94 @@ function mainFrame:GetKnownMinimumBankTabs(row)
     return tabs
 end
 
+function mainFrame:RememberMinimumSearchItem(item)
+    local db = current_db()
+    db.ui = db.ui or {}
+    db.ui.minimumItemCatalog = db.ui.minimumItemCatalog or {}
+
+    local itemID = tonumber((item or {}).itemID)
+    local itemName = tostring((item or {}).name or (item or {}).itemName or "")
+    if not itemID or itemName == "" then
+        return nil
+    end
+
+    for _, existing in ipairs(db.ui.minimumItemCatalog) do
+        if tonumber(existing.itemID) == itemID then
+            existing.name = itemName
+            existing.craftedQuality = (item or {}).craftedQuality or existing.craftedQuality
+            existing.craftedQualityIcon = (item or {}).craftedQualityIcon or existing.craftedQualityIcon
+            return existing
+        end
+    end
+
+    local entry = {
+        itemID = itemID,
+        name = itemName,
+        craftedQuality = (item or {}).craftedQuality,
+        craftedQualityIcon = (item or {}).craftedQualityIcon,
+    }
+    table.insert(db.ui.minimumItemCatalog, entry)
+    return entry
+end
+
+function mainFrame:GetMinimumSearchSnapshot()
+    local snapshot = self:GetCurrentSnapshot()
+    local db = current_db()
+    local searchCatalog = {}
+
+    local function append_catalog_item(item)
+        if type(item) ~= "table" then
+            return
+        end
+
+        local itemID = tonumber(item.itemID)
+        local itemName = tostring(item.name or item.itemName or "")
+        if not itemID or itemName == "" then
+            return
+        end
+
+        searchCatalog[#searchCatalog + 1] = {
+            itemID = itemID,
+            name = itemName,
+            craftedQuality = item.craftedQuality,
+            craftedQualityIcon = item.craftedQualityIcon,
+        }
+    end
+
+    for _, item in ipairs(((db.ui or {}).minimumItemCatalog) or {}) do
+        append_catalog_item(item)
+    end
+
+    for _, item in ipairs(db.minimums or {}) do
+        append_catalog_item(item)
+    end
+
+    for _, item in ipairs(db.requests or {}) do
+        append_catalog_item(item)
+    end
+
+    for _, item in ipairs(db.oneTimeTargets or {}) do
+        append_catalog_item(item)
+    end
+
+    snapshot.searchCatalog = searchCatalog
+    return snapshot
+end
+
 function mainFrame:ConfigureMinimumBankTabDropdown(rowFrame, row, rowIndex, state)
     if not rowFrame or not row then
         return
     end
 
-    rowFrame.bankTabDropdownButton = rowFrame.bankTabDropdownButton or make_button(rowFrame, 74, 20, "")
+    rowFrame.bankTabDropdownButton = rowFrame.bankTabDropdownButton or make_button(rowFrame, 104, 20, "")
     rowFrame.bankTabDropdownPanel = rowFrame.bankTabDropdownPanel or _G.CreateFrame("Frame", nil, rowFrame, "BackdropTemplate")
     apply_panel_style(rowFrame.bankTabDropdownPanel, theme.colors.panelAlt)
     rowFrame.bankTabDropdownOptions = rowFrame.bankTabDropdownOptions or {}
 
     rowFrame.bankTabDropdownButton:ClearAllPoints()
-    rowFrame.bankTabDropdownButton:SetPoint("TOPLEFT", rowFrame.columns[4], "TOPLEFT", -4, -1)
-    rowFrame.bankTabDropdownButton:SetWidth((self.tableColumnLayout[4] and self.tableColumnLayout[4].width or 110) - 12)
-    rowFrame.bankTabDropdownButton.labelText:SetText((state and state.tabName) or row.bankTab or "Select Tab")
+    rowFrame.bankTabDropdownButton:SetPoint("LEFT", rowFrame.columns[4], "LEFT", -4, 0)
+    rowFrame.bankTabDropdownButton:SetWidth(math.max(96, (self.tableColumnLayout[4] and self.tableColumnLayout[4].width or 110) - 12))
+    rowFrame.bankTabDropdownButton.labelText:SetText(((state and state.tabName) and state.tabName ~= "") and state.tabName or "Select Bank Tab")
 
     rowFrame.bankTabDropdownPanel:ClearAllPoints()
     rowFrame.bankTabDropdownPanel:SetPoint("TOPLEFT", rowFrame.bankTabDropdownButton, "BOTTOMLEFT", 0, -2)
@@ -2001,15 +2083,15 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     set_button_icon(rowFrame.undoButton, "undo")
 
     rowFrame.bankTabValueInput:ClearAllPoints()
-    rowFrame.bankTabValueInput:SetPoint("TOPLEFT", rowFrame.columns[4], "TOPLEFT", -4, 0)
+    rowFrame.bankTabValueInput:SetPoint("LEFT", rowFrame.columns[4], "LEFT", -4, 0)
     rowFrame.bankTabValueInput:SetWidth((self.tableColumnLayout[4] and self.tableColumnLayout[4].width or 110) - 12)
 
     rowFrame.minimumValueInput:ClearAllPoints()
-    rowFrame.minimumValueInput:SetPoint("TOPLEFT", rowFrame.columns[7], "TOPLEFT", -4, 0)
+    rowFrame.minimumValueInput:SetPoint("LEFT", rowFrame.columns[7], "LEFT", -4, 0)
     rowFrame.minimumValueInput:SetWidth((self.tableColumnLayout[7] and self.tableColumnLayout[7].width or 70) - 12)
 
     rowFrame.restockToggleButton:ClearAllPoints()
-    rowFrame.restockToggleButton:SetPoint("TOPLEFT", rowFrame.columns[6], "TOPLEFT", -4, -1)
+    rowFrame.restockToggleButton:SetPoint("LEFT", rowFrame.columns[6], "LEFT", -4, 0)
     rowFrame.restockToggleButton:SetWidth((self.tableColumnLayout[6] and self.tableColumnLayout[6].width or 70) - 12)
 
     rowFrame.removeButton:ClearAllPoints()
@@ -2174,6 +2256,7 @@ function mainFrame:ApplyMinimumResolvedItem(item)
         return nil
     end
 
+    self:RememberMinimumSearchItem(item)
     self.isResolvingMinimumAdd = true
     self.minimumAddItemIDInput:SetText(tostring(item.itemID or ""))
     self.minimumAddItemNameInput:SetText(item.name or "")
@@ -2185,7 +2268,7 @@ end
 
 function mainFrame:ResolveMinimumAddByItemID()
     local minimumsView = ns.modules.minimumsView
-    local resolution = minimumsView.ResolveItemQuery(self:GetCurrentSnapshot(), self.minimumAddItemIDInput:GetText() or "")
+    local resolution = minimumsView.ResolveItemQuery(self:GetMinimumSearchSnapshot(), self.minimumAddItemIDInput:GetText() or "")
     self:HideMinimumVariantButtons()
 
     if resolution.status == "resolved" then
@@ -2198,7 +2281,7 @@ end
 
 function mainFrame:ResolveMinimumAddByName()
     local minimumsView = ns.modules.minimumsView
-    local resolution = minimumsView.ResolveItemQuery(self:GetCurrentSnapshot(), self.minimumAddItemNameInput:GetText() or "")
+    local resolution = minimumsView.ResolveItemQuery(self:GetMinimumSearchSnapshot(), self.minimumAddItemNameInput:GetText() or "")
     self.minimumAddResolvedMatches = resolution.matches or {}
     self:HideMinimumVariantButtons()
 
@@ -2279,6 +2362,11 @@ function mainFrame:CreateMinimumFromAddRow()
         originalScope = "TAB",
         originalTabName = nil,
     }
+
+    self:RememberMinimumSearchItem({
+        itemID = itemID,
+        name = itemName,
+    })
 
     self.minimumPendingRules = self.minimumPendingRules or {}
     self.minimumPendingDirty = self.minimumPendingDirty or {}

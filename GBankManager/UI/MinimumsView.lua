@@ -21,7 +21,7 @@ local DEFAULT_COLUMNS = {
     { key = "current", label = "Current", width = 60, justifyH = "LEFT", filterMode = "none", sortable = true },
     { key = "restock", label = "Restock", width = 68, justifyH = "LEFT", filterMode = "none", sortable = true },
     { key = "quantity", label = "Minimum", width = 66, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restockFrom", label = "Restock\nSource", width = 86, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "restockFrom", label = "", width = 0, justifyH = "LEFT", filterMode = "none", sortable = false },
 }
 
 local function copy_columns(columns)
@@ -565,6 +565,50 @@ local function append_unique_match(matches, item)
     return matches
 end
 
+local function collect_search_items(snapshot)
+    local items = {}
+    local seen = {}
+
+    local function add_item(item)
+        if type(item) ~= "table" then
+            return
+        end
+
+        local itemID = tonumber(item.itemID)
+        local itemName = tostring(item.name or item.itemName or "")
+        if not itemID or itemName == "" or seen[itemID] then
+            return
+        end
+
+        seen[itemID] = true
+        table.insert(items, {
+            itemID = itemID,
+            name = itemName,
+            craftedQuality = item.craftedQuality,
+            craftedQualityIcon = item.craftedQualityIcon,
+            totalCount = item.totalCount,
+            tabs = item.tabs,
+        })
+    end
+
+    for _, item in pairs(((snapshot or {}).items) or {}) do
+        add_item(item)
+    end
+
+    for _, item in ipairs(((snapshot or {}).searchCatalog) or {}) do
+        add_item(item)
+    end
+
+    table.sort(items, function(left, right)
+        if tostring(left.name or "") ~= tostring(right.name or "") then
+            return tostring(left.name or "") < tostring(right.name or "")
+        end
+        return crafted_quality_rank(left) < crafted_quality_rank(right)
+    end)
+
+    return items
+end
+
 function minimumsView.SortRows(rows, sortState)
     rows = rows or {}
     sortState = sortState or {}
@@ -600,22 +644,10 @@ function minimumsView.SortRows(rows, sortState)
 end
 
 function minimumsView.ResolveItemQuery(snapshot, query)
-    local items = {}
-    local itemMap = ((snapshot or {}).items) or {}
+    local items = collect_search_items(snapshot)
     local raw = tostring(query or "")
     local numericId = tonumber(raw)
     local lowered = string.lower(raw)
-
-    for _, item in pairs(itemMap) do
-        table.insert(items, item)
-    end
-
-    table.sort(items, function(left, right)
-        if tostring(left.name or "") ~= tostring(right.name or "") then
-            return tostring(left.name or "") < tostring(right.name or "")
-        end
-        return crafted_quality_rank(left) < crafted_quality_rank(right)
-    end)
 
     if numericId then
         for _, item in ipairs(items) do
