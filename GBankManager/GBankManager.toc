@@ -25,6 +25,7 @@ UI/MainFrameShell.lua
 UI/MainTableController.lua
 UI/MainRequestsController.lua
 UI/MainExportsController.lua
+UI/MainMinimumsController.lua
 UI/MainFrame.lua
 UI/DashboardView.lua
 UI/InventoryView.lua
