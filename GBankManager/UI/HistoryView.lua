@@ -37,6 +37,33 @@ local function normalize_timestamp(timestamp)
     return 0
 end
 
+local function abbreviate_timezone_name(displayText)
+    local prefix, timezoneName = string.match(tostring(displayText or ""), "^(.-)([A-Za-z][A-Za-z%s]+)$")
+    if not timezoneName or string.find(timezoneName, " ", 1, true) == nil then
+        return tostring(displayText or "")
+    end
+
+    local known = {
+        ["Eastern Daylight Time"] = "EDT",
+        ["Eastern Standard Time"] = "EST",
+        ["Central Daylight Time"] = "CDT",
+        ["Central Standard Time"] = "CST",
+        ["Mountain Daylight Time"] = "MDT",
+        ["Mountain Standard Time"] = "MST",
+        ["Pacific Daylight Time"] = "PDT",
+        ["Pacific Standard Time"] = "PST",
+        ["Greenwich Mean Time"] = "GMT",
+        ["Coordinated Universal Time"] = "UTC",
+    }
+
+    local abbreviation = known[timezoneName]
+    if not abbreviation then
+        abbreviation = timezoneName:gsub("(%a)[%a']*", "%1"):gsub("%s+", ""):upper()
+    end
+
+    return string.format("%s%s", prefix or "", abbreviation)
+end
+
 local function format_timestamp(timestamp)
     timestamp = normalize_timestamp(timestamp)
     if timestamp == 0 then
@@ -45,7 +72,7 @@ local function format_timestamp(timestamp)
 
     local formatter = _G.date or os.date
     if type(formatter) == "function" then
-        return formatter("%Y-%m-%d %H:%M %Z", timestamp)
+        return abbreviate_timezone_name(formatter("%Y-%m-%d %H:%M %Z", timestamp))
     end
 
     return tostring(timestamp)

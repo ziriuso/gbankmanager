@@ -14,14 +14,14 @@ local QUALITY_RANK_BY_ATLAS = {
 }
 
 local DEFAULT_COLUMNS = {
-    { key = "itemID", label = "Item ID", width = 72, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "tier", label = "Tier", width = 60, justifyH = "CENTER", filterMode = "none", sortable = true },
-    { key = "itemName", label = "Item", width = 196, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "bankTab", label = "Bank Tab", width = 116, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "current", label = "Current", width = 64, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restock", label = "Restock", width = 70, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "quantity", label = "Minimum", width = 70, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restockFrom", label = "Restock\nSource", width = 100, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "itemID", label = "Item ID", width = 68, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "tier", label = "Tier", width = 56, justifyH = "CENTER", filterMode = "none", sortable = true },
+    { key = "itemName", label = "Item", width = 188, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "bankTab", label = "Bank Tab", width = 110, justifyH = "LEFT", filterMode = "text", sortable = true },
+    { key = "current", label = "Current", width = 60, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "restock", label = "Restock", width = 68, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "quantity", label = "Minimum", width = 66, justifyH = "LEFT", filterMode = "none", sortable = true },
+    { key = "restockFrom", label = "Restock\nSource", width = 86, justifyH = "LEFT", filterMode = "none", sortable = true },
 }
 
 local function copy_columns(columns)
@@ -241,8 +241,12 @@ function minimumsView.Upsert(list, rule)
     for index, existing in ipairs(list) do
         local sameDraft = existing.draftKey ~= nil and rule.draftKey ~= nil and existing.draftKey == rule.draftKey
         local sameRule = existing.itemID == rule.itemID and existing.scope == rule.scope and existing.tabName == rule.tabName
+        local sameOriginal = rule.originalItemID ~= nil
+            and existing.itemID == rule.originalItemID
+            and existing.scope == (rule.originalScope or rule.scope)
+            and existing.tabName == rule.originalTabName
 
-        if sameDraft or sameRule then
+        if sameDraft or sameRule or sameOriginal then
             list[index] = normalize_rule(rule, existing)
             updated = true
             break
@@ -333,6 +337,41 @@ function minimumsView.SetEnabledWithAudit(db, rule, enabled, metadata)
     end
 
     return normalizedRule
+end
+
+function minimumsView.RemoveWithAudit(db, rule, metadata)
+    db = db or {}
+    db.minimums = db.minimums or {}
+    db.auditLog = db.auditLog or {}
+    metadata = metadata or {}
+
+    local removed = nil
+    local remaining = {}
+
+    for _, existing in ipairs(db.minimums) do
+        if removed == nil and rule_key(existing) == rule_key(rule) then
+            removed = existing
+        else
+            table.insert(remaining, existing)
+        end
+    end
+
+    db.minimums = remaining
+
+    if removed then
+        table.insert(db.auditLog, {
+            category = "MINIMUM",
+            type = "MINIMUM_REMOVED",
+            actor = metadata.actor or "Unknown",
+            itemID = removed.itemID,
+            itemName = removed.itemName,
+            oldValue = tostring(removed.quantity or 0),
+            newValue = "REMOVED",
+            timestamp = metadata.timestamp or _G.time(),
+        })
+    end
+
+    return db.minimums
 end
 
 function minimumsView.BuildTableRows(rows, snapshot, options)
@@ -479,6 +518,37 @@ local function compare_with_direction(left, right, direction)
     return left < right
 end
 
+local function item_id_from_link(link)
+    return tonumber(string.match(tostring(link or ""), "item:(%d+)"))
+end
+
+local function resolve_item_from_client_cache(query)
+    local getter = _G.GetItemInfo
+    if type(getter) ~= "function" then
+        return nil
+    end
+
+    local itemName, itemLink = getter(query)
+    if itemName == nil or itemName == "" then
+        local requestor = _G.C_Item and _G.C_Item.RequestLoadItemDataByID
+        local numericId = tonumber(query)
+        if numericId and type(requestor) == "function" then
+            requestor(numericId)
+        end
+        return nil
+    end
+
+    local itemID = tonumber(query) or item_id_from_link(itemLink)
+    if not itemID then
+        return nil
+    end
+
+    return {
+        itemID = itemID,
+        name = itemName,
+    }
+end
+
 function minimumsView.SortRows(rows, sortState)
     rows = rows or {}
     sortState = sortState or {}
@@ -542,6 +612,15 @@ function minimumsView.ResolveItemQuery(snapshot, query)
             end
         end
 
+        local cachedItem = resolve_item_from_client_cache(numericId)
+        if cachedItem then
+            return {
+                status = "resolved",
+                item = cachedItem,
+                matches = { cachedItem },
+            }
+        end
+
         return {
             status = "missing",
             matches = {},
@@ -567,6 +646,15 @@ function minimumsView.ResolveItemQuery(snapshot, query)
         return {
             status = "multiple",
             matches = matches,
+        }
+    end
+
+    local cachedItem = resolve_item_from_client_cache(raw)
+    if cachedItem then
+        return {
+            status = "resolved",
+            item = cachedItem,
+            matches = { cachedItem },
         }
     end
 

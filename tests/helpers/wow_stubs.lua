@@ -141,8 +141,12 @@ if _G.CreateFrame == nil then
             return region
         end
 
-        function frame:SetBackdropColor() end
-        function frame:SetBackdropBorderColor() end
+        function frame:SetBackdropColor(r, g, b, a)
+            self.backdropColor = { r, g, b, a }
+        end
+        function frame:SetBackdropBorderColor(r, g, b, a)
+            self.backdropBorderColor = { r, g, b, a }
+        end
         function frame:SetBackdrop(backdrop)
             self.backdrop = backdrop
         end
@@ -169,7 +173,9 @@ if _G.CreateFrame == nil then
             }
         end
         function frame:SetClampedToScreen() end
-        function frame:SetFrameStrata() end
+        function frame:SetFrameStrata(value)
+            self.frameStrata = value
+        end
         function frame:SetFrameLevel() end
         function frame:SetScrollChild(child)
             self.scrollChild = child

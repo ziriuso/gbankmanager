@@ -7,7 +7,6 @@ local inventory = ns.modules.inventoryView
 local history = ns.modules.historyView
 local exportsView = ns.modules.exportsView
 local minimumsView = ns.modules.minimumsView
-local targetsView = ns.modules.targetsView
 local requestsView = ns.modules.requestsView
 local requestDialog = ns.modules.requestDialog
 local slash = ns.modules.slash
@@ -19,13 +18,16 @@ assert.truthy(type(inventory) == "table", "inventory view should load from the t
 assert.truthy(type(history) == "table", "history view should load from the toc")
 assert.truthy(type(exportsView) == "table", "exports view should load from the toc")
 assert.truthy(type(minimumsView) == "table", "minimums view should load from the toc")
-assert.truthy(type(targetsView) == "table", "targets view should load from the toc")
 assert.truthy(type(requestsView) == "table", "requests view should load from the toc")
 assert.truthy(type(requestDialog) == "table", "request dialog should load from the toc")
 
 assert.equal("DASHBOARD", mainFrame.activeView, "main frame should default to dashboard")
 assert.truthy(mainFrame.collapsedSidebar == false, "sidebar should start expanded")
-assert.equal(8, #mainFrame.navItems, "history should be available in sidebar navigation once audit history work starts")
+local navKeys = {}
+for _, item in ipairs(mainFrame.navItems or {}) do
+    navKeys[item.key] = true
+end
+assert.truthy(navKeys.HISTORY and navKeys.ABOUT, "history and about should remain available after navigation updates")
 assert.truthy(not mainFrame:IsShown(), "main frame should start hidden")
 assert.truthy(mainFrame.mouseEnabled == false, "main frame should not capture mouse before opening")
 assert.equal(920, mainFrame.resizeBounds.minWidth, "main frame should use resize bounds for the minimum width")
@@ -35,10 +37,12 @@ assert.equal(760, mainFrame.resizeBounds.maxHeight, "main frame should use resiz
 assert.truthy(type(mainFrame.backdrop) == "table", "main frame should define a visible backdrop")
 assert.equal("GameFontHighlightLarge", mainFrame.titleText.fontObject, "title text should inherit a real WoW font")
 assert.equal("GameFontHighlightSmall", mainFrame.subtitleText.fontObject, "subtitle text should inherit a real WoW font")
-assert.equal("Inventory Management", mainFrame.subtitleText:GetText(), "top-bar subtitle should describe the addon as inventory management")
+assert.equal("Guild Bank Management", mainFrame.subtitleText:GetText(), "top-bar subtitle should describe the shell branding rather than a specific view")
 assert.equal("GameFontNormal", mainFrame.statusText.fontObject, "status text should inherit a real WoW font")
 assert.equal("GameFontNormal", mainFrame.viewTitle.fontObject, "view title should inherit a real WoW font")
 assert.equal("LEFT", mainFrame.viewTitle.justifyH, "screen text should be left aligned")
+assert.truthy(mainFrame.viewDescriptions.TARGETS == nil, "targets should no longer appear in shell view descriptions")
+assert.truthy(not navKeys.TARGETS, "targets should no longer appear in shell navigation")
 assert.truthy(#(mainFrame.titleText.points or {}) > 0, "main frame title should be anchored into the top bar")
 assert.truthy(type(mainFrame.closeButton) == "table", "main frame should expose a close button")
 assert.truthy(type(mainFrame.closeButton:GetScript("OnClick")) == "function", "close button should be wired")
@@ -59,26 +63,22 @@ assert.truthy(type(mainFrame.requestCreateButton) == "table", "main frame should
 assert.truthy(type(mainFrame.requestCreateItemNameInput) == "table", "main frame should expose a request item-name input")
 assert.truthy(type(mainFrame.requestCreateQuantityInput) == "table", "main frame should expose a request quantity input")
 assert.truthy(type(mainFrame.minimumsPanel) == "table", "main frame should expose a minimums editor panel")
-assert.truthy(type(mainFrame.minimumSaveButton) == "table", "main frame should expose a minimum save button")
+assert.truthy(type(mainFrame.minimumSaveButton) == "table", "main frame should expose a minimum save-all button")
 assert.truthy(type(mainFrame.minimumNewButton) == "table", "main frame should expose a minimum new button")
-assert.truthy(type(mainFrame.minimumSaveAllButton) == "table", "main frame should expose a minimum undo button control")
+assert.truthy(type(mainFrame.minimumSaveAllButton) == "table", "main frame should still expose the legacy minimum secondary control for compatibility while the view hides global undo")
 assert.truthy(type(mainFrame.minimumAddModal) == "table", "main frame should expose a modal for adding new minimum items")
 assert.truthy(type(mainFrame.minimumAddItemNameInput) == "table", "main frame should expose a modal minimum item-name input")
 assert.truthy(type(mainFrame.minimumAddQuantityInput) == "table", "main frame should expose a modal or staged minimum quantity input")
 assert.truthy(type(mainFrame.minimumShowAllToggleButton) == "table", "main frame should expose a minimum show-all toggle button")
 assert.truthy(type(mainFrame.minimumSearchInput) == "table", "main frame should expose a minimum search input")
-assert.truthy(type(mainFrame.minimumManualOnlyToggleButton) == "table", "main frame should expose a minimum manual-only toggle button")
-assert.truthy(type(mainFrame.targetsPanel) == "table", "main frame should expose a targets editor panel")
-assert.truthy(type(mainFrame.targetSaveButton) == "table", "main frame should expose a target save button")
-assert.truthy(type(mainFrame.targetStatusButton) == "table", "main frame should expose a target status button")
-assert.truthy(type(mainFrame.targetItemNameInput) == "table", "main frame should expose a target item-name input")
-assert.truthy(type(mainFrame.targetQuantityInput) == "table", "main frame should expose a target quantity input")
 assert.truthy(type(mainFrame.exportDelimiterInput) == "table", "exports panel should expose a custom delimiter input")
 assert.truthy(type(mainFrame.exportFieldsInput) == "table", "exports panel should expose a custom fields input")
 assert.truthy(type(mainFrame.exportHeaderToggleButton) == "table", "exports panel should expose a custom header toggle button")
 assert.truthy(type(mainFrame.exportApplyCustomButton) == "table", "exports panel should expose an apply-custom button")
-assert.truthy(type(mainFrame.transparencyDownButton) == "table", "options panel should expose a transparency decrease button")
-assert.truthy(type(mainFrame.transparencyUpButton) == "table", "options panel should expose a transparency increase button")
+assert.truthy(type(mainFrame.optionsAppearancePanel) == "table", "options view should split appearance settings into a dedicated box")
+assert.truthy(type(mainFrame.optionsRestockPanel) == "table", "options view should split minimum defaults into a dedicated box")
+assert.truthy(type(mainFrame.transparencySlider) == "table", "options panel should expose an opacity slider")
+assert.truthy(type(mainFrame.optionsRestockHint) == "table", "options panel should explain the saved minimum setting")
 assert.truthy(type(mainFrame:GetScript("OnDragStart")) == "function", "main frame should be draggable")
 assert.truthy(type(mainFrame:GetScript("OnDragStop")) == "function", "main frame should stop moving on drag stop")
 assert.equal(0.96, mainFrame.currentAlpha, "main frame should start near opaque")
@@ -101,13 +101,14 @@ mainFrame:SelectView("OPTIONS")
 assert.equal("OPTIONS", mainFrame.activeView, "options tab should be selectable")
 assert.truthy(mainFrame.optionsPanel:IsShown(), "options panel should show in the options view")
 assert.equal("", mainFrame.contentBodyText:GetText(), "options view should rely on its panel copy instead of overlapping body text")
+assert.equal("Options", mainFrame.viewTitle:GetText(), "options view title should render in title case")
 
 local alphaAfterDown
-mainFrame.transparencyDownButton:GetScript("OnClick")(mainFrame.transparencyDownButton)
+mainFrame.transparencySlider:SetValue(88)
 alphaAfterDown = mainFrame.currentAlpha
 assert.truthy(alphaAfterDown < 0.96, "transparency down should reduce alpha")
 
-mainFrame.transparencyUpButton:GetScript("OnClick")(mainFrame.transparencyUpButton)
+mainFrame.transparencySlider:SetValue(94)
 assert.truthy(mainFrame.currentAlpha > alphaAfterDown, "transparency up should increase alpha")
 
 mainFrame:GetScript("OnDragStart")(mainFrame)
@@ -200,6 +201,7 @@ assert.truthy(mainFrame.tableVisibleCount < 20, "inventory should size visible r
 assert.equal("Qty", mainFrame.tableHeaderLabels[5]:GetText(), "inventory should use the abbreviated quantity header before any sort is clicked")
 
 assert.truthy(mainFrame.viewDescriptions.HISTORY ~= nil, "history view should have a description once the tab is enabled")
+assert.truthy(mainFrame.viewDescriptions.ABOUT ~= nil, "about view should have a description once the tab is enabled")
 
 local summary = dashboard.BuildSummary({
     meta = {
@@ -344,6 +346,7 @@ local historyRows = history.BuildTableRows({
 }, {})
 
 assert.equal("Request", historyRows[1].category, "history should label request audit rows by category")
+assert.truthy(type(historyRows[1].date) == "string" and historyRows[1].date ~= "", "history should expose a visible timestamp value for audit rows")
 assert.equal("PENDING", historyRows[1].oldValue, "history should expose old values for audit changes")
 assert.equal("APPROVED", historyRows[1].newValue, "history should expose new values for audit changes")
 assert.equal("10", historyRows[2].oldValue, "history should keep previous minimum values")
@@ -390,6 +393,23 @@ assert.equal(1, #minimumDb.auditLog, "minimum audit upsert should append an audi
 assert.equal("MINIMUM_UPDATED", minimumDb.auditLog[1].type, "minimum audit upsert should record update events")
 assert.equal("8", minimumDb.auditLog[1].oldValue, "minimum audit upsert should store the previous minimum value")
 assert.equal("10", minimumDb.auditLog[1].newValue, "minimum audit upsert should store the new minimum value")
+
+local removedMinimums = minimumsView.RemoveWithAudit(minimumDb, {
+    itemID = 1001,
+    itemName = "Flask Alpha",
+    quantity = 10,
+    scope = "GLOBAL",
+    enabled = true,
+}, {
+    actor = "OfficerOne",
+    timestamp = 102,
+})
+
+assert.equal(0, #removedMinimums, "minimum remove should delete the persisted minimum rule")
+assert.equal(2, #minimumDb.auditLog, "minimum remove should append an audit row")
+assert.equal("MINIMUM_REMOVED", minimumDb.auditLog[2].type, "minimum remove should record removal events")
+assert.equal("10", minimumDb.auditLog[2].oldValue, "minimum remove should store the removed quantity as the old value")
+assert.equal("REMOVED", minimumDb.auditLog[2].newValue, "minimum remove should store a removed marker as the new value")
 
 local minimumRows = minimumsView.BuildTableRows({
     { itemID = 1001, itemName = "Flask Alpha", quantity = 12, scope = "GLOBAL", enabled = true },
@@ -441,61 +461,6 @@ local filteredMinimumRows = minimumsView.BuildTableRows({
 
 assert.equal(1, #filteredMinimumRows, "minimum rows should support combined search and manual-only filters")
 assert.equal("Potion Beta", filteredMinimumRows[1].itemName, "minimum row filters should keep matching manual entries")
-
-local target = targetsView.MarkSuggestedFulfilled({
-    itemID = 1001,
-    itemName = "Flask Alpha",
-    quantity = 12,
-    status = "OPEN",
-}, 12)
-
-assert.equal("SUGGESTED_FULFILLED", target.status, "targets view should suggest fulfillment when counts meet the target")
-
-local targetDb = {
-    oneTimeTargets = {
-        { itemID = 1001, itemName = "Flask Alpha", quantity = 12, scope = "GLOBAL", status = "OPEN" },
-    },
-    auditLog = {},
-}
-
-targetsView.UpsertWithAudit(targetDb, {
-    itemID = 1001,
-    itemName = "Flask Alpha",
-    quantity = 14,
-    scope = "GLOBAL",
-    status = "OPEN",
-}, {
-    actor = "OfficerOne",
-    timestamp = 201,
-})
-targetsView.SetStatusWithAudit(targetDb, {
-    itemID = 1001,
-    itemName = "Flask Alpha",
-    quantity = 14,
-    scope = "GLOBAL",
-    status = "OPEN",
-}, "CLOSED", {
-    actor = "OfficerOne",
-    timestamp = 202,
-})
-
-assert.equal(2, #targetDb.auditLog, "targets workflows should append audit rows for updates and status changes")
-assert.equal("TARGET_UPDATED", targetDb.auditLog[1].type, "targets upsert should audit updates")
-assert.equal("TARGET_CLOSED", targetDb.auditLog[2].type, "targets status changes should audit close events")
-
-local targetRows = targetsView.BuildTableRows({
-    { itemID = 1001, itemName = "Flask Alpha", quantity = 12, scope = "GLOBAL", status = "OPEN" },
-    { itemID = 2002, itemName = "Potion Beta", quantity = 4, scope = "GLOBAL", status = "CLOSED" },
-}, {
-    items = {
-        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 12, tabs = { Flasks = 12 } },
-        [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 1, tabs = { Potions = 1 } },
-    },
-})
-
-assert.equal("Flask Alpha", targetRows[1].itemName, "targets rows should sort actionable open targets to the top")
-assert.equal("Suggested", targetRows[1].status, "targets rows should surface suggested fulfillment when bank quantity meets the target")
-assert.equal("Closed", targetRows[2].status, "targets rows should preserve explicit closed status")
 
 local resolvedMatches = requestDialog.ResolveMatches({
     { itemID = 1001, name = "Flask Alpha" },
@@ -550,8 +515,10 @@ assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[2]:GetText(), "reques
 assert.equal("PENDING", mainFrame.tableRows[1].columns[4]:GetText(), "requests tab should render approval state")
 mainFrame:SelectView("HISTORY")
 assert.equal("HISTORY", mainFrame.activeView, "history should be selectable from the shell once re-enabled")
-assert.equal("Request", mainFrame.tableRows[1].columns[1]:GetText(), "history should render request audit rows in the shared table shell")
-assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[2]:GetText(), "history should render audit item names")
+assert.equal("When", mainFrame.tableHeaderLabels[1]:GetText(), "history should dedicate the first table column to the audit timestamp")
+assert.truthy(mainFrame.tableRows[1].columns[1]:GetText() ~= "", "history should render audit timestamps in the shared table shell")
+assert.equal("Request", mainFrame.tableRows[1].columns[2]:GetText(), "history should render request audit rows in the shared table shell")
+assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[3]:GetText(), "history should render audit item names")
 
 _G.GBankManagerDB = {
     requests = {
@@ -632,18 +599,18 @@ assert.equal("Potion Beta", mainFrame.tableRows[2].columns[2]:GetText(), "reques
 assert.equal("Rune Delta", mainFrame.tableRows[3].columns[2]:GetText(), "request create flow should refresh the officer queue immediately")
 
 mainFrame:SelectView("HISTORY")
-assert.equal("Rejected", mainFrame.tableRows[1].columns[3]:GetText(), "history should refresh to show rejected request audit events")
-assert.equal("Request", mainFrame.tableRows[1].columns[1]:GetText(), "history should keep request actions in workflow audit history")
+assert.equal("Rejected", mainFrame.tableRows[1].columns[4]:GetText(), "history should refresh to show rejected request audit events")
+assert.equal("Request", mainFrame.tableRows[1].columns[2]:GetText(), "history should keep request actions in workflow audit history")
 
-mainFrame.tableFilterInputs[1]:SetText("Request")
-mainFrame.tableFilterInputs[4]:SetText("OfficerOne")
-mainFrame.tableFilterInputs[2]:SetText("Rune")
-assert.equal("Rune Delta", mainFrame.tableRows[1].columns[2]:GetText(), "history filters should narrow rows by category, actor, and item")
-assert.equal("", mainFrame.tableRows[2].columns[2]:GetText(), "history filters should hide non-matching audit rows")
-mainFrame.tableFilterInputs[1]:SetText("")
-mainFrame.tableFilterInputs[4]:SetText("")
+mainFrame.tableFilterInputs[2]:SetText("Request")
+mainFrame.tableFilterInputs[5]:SetText("OfficerOne")
+mainFrame.tableFilterInputs[3]:SetText("Rune")
+assert.equal("Rune Delta", mainFrame.tableRows[1].columns[3]:GetText(), "history filters should narrow rows by category, actor, and item")
+assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "history filters should hide non-matching audit rows")
 mainFrame.tableFilterInputs[2]:SetText("")
-assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[2]:GetText(), "clearing history filters should restore the full audit list")
+mainFrame.tableFilterInputs[5]:SetText("")
+mainFrame.tableFilterInputs[3]:SetText("")
+assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[3]:GetText(), "clearing history filters should restore the full audit list")
 
 _G.GBankManagerDB = {
     requests = {},
@@ -689,15 +656,10 @@ assert.equal("Feast Gamma", mainFrame.tableRows[1].columns[3]:GetText(), "minimu
 assert.equal("", mainFrame.tableRows[2].columns[3]:GetText(), "minimum search should hide non-matching rows")
 
 mainFrame.minimumSearchInput:SetText("")
-mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
-assert.truthy(mainFrame.minimumManualOnlyRows == true, "minimum manual-only toggle should switch the tab into manual-only mode")
-assert.equal("", mainFrame.tableRows[1].columns[3]:GetText(), "manual-only filter should hide bank-backed rows when no manual rows exist yet")
-assert.equal("No manual items match the current minimum filters.", mainFrame.minimumEmptyStateText:GetText(), "manual-only filter should explain why the minimums table is empty")
-
-mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
+assert.truthy(not mainFrame.minimumManualOnlyToggleButton:IsShown(), "minimums should remove the manual-only toggle from the panel")
+assert.truthy(mainFrame.minimumManualOnlyRows == false, "minimums should keep all sources visible once the manual-only filter is removed")
 mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
 assert.truthy(mainFrame.minimumShowAllRows == false, "minimum show-all toggle should collapse back to the enabled-only view")
-assert.truthy(mainFrame.minimumManualOnlyRows == false, "minimum manual-only toggle should return to all-source mode")
 
 mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
 assert.truthy(mainFrame.tableRows[1].minimumValueInput:IsShown(), "clicking a configured minimum row should edit the minimum in place")
@@ -709,6 +671,15 @@ mainFrame.tableRows[1].restockToggleButton:GetScript("OnClick")(mainFrame.tableR
 assert.equal(8, ns.state.db.minimums[1].quantity, "minimum edits should stay pending until the minimum save button is clicked")
 assert.truthy(ns.state.db.minimums[1].enabled == true, "restock edits should stay pending until the minimum save button is clicked")
 assert.equal(nil, ns.state.db.minimums[1].tabName, "bank-tab edits should stay pending until the minimum save button is clicked")
+mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
+local flaskAlphaCount = 0
+for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
+    if row.itemName == "Flask Alpha" then
+        flaskAlphaCount = flaskAlphaCount + 1
+    end
+end
+assert.equal(1, flaskAlphaCount, "minimum draft edits should replace the visible saved row instead of duplicating it when filters refresh")
+mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
 
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
 assert.truthy(mainFrame.minimumAddModal:IsShown(), "minimum add button should open a clean modal instead of exposing a bottom add-row form")
@@ -718,12 +689,26 @@ assert.equal("Potion Beta", mainFrame.minimumAddItemNameInput:GetText(), "minimu
 mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
 assert.truthy(not mainFrame.minimumAddModal:IsShown(), "adding an item from the modal should close it")
 assert.equal(1, #ns.state.db.minimums, "adding an item from the modal should stage the new minimum instead of saving immediately")
-assert.equal("Potion Beta", mainFrame.cachedMinimumRows[2].itemName, "the newly staged minimum should appear in the table immediately")
+local stagedPotionRow = nil
+for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
+    if row.itemName == "Potion Beta" then
+        stagedPotionRow = row
+        break
+    end
+end
+assert.equal("Potion Beta", stagedPotionRow and stagedPotionRow.itemName or nil, "the newly staged minimum should appear in the table immediately")
 assert.equal(8, ns.state.db.minimums[1].quantity, "drafted row and inline edits should not persist before the minimum save button is clicked")
 
-mainFrame.tableRows[2]:GetScript("OnClick")(mainFrame.tableRows[2])
-mainFrame.tableRows[2].bankTabValueInput:SetText("Overflow")
-mainFrame.tableRows[2].minimumValueInput:SetText("16")
+local stagedPotionRowIndex = nil
+for index, rowFrame in ipairs(mainFrame.tableRows) do
+    if rowFrame.columns[3]:GetText() == "Potion Beta" then
+        stagedPotionRowIndex = index
+        break
+    end
+end
+mainFrame.tableRows[stagedPotionRowIndex]:GetScript("OnClick")(mainFrame.tableRows[stagedPotionRowIndex])
+mainFrame.tableRows[stagedPotionRowIndex].bankTabValueInput:SetText("Overflow")
+mainFrame.tableRows[stagedPotionRowIndex].minimumValueInput:SetText("16")
 mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
 assert.equal(2, #ns.state.db.minimums, "minimum save should persist both edited rows and newly staged rows together")
 assert.equal(10, ns.state.db.minimums[1].quantity, "minimum save should persist drafted minimum edits")
@@ -735,18 +720,17 @@ assert.equal(2, #ns.state.db.auditLog, "minimum save should audit each committed
 
 mainFrame:SelectView("MINIMUMS")
 mainFrame.minimumShowAllToggleButton:GetScript("OnClick")(mainFrame.minimumShowAllToggleButton)
-mainFrame.minimumManualOnlyToggleButton:GetScript("OnClick")(mainFrame.minimumManualOnlyToggleButton)
-assert.equal("", mainFrame.tableRows[1].columns[3]:GetText(), "manual-only filter should hide bank-backed rows when the staged save resolved to tracked snapshot items")
-assert.equal("No manual items match the current minimum filters.", mainFrame.minimumEmptyStateText:GetText(), "minimums view should explain when no manual-only rows remain after save")
+assert.truthy(not mainFrame.minimumManualOnlyToggleButton:IsShown(), "minimums should no longer show a panel-level all-sources toggle after save")
+assert.truthy(mainFrame.tableRows[1].columns[3]:GetText() ~= "", "minimums should keep showing tracked rows instead of filtering to manual-only sources")
 
 mainFrame:SelectView("HISTORY")
-assert.equal("Minimum", mainFrame.tableRows[1].columns[1]:GetText(), "history should refresh to show minimum workflow audit rows")
-assert.equal("Updated", mainFrame.tableRows[1].columns[3]:GetText(), "history should keep earlier minimum workflow actions visible after later mutations")
-mainFrame.tableFilterInputs[1]:SetText("Minimum")
-mainFrame.tableFilterInputs[4]:SetText("TestPlayer")
-mainFrame.tableFilterInputs[2]:SetText("Potion")
-assert.equal("Potion Beta", mainFrame.tableRows[1].columns[2]:GetText(), "history filters should also work for minimum audit rows")
-assert.equal("Created", mainFrame.tableRows[1].columns[3]:GetText(), "filtered history should show manual minimum creation actions from saved mutations")
+assert.equal("Minimum", mainFrame.tableRows[1].columns[2]:GetText(), "history should refresh to show minimum workflow audit rows")
+assert.equal("Updated", mainFrame.tableRows[1].columns[4]:GetText(), "history should keep earlier minimum workflow actions visible after later mutations")
+mainFrame.tableFilterInputs[2]:SetText("Minimum")
+mainFrame.tableFilterInputs[5]:SetText("TestPlayer")
+mainFrame.tableFilterInputs[3]:SetText("Potion")
+assert.equal("Potion Beta", mainFrame.tableRows[1].columns[3]:GetText(), "history filters should also work for minimum audit rows")
+assert.equal("Created", mainFrame.tableRows[1].columns[4]:GetText(), "filtered history should show manual minimum creation actions from saved mutations")
 
 _G.GBankManagerDB = {
     requests = {},
@@ -807,14 +791,12 @@ mainFrame:SelectView("MINIMUMS")
 mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
 mainFrame.tableRows[1].minimumValueInput:SetText("15")
 mainFrame.tableRows[1].bankTabValueInput:SetText("Overflow")
-mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
-mainFrame.minimumAddItemIDInput:SetText("1001")
-mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
-assert.equal(1, #ns.state.db.minimums, "undo scenario should keep staged changes out of saved minimums before save")
-mainFrame.minimumSaveAllButton:GetScript("OnClick")(mainFrame.minimumSaveAllButton)
-assert.equal(1, #ns.state.db.minimums, "minimum undo should discard staged new rows")
-assert.equal(8, ns.state.db.minimums[1].quantity, "minimum undo should restore the original quantity from when the view opened")
-assert.equal("Flasks", ns.state.db.minimums[1].tabName, "minimum undo should restore the original bank tab from when the view opened")
+assert.equal(1, #ns.state.db.minimums, "row undo scenario should keep staged changes out of saved minimums before save")
+assert.truthy(type(mainFrame.tableRows[1].undoButton) == "table", "minimum rows should expose a per-row undo control next to delete")
+mainFrame.tableRows[1].undoButton:GetScript("OnClick")(mainFrame.tableRows[1].undoButton)
+assert.equal(1, #ns.state.db.minimums, "minimum row undo should keep unsaved row edits out of persisted minimums")
+assert.equal(8, ns.state.db.minimums[1].quantity, "minimum row undo should restore the original quantity from when the view opened")
+assert.equal("Flasks", ns.state.db.minimums[1].tabName, "minimum row undo should restore the original bank tab from when the view opened")
 
 _G.GBankManagerDB = {
     currentSnapshotId = "export-scan",
@@ -865,63 +847,6 @@ assert.equal("Custom", ns.state.db.ui.exportSettings.selectedPreset, "exports sh
 assert.equal(";", ns.state.db.ui.exportSettings.customTemplate.delimiter, "exports should persist the selected custom delimiter")
 assert.equal("itemName,totalToBuy", table.concat(ns.state.db.ui.exportSettings.customTemplate.fields, ","), "exports should persist custom field selection and order")
 assert.truthy(ns.state.db.ui.exportSettings.customTemplate.includeHeader == false, "exports should persist header toggle state")
-
-_G.GBankManagerDB = {
-    currentSnapshotId = "target-scan",
-    snapshots = {
-        ["target-scan"] = {
-            items = {
-                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 9, tabs = { Flasks = 9 } },
-                [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 5, tabs = { Potions = 5 } },
-            },
-        },
-    },
-    minimums = {},
-    oneTimeTargets = {
-        { itemID = 1001, itemName = "Flask Alpha", quantity = 12, scope = "GLOBAL", status = "OPEN" },
-    },
-    requests = {},
-    auditLog = {},
-}
-ns.state.db = _G.GBankManagerDB
-
-mainFrame:SelectView("TARGETS")
-assert.truthy(mainFrame.targetsPanel:IsShown(), "targets controls should show in the targets view")
-assert.truthy(not mainFrame.minimumsPanel:IsShown(), "minimum controls should hide outside the minimums view")
-assert.equal("Flask Alpha", mainFrame.tableRows[1].columns[2]:GetText(), "targets view should render saved targets in the shared table")
-assert.equal("Open", mainFrame.tableRows[1].columns[4]:GetText(), "targets view should show open target status")
-mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
-assert.equal("1001", mainFrame.targetItemIDInput:GetText(), "clicking a target row should load its item id into the editor")
-assert.equal("Editing saved target.", mainFrame.targetEditorStateText:GetText(), "saved targets should show an editing-state cue")
-mainFrame.targetQuantityInput:SetText("14")
-mainFrame.targetSaveButton:GetScript("OnClick")(mainFrame.targetSaveButton)
-assert.equal(14, ns.state.db.oneTimeTargets[1].quantity, "target save button should persist edited quantities into the saved db")
-assert.equal("TARGET_UPDATED", ns.state.db.auditLog[1].type, "target save button should append update audit rows")
-mainFrame.targetStatusButton:GetScript("OnClick")(mainFrame.targetStatusButton)
-assert.equal("CLOSED", ns.state.db.oneTimeTargets[1].status, "target status button should persist closed state")
-assert.equal("TARGET_CLOSED", ns.state.db.auditLog[2].type, "target status button should append close audit rows")
-mainFrame.targetNewButton:GetScript("OnClick")(mainFrame.targetNewButton)
-assert.equal("Status: Open", mainFrame.targetStatusButton.labelText:GetText(), "new target editor should default to an active procurement state")
-mainFrame.targetItemIDInput:SetText("2002")
-mainFrame.targetItemNameInput:SetText("Potion Beta")
-mainFrame.targetQuantityInput:SetText("4")
-mainFrame.targetScopeInput:SetText("GLOBAL")
-mainFrame.targetSaveButton:GetScript("OnClick")(mainFrame.targetSaveButton)
-assert.equal(2, #ns.state.db.oneTimeTargets, "target save button should create new one-time targets from editor input")
-assert.equal("OPEN", ns.state.db.oneTimeTargets[2].status, "new targets should start in an active export state without an extra reopen step")
-
-mainFrame:SelectView("TARGETS")
-assert.equal("Potion Beta", mainFrame.tableRows[1].columns[2]:GetText(), "targets view should refresh and sort suggested targets ahead of closed ones")
-assert.equal("Suggested", mainFrame.tableRows[1].columns[4]:GetText(), "targets view should surface suggested fulfillment when current stock meets an open target")
-assert.equal("Closed", mainFrame.tableRows[2].columns[4]:GetText(), "targets view should keep closed targets visible after refresh")
-mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
-assert.equal("Inventory currently meets this target. Close it when the procurement work is done.", mainFrame.targetEditorStateText:GetText(), "suggested targets should explain why they are still open in the editor")
-
-mainFrame:SelectView("HISTORY")
-mainFrame.tableFilterInputs[1]:SetText("Target")
-mainFrame.tableFilterInputs[2]:SetText("Potion")
-assert.equal("Potion Beta", mainFrame.tableRows[1].columns[2]:GetText(), "history should include one-time target audit rows")
-assert.equal("Created", mainFrame.tableRows[1].columns[3]:GetText(), "target history should surface target creation actions")
 
 _G.GBankManagerDB = {
     ui = {
@@ -1210,6 +1135,14 @@ _G.GBankManagerDB = {
                         Feasts = 1,
                     },
                 },
+                [7007] = {
+                    itemID = 7007,
+                    name = "Rune Oil Extra",
+                    totalCount = 4,
+                    tabs = {
+                        Alchemy = 4,
+                    },
+                },
             },
         },
     },
@@ -1236,16 +1169,31 @@ _G.GBankManagerDB = {
 ns.state.db = _G.GBankManagerDB
 
 mainFrame.minimumShowAllRows = true
-mainFrame.minimumManualOnlyRows = false
+mainFrame.minimumManualOnlyRows = true
 mainFrame.minimumSearchInput:SetText("")
 mainFrame:ClearTableFilters()
 mainFrame:SelectView("MINIMUMS")
 assert.equal("Manage Guild Bank Item Minimum Stock Levels", mainFrame.viewSubtitle:GetText(), "minimums subtitle should explain the stock-level workflow clearly")
+assert.truthy(not mainFrame.tableFilterFrame:IsShown(), "minimums should hide the shared header filter row to avoid header crowding")
 assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should add crafting tier as the second column")
 assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should replace the old source column with bank tab")
 assert.equal("Restock\nSource", mainFrame.tableHeaderLabels[8]:GetText(), "minimums should rename restock-from to a wrapped restock-source header")
-assert.truthy(not mainFrame.tableFilterInputs[5]:IsShown(), "minimums should not expose a text filter for the current column")
-assert.truthy(not mainFrame.tableFilterInputs[7]:IsShown(), "minimums should not expose a text filter for the minimum column")
+assert.truthy(not mainFrame.tableFilterInputs[1]:IsShown(), "minimums should remove the shared header text filters")
+assert.truthy(not mainFrame.tableFilterInputs[3]:IsShown(), "minimums should remove the shared header text filters for item columns too")
+assert.truthy(not mainFrame.tableFilterInputs[8]:IsShown(), "minimums should remove the shared header text filters for restock source")
+assert.truthy(not mainFrame.minimumManualOnlyToggleButton:IsShown(), "minimums should remove the all-sources toggle entirely")
+assert.truthy(not mainFrame.minimumSaveAllButton:IsShown(), "minimums should not keep a panel-level undo button once row-level undo exists")
+assert.truthy(mainFrame.minimumsTitle.shown == false, "minimums should remove the draft-actions title box")
+assert.truthy(mainFrame.minimumEditorStateText.shown == false, "minimums should remove the draft-actions state box")
+assert.equal("BOTTOMRIGHT", (mainFrame.minimumShowAllToggleButton.points[1] or {})[1], "minimums should anchor the show-all button under the table")
+assert.equal("BOTTOMRIGHT", (mainFrame.minimumShowAllToggleButton.points[1] or {})[3], "minimums should keep the show-all button at the bottom-right edge")
+local bottomShowAllRowCount = 0
+for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
+    if row.itemName ~= nil and row.itemName ~= "" then
+        bottomShowAllRowCount = bottomShowAllRowCount + 1
+    end
+end
+assert.truthy(bottomShowAllRowCount >= 2, "minimums should keep showing configured and bank rows even if an old all-sources flag was left on")
 local redesignedMinimumCachedRow = nil
 for _, row in ipairs(mainFrame.cachedMinimumRows or {}) do
     if row.itemName == "Potion Rank Two" then
@@ -1266,17 +1214,58 @@ mainFrame.tableRows[redesignedMinimumRowIndex]:GetScript("OnClick")(mainFrame.ta
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:IsShown(), "minimum rows should expose inline numeric editing when selected for editing")
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:IsShown(), "minimum rows should expose inline restock editing when selected for editing")
 assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].bankTabValueInput:IsShown(), "minimum rows should expose inline bank-tab editing when selected for editing")
+assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:GetScript("OnEditFocusLost")) == "function", "minimum rows should keep pending inline values when the numeric field loses focus")
+assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].removeButton) == "table", "minimum rows should expose an explicit remove control at the far end of existing rows")
+assert.truthy(type(mainFrame.tableRows[redesignedMinimumRowIndex].undoButton) == "table", "minimum rows should expose a per-row undo control beside delete")
+assert.truthy(mainFrame.tableRows[redesignedMinimumRowIndex].removeButton:IsShown(), "minimum rows should keep the explicit remove control visible for existing enabled rows")
 assert.equal("5", mainFrame.tableRows[redesignedMinimumRowIndex].columns[7]:GetText(), "minimum rows should keep the minimum value in the same cell position while editing")
 assert.equal("Yes", mainFrame.tableRows[redesignedMinimumRowIndex].columns[6]:GetText(), "minimum rows should keep the restock value in the same cell position while editing")
 mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:SetText("8")
 mainFrame.tableRows[redesignedMinimumRowIndex].bankTabValueInput:SetText("Overflow")
-mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton:GetScript("OnClick")(mainFrame.tableRows[redesignedMinimumRowIndex].restockToggleButton)
+mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput:GetScript("OnEditFocusLost")(mainFrame.tableRows[redesignedMinimumRowIndex].minimumValueInput)
+assert.equal("changed", mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftState, "minimum rows should mark edited drafts with a changed state")
+assert.equal("yellow", mainFrame.tableRows[redesignedMinimumRowIndex].minimumDraftTint, "minimum rows should tint edited drafts yellow before save")
 assert.equal(5, ns.state.db.minimums[1].quantity, "inline row edits should stay pending until the top save button is clicked")
 assert.truthy(ns.state.db.minimums[1].enabled == true, "inline restock edits should stay pending until the top save button is clicked")
 assert.equal("Potions", ns.state.db.minimums[1].tabName, "inline bank-tab edits should stay pending until the top save button is clicked")
+local deletedMinimumRowIndex = nil
+for index, rowFrame in ipairs(mainFrame.tableRows) do
+    if rowFrame.columns[3]:GetText() == "Feast Delta" then
+        deletedMinimumRowIndex = index
+        break
+    end
+end
+mainFrame.tableRows[deletedMinimumRowIndex]:GetScript("OnClick")(mainFrame.tableRows[deletedMinimumRowIndex])
+assert.equal("8", mainFrame.tableRows[redesignedMinimumRowIndex].columns[7]:GetText(), "minimum rows should keep pending inline values visible after focus moves to another row")
+assert.equal("Overflow", mainFrame.tableRows[redesignedMinimumRowIndex].columns[4]:GetText(), "minimum rows should keep pending bank-tab edits visible after row focus changes")
+mainFrame.tableRows[deletedMinimumRowIndex].removeButton:GetScript("OnClick")(mainFrame.tableRows[deletedMinimumRowIndex].removeButton)
+assert.equal("deleted", mainFrame.tableRows[deletedMinimumRowIndex].minimumDraftState, "minimum rows should mark explicit removes as deleted drafts")
+assert.equal("red", mainFrame.tableRows[deletedMinimumRowIndex].minimumDraftTint, "minimum rows should tint deleted drafts red before save")
+assert.equal(2, #ns.state.db.minimums, "minimum remove should stay pending until save is clicked")
+mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
+assert.equal(1, #ns.state.db.minimums, "minimum save should commit edited rows and explicit removals together")
+assert.equal(8, ns.state.db.minimums[1].quantity, "minimum save should persist inline row quantity edits")
+assert.equal("Overflow", ns.state.db.minimums[1].tabName, "minimum save should persist inline row bank-tab edits")
+assert.equal(2, #ns.state.db.auditLog, "minimum save should write audit rows for changed and removed minimums")
+local savedMinimumAuditTypes = {
+    ns.state.db.auditLog[1].type,
+    ns.state.db.auditLog[2].type,
+}
+table.sort(savedMinimumAuditTypes)
+assert.equal("MINIMUM_REMOVED", savedMinimumAuditTypes[1], "minimum save should add removal audit rows for explicit deletes")
+assert.equal("MINIMUM_UPDATED", savedMinimumAuditTypes[2], "minimum save should keep update audit rows for edited minimums")
+mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
+mainFrame.tableRows[1].minimumValueInput:SetText("0")
+mainFrame.tableRows[1].restockToggleButton:GetScript("OnClick")(mainFrame.tableRows[1].restockToggleButton)
+mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
+assert.equal(1, #ns.state.db.minimums, "minimum zeroing should not silently remove rows without using the explicit remove control")
+assert.equal(0, ns.state.db.minimums[1].quantity, "minimum zeroing should persist the edited quantity instead of deleting the rule")
+assert.truthy(ns.state.db.minimums[1].enabled == false, "minimum zeroing should not keep a zeroed row active after save")
 
 mainFrame:SelectView("OPTIONS")
 assert.equal("100", mainFrame.defaultMinimumInput:GetText(), "options should expose the saved default minimum value")
+assert.equal("Opacity 94%", mainFrame.transparencyValueText:GetText(), "options should keep the shell opacity percentage visible after slider changes")
+assert.equal("Save Min stores the maximum amount allowed for restock when new rows are staged.", mainFrame.optionsRestockHint:GetText(), "options should explain the saved minimum behavior in the split restock panel")
 mainFrame.defaultMinimumInput:SetText("250")
 mainFrame.defaultMinimumSaveButton:GetScript("OnClick")(mainFrame.defaultMinimumSaveButton)
 assert.equal(250, ns.state.db.ui.minimumSettings.defaultQuantity, "options should persist the configured default minimum value")
@@ -1315,7 +1304,24 @@ mainFrame.selectedMinimumKey = nil
 mainFrame:SelectView("MINIMUMS")
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
 assert.truthy(mainFrame.minimumAddModal:IsShown(), "add should open the minimum modal for the next-phase workflow")
+assert.equal("FULLSCREEN_DIALOG", mainFrame.minimumAddModal.frameStrata, "minimum add modal should render above the shared table and controls")
 assert.equal("250", mainFrame.minimumAddQuantityInput:GetText(), "new minimum rows should start from the configured default minimum value")
+local originalGetItemInfo = _G.GetItemInfo
+_G.GetItemInfo = function(query)
+    if tonumber(query) == 9009 or query == "Deepstone Serum" then
+        return "Deepstone Serum", "|cff1eff00|Hitem:9009:::::::::|h[Deepstone Serum]|h|r"
+    end
+    if type(originalGetItemInfo) == "function" then
+        return originalGetItemInfo(query)
+    end
+    return nil
+end
+mainFrame.minimumAddItemIDInput:SetText("9009")
+assert.equal("Deepstone Serum", mainFrame.minimumAddItemNameInput:GetText(), "entering an item id should resolve from the WoW item database even when the item is not in the current snapshot")
+mainFrame.minimumAddItemIDInput:SetText("")
+mainFrame.minimumAddItemNameInput:SetText("Deepstone Serum")
+assert.equal("9009", mainFrame.minimumAddItemIDInput:GetText(), "entering an item name should resolve from the WoW item database even when the item is not in the current snapshot")
+_G.GetItemInfo = originalGetItemInfo
 mainFrame.minimumAddItemIDInput:SetText("7007")
 assert.equal("Algari Mana Oil", mainFrame.minimumAddItemNameInput:GetText(), "entering an item id should resolve and fill the item name")
 mainFrame.minimumAddItemNameInput:SetText("Algari Mana Oil")
@@ -1327,6 +1333,17 @@ mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
 assert.truthy(not mainFrame.minimumAddModal:IsShown(), "adding from the modal should close the modal")
 assert.equal(0, #ns.state.db.minimums, "modal add should stage a new minimum instead of saving immediately")
 assert.equal("Algari Mana Oil", mainFrame.cachedMinimumRows[1].itemName, "modal add should stage and highlight the new minimum row")
+assert.equal("added", mainFrame.tableRows[1].minimumDraftState, "minimum rows should mark staged adds with an added state")
+assert.equal("green", mainFrame.tableRows[1].minimumDraftTint, "minimum rows should tint staged adds green before save")
+assert.truthy(type(mainFrame.tableRows[1].undoButton) == "table", "staged minimum rows should expose the per-row undo control")
+mainFrame.tableRows[1].undoButton:GetScript("OnClick")(mainFrame.tableRows[1].undoButton)
+assert.equal(0, #ns.state.db.minimums, "minimum row undo should discard staged add rows before save")
+assert.truthy(mainFrame.tableRows[1].minimumDraftState ~= "added", "minimum row undo should remove the staged-add draft state from the table")
+mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
+mainFrame.minimumAddItemIDInput:SetText("7007")
+mainFrame.minimumAddItemNameInput:SetText("Algari Mana Oil")
+mainFrame.minimumAddMatchButtons[2]:GetScript("OnClick")(mainFrame.minimumAddMatchButtons[2])
+mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
 local stagedMinimumRowIndex = nil
 for index, rowFrame in ipairs(mainFrame.tableRows) do
     if rowFrame.columns[3]:GetText() == "Algari Mana Oil" then
@@ -1341,3 +1358,42 @@ assert.equal(1, #ns.state.db.minimums, "save should persist staged modal rows")
 assert.equal("TAB", ns.state.db.minimums[1].scope, "new minimum rows should save as tab-scoped rules")
 assert.equal("Alchemy", ns.state.db.minimums[1].tabName, "new minimum rows should require and persist the chosen bank tab")
 assert.equal(250, ns.state.db.minimums[1].quantity, "new minimum rows should use the configured default minimum when the user keeps the seeded value")
+
+_G.GBankManagerDB = {
+    requests = {},
+    currentSnapshotId = "history-shell-audit",
+    snapshots = {
+        ["history-shell-audit"] = {
+            items = {},
+        },
+    },
+    minimums = {},
+    oneTimeTargets = {},
+    auditLog = {
+        { type = "OPTIONS_CHANGED", actor = "TestPlayer", category = "OPTIONS", itemName = "Window Opacity", oldValue = "94", newValue = "88", timestamp = 100 },
+        { type = "MINIMUM_UPDATED", actor = "TestPlayer", category = "MINIMUM", itemName = "Potion Rank Two", oldValue = "5", newValue = "8", timestamp = 101 },
+        { type = "REQUEST_APPROVED", actor = "GuildLead", category = "REQUEST", itemName = "Raid Flask", oldValue = "PENDING", newValue = "APPROVED", timestamp = 102 },
+    },
+}
+ns.state.db = _G.GBankManagerDB
+
+mainFrame:SelectView("HISTORY")
+local visibleHistoryCategories = {
+    mainFrame.tableRows[1].columns[2]:GetText(),
+    mainFrame.tableRows[2].columns[2]:GetText(),
+}
+table.sort(visibleHistoryCategories)
+assert.equal("Minimum", visibleHistoryCategories[1], "history should keep minimum audit categories visible")
+assert.equal("Request", visibleHistoryCategories[2], "history should keep request audit categories visible")
+assert.equal("", mainFrame.tableRows[3].columns[2]:GetText(), "history should keep shell-only audit rows out of the procurement history table")
+
+mainFrame:SelectView("ABOUT")
+assert.equal("ABOUT", mainFrame.activeView, "about should be selectable from the shell")
+assert.equal("About", mainFrame.viewTitle:GetText(), "about view title should render in title case")
+assert.truthy(mainFrame.contentBodyText.shown == true, "about should render body copy in the shared shell content area")
+assert.truthy(string.find(mainFrame.contentBodyText:GetText(), "Author: Zirleficent", 1, true) ~= nil, "about should list the addon author")
+assert.truthy(string.find(mainFrame.contentBodyText:GetText(), "Server: Stormrage", 1, true) ~= nil, "about should list the home server")
+assert.truthy(string.find(mainFrame.contentBodyText:GetText(), "Guild: Tyrrish Rebellion", 1, true) ~= nil, "about should list the guild")
+assert.truthy(string.find(mainFrame.contentBodyText:GetText(), "Build: ", 1, true) ~= nil, "about should list the runtime build stamp")
+assert.truthy(string.find(mainFrame.contentBodyText:GetText(), "Support:", 1, true) ~= nil, "about should include support placeholder copy")
+assert.truthy(string.match(mainFrame.contentBodyText:GetText(), "Build: %d%d%d%d%-%d%d%-%d%d%-%d%d%d%d%d%d") ~= nil, "about should format the build stamp as YYYY-MM-DD-HHMMSS")

@@ -25,7 +25,6 @@ UI/MainFrame.lua
 UI/DashboardView.lua
 UI/InventoryView.lua
 UI/MinimumsView.lua
-UI/TargetsView.lua
 UI/RequestsView.lua
 UI/HistoryView.lua
 UI/ExportsView.lua

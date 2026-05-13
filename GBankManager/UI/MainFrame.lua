@@ -43,6 +43,10 @@ local backdrop = {
 }
 
 local function apply_panel_style(frame, color)
+    if not frame then
+        return
+    end
+
     if type(frame.SetBackdrop) == "function" then
         frame:SetBackdrop(backdrop)
     end
@@ -100,6 +104,27 @@ local function make_input(parent, width, height)
     return input
 end
 
+local function make_slider(parent, width, height, minValue, maxValue, initialValue)
+    local slider = _G.CreateFrame("Slider", nil, parent, "BackdropTemplate")
+    slider:SetSize(width, height)
+    slider.minValue = minValue or 0
+    slider.maxValue = maxValue or 1
+    slider.value = initialValue or slider.minValue
+    apply_panel_style(slider, theme.colors.background)
+
+    local baseSetValue = slider.SetValue
+    function slider:SetValue(value)
+        value = math.max(self.minValue, math.min(self.maxValue, value or self.minValue))
+        baseSetValue(self, value)
+        local handler = self.scripts and self.scripts.OnValueChanged
+        if type(handler) == "function" then
+            handler(self, value)
+        end
+    end
+
+    return slider
+end
+
 local function parse_number(value)
     local parsed = tonumber(value)
     if not parsed then
@@ -142,15 +167,21 @@ local function format_timestamp(timestamp)
     return tostring(timestamp)
 end
 
-local function minimum_rule_key(rule)
-    return table.concat({
-        tostring((rule or {}).itemID or ""),
-        tostring((rule or {}).scope or "GLOBAL"),
-        tostring((rule or {}).tabName or ""),
-    }, "|")
+local function build_about_stamp()
+    local timestampProvider = _G.time or os.time
+    local formatter = _G.date or os.date
+    local buildTimestamp = type(timestampProvider) == "function" and timestampProvider() or 0
+
+    if type(formatter) == "function" then
+        return formatter("%Y-%m-%d-%H%M%S", buildTimestamp)
+    end
+
+    return tostring(buildTimestamp)
 end
 
-local function target_rule_key(rule)
+local ABOUT_BUILD_STAMP = build_about_stamp()
+
+local function minimum_rule_key(rule)
     return table.concat({
         tostring((rule or {}).itemID or ""),
         tostring((rule or {}).scope or "GLOBAL"),
@@ -171,6 +202,12 @@ local function apply_table_row_style(rowFrame, rowIndex, isSelected)
 
     rowFrame.isSelected = isSelected and true or false
 end
+
+local MINIMUM_DRAFT_ROW_COLORS = {
+    added = { 0.16, 0.30, 0.18, 0.98 },
+    changed = { 0.34, 0.31, 0.12, 0.98 },
+    deleted = { 0.34, 0.14, 0.14, 0.98 },
+}
 
 local function label_with_sort_marker(columnLayout, sortState)
     local label = (columnLayout and columnLayout.label) or ""
@@ -235,6 +272,22 @@ local function current_db()
     return runtime
 end
 
+local function procurement_audit_entries(entries)
+    local filtered = {}
+    local allowedCategories = {
+        REQUEST = true,
+        MINIMUM = true,
+    }
+
+    for _, entry in ipairs(entries or {}) do
+        if allowedCategories[entry.category] then
+            table.insert(filtered, entry)
+        end
+    end
+
+    return filtered
+end
+
 mainFrame:SetSize(theme.spacing.frameWidth, theme.spacing.frameHeight)
 mainFrame:SetPoint("CENTER")
 mainFrame:SetClampedToScreen(true)
@@ -261,19 +314,19 @@ mainFrame.navItems = {
     { key = "INVENTORY", label = "Inventory" },
     { key = "HISTORY", label = "History" },
     { key = "MINIMUMS", label = "Minimums" },
-    { key = "TARGETS", label = "Targets" },
     { key = "REQUESTS", label = "Requests" },
     { key = "EXPORTS", label = "Exports" },
+    { key = "ABOUT", label = "About" },
     { key = "OPTIONS", label = "Options" },
 }
 mainFrame.viewDescriptions = {
     DASHBOARD = "Critical shortages, pending requests, and export readiness.",
     INVENTORY = "Search the latest bank snapshot and inspect current counts.",
-    HISTORY = "Audit request changes and minimum updates with timestamps and before/after values.",
+    HISTORY = "Review procurement audit events with explicit timestamps and before/after values.",
     MINIMUMS = "Manage Guild Bank Item Minimum Stock Levels",
-    TARGETS = "Track one-time buy-up goals and suggested fulfillment state.",
     REQUESTS = "Review officer-first request queues and member-visible demand.",
     EXPORTS = "Prepare Auctionator and spreadsheet-ready purchase output.",
+    ABOUT = "Reference addon ownership, guild identity, runtime build info, and support notes.",
     OPTIONS = "Adjust shell behavior like transparency without cluttering the main toolbar.",
 }
 
@@ -294,9 +347,9 @@ mainFrame.content:SetPoint("TOPLEFT", mainFrame.topBar, "BOTTOMLEFT", 0, 0)
 mainFrame.content:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", 0, 0)
 apply_panel_style(mainFrame.content, theme.colors.background)
 
-mainFrame.titleText = mainFrame.titleText or make_label(mainFrame.topBar, "Guild Bank Dashboard", "GameFontHighlightLarge")
+mainFrame.titleText = mainFrame.titleText or make_label(mainFrame.topBar, "Guild Bank Manager", "GameFontHighlightLarge")
 mainFrame.titleText:SetPoint("TOPLEFT", mainFrame.topBar, "TOPLEFT", 36, -14)
-mainFrame.subtitleText = mainFrame.subtitleText or make_label(mainFrame.topBar, "Inventory Management", "GameFontHighlightSmall")
+mainFrame.subtitleText = mainFrame.subtitleText or make_label(mainFrame.topBar, "Guild Bank Management", "GameFontHighlightSmall")
 mainFrame.subtitleText:SetPoint("TOPLEFT", mainFrame.titleText, "BOTTOMLEFT", 0, -6)
 mainFrame.statusText = mainFrame.statusText or make_label(mainFrame.topBar, "No scan yet", "GameFontNormal")
 mainFrame.statusText:SetPoint("RIGHT", mainFrame.topBar, "RIGHT", -152, 0)
@@ -321,13 +374,24 @@ local function set_alpha(nextAlpha)
     mainFrame:SetAlpha(mainFrame.currentAlpha)
 end
 
+local function view_label_for(key)
+    for _, item in ipairs(mainFrame.navItems or {}) do
+        if item.key == key then
+            return item.label
+        end
+    end
+
+    local normalized = string.lower(tostring(key or "Dashboard"))
+    return normalized:gsub("^%l", string.upper)
+end
+
 mainFrame.viewTitle = mainFrame.viewTitle or make_label(mainFrame.content, "Dashboard", "GameFontNormal")
 mainFrame.viewTitle:SetPoint("TOPLEFT", mainFrame.content, "TOPLEFT", 24, -24)
 mainFrame.viewSubtitle = mainFrame.viewSubtitle or make_label(mainFrame.content, "Critical shortages, pending requests, and export readiness.", "GameFontHighlightSmall")
 mainFrame.viewSubtitle:SetPoint("TOPLEFT", mainFrame.viewTitle, "BOTTOMLEFT", 0, -8)
 mainFrame.tableViewportWidth = 730
 mainFrame.tableViewportInnerWidth = 730
-mainFrame.tableHeaderHeight = 28
+mainFrame.tableHeaderHeight = 34
 mainFrame.tableFilterHeight = 28
 mainFrame.tableRowHeight = 26
 mainFrame.defaultTableViewportHeight = 364
@@ -338,8 +402,6 @@ mainFrame.selectedMinimumKey = mainFrame.selectedMinimumKey or nil
 mainFrame.selectedMinimumEnabled = mainFrame.selectedMinimumEnabled or false
 mainFrame.minimumShowAllRows = mainFrame.minimumShowAllRows or false
 mainFrame.minimumManualOnlyRows = mainFrame.minimumManualOnlyRows or false
-mainFrame.selectedTargetKey = mainFrame.selectedTargetKey or nil
-mainFrame.selectedTargetStatus = mainFrame.selectedTargetStatus or "OPEN"
 mainFrame.exportSelectedPreset = mainFrame.exportSelectedPreset or "Spreadsheet"
 mainFrame.exportCustomTemplate = mainFrame.exportCustomTemplate or clone_export_template()
 
@@ -463,9 +525,21 @@ mainFrame.minimumEmptyStateText:Hide()
 mainFrame.optionsPanel = mainFrame.optionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.optionsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.optionsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.optionsPanel:SetHeight(92)
+mainFrame.optionsPanel:SetHeight(224)
 apply_panel_style(mainFrame.optionsPanel, theme.colors.panel)
 mainFrame.optionsPanel:Hide()
+
+mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsPanel, "TOPLEFT", 0, 0)
+mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsPanel, "TOPRIGHT", 0, 0)
+mainFrame.optionsAppearancePanel:SetHeight(96)
+apply_panel_style(mainFrame.optionsAppearancePanel, theme.colors.panelAlt)
+
+mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsRestockPanel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "BOTTOMLEFT", 0, -16)
+mainFrame.optionsRestockPanel:SetPoint("TOPRIGHT", mainFrame.optionsAppearancePanel, "BOTTOMRIGHT", 0, -16)
+mainFrame.optionsRestockPanel:SetHeight(96)
+apply_panel_style(mainFrame.optionsRestockPanel, theme.colors.panelAlt)
 
 mainFrame.requestActionsPanel = mainFrame.requestActionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.requestActionsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -529,40 +603,54 @@ mainFrame.requestCreateButton:SetPoint("LEFT", mainFrame.requestCreateNoteInput,
 mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.minimumsPanel:SetHeight(78)
+mainFrame.minimumsPanel:SetHeight(52)
 apply_panel_style(mainFrame.minimumsPanel, theme.colors.panel)
 mainFrame.minimumsPanel:Hide()
 
 mainFrame.minimumsTitle = mainFrame.minimumsTitle or make_label(mainFrame.minimumsPanel, "Minimum Draft Actions", "GameFontHighlight")
 mainFrame.minimumsTitle:SetPoint("TOPLEFT", mainFrame.minimumsPanel, "TOPLEFT", 16, -16)
+mainFrame.minimumsTitle:Hide()
 
 mainFrame.minimumsHint = mainFrame.minimumsHint or make_label(mainFrame.minimumsPanel, "Use Add to stage items, edit Bank Tab / Restock / Minimum inline, Save to commit, or Undo to discard draft changes.", "GameFontHighlightSmall")
 mainFrame.minimumsHint:SetPoint("TOPLEFT", mainFrame.minimumsTitle, "BOTTOMLEFT", 0, -8)
+mainFrame.minimumsHint:Hide()
 
 mainFrame.minimumEditorStateText = mainFrame.minimumEditorStateText or make_label(mainFrame.minimumsPanel, "No draft minimum changes yet.", "GameFontHighlightSmall")
 mainFrame.minimumEditorStateText:SetPoint("TOPLEFT", mainFrame.minimumsHint, "BOTTOMLEFT", 0, -14)
+mainFrame.minimumEditorStateText:Hide()
 
 mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or make_button(mainFrame.minimumsPanel, 80, 28, "Show All")
-mainFrame.minimumShowAllToggleButton:SetPoint("TOPRIGHT", mainFrame.minimumsPanel, "TOPRIGHT", -16, -14)
+mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, 12)
 
-mainFrame.minimumSearchInput = mainFrame.minimumSearchInput or make_input(mainFrame.minimumsPanel, 110, 22)
+mainFrame.minimumSearchInput = mainFrame.minimumSearchInput or make_input(mainFrame.minimumsPanel, 120, 22)
 mainFrame.minimumSearchInput:SetPoint("RIGHT", mainFrame.minimumShowAllToggleButton, "LEFT", -8, 0)
 
 mainFrame.minimumManualOnlyToggleButton = mainFrame.minimumManualOnlyToggleButton or make_button(mainFrame.minimumsPanel, 86, 28, "Manual Only")
 mainFrame.minimumManualOnlyToggleButton:SetPoint("RIGHT", mainFrame.minimumSearchInput, "LEFT", -8, 0)
+mainFrame.minimumManualOnlyToggleButton:Hide()
 
 mainFrame.minimumNewButton = mainFrame.minimumNewButton or make_button(mainFrame.minimumsPanel, 64, 28, "Add")
-mainFrame.minimumNewButton:SetPoint("TOPLEFT", mainFrame.minimumEditorStateText, "BOTTOMLEFT", 0, -10)
+mainFrame.minimumNewButton:SetPoint("BOTTOMLEFT", mainFrame.minimumsPanel, "BOTTOMLEFT", 16, 12)
 
-mainFrame.minimumSaveButton = mainFrame.minimumSaveButton or make_button(mainFrame.minimumsPanel, 72, 28, "Save")
+mainFrame.minimumSaveButton = mainFrame.minimumSaveButton or make_button(mainFrame.minimumsPanel, 88, 28, "Save")
 mainFrame.minimumSaveButton:SetPoint("LEFT", mainFrame.minimumNewButton, "RIGHT", 8, 0)
+mainFrame.minimumSaveButton.labelText:SetText("Save All")
 
 mainFrame.minimumSaveAllButton = mainFrame.minimumSaveAllButton or make_button(mainFrame.minimumsPanel, 84, 28, "Undo")
 mainFrame.minimumSaveAllButton:SetPoint("LEFT", mainFrame.minimumSaveButton, "RIGHT", 8, 0)
+mainFrame.minimumSaveAllButton:Hide()
 
 mainFrame.minimumAddModal = mainFrame.minimumAddModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.minimumAddModal:SetSize(420, 220)
 mainFrame.minimumAddModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+mainFrame.minimumAddModal.frameStrata = "FULLSCREEN_DIALOG"
+if type(mainFrame.minimumAddModal.SetFrameStrata) == "function" then
+    mainFrame.minimumAddModal:SetFrameStrata(mainFrame.minimumAddModal.frameStrata)
+end
+mainFrame.minimumAddModal.frameLevel = (mainFrame.frameLevel or 0) + 20
+if type(mainFrame.minimumAddModal.SetFrameLevel) == "function" then
+    mainFrame.minimumAddModal:SetFrameLevel(mainFrame.minimumAddModal.frameLevel)
+end
 apply_panel_style(mainFrame.minimumAddModal, theme.colors.panelAlt)
 mainFrame.minimumAddModal:Hide()
 
@@ -580,6 +668,7 @@ mainFrame.minimumAddItemNameInput:SetPoint("LEFT", mainFrame.minimumAddItemIDInp
 
 mainFrame.minimumAddQuantityInput = mainFrame.minimumAddQuantityInput or make_input(mainFrame.minimumAddModal, 64, 22)
 mainFrame.minimumAddQuantityInput:SetPoint("LEFT", mainFrame.minimumAddItemNameInput, "RIGHT", 8, 0)
+mainFrame.minimumAddQuantityInput:Hide()
 
 mainFrame.minimumAddButton = mainFrame.minimumAddButton or make_button(mainFrame.minimumAddModal, 64, 28, "Add")
 mainFrame.minimumAddButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumAddModal, "BOTTOMRIGHT", -16, 16)
@@ -611,46 +700,6 @@ for index = 1, 3 do
     button:Hide()
     mainFrame.minimumAddMatchButtons[index] = button
 end
-
-mainFrame.targetsPanel = mainFrame.targetsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
-mainFrame.targetsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
-mainFrame.targetsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.targetsPanel:SetHeight(132)
-apply_panel_style(mainFrame.targetsPanel, theme.colors.panel)
-mainFrame.targetsPanel:Hide()
-
-mainFrame.targetsTitle = mainFrame.targetsTitle or make_label(mainFrame.targetsPanel, "One-Time Target Editor", "GameFontHighlight")
-mainFrame.targetsTitle:SetPoint("TOPLEFT", mainFrame.targetsPanel, "TOPLEFT", 16, -16)
-
-mainFrame.targetsHint = mainFrame.targetsHint or make_label(mainFrame.targetsPanel, "Create or adjust buy-up targets that should not recur forever.", "GameFontHighlightSmall")
-mainFrame.targetsHint:SetPoint("TOPLEFT", mainFrame.targetsTitle, "BOTTOMLEFT", 0, -8)
-
-mainFrame.targetEditorStateText = mainFrame.targetEditorStateText or make_label(mainFrame.targetsPanel, "Create or select a target to start editing.", "GameFontHighlightSmall")
-mainFrame.targetEditorStateText:SetPoint("TOPLEFT", mainFrame.targetsHint, "BOTTOMLEFT", 0, -14)
-
-mainFrame.targetItemIDInput = mainFrame.targetItemIDInput or make_input(mainFrame.targetsPanel, 72, 22)
-mainFrame.targetItemIDInput:SetPoint("TOPLEFT", mainFrame.targetEditorStateText, "BOTTOMLEFT", 0, -10)
-
-mainFrame.targetItemNameInput = mainFrame.targetItemNameInput or make_input(mainFrame.targetsPanel, 180, 22)
-mainFrame.targetItemNameInput:SetPoint("LEFT", mainFrame.targetItemIDInput, "RIGHT", 8, 0)
-
-mainFrame.targetQuantityInput = mainFrame.targetQuantityInput or make_input(mainFrame.targetsPanel, 64, 22)
-mainFrame.targetQuantityInput:SetPoint("LEFT", mainFrame.targetItemNameInput, "RIGHT", 8, 0)
-
-mainFrame.targetScopeInput = mainFrame.targetScopeInput or make_input(mainFrame.targetsPanel, 88, 22)
-mainFrame.targetScopeInput:SetPoint("LEFT", mainFrame.targetQuantityInput, "RIGHT", 8, 0)
-
-mainFrame.targetTabNameInput = mainFrame.targetTabNameInput or make_input(mainFrame.targetsPanel, 110, 22)
-mainFrame.targetTabNameInput:SetPoint("LEFT", mainFrame.targetScopeInput, "RIGHT", 8, 0)
-
-mainFrame.targetStatusButton = mainFrame.targetStatusButton or make_button(mainFrame.targetsPanel, 90, 28, "Status: Closed")
-mainFrame.targetStatusButton:SetPoint("TOPLEFT", mainFrame.targetItemIDInput, "BOTTOMLEFT", 0, -10)
-
-mainFrame.targetNewButton = mainFrame.targetNewButton or make_button(mainFrame.targetsPanel, 64, 28, "New")
-mainFrame.targetNewButton:SetPoint("LEFT", mainFrame.targetStatusButton, "RIGHT", 8, 0)
-
-mainFrame.targetSaveButton = mainFrame.targetSaveButton or make_button(mainFrame.targetsPanel, 72, 28, "Save")
-mainFrame.targetSaveButton:SetPoint("LEFT", mainFrame.targetNewButton, "RIGHT", 8, 0)
 
 mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -736,7 +785,7 @@ mainFrame.minimumSaveButton:SetScript("OnClick", function()
 end)
 
 mainFrame.minimumSaveAllButton:SetScript("OnClick", function()
-    mainFrame:UndoMinimumChanges()
+    mainFrame:SaveAllMinimumChanges()
 end)
 
 mainFrame.minimumAddButton:SetScript("OnClick", function()
@@ -745,18 +794,6 @@ end)
 
 mainFrame.minimumAddCancelButton:SetScript("OnClick", function()
     mainFrame:HideMinimumAddModal()
-end)
-
-mainFrame.targetNewButton:SetScript("OnClick", function()
-    mainFrame:ClearTargetEditor()
-end)
-
-mainFrame.targetStatusButton:SetScript("OnClick", function()
-    mainFrame:ToggleTargetStatus()
-end)
-
-mainFrame.targetSaveButton:SetScript("OnClick", function()
-    mainFrame:SaveTargetFromEditor()
 end)
 
 mainFrame.exportPresetSpreadsheetButton:SetScript("OnClick", function()
@@ -779,40 +816,40 @@ mainFrame.exportApplyCustomButton:SetScript("OnClick", function()
     mainFrame:ApplyCustomExportTemplate()
 end)
 
-mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsPanel, "Window Transparency", "GameFontHighlight")
-mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Window Transparency", "GameFontHighlight")
+mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsPanel, "Use the controls below to lighten or darken the shell.", "GameFontHighlightSmall")
+mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Adjust shell opacity with a slider and keep the percentage visible.", "GameFontHighlightSmall")
 mainFrame.optionsHint:SetPoint("TOPLEFT", mainFrame.optionsTitle, "BOTTOMLEFT", 0, -8)
 
-mainFrame.transparencyDownButton = mainFrame.transparencyDownButton or make_button(mainFrame.optionsPanel, 32, 28, "-")
-mainFrame.transparencyDownButton:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -16)
+mainFrame.transparencySlider = mainFrame.transparencySlider or make_slider(mainFrame.optionsAppearancePanel, 220, 18, 55, 100, math.floor(mainFrame.currentAlpha * 100 + 0.5))
+mainFrame.transparencySlider:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -18)
 
-mainFrame.transparencyUpButton = mainFrame.transparencyUpButton or make_button(mainFrame.optionsPanel, 32, 28, "+")
-mainFrame.transparencyUpButton:SetPoint("LEFT", mainFrame.transparencyDownButton, "RIGHT", 4, 0)
+mainFrame.transparencyValueText = mainFrame.transparencyValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
+mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencySlider, "RIGHT", 16, 0)
 
-mainFrame.transparencyValueText = mainFrame.transparencyValueText or make_label(mainFrame.optionsPanel, "", "GameFontNormal")
-mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencyUpButton, "RIGHT", 12, 0)
+mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsRestockPanel, "Restock Default", "GameFontHighlight")
+mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "TOPLEFT", 16, -16)
 
-mainFrame.defaultMinimumInput = mainFrame.defaultMinimumInput or make_input(mainFrame.optionsPanel, 72, 22)
-mainFrame.defaultMinimumInput:SetPoint("LEFT", mainFrame.transparencyValueText, "RIGHT", 24, 0)
+mainFrame.optionsRestockHint = mainFrame.optionsRestockHint or make_label(mainFrame.optionsRestockPanel, "Save Min stores the maximum amount allowed for restock when new rows are staged.", "GameFontHighlightSmall")
+mainFrame.optionsRestockHint:SetPoint("TOPLEFT", mainFrame.optionsRestockTitle, "BOTTOMLEFT", 0, -8)
 
-mainFrame.defaultMinimumSaveButton = mainFrame.defaultMinimumSaveButton or make_button(mainFrame.optionsPanel, 86, 28, "Save Min")
+mainFrame.defaultMinimumInput = mainFrame.defaultMinimumInput or make_input(mainFrame.optionsRestockPanel, 72, 22)
+mainFrame.defaultMinimumInput:SetPoint("TOPLEFT", mainFrame.optionsRestockHint, "BOTTOMLEFT", 0, -16)
+
+mainFrame.defaultMinimumSaveButton = mainFrame.defaultMinimumSaveButton or make_button(mainFrame.optionsRestockPanel, 86, 28, "Save Min")
 mainFrame.defaultMinimumSaveButton:SetPoint("LEFT", mainFrame.defaultMinimumInput, "RIGHT", 8, 0)
 
 local function refresh_alpha_text()
-    mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", math.floor(mainFrame.currentAlpha * 100 + 0.5)))
+    local percentage = math.floor(mainFrame.currentAlpha * 100 + 0.5)
+    mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", percentage))
 end
 
-mainFrame.transparencyDownButton:SetScript("OnClick", function()
-    set_alpha(mainFrame.currentAlpha - 0.08)
+mainFrame.transparencySlider:SetScript("OnValueChanged", function(_, value)
+    set_alpha((value or 100) / 100)
     refresh_alpha_text()
 end)
-
-mainFrame.transparencyUpButton:SetScript("OnClick", function()
-    set_alpha(mainFrame.currentAlpha + 0.08)
-    refresh_alpha_text()
-end)
+mainFrame.transparencySlider:SetValue(math.floor(mainFrame.currentAlpha * 100 + 0.5))
 
 mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
     mainFrame:SaveDefaultMinimumSetting()
@@ -847,11 +884,12 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.topBar, theme.colors.panelAlt)
     apply_panel_style(self.content, theme.colors.background)
     apply_panel_style(self.optionsPanel, theme.colors.panel)
+    apply_panel_style(self.optionsAppearancePanel, theme.colors.panelAlt)
+    apply_panel_style(self.optionsRestockPanel, theme.colors.panelAlt)
     apply_panel_style(self.requestActionsPanel, theme.colors.panel)
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
     apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
-    apply_panel_style(self.targetsPanel, theme.colors.panel)
     apply_panel_style(self.exportsPanel, theme.colors.panel)
     apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
     apply_panel_style(self.tableFilterFrame, theme.colors.background)
@@ -894,16 +932,12 @@ function mainFrame:ApplyTheme()
     for _, button in ipairs(self.minimumAddMatchButtons or {}) do
         apply_panel_style(button, theme.colors.panel)
     end
-    apply_panel_style(self.targetStatusButton, theme.colors.panel)
-    apply_panel_style(self.targetNewButton, theme.colors.panel)
-    apply_panel_style(self.targetSaveButton, theme.colors.panelAlt)
     apply_panel_style(self.exportPresetSpreadsheetButton, theme.colors.panelAlt)
     apply_panel_style(self.exportPresetAuctionatorButton, theme.colors.panel)
     apply_panel_style(self.exportPresetCustomButton, theme.colors.panel)
     apply_panel_style(self.exportHeaderToggleButton, theme.colors.panel)
     apply_panel_style(self.exportApplyCustomButton, theme.colors.panelAlt)
-    apply_panel_style(self.transparencyDownButton, theme.colors.panel)
-    apply_panel_style(self.transparencyUpButton, theme.colors.panel)
+    apply_panel_style(self.transparencySlider, theme.colors.background)
     apply_panel_style(self.tableScrollBar, theme.colors.panel)
     apply_panel_style(self.tableScrollBar.track, theme.colors.background)
     apply_panel_style(self.tableScrollBar.thumb, theme.colors.accent)
@@ -932,11 +966,6 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumTabNameInput, theme.colors.background)
     apply_panel_style(self.minimumSearchInput, theme.colors.background)
     apply_panel_style(self.defaultMinimumInput, theme.colors.background)
-    apply_panel_style(self.targetItemIDInput, theme.colors.background)
-    apply_panel_style(self.targetItemNameInput, theme.colors.background)
-    apply_panel_style(self.targetQuantityInput, theme.colors.background)
-    apply_panel_style(self.targetScopeInput, theme.colors.background)
-    apply_panel_style(self.targetTabNameInput, theme.colors.background)
     apply_panel_style(self.exportDelimiterInput, theme.colors.background)
     apply_panel_style(self.exportFieldsInput, theme.colors.background)
 end
@@ -947,6 +976,10 @@ function mainFrame:GetActiveSortState()
     end
 
     return self.inventorySortState
+end
+
+function mainFrame:UsesInlineTableFilters()
+    return self.activeView ~= "MINIMUMS"
 end
 
 function mainFrame:ConfigureTable(columns, rows)
@@ -988,7 +1021,10 @@ function mainFrame:ConfigureTable(columns, rows)
         input:ClearAllPoints()
         input:SetPoint("TOPLEFT", self.tableFilterFrame, "TOPLEFT", offset, -3)
         input:SetWidth(width)
-        if columnLayout.filterMode == "none" then
+        if not self:UsesInlineTableFilters() then
+            input:SetText("")
+            input:Hide()
+        elseif columnLayout.filterMode == "none" then
             input:SetText("")
             input:Hide()
         elseif width == 0 then
@@ -1221,10 +1257,12 @@ function mainFrame:ApplyMinimumFilters()
     local minimumsView = ns.modules.minimumsView
     local db = current_db()
     local snapshot = self:GetCurrentSnapshot()
+    self.minimumManualOnlyRows = false
     if self.minimumPendingDb ~= db then
         self.minimumPendingDb = db
         self.minimumPendingRules = {}
         self.minimumPendingDirty = {}
+        self.minimumPendingDeleted = {}
         self.minimumSessionBaseline = {}
         for _, rule in ipairs(db.minimums or {}) do
             table.insert(self.minimumSessionBaseline, self:CloneMinimumRule(rule))
@@ -1235,7 +1273,7 @@ function mainFrame:ApplyMinimumFilters()
     local rows = minimumsView.BuildTableRows(self:GetMergedMinimumRules(db), snapshot, {
         showAll = self.minimumShowAllRows,
         search = self.minimumSearchInput:GetText() or "",
-        manualOnly = self.minimumManualOnlyRows,
+        manualOnly = false,
         columnFilters = self:GetSharedFilterState(),
     })
 
@@ -1295,27 +1333,7 @@ function mainFrame:HandleTableRowClick(row)
 
     if self.activeView == "MINIMUMS" and row.itemID then
         self.selectedMinimumKey = row.rowKey
-        self.minimumEditorStateText:SetText("Drafting changes in the table. Use Save to commit or Undo to discard this Minimums session.")
-        self:GetPendingMinimumDraft(row)
-        self:RefreshVisibleTableRows()
-        return row
-    end
-
-    if self.activeView == "TARGETS" and row.itemID then
-        local db = ns.state.db or {}
-        local key = target_rule_key({
-            itemID = row.itemID,
-            scope = row.scope,
-            tabName = row.tabKey or row.tabName,
-        })
-
-        for _, target in ipairs(db.oneTimeTargets or {}) do
-            if target_rule_key(target) == key then
-                self:LoadTargetIntoEditor(target)
-                break
-            end
-        end
-        self:RefreshVisibleTableRows()
+        self:ApplyMinimumFilters()
         return row
     end
 
@@ -1333,14 +1351,6 @@ function mainFrame:IsSelectedTableRow(row)
 
     if self.activeView == "MINIMUMS" then
         return self.selectedMinimumKey ~= nil and row.rowKey == self.selectedMinimumKey
-    end
-
-    if self.activeView == "TARGETS" then
-        return self.selectedTargetKey ~= nil and target_rule_key({
-            itemID = row.itemID,
-            scope = row.scope,
-            tabName = row.tabKey or row.tabName,
-        }) == self.selectedTargetKey
     end
 
     return false
@@ -1427,7 +1437,6 @@ end
 function mainFrame:ClearMinimumEditor()
     self.selectedMinimumKey = nil
     self.selectedMinimumEnabled = true
-    self.minimumEditorStateText:SetText("No draft minimum changes yet.")
 end
 
 function mainFrame:CloneMinimumRule(rule)
@@ -1446,6 +1455,22 @@ function mainFrame:CloneMinimumRule(rule)
         originalScope = rule.originalScope,
         originalTabName = rule.originalTabName,
     }
+end
+
+function mainFrame:GetMinimumBaselineRule(rowOrKey)
+    local rowKey = rowOrKey
+    if type(rowOrKey) == "table" then
+        rowKey = rowOrKey.rowKey or rowOrKey.draftKey or minimum_rule_key(rowOrKey)
+    end
+
+    for _, rule in ipairs(self.minimumSessionBaseline or {}) do
+        local baselineKey = rule.draftKey or minimum_rule_key(rule)
+        if baselineKey == rowKey then
+            return self:CloneMinimumRule(rule)
+        end
+    end
+
+    return nil
 end
 
 function mainFrame:BuildMinimumRuleFromRow(row)
@@ -1495,6 +1520,26 @@ function mainFrame:GetPendingMinimumDraft(row)
     return draft
 end
 
+function mainFrame:GetMinimumDraftState(row)
+    if not row then
+        return nil
+    end
+
+    if (self.minimumPendingDeleted or {})[row.rowKey] then
+        return "deleted"
+    end
+
+    if not (self.minimumPendingDirty or {})[row.rowKey] then
+        return nil
+    end
+
+    if self:GetMinimumBaselineRule(row) then
+        return "changed"
+    end
+
+    return "added"
+end
+
 function mainFrame:GetMergedMinimumRules(db)
     local minimumsView = ns.modules.minimumsView
     local merged = {}
@@ -1524,9 +1569,79 @@ function mainFrame:HideMinimumInlineRow(rowFrame)
     if rowFrame.bankTabValueInput then
         rowFrame.bankTabValueInput:Hide()
     end
+    if rowFrame.removeButton then
+        rowFrame.removeButton:Hide()
+    end
+    if rowFrame.undoButton then
+        rowFrame.undoButton:Hide()
+    end
 end
 
-function mainFrame:SyncMinimumInlineRow(rowFrame, row)
+function mainFrame:ApplyMinimumDraftStyle(rowFrame, rowIndex, draftState)
+    if not rowFrame then
+        return
+    end
+
+    local tintByState = {
+        added = "green",
+        changed = "yellow",
+        deleted = "red",
+    }
+
+    rowFrame.minimumDraftState = draftState
+    rowFrame.minimumDraftTint = tintByState[draftState]
+
+    if draftState and MINIMUM_DRAFT_ROW_COLORS[draftState] then
+        apply_panel_style(rowFrame, MINIMUM_DRAFT_ROW_COLORS[draftState])
+        rowFrame.isSelected = self:IsSelectedTableRow(rowFrame.rowData)
+        return
+    end
+
+    rowFrame.minimumDraftTint = nil
+    apply_table_row_style(rowFrame, rowIndex, self:IsSelectedTableRow(rowFrame.rowData))
+end
+
+function mainFrame:UndoMinimumRow(row)
+    if not row then
+        return nil
+    end
+
+    self.minimumPendingRules = self.minimumPendingRules or {}
+    self.minimumPendingDirty = self.minimumPendingDirty or {}
+    self.minimumPendingDeleted = self.minimumPendingDeleted or {}
+    self.minimumPendingRules[row.rowKey] = nil
+    self.minimumPendingDirty[row.rowKey] = nil
+    self.minimumPendingDeleted[row.rowKey] = nil
+
+    if self.selectedMinimumKey == row.rowKey and not self:GetMinimumBaselineRule(row) then
+        self.selectedMinimumKey = nil
+    end
+
+    self:ApplyMinimumFilters()
+    return row
+end
+
+function mainFrame:MarkMinimumRowDeleted(row)
+    if not row then
+        return nil
+    end
+
+    if not self:GetMinimumBaselineRule(row) then
+        return self:UndoMinimumRow(row)
+    end
+
+    self.minimumPendingRules = self.minimumPendingRules or {}
+    self.minimumPendingDirty = self.minimumPendingDirty or {}
+    self.minimumPendingDeleted = self.minimumPendingDeleted or {}
+    self.minimumPendingRules[row.rowKey] = nil
+    self.minimumPendingDirty[row.rowKey] = nil
+    self.minimumPendingDeleted[row.rowKey] = true
+    self.selectedMinimumKey = row.rowKey
+    self:ApplyMinimumFilters()
+    return row
+end
+
+function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     if not rowFrame then
         return
     end
@@ -1534,10 +1649,14 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row)
     rowFrame.minimumValueInput = rowFrame.minimumValueInput or make_input(rowFrame, 52, 18)
     rowFrame.restockToggleButton = rowFrame.restockToggleButton or make_button(rowFrame, 58, 20, "Yes")
     rowFrame.bankTabValueInput = rowFrame.bankTabValueInput or make_input(rowFrame, 74, 18)
+    rowFrame.removeButton = rowFrame.removeButton or make_button(rowFrame, 20, 20, "-")
+    rowFrame.undoButton = rowFrame.undoButton or make_button(rowFrame, 20, 20, "<")
 
     apply_panel_style(rowFrame.minimumValueInput, theme.colors.background)
     apply_panel_style(rowFrame.restockToggleButton, theme.colors.panel)
     apply_panel_style(rowFrame.bankTabValueInput, theme.colors.background)
+    apply_panel_style(rowFrame.removeButton, MINIMUM_DRAFT_ROW_COLORS.deleted)
+    apply_panel_style(rowFrame.undoButton, theme.colors.panelAlt)
 
     rowFrame.bankTabValueInput:ClearAllPoints()
     rowFrame.bankTabValueInput:SetPoint("TOPLEFT", rowFrame.columns[4], "TOPLEFT", -4, 0)
@@ -1551,12 +1670,37 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row)
     rowFrame.restockToggleButton:SetPoint("TOPLEFT", rowFrame.columns[6], "TOPLEFT", -4, -1)
     rowFrame.restockToggleButton:SetWidth((self.tableColumnLayout[6] and self.tableColumnLayout[6].width or 70) - 12)
 
+    rowFrame.removeButton:ClearAllPoints()
+    rowFrame.removeButton:SetPoint("TOPRIGHT", rowFrame, "TOPRIGHT", -6, -1)
+
+    rowFrame.undoButton:ClearAllPoints()
+    rowFrame.undoButton:SetPoint("RIGHT", rowFrame.removeButton, "LEFT", -4, 0)
+
     if not row or self.selectedMinimumKey ~= row.rowKey then
         self:HideMinimumInlineRow(rowFrame)
+        self:ApplyMinimumDraftStyle(rowFrame, rowIndex, row and self:GetMinimumDraftState(row) or nil)
+        if row and self:GetMinimumBaselineRule(row) and row.restock == "Yes" and self:GetMinimumDraftState(row) ~= "added" then
+            rowFrame.removeButton:Show()
+        else
+            rowFrame.removeButton:Hide()
+        end
+        if row and self:GetMinimumDraftState(row) ~= nil then
+            rowFrame.undoButton:Show()
+        else
+            rowFrame.undoButton:Hide()
+        end
+        rowFrame.removeButton:SetScript("OnClick", function()
+            self:MarkMinimumRowDeleted(row)
+        end)
+        rowFrame.undoButton:SetScript("OnClick", function()
+            self:UndoMinimumRow(row)
+        end)
         return
     end
 
     local state = self:GetPendingMinimumDraft(row)
+    local draftState = self:GetMinimumDraftState(row)
+    local isDeleted = draftState == "deleted"
     rowFrame.columns[4]:SetText(state.tabName or "")
     rowFrame.columns[7]:SetText(tostring(state.quantity or 0))
     rowFrame.columns[6]:SetText(state.enabled and "Yes" or "No")
@@ -1566,17 +1710,42 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row)
     rowFrame.syncingMinimumDraft = false
     rowFrame.restockToggleButton.labelText:SetText(state.enabled and "Yes" or "No")
 
-    rowFrame.bankTabValueInput:Show()
-    rowFrame.minimumValueInput:Show()
-    rowFrame.restockToggleButton:Show()
+    self:ApplyMinimumDraftStyle(rowFrame, rowIndex, draftState)
+
+    if isDeleted then
+        rowFrame.bankTabValueInput:Hide()
+        rowFrame.minimumValueInput:Hide()
+        rowFrame.restockToggleButton:Hide()
+    else
+        rowFrame.bankTabValueInput:Show()
+        rowFrame.minimumValueInput:Show()
+        rowFrame.restockToggleButton:Show()
+    end
+    rowFrame.removeButton:Show()
+    if draftState ~= nil then
+        rowFrame.undoButton:Show()
+    else
+        rowFrame.undoButton:Hide()
+    end
+
+    rowFrame.removeButton:SetScript("OnClick", function()
+        self:MarkMinimumRowDeleted(row)
+    end)
+
+    rowFrame.undoButton:SetScript("OnClick", function()
+        self:UndoMinimumRow(row)
+    end)
 
     rowFrame.restockToggleButton:SetScript("OnClick", function()
         local current = self:GetPendingMinimumDraft(row)
         current.enabled = not current.enabled
         self.minimumPendingDirty = self.minimumPendingDirty or {}
+        self.minimumPendingDeleted = self.minimumPendingDeleted or {}
         self.minimumPendingDirty[row.rowKey] = true
+        self.minimumPendingDeleted[row.rowKey] = nil
         rowFrame.restockToggleButton.labelText:SetText(current.enabled and "Yes" or "No")
         rowFrame.columns[6]:SetText(current.enabled and "Yes" or "No")
+        self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
     end)
 
     rowFrame.minimumValueInput:SetScript("OnTextChanged", function(input)
@@ -1586,8 +1755,11 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row)
         local current = self:GetPendingMinimumDraft(row)
         current.quantity = parse_number(input:GetText() or "") or current.quantity or 0
         self.minimumPendingDirty = self.minimumPendingDirty or {}
+        self.minimumPendingDeleted = self.minimumPendingDeleted or {}
         self.minimumPendingDirty[row.rowKey] = true
+        self.minimumPendingDeleted[row.rowKey] = nil
         rowFrame.columns[7]:SetText(tostring(current.quantity or 0))
+        self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
     end)
 
     rowFrame.bankTabValueInput:SetScript("OnTextChanged", function(input)
@@ -1598,8 +1770,19 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row)
         current.tabName = input:GetText() or ""
         current.scope = "TAB"
         self.minimumPendingDirty = self.minimumPendingDirty or {}
+        self.minimumPendingDeleted = self.minimumPendingDeleted or {}
         self.minimumPendingDirty[row.rowKey] = true
+        self.minimumPendingDeleted[row.rowKey] = nil
         rowFrame.columns[4]:SetText(current.tabName or "")
+        self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
+    end)
+
+    rowFrame.minimumValueInput:SetScript("OnEditFocusLost", function()
+        self:ApplyMinimumFilters()
+    end)
+
+    rowFrame.bankTabValueInput:SetScript("OnEditFocusLost", function()
+        self:ApplyMinimumFilters()
     end)
 end
 
@@ -1676,6 +1859,14 @@ end
 
 function mainFrame:OpenMinimumAddModal()
     self:ResetMinimumAddRow()
+    self.minimumAddModal.frameStrata = "FULLSCREEN_DIALOG"
+    if type(self.minimumAddModal.SetFrameStrata) == "function" then
+        self.minimumAddModal:SetFrameStrata(self.minimumAddModal.frameStrata)
+    end
+    self.minimumAddModal.frameLevel = (self.frameLevel or 0) + 20
+    if type(self.minimumAddModal.SetFrameLevel) == "function" then
+        self.minimumAddModal:SetFrameLevel(self.minimumAddModal.frameLevel)
+    end
     self.minimumAddModal:Show()
     return self.minimumAddModal
 end
@@ -1711,10 +1902,11 @@ function mainFrame:CreateMinimumFromAddRow()
 
     self.minimumPendingRules = self.minimumPendingRules or {}
     self.minimumPendingDirty = self.minimumPendingDirty or {}
+    self.minimumPendingDeleted = self.minimumPendingDeleted or {}
     self.minimumPendingRules[draftKey] = rule
     self.minimumPendingDirty[draftKey] = true
+    self.minimumPendingDeleted[draftKey] = nil
     self.selectedMinimumKey = draftKey
-    self.minimumEditorStateText:SetText("New minimum row staged. Fill in Bank Tab, Restock, and Minimum inline, then Save when ready.")
     self:HideMinimumAddModal()
     self:ApplyMinimumFilters()
     return rule
@@ -1725,14 +1917,29 @@ function mainFrame:SaveAllMinimumChanges()
     local db = current_db()
     local changed = false
 
-    for key, rule in pairs(self.minimumPendingRules or {}) do
-        if (self.minimumPendingDirty or {})[key] then
-            if tonumber(rule.itemID) and tostring(rule.itemName or "") ~= "" and tostring(rule.tabName or "") ~= "" then
-            minimumsView.UpsertWithAudit(db, self:CloneMinimumRule(rule), {
+    for key in pairs(self.minimumPendingDeleted or {}) do
+        local pending = (self.minimumPendingRules or {})[key] or self:GetMinimumBaselineRule(key)
+        if pending then
+            minimumsView.RemoveWithAudit(db, self:CloneMinimumRule(pending), {
                 actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
                 timestamp = _G.time(),
             })
             changed = true
+        end
+    end
+
+    for key, rule in pairs(self.minimumPendingRules or {}) do
+        if not (self.minimumPendingDeleted or {})[key] and (self.minimumPendingDirty or {})[key] then
+            local normalized = self:CloneMinimumRule(rule)
+            if (tonumber(normalized.quantity or 0) or 0) <= 0 then
+                normalized.enabled = false
+            end
+            if tonumber(normalized.itemID) and tostring(normalized.itemName or "") ~= "" and tostring(normalized.tabName or "") ~= "" then
+                minimumsView.UpsertWithAudit(db, normalized, {
+                    actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
+                    timestamp = _G.time(),
+                })
+                changed = true
             end
         end
     end
@@ -1740,11 +1947,11 @@ function mainFrame:SaveAllMinimumChanges()
     if changed then
         self.minimumPendingRules = {}
         self.minimumPendingDirty = {}
+        self.minimumPendingDeleted = {}
         self.minimumSessionBaseline = {}
         for _, rule in ipairs(db.minimums or {}) do
             table.insert(self.minimumSessionBaseline, self:CloneMinimumRule(rule))
         end
-        self.minimumEditorStateText:SetText("Minimum draft changes saved.")
         self.selectedMinimumKey = nil
     end
 
@@ -1755,41 +1962,11 @@ end
 function mainFrame:UndoMinimumChanges()
     self.minimumPendingRules = {}
     self.minimumPendingDirty = {}
+    self.minimumPendingDeleted = {}
     self.selectedMinimumKey = nil
-    self.minimumEditorStateText:SetText("Draft minimum changes discarded.")
     self:HideMinimumAddModal()
     self:RefreshView()
     return true
-end
-
-function mainFrame:LoadTargetIntoEditor(target)
-    target = target or {}
-    self.targetItemIDInput:SetText(target.itemID and tostring(target.itemID) or "")
-    self.targetItemNameInput:SetText(target.itemName or "")
-    self.targetQuantityInput:SetText(target.quantity and tostring(target.quantity) or "")
-    self.targetScopeInput:SetText(target.scope or "GLOBAL")
-    self.targetTabNameInput:SetText(target.tabName or "")
-    self.selectedTargetStatus = target.status or "OPEN"
-    self.selectedTargetKey = target_rule_key(target)
-    self:UpdateTargetStatusLabel()
-    if self:IsTargetSuggested(target) then
-        self.targetEditorStateText:SetText("Inventory currently meets this target. Close it when the procurement work is done.")
-    else
-        self.targetEditorStateText:SetText("Editing saved target.")
-    end
-    return target
-end
-
-function mainFrame:ClearTargetEditor()
-    self.selectedTargetKey = nil
-    self.selectedTargetStatus = "OPEN"
-    self.targetItemIDInput:SetText("")
-    self.targetItemNameInput:SetText("")
-    self.targetQuantityInput:SetText("")
-    self.targetScopeInput:SetText("")
-    self.targetTabNameInput:SetText("")
-    self:UpdateTargetStatusLabel()
-    self.targetEditorStateText:SetText("Create or select a target to start editing.")
 end
 
 function mainFrame:ToggleMinimumShowAllRows()
@@ -1800,9 +1977,8 @@ function mainFrame:ToggleMinimumShowAllRows()
 end
 
 function mainFrame:ToggleMinimumManualOnlyRows()
-    self.minimumManualOnlyRows = not self.minimumManualOnlyRows
-    self.minimumManualOnlyToggleButton.labelText:SetText(self.minimumManualOnlyRows and "All Sources" or "Manual Only")
-    self:RefreshView()
+    self.minimumManualOnlyRows = false
+    self:ApplyMinimumFilters()
     return self.minimumManualOnlyRows
 end
 
@@ -1811,10 +1987,6 @@ function mainFrame:GetMinimumEmptyStateText(rows)
 
     if #rows > 0 then
         return ""
-    end
-
-    if self.minimumManualOnlyRows then
-        return "No manual items match the current minimum filters."
     end
 
     if (self.minimumSearchInput:GetText() or "") ~= "" then
@@ -1863,23 +2035,6 @@ function mainFrame:GetCurrentSnapshot()
     return { items = {} }
 end
 
-function mainFrame:IsTargetSuggested(target)
-    target = target or {}
-
-    if (target.status or "OPEN") ~= "OPEN" then
-        return false
-    end
-
-    local snapshot = self:GetCurrentSnapshot()
-    local item = (snapshot.items or {})[target.itemID]
-    local current = item and item.totalCount or 0
-    return current >= (target.quantity or 0)
-end
-
-function mainFrame:UpdateTargetStatusLabel()
-    self.targetStatusButton.labelText:SetText(self.selectedTargetStatus == "OPEN" and "Status: Open" or "Status: Closed")
-end
-
 function mainFrame:GetExportUiState(db)
     db = db or current_db()
     db.ui = db.ui or {}
@@ -1908,6 +2063,7 @@ function mainFrame:UpdateSharedTableLayout()
     local anchor = self.viewSubtitle
     local offsetY = -24
     local viewportHeight = self.defaultTableViewportHeight
+    local usesInlineFilters = self:UsesInlineTableFilters()
 
     if self.activeView == "REQUESTS" then
         anchor = self.requestCreatePanel
@@ -1917,10 +2073,6 @@ function mainFrame:UpdateSharedTableLayout()
         anchor = self.viewSubtitle
         offsetY = -24
         viewportHeight = 320
-    elseif self.activeView == "TARGETS" then
-        anchor = self.targetsPanel
-        offsetY = -16
-        viewportHeight = 252
     elseif self.activeView == "EXPORTS" then
         anchor = self.exportsPanel
         offsetY = -16
@@ -1941,7 +2093,11 @@ function mainFrame:UpdateSharedTableLayout()
     self.tableFilterFrame:SetPoint("TOPLEFT", self.tableHeaderFrame, "BOTTOMLEFT", 0, -4)
 
     self.tableScrollFrame:ClearAllPoints()
-    self.tableScrollFrame:SetPoint("TOPLEFT", self.tableFilterFrame, "BOTTOMLEFT", 0, -4)
+    if usesInlineFilters then
+        self.tableScrollFrame:SetPoint("TOPLEFT", self.tableFilterFrame, "BOTTOMLEFT", 0, -4)
+    else
+        self.tableScrollFrame:SetPoint("TOPLEFT", self.tableHeaderFrame, "BOTTOMLEFT", 0, -4)
+    end
     self.tableScrollFrame:SetSize(self.tableViewportWidth, self.tableViewportHeight)
 
     self.tableScrollBar:ClearAllPoints()
@@ -2050,27 +2206,6 @@ function mainFrame:BuildMinimumRuleFromEditor()
     }
 end
 
-function mainFrame:BuildTargetFromEditor()
-    local itemID = parse_number(self.targetItemIDInput:GetText() or "")
-    local quantity = parse_number(self.targetQuantityInput:GetText() or "")
-    local itemName = self.targetItemNameInput:GetText() or ""
-    local scope = self.targetScopeInput:GetText() or "GLOBAL"
-    local tabName = self.targetTabNameInput:GetText() or ""
-
-    if not itemID or itemName == "" then
-        return nil
-    end
-
-    return {
-        itemID = itemID,
-        itemName = itemName,
-        quantity = quantity or 0,
-        scope = scope ~= "" and scope or "GLOBAL",
-        tabName = tabName ~= "" and tabName or nil,
-        status = self.selectedTargetStatus or "OPEN",
-    }
-end
-
 function mainFrame:ToggleMinimumRestock()
     self.selectedMinimumEnabled = not self.selectedMinimumEnabled
     self.minimumRestockToggleButton.labelText:SetText(self.selectedMinimumEnabled and "Restock: Yes" or "Restock: No")
@@ -2079,45 +2214,6 @@ end
 
 function mainFrame:SaveMinimumFromEditor()
     return self:SaveAllMinimumChanges()
-end
-
-function mainFrame:ToggleTargetStatus()
-    self.selectedTargetStatus = self.selectedTargetStatus == "OPEN" and "CLOSED" or "OPEN"
-    self:UpdateTargetStatusLabel()
-
-    local targetsView = ns.modules.targetsView
-    local db = ns.state.db or {}
-    local target = self:BuildTargetFromEditor()
-
-    if target and self.selectedTargetKey and type(targetsView) == "table" and type(targetsView.SetStatusWithAudit) == "function" then
-        local updatedTarget = targetsView.SetStatusWithAudit(db, target, self.selectedTargetStatus, {
-            actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
-            timestamp = _G.time(),
-        })
-        self:LoadTargetIntoEditor(updatedTarget)
-        self:RefreshView()
-        return updatedTarget
-    end
-
-    return target
-end
-
-function mainFrame:SaveTargetFromEditor()
-    local targetsView = ns.modules.targetsView
-    local db = ns.state.db or {}
-    local target = self:BuildTargetFromEditor()
-
-    if not target or target.quantity == nil or type(targetsView) ~= "table" or type(targetsView.UpsertWithAudit) ~= "function" then
-        return nil
-    end
-
-    targetsView.UpsertWithAudit(db, target, {
-        actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
-        timestamp = _G.time(),
-    })
-    self:LoadTargetIntoEditor(target)
-    self:RefreshView()
-    return target
 end
 
 function mainFrame:CreateRequestFromEditor()
@@ -2163,7 +2259,6 @@ function mainFrame:RefreshView()
     local inventoryView = ns.modules.inventoryView
     local historyView = ns.modules.historyView
     local minimumsView = ns.modules.minimumsView
-    local targetsView = ns.modules.targetsView
     local requestsView = ns.modules.requestsView
 
     self:UpdateSharedTableLayout()
@@ -2201,7 +2296,6 @@ function mainFrame:RefreshView()
     self.minimumsPanel:Hide()
     self.minimumAddModal:Hide()
     self.minimumEmptyStateText:Hide()
-    self.targetsPanel:Hide()
     self.exportsPanel:Hide()
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
@@ -2232,36 +2326,26 @@ function mainFrame:RefreshView()
         self:ApplyInventoryFilters()
         showTable = true
     elseif self.activeView == "HISTORY" then
-        local rows = historyView.BuildTableRows(db.auditLog or {}, self:GetSharedFilterState())
+        local rows = historyView.BuildTableRows(procurement_audit_entries(db.auditLog or {}), self:GetSharedFilterState())
         self.tableScrollOffset = 0
         self:ConfigureTable({
-            { key = "category", label = "Category", width = 100, justifyH = "LEFT" },
-            { key = "itemName", label = "Item", width = 170, justifyH = "LEFT" },
-            { key = "action", label = "Action", width = 100, justifyH = "LEFT" },
-            { key = "actor", label = "Who", width = 100, justifyH = "LEFT" },
-            { key = "oldValue", label = "Old", width = 80, justifyH = "LEFT" },
-            { key = "newValue", label = "New", width = 80, justifyH = "LEFT" },
+            { key = "date", label = "When", width = 150, justifyH = "LEFT" },
+            { key = "category", label = "Category", width = 90, justifyH = "LEFT" },
+            { key = "itemName", label = "Item", width = 150, justifyH = "LEFT" },
+            { key = "action", label = "Action", width = 80, justifyH = "LEFT" },
+            { key = "actor", label = "Who", width = 90, justifyH = "LEFT" },
+            { key = "oldValue", label = "Old", width = 70, justifyH = "LEFT" },
+            { key = "newValue", label = "New", width = 70, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         showTable = true
     elseif self.activeView == "MINIMUMS" then
         self.minimumShowAllToggleButton.labelText:SetText(self.minimumShowAllRows and "Enabled Only" or "Show All")
-        self.minimumManualOnlyToggleButton.labelText:SetText(self.minimumManualOnlyRows and "All Sources" or "Manual Only")
+        self.minimumManualOnlyToggleButton:Hide()
+        self.minimumSaveAllButton:Hide()
+        self.minimumSaveButton.labelText:SetText("Save All")
         self:LoadMinimumSettingsFromDb(db)
         self:ApplyMinimumFilters()
-        showTable = true
-    elseif self.activeView == "TARGETS" then
-        local rows = targetsView and type(targetsView.BuildTableRows) == "function" and targetsView.BuildTableRows(db.oneTimeTargets or {}, currentSnapshot or { items = {} }) or {}
-        self.tableScrollOffset = 0
-        self:ConfigureTable({
-            { key = "itemID", label = "Item ID", width = 70, justifyH = "LEFT" },
-            { key = "itemName", label = "Item", width = 180, justifyH = "LEFT" },
-            { key = "current", label = "Current", width = 70, justifyH = "LEFT" },
-            { key = "status", label = "Status", width = 80, justifyH = "LEFT" },
-            { key = "quantity", label = "Target", width = 80, justifyH = "LEFT" },
-            { key = "scope", label = "Scope", width = 90, justifyH = "LEFT" },
-        }, rows)
-        self:RefreshVisibleTableRows()
         showTable = true
     elseif self.activeView == "REQUESTS" then
         local rows = requestsView.BuildTableRows(db.requests or {})
@@ -2299,6 +2383,14 @@ function mainFrame:RefreshView()
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
         bodyText = ""
+    elseif self.activeView == "ABOUT" then
+        bodyText = table.concat({
+            "Author: Zirleficent",
+            "Server: Stormrage",
+            "Guild: Tyrrish Rebellion",
+            string.format("Build: %s", ABOUT_BUILD_STAMP),
+            "Support: Placeholder text.",
+        }, "\n")
     else
         bodyText = "Detailed content for this view is coming next."
     end
@@ -2313,7 +2405,11 @@ function mainFrame:RefreshView()
 
     if showTable then
         self.tableHeaderFrame:Show()
-        self.tableFilterFrame:Show()
+        if self:UsesInlineTableFilters() then
+            self.tableFilterFrame:Show()
+        else
+            self.tableFilterFrame:Hide()
+        end
         self.tableScrollFrame:Show()
         self.tableScrollBar:Show()
     else
@@ -2348,12 +2444,6 @@ function mainFrame:RefreshView()
     else
         self.minimumsPanel:Hide()
         self.minimumEmptyStateText:Hide()
-    end
-
-    if self.activeView == "TARGETS" then
-        self.targetsPanel:Show()
-    else
-        self.targetsPanel:Hide()
     end
 
     if self.activeView == "EXPORTS" then
@@ -2447,7 +2537,7 @@ function mainFrame:SelectView(name)
         self:ClearTableFilters()
     end
     self.activeView = nextView
-    self.viewTitle:SetText((name or "Dashboard"):gsub("^%l", string.upper):gsub("_", " "))
+    self.viewTitle:SetText(view_label_for(nextView))
     self.viewSubtitle:SetText(self.viewDescriptions[self.activeView] or self.viewDescriptions.DASHBOARD)
     self:ApplyTheme()
     self:RefreshView()

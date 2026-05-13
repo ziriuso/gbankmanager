@@ -94,3 +94,69 @@ assert.equal(
     sorted[4].name,
     "inventory tier sorting should still push unranked rows after ranked tiers"
 )
+
+local rankRows = inventory.BuildTableRows({
+    items = {
+        [2001] = {
+            itemID = 2001,
+            name = "Potion Bomb of Speed Rank Markup",
+            totalCount = 5,
+            craftedQuality = 0,
+            craftedQualityIcon = "|A:Interface-Crafting-ReagentRank1-Med:16:16|a",
+            tabs = { Potions = 5 },
+        },
+        [2002] = {
+            itemID = 2002,
+            name = "Algari Mana Oil Rank Atlas",
+            totalCount = 5,
+            craftedQuality = 0,
+            craftedQualityIcon = "Professions-Icon-Rank2-Inv",
+            tabs = { Potions = 5 },
+        },
+        [2003] = {
+            itemID = 2003,
+            name = "Basic Cloth",
+            totalCount = 5,
+            craftedQuality = 0,
+            craftedQualityIcon = "",
+            tabs = { Cloth = 5 },
+        },
+    },
+}, {}, "")
+
+local rankRowsByName = {}
+for _, row in ipairs(rankRows) do
+    rankRowsByName[row.name] = row
+end
+
+assert.equal(
+    1,
+    rankRowsByName["Potion Bomb of Speed Rank Markup"].qualityValue,
+    "inventory should derive tier 1 from live-client reagent-quality rank markup variants"
+)
+assert.equal(
+    2,
+    rankRowsByName["Algari Mana Oil Rank Atlas"].qualityValue,
+    "inventory should derive tier 2 from live-client crafted-quality rank atlas variants"
+)
+
+local rankSorted = inventory.SortRows(rankRows, {
+    key = "quality",
+    direction = "asc",
+})
+
+assert.equal(
+    "Potion Bomb of Speed Rank Markup",
+    rankSorted[1].name,
+    "inventory tier sorting should treat rank atlas variants as tier 1 entries"
+)
+assert.equal(
+    "Algari Mana Oil Rank Atlas",
+    rankSorted[2].name,
+    "inventory tier sorting should place rank atlas variants into the derived tier 2 group"
+)
+assert.equal(
+    "Basic Cloth",
+    rankSorted[3].name,
+    "inventory tier sorting should still push unranked items after parsed rank atlas variants"
+)

@@ -64,6 +64,9 @@ local function parsed_quality_tier(icon)
     if tierText == nil then
         tierText = string.match(atlasName, "[Qq]uality%s*[_%-]?(%d+)")
     end
+    if tierText == nil then
+        tierText = string.match(atlasName, "[Rr]ank%s*[_%-]?(%d+)")
+    end
 
     local parsedTier = tonumber(tierText or "")
     if parsedTier and parsedTier >= 1 and parsedTier <= 5 then

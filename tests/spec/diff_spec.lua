@@ -65,7 +65,7 @@ _G.date = function(format, timestamp)
         timestamp = timestamp,
     })
 
-    return "2026-05-12 08:15 EDT"
+    return "2026-05-12 08:15 Eastern Daylight Time"
 end
 
 local dashboardLines = dashboard.BuildLines({
@@ -96,9 +96,9 @@ local historyRows = historyView.BuildTableRows({
 
 _G.date = originalDate
 
-assert.equal("Last scan: 2026-05-12 08:15 EDT", dashboardLines[1], "dashboard lines should localize stored UTC scan timestamps for display")
-assert.equal("2026-05-12 08:15 EDT", dashboardCards[1].value, "dashboard cards should localize stored UTC scan timestamps for display")
-assert.equal("2026-05-12 08:15 EDT", historyRows[1].date, "history rows should localize stored UTC audit timestamps for display")
+assert.equal("Last scan: 2026-05-12 08:15 EDT", dashboardLines[1], "dashboard lines should abbreviate localized scan timezones for display")
+assert.equal("2026-05-12 08:15 EDT", dashboardCards[1].value, "dashboard cards should abbreviate localized scan timezones for display")
+assert.equal("2026-05-12 08:15 EDT", historyRows[1].date, "history rows should abbreviate localized audit timezones for display")
 assert.equal("%Y-%m-%d %H:%M %Z", dateCalls[1].format, "dashboard timestamp display should include the player's local timezone")
 assert.equal(1715523300, dateCalls[1].timestamp, "dashboard timestamp display should format the stored UTC timestamp directly")
 
