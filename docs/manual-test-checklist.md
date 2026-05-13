@@ -9,8 +9,8 @@
 7. Confirm the top bar shows scan metadata and action status text.
 8. Confirm inventory filtering returns matching items.
 9. Confirm history filtering can narrow by change type and actor.
-10. Confirm export text can be generated from the Exports view helpers.
-11. Confirm the sidebar includes Minimums, Targets, and Requests without changing the shell style.
+10. Confirm selecting each export preset opens the export modal instead of trapping output inline in the Exports panel.
+11. Confirm the sidebar includes Minimums, Requests, Exports, About, and Options without changing the shell style.
 12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
 13. Add a one-time target and confirm it reaches suggested fulfilled status once inventory meets the target quantity.
 14. Submit a member request and confirm it begins as `PENDING`.
@@ -22,14 +22,27 @@
 20. Capture a manual recovery payload and confirm it can be replayed without Lua errors after a `/reload`.
 21. With the guild bank open, verify a scan queues only tabs the current character can view.
 22. Change bank contents between scans and confirm the dashboard and history reflect the new snapshot.
-23. Generate Auctionator, spreadsheet, and custom export text from the same demand rows and confirm each preset formats correctly.
-24. Open the Inventory view with enough rows to overflow and confirm the scroll controls move through the table without blanking the header.
-25. Resize the inventory name column and confirm the wider width is reflected immediately while neighboring columns stay readable.
-26. Use the inline inventory column filters and confirm filtering by `Name`, `Tab`, and `Restock` narrows the visible rows immediately.
-27. Confirm the inventory quality column shows a quality marker for known uncommon-or-better items and stays blank for items without known quality.
-28. Confirm long item names and long tab lists clip with an ellipsis instead of spilling into adjacent inventory columns.
-29. Run a scan, `/reload`, and confirm both the inventory snapshot and last-scan status still appear before starting a fresh scan.
-30. Open the History tab and confirm request approvals and minimum changes render as audit-style rows with actor, old value, new value, and timestamp columns.
-31. Open the Requests tab and confirm pending requests appear ahead of approved-open requests, with requester, item, quantity, approval, fulfillment, and note columns rendered in the shared table shell.
-32. Confirm rejected requests and fulfilled requests transition correctly in the Requests flow once those actions are wired into the live controls.
-33. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.
+23. Generate Auctionator, CSV, and custom export text from the same demand rows and confirm each preset formats correctly in the export modal.
+24. In the export modal, use `Select All`, then `Copy`, and confirm the full output is easy to copy/paste into the target tool before closing the modal.
+25. Open the Inventory view with enough rows to overflow and confirm the scroll controls move through the table without blanking the header.
+26. Resize the inventory name column and confirm the wider width is reflected immediately while neighboring columns stay readable.
+27. Use the inline inventory column filters and confirm filtering by `Name`, `Tab`, and `Restock` narrows the visible rows immediately.
+28. Confirm the inventory quality column shows a quality marker for known uncommon-or-better items and stays blank for items without known quality.
+29. Confirm long item names and long tab lists clip with an ellipsis instead of spilling into adjacent inventory columns.
+30. Run a scan, `/reload`, and confirm both the inventory snapshot and last-scan status still appear before starting a fresh scan.
+31. Open the History tab and confirm request approvals and minimum changes render as audit-style rows with actor, old value, new value, and timestamp columns.
+32. Open the Requests tab and confirm pending requests appear ahead of approved-open requests, with requester, item, quantity, approval, fulfillment, and note columns rendered in the shared table shell.
+33. Confirm rejected requests and fulfilled requests transition correctly in the Requests flow once those actions are wired into the live controls.
+34. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.
+35. Open Minimums and confirm the search field has a visible `Search` label and the `Enabled Only` / `Show All` toggle text fits cleanly without clipping.
+36. Select an existing saved minimum row and confirm changed rows tint yellow, deleted rows tint red, and newly staged rows tint green in the live client.
+37. Select an existing saved minimum row and confirm the remove and undo actions use icon buttons instead of placeholder glyph text.
+38. Select an existing saved minimum row and confirm `Bank Tab` stays read-only while `Restock` and `Minimum` still edit inline.
+39. Select any actively edited minimum row and confirm the underlying inline cell text is hidden behind the live editor controls instead of ghosting through.
+40. Click `Add` in Minimums and confirm the modal labels `Item ID`, `Item Name`, `Minimum`, and `Matches` are visible and do not overflow the dialog.
+41. Search for an item name that has multiple quality variants and confirm the modal shows a clean stacked results list instead of jumbled buttons.
+42. Search for an item that exists in the bank and in the WoW client item cache and confirm client-item results are still available alongside bank matches.
+43. Stage a new minimum row from the modal and confirm the row exposes a `Bank Tab` dropdown populated with known guild bank tab names before save.
+44. Save an edited existing minimum row and confirm quantity and restock changes persist without changing the saved row's original `Bank Tab` scope.
+45. Save a newly staged minimum row and confirm the chosen `Bank Tab` dropdown value persists as a tab-scoped minimum.
+46. Use the Minimums search box with and without matches and confirm the empty-state message remains clear when filters hide all rows.

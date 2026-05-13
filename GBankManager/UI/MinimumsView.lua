@@ -549,6 +549,22 @@ local function resolve_item_from_client_cache(query)
     }
 end
 
+local function append_unique_match(matches, item)
+    if not item then
+        return matches
+    end
+
+    matches = matches or {}
+    for _, existing in ipairs(matches) do
+        if tonumber(existing.itemID) == tonumber(item.itemID) then
+            return matches
+        end
+    end
+
+    table.insert(matches, item)
+    return matches
+end
+
 function minimumsView.SortRows(rows, sortState)
     rows = rows or {}
     sortState = sortState or {}
@@ -634,6 +650,17 @@ function minimumsView.ResolveItemQuery(snapshot, query)
         end
     end
 
+    local cachedItem = resolve_item_from_client_cache(raw)
+    if cachedItem and lowered ~= "" and string.find(string.lower(cachedItem.name or ""), lowered, 1, true) ~= nil then
+        matches = append_unique_match(matches, cachedItem)
+        table.sort(matches, function(left, right)
+            if tostring(left.name or "") ~= tostring(right.name or "") then
+                return tostring(left.name or "") < tostring(right.name or "")
+            end
+            return (tonumber(left.itemID or 0) or 0) < (tonumber(right.itemID or 0) or 0)
+        end)
+    end
+
     if #matches == 1 then
         return {
             status = "resolved",
@@ -649,7 +676,6 @@ function minimumsView.ResolveItemQuery(snapshot, query)
         }
     end
 
-    local cachedItem = resolve_item_from_client_cache(raw)
     if cachedItem then
         return {
             status = "resolved",

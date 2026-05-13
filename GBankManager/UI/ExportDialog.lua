@@ -11,19 +11,29 @@ end
 exports = exports or {}
 local exportDialog = ns.modules.exportDialog or {}
 
-function exportDialog.BuildState(text, presetName)
+local function normalize_preset_name(presetName)
+    if presetName == nil or presetName == "" or presetName == "Spreadsheet" then
+        return "CSV"
+    end
+
+    return presetName
+end
+
+function exportDialog.BuildState(text, presetName, shoppingListName)
     return {
-        presetName = presetName or "Spreadsheet",
+        presetName = normalize_preset_name(presetName),
+        shoppingListName = shoppingListName or "GBankManager",
         text = text or "",
     }
 end
 
 function exportDialog.BuildPresetState(rows, presetName, template)
     local text = ""
-    local selectedPreset = presetName or "Spreadsheet"
+    local selectedPreset = normalize_preset_name(presetName)
+    local shoppingListName = (template and template.shoppingListName) or "GBankManager"
 
     if selectedPreset == "Auctionator" then
-        text = exports.BuildAuctionator(rows or {})
+        text = exports.BuildAuctionator(rows or {}, shoppingListName)
     elseif selectedPreset == "Custom" then
         text = exports.BuildDelimited(rows or {}, template or {
             delimiter = "|",
@@ -38,7 +48,7 @@ function exportDialog.BuildPresetState(rows, presetName, template)
         })
     end
 
-    return exportDialog.BuildState(text, selectedPreset)
+    return exportDialog.BuildState(text, selectedPreset, shoppingListName)
 end
 
 ns.modules.exportDialog = exportDialog

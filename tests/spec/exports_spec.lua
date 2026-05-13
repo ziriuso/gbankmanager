@@ -22,11 +22,13 @@ local custom = exports.BuildDelimited({
 assert.equal("4|Flask Alpha", custom, "custom delimited export should honor delimiter and suppress header")
 
 local auctionator = exports.BuildAuctionator({
-    { itemName = "Flask Alpha", totalToBuy = 4 },
-    { itemName = "Potion Beta", totalToBuy = 2 },
-})
+    { itemName = "Flask Alpha", totalToBuy = 4, quality = 3 },
+    { itemName = "", totalToBuy = 7, quality = 5 },
+    { itemName = "Potion Beta", totalToBuy = 2, quality = 0 },
+    { itemName = "Feast Gamma", totalToBuy = 0, quality = 1 },
+}, "Raid Prep")
 
-assert.equal("Flask Alpha x4; Potion Beta x2", auctionator, "auctionator export should build a compact item list")
+assert.equal('Raid Prep^"Flask Alpha";0;0;0;0;0;0;0;3;4^"Potion Beta";0;0;0;0;0;0;0;0;2', auctionator, "auctionator export should match the approved shopping-list sample format")
 
 local rows = exports.MaterializePlanRows({
     [2002] = {
@@ -48,6 +50,20 @@ assert.equal("REQUEST:1|RESTOCK:4", rows[1].reason, "materialized rows should in
 assert.equal(1001, rows[1].itemID, "materialized rows should keep item ids for release exports")
 assert.equal(5, rows[1].totalToBuy, "materialized rows should keep purchase totals")
 
+local outOfStockQualityRows = exports.MaterializePlanRows({
+    [4004] = {
+        itemID = 4004,
+        itemName = "Ranked Rune",
+        totalToBuy = 6,
+        craftedQuality = 2,
+        sources = { RESTOCK = 6, ONE_TIME_TARGET = 0, REQUEST = 0 },
+    },
+}, {
+    items = {},
+})
+
+assert.equal(2, outOfStockQualityRows[1].quality, "materialized rows should preserve row quality when an item is missing from the current snapshot")
+
 local enrichedRows = exports.MaterializePlanRows({
     [3003] = {
         itemID = 3003,
@@ -67,7 +83,7 @@ local enrichedRows = exports.MaterializePlanRows({
     },
 }, {
     items = {
-        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 10 },
+        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 10, craftedQuality = 3 },
     },
 })
 
@@ -77,17 +93,25 @@ assert.equal(4, enrichedRows[1].restockQuantity, "materialized rows should expos
 assert.equal(0, enrichedRows[1].targetQuantity, "materialized rows should expose one-time target contribution")
 assert.equal(1, enrichedRows[1].requestQuantity, "materialized rows should expose approved request contribution")
 assert.equal("GLOBAL", enrichedRows[1].scopeSummary, "materialized rows should summarize involved scopes")
+assert.equal(3, enrichedRows[1].quality, "materialized rows should expose crafted quality for Auctionator exports")
 
 local exportDialog = dofile("GBankManager/UI/ExportDialog.lua")
-local auctionatorState = exportDialog.BuildPresetState(rows, "Auctionator")
+local defaultState = exportDialog.BuildPresetState(rows)
+local spreadsheetState = exportDialog.BuildPresetState(rows, "Spreadsheet")
+local auctionatorState = exportDialog.BuildPresetState(rows, "Auctionator", {
+    shoppingListName = "Raid Prep",
+})
 local customState = exportDialog.BuildPresetState(rows, "Custom", {
     delimiter = "|",
     includeHeader = false,
     fields = { "totalToBuy", "itemName" },
 })
 
+assert.equal("CSV", defaultState.presetName, "export dialog should default to the visible CSV preset name")
+assert.equal("CSV", spreadsheetState.presetName, "export dialog should map legacy spreadsheet state to the visible CSV preset name")
 assert.equal("Auctionator", auctionatorState.presetName, "export dialog should preserve the selected preset")
-assert.equal("Flask Alpha x5; Potion Beta x2", auctionatorState.text, "auctionator preset should build compact output")
+assert.equal("Raid Prep", auctionatorState.shoppingListName, "auctionator preset state should preserve the officer-selected shopping-list name")
+assert.equal('Raid Prep^"Flask Alpha";0;0;0;0;0;0;0;0;5^"Potion Beta";0;0;0;0;0;0;0;0;2', auctionatorState.text, "auctionator preset should build the approved caret-delimited shopping-list output")
 assert.equal("5|Flask Alpha\n2|Potion Beta", customState.text, "custom preset should honor caller template settings")
 
 local exportsView = dofile("GBankManager/UI/ExportsView.lua")

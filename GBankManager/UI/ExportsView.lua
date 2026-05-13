@@ -10,7 +10,7 @@ end
 
 local exportsView = ns.modules.exportsView or {}
 
-function exportsView.BuildSpreadsheetText(rows)
+function exportsView.BuildCsvText(rows)
     return exports.BuildDelimited(rows or {}, {
         delimiter = ",",
         includeHeader = true,
@@ -18,8 +18,12 @@ function exportsView.BuildSpreadsheetText(rows)
     })
 end
 
-function exportsView.BuildAuctionatorText(rows)
-    return exports.BuildAuctionator(rows or {})
+function exportsView.BuildSpreadsheetText(rows)
+    return exportsView.BuildCsvText(rows)
+end
+
+function exportsView.BuildAuctionatorText(rows, shoppingListName)
+    return exports.BuildAuctionator(rows or {}, shoppingListName)
 end
 
 function exportsView.BuildCustomText(rows, template)

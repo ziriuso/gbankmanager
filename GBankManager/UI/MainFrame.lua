@@ -81,6 +81,30 @@ local function make_button(parent, width, height, text)
     return button
 end
 
+local function set_button_icon(button, kind)
+    if not button then
+        return
+    end
+
+    button.iconKind = kind
+    if button.labelText then
+        button.labelText:SetText("")
+    end
+
+    button.iconTexture = button.iconTexture or button:CreateTexture()
+    if type(button.iconTexture.SetAllPoints) == "function" then
+        button.iconTexture:SetAllPoints()
+    end
+    if type(button.iconTexture.SetAtlas) == "function" then
+        button.iconTexture:SetAtlas(kind == "remove" and "common-icon-redx" or "common-icon-undo", true)
+    end
+
+    button.iconLabel = button.iconLabel or make_label(button, "", "GameFontHighlightSmall")
+    button.iconLabel:ClearAllPoints()
+    button.iconLabel:SetPoint("CENTER", button, "CENTER", 0, 0)
+    button.iconLabel:SetText(kind == "remove" and "X" or "U")
+end
+
 local function make_input(parent, width, height)
     local input = _G.CreateFrame("EditBox", nil, parent, "BackdropTemplate")
     input:SetSize(width, height)
@@ -152,6 +176,111 @@ local function clone_export_template(template)
         includeHeader = template.includeHeader ~= false,
         fields = (#(template.fields or {}) > 0) and copy_list(template.fields) or { "itemID", "itemName", "totalToBuy" },
     }
+end
+
+local function normalize_export_preset_name(presetName)
+    if presetName == nil or presetName == "" or presetName == "Spreadsheet" then
+        return "CSV"
+    end
+
+    return presetName
+end
+
+local function normalize_shopping_list_name(value)
+    value = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if value == "" then
+        return "GBankManager"
+    end
+
+    return value
+end
+
+local function make_export_output_input(parent, width, height)
+    local input = make_input(parent, width, height)
+    input.lastCopiedText = nil
+    input.highlightStart = nil
+    input.highlightEnd = nil
+    input.multiLine = true
+
+    if type(input.SetMultiLine) == "function" then
+        input:SetMultiLine(true)
+    else
+        function input:SetMultiLine(value)
+            self.multiLine = value and true or false
+        end
+    end
+
+    function input:HighlightText(startIndex, endIndex)
+        self.highlightStart = startIndex
+        self.highlightEnd = endIndex
+    end
+
+    function input:SetFocus()
+        self.hasFocus = true
+    end
+
+    return input
+end
+
+local function set_frame_shown(frame, shouldShow)
+    if not frame then
+        return
+    end
+
+    if shouldShow then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end
+
+local function uses_auctionator_controls(presetName)
+    return normalize_export_preset_name(presetName) == "Auctionator"
+end
+
+local function uses_custom_export_controls(presetName)
+    return normalize_export_preset_name(presetName) == "Custom"
+end
+
+local function count_lines(text)
+    local lineCount = 1
+    text = tostring(text or "")
+
+    for _ in string.gmatch(text, "\n") do
+        lineCount = lineCount + 1
+    end
+
+    return lineCount
+end
+
+local function export_quality_for_item(db, itemID)
+    db = db or {}
+    local snapshots = db.snapshots or {}
+    local currentSnapshot = db.currentSnapshotId and snapshots[db.currentSnapshotId] or nil
+    local snapshotItems = (currentSnapshot and currentSnapshot.items) or {}
+    local sources = {
+        db.minimums,
+        db.oneTimeTargets,
+        db.requests,
+    }
+
+    local snapshotItem = snapshotItems[itemID]
+    if snapshotItem and tonumber(snapshotItem.craftedQuality or 0) and tonumber(snapshotItem.craftedQuality or 0) > 0 then
+        return tonumber(snapshotItem.craftedQuality or 0) or 0
+    end
+
+    for _, source in ipairs(sources) do
+        for _, entry in ipairs(source or {}) do
+            if entry.itemID == itemID then
+                local quality = tonumber(entry.quality or entry.craftedQuality or 0) or 0
+                if quality > 0 then
+                    return quality
+                end
+            end
+        end
+    end
+
+    return 0
 end
 
 local function format_timestamp(timestamp)
@@ -402,8 +531,9 @@ mainFrame.selectedMinimumKey = mainFrame.selectedMinimumKey or nil
 mainFrame.selectedMinimumEnabled = mainFrame.selectedMinimumEnabled or false
 mainFrame.minimumShowAllRows = mainFrame.minimumShowAllRows or false
 mainFrame.minimumManualOnlyRows = mainFrame.minimumManualOnlyRows or false
-mainFrame.exportSelectedPreset = mainFrame.exportSelectedPreset or "Spreadsheet"
+mainFrame.exportSelectedPreset = normalize_export_preset_name(mainFrame.exportSelectedPreset)
 mainFrame.exportCustomTemplate = mainFrame.exportCustomTemplate or clone_export_template()
+mainFrame.exportShoppingListName = normalize_shopping_list_name(mainFrame.exportShoppingListName)
 
 mainFrame.dashboardCards = mainFrame.dashboardCards or {}
 for index = 1, 4 do
@@ -603,7 +733,7 @@ mainFrame.requestCreateButton:SetPoint("LEFT", mainFrame.requestCreateNoteInput,
 mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-mainFrame.minimumsPanel:SetHeight(52)
+mainFrame.minimumsPanel:SetHeight(72)
 apply_panel_style(mainFrame.minimumsPanel, theme.colors.panel)
 mainFrame.minimumsPanel:Hide()
 
@@ -619,11 +749,14 @@ mainFrame.minimumEditorStateText = mainFrame.minimumEditorStateText or make_labe
 mainFrame.minimumEditorStateText:SetPoint("TOPLEFT", mainFrame.minimumsHint, "BOTTOMLEFT", 0, -14)
 mainFrame.minimumEditorStateText:Hide()
 
-mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or make_button(mainFrame.minimumsPanel, 80, 28, "Show All")
+mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or make_button(mainFrame.minimumsPanel, 110, 28, "Show All")
 mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, 12)
 
+mainFrame.minimumSearchLabel = mainFrame.minimumSearchLabel or make_label(mainFrame.minimumsPanel, "Search", "GameFontHighlightSmall")
+mainFrame.minimumSearchLabel:SetPoint("TOPRIGHT", mainFrame.minimumsPanel, "TOPRIGHT", -16, -14)
+
 mainFrame.minimumSearchInput = mainFrame.minimumSearchInput or make_input(mainFrame.minimumsPanel, 120, 22)
-mainFrame.minimumSearchInput:SetPoint("RIGHT", mainFrame.minimumShowAllToggleButton, "LEFT", -8, 0)
+mainFrame.minimumSearchInput:SetPoint("TOPRIGHT", mainFrame.minimumsPanel, "TOPRIGHT", -16, -32)
 
 mainFrame.minimumManualOnlyToggleButton = mainFrame.minimumManualOnlyToggleButton or make_button(mainFrame.minimumsPanel, 86, 28, "Manual Only")
 mainFrame.minimumManualOnlyToggleButton:SetPoint("RIGHT", mainFrame.minimumSearchInput, "LEFT", -8, 0)
@@ -641,7 +774,7 @@ mainFrame.minimumSaveAllButton:SetPoint("LEFT", mainFrame.minimumSaveButton, "RI
 mainFrame.minimumSaveAllButton:Hide()
 
 mainFrame.minimumAddModal = mainFrame.minimumAddModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
-mainFrame.minimumAddModal:SetSize(420, 220)
+mainFrame.minimumAddModal:SetSize(500, 300)
 mainFrame.minimumAddModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
 mainFrame.minimumAddModal.frameStrata = "FULLSCREEN_DIALOG"
 if type(mainFrame.minimumAddModal.SetFrameStrata) == "function" then
@@ -659,16 +792,25 @@ mainFrame.minimumAddModalTitle:SetPoint("TOPLEFT", mainFrame.minimumAddModal, "T
 
 mainFrame.minimumAddModalHint = mainFrame.minimumAddModalHint or make_label(mainFrame.minimumAddModal, "Search by Item ID or Item Name, then add the item and finish Bank Tab / Restock / Minimum inline in the table.", "GameFontHighlightSmall")
 mainFrame.minimumAddModalHint:SetPoint("TOPLEFT", mainFrame.minimumAddModalTitle, "BOTTOMLEFT", 0, -8)
+mainFrame.minimumAddModalHint:SetWidth(452)
+
+mainFrame.minimumAddItemIDLabel = mainFrame.minimumAddItemIDLabel or make_label(mainFrame.minimumAddModal, "Item ID", "GameFontHighlightSmall")
+mainFrame.minimumAddItemIDLabel:SetPoint("TOPLEFT", mainFrame.minimumAddModalHint, "BOTTOMLEFT", 0, -14)
+
+mainFrame.minimumAddItemNameLabel = mainFrame.minimumAddItemNameLabel or make_label(mainFrame.minimumAddModal, "Item Name", "GameFontHighlightSmall")
+mainFrame.minimumAddItemNameLabel:SetPoint("TOPLEFT", mainFrame.minimumAddItemIDLabel, "TOPRIGHT", 96, 0)
+
+mainFrame.minimumAddQuantityLabel = mainFrame.minimumAddQuantityLabel or make_label(mainFrame.minimumAddModal, "Minimum", "GameFontHighlightSmall")
+mainFrame.minimumAddQuantityLabel:SetPoint("TOPLEFT", mainFrame.minimumAddItemNameLabel, "TOPRIGHT", 208, 0)
 
 mainFrame.minimumAddItemIDInput = mainFrame.minimumAddItemIDInput or make_input(mainFrame.minimumAddModal, 84, 22)
-mainFrame.minimumAddItemIDInput:SetPoint("TOPLEFT", mainFrame.minimumAddModalHint, "BOTTOMLEFT", 0, -16)
+mainFrame.minimumAddItemIDInput:SetPoint("TOPLEFT", mainFrame.minimumAddItemIDLabel, "BOTTOMLEFT", 0, -4)
 
 mainFrame.minimumAddItemNameInput = mainFrame.minimumAddItemNameInput or make_input(mainFrame.minimumAddModal, 196, 22)
 mainFrame.minimumAddItemNameInput:SetPoint("LEFT", mainFrame.minimumAddItemIDInput, "RIGHT", 8, 0)
 
 mainFrame.minimumAddQuantityInput = mainFrame.minimumAddQuantityInput or make_input(mainFrame.minimumAddModal, 64, 22)
 mainFrame.minimumAddQuantityInput:SetPoint("LEFT", mainFrame.minimumAddItemNameInput, "RIGHT", 8, 0)
-mainFrame.minimumAddQuantityInput:Hide()
 
 mainFrame.minimumAddButton = mainFrame.minimumAddButton or make_button(mainFrame.minimumAddModal, 64, 28, "Add")
 mainFrame.minimumAddButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumAddModal, "BOTTOMRIGHT", -16, 16)
@@ -693,10 +835,20 @@ mainFrame.minimumRestockToggleButton = mainFrame.minimumRestockToggleButton or m
 mainFrame.minimumRestockToggleButton:SetPoint("LEFT", mainFrame.minimumScopeInput, "RIGHT", 8, 0)
 mainFrame.minimumRestockToggleButton:Hide()
 
+mainFrame.minimumAddResultsLabel = mainFrame.minimumAddResultsLabel or make_label(mainFrame.minimumAddModal, "Matches", "GameFontHighlightSmall")
+mainFrame.minimumAddResultsLabel:SetPoint("TOPLEFT", mainFrame.minimumAddItemIDInput, "BOTTOMLEFT", 0, -16)
+
+mainFrame.minimumAddResultsPanel = mainFrame.minimumAddResultsPanel or _G.CreateFrame("Frame", nil, mainFrame.minimumAddModal, "BackdropTemplate")
+mainFrame.minimumAddResultsPanel:SetPoint("TOPLEFT", mainFrame.minimumAddResultsLabel, "BOTTOMLEFT", 0, -6)
+mainFrame.minimumAddResultsPanel:SetSize(452, 86)
+apply_panel_style(mainFrame.minimumAddResultsPanel, theme.colors.background)
+mainFrame.minimumAddResultsPanel:Hide()
+
 mainFrame.minimumAddMatchButtons = mainFrame.minimumAddMatchButtons or {}
 for index = 1, 3 do
-    local button = mainFrame.minimumAddMatchButtons[index] or make_button(mainFrame.minimumAddModal, 122, 24, "")
-    button:SetPoint("TOPLEFT", mainFrame.minimumAddItemIDInput, "BOTTOMLEFT", ((index - 1) * 130), -12)
+    local button = mainFrame.minimumAddMatchButtons[index] or make_button(mainFrame.minimumAddResultsPanel, 444, 22, "")
+    button:SetPoint("TOPLEFT", mainFrame.minimumAddResultsPanel, "TOPLEFT", 4, -4 - ((index - 1) * 24))
+    button:SetWidth(444)
     button:Hide()
     mainFrame.minimumAddMatchButtons[index] = button
 end
@@ -714,8 +866,9 @@ mainFrame.exportsTitle:SetPoint("TOPLEFT", mainFrame.exportsPanel, "TOPLEFT", 16
 mainFrame.exportsHint = mainFrame.exportsHint or make_label(mainFrame.exportsPanel, "Generate preset text from the active procurement plan.", "GameFontHighlightSmall")
 mainFrame.exportsHint:SetPoint("TOPLEFT", mainFrame.exportsTitle, "BOTTOMLEFT", 0, -8)
 
-mainFrame.exportPresetSpreadsheetButton = mainFrame.exportPresetSpreadsheetButton or make_button(mainFrame.exportsPanel, 84, 28, "Spreadsheet")
+mainFrame.exportPresetSpreadsheetButton = mainFrame.exportPresetSpreadsheetButton or make_button(mainFrame.exportsPanel, 84, 28, "CSV")
 mainFrame.exportPresetSpreadsheetButton:SetPoint("TOPLEFT", mainFrame.exportsHint, "BOTTOMLEFT", 0, -14)
+mainFrame.exportPresetSpreadsheetButton.labelText:SetText("CSV")
 
 mainFrame.exportPresetAuctionatorButton = mainFrame.exportPresetAuctionatorButton or make_button(mainFrame.exportsPanel, 84, 28, "Auctionator")
 mainFrame.exportPresetAuctionatorButton:SetPoint("LEFT", mainFrame.exportPresetSpreadsheetButton, "RIGHT", 8, 0)
@@ -723,16 +876,22 @@ mainFrame.exportPresetAuctionatorButton:SetPoint("LEFT", mainFrame.exportPresetS
 mainFrame.exportPresetCustomButton = mainFrame.exportPresetCustomButton or make_button(mainFrame.exportsPanel, 68, 28, "Custom")
 mainFrame.exportPresetCustomButton:SetPoint("LEFT", mainFrame.exportPresetAuctionatorButton, "RIGHT", 8, 0)
 
-mainFrame.exportsPresetTitle = mainFrame.exportsPresetTitle or make_label(mainFrame.exportsPanel, "Spreadsheet", "GameFontHighlight")
+mainFrame.exportsPresetTitle = mainFrame.exportsPresetTitle or make_label(mainFrame.exportsPanel, "CSV", "GameFontHighlight")
 mainFrame.exportsPresetTitle:SetPoint("LEFT", mainFrame.exportPresetCustomButton, "RIGHT", 16, 0)
 
 mainFrame.exportsOutputText = mainFrame.exportsOutputText or make_label(mainFrame.exportsPanel, "", "GameFontNormal")
 mainFrame.exportsOutputText:SetPoint("TOPLEFT", mainFrame.exportPresetSpreadsheetButton, "BOTTOMLEFT", 0, -12)
 mainFrame.exportsOutputText:SetWidth(760)
+mainFrame.exportsOutputText:Hide()
 
 mainFrame.exportDelimiterInput = mainFrame.exportDelimiterInput or make_input(mainFrame.exportsPanel, 42, 22)
 mainFrame.exportDelimiterInput:SetPoint("LEFT", mainFrame.exportsPresetTitle, "RIGHT", 16, 0)
 mainFrame.exportDelimiterInput:SetText(mainFrame.exportCustomTemplate.delimiter or "|")
+
+mainFrame.exportAuctionatorListNameInput = mainFrame.exportAuctionatorListNameInput or make_input(mainFrame.exportsPanel, 140, 22)
+mainFrame.exportAuctionatorListNameInput:SetPoint("LEFT", mainFrame.exportsPresetTitle, "RIGHT", 16, 0)
+mainFrame.exportAuctionatorListNameInput:SetText(mainFrame.exportShoppingListName or "GBankManager")
+mainFrame.exportAuctionatorListNameInput:Hide()
 
 mainFrame.exportFieldsInput = mainFrame.exportFieldsInput or make_input(mainFrame.exportsPanel, 250, 22)
 mainFrame.exportFieldsInput:SetPoint("LEFT", mainFrame.exportDelimiterInput, "RIGHT", 8, 0)
@@ -743,6 +902,63 @@ mainFrame.exportHeaderToggleButton:SetPoint("LEFT", mainFrame.exportFieldsInput,
 
 mainFrame.exportApplyCustomButton = mainFrame.exportApplyCustomButton or make_button(mainFrame.exportsPanel, 64, 28, "Apply")
 mainFrame.exportApplyCustomButton:SetPoint("LEFT", mainFrame.exportHeaderToggleButton, "RIGHT", 8, 0)
+
+mainFrame.exportModal = mainFrame.exportModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.exportModal:SetSize(760, 252)
+mainFrame.exportModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+mainFrame.exportModal.frameStrata = "FULLSCREEN_DIALOG"
+if type(mainFrame.exportModal.SetFrameStrata) == "function" then
+    mainFrame.exportModal:SetFrameStrata(mainFrame.exportModal.frameStrata)
+end
+mainFrame.exportModal.frameLevel = (mainFrame.frameLevel or 0) + 20
+if type(mainFrame.exportModal.SetFrameLevel) == "function" then
+    mainFrame.exportModal:SetFrameLevel(mainFrame.exportModal.frameLevel)
+end
+apply_panel_style(mainFrame.exportModal, theme.colors.panelAlt)
+mainFrame.exportModal:Hide()
+
+mainFrame.exportModalTitle = mainFrame.exportModalTitle or make_label(mainFrame.exportModal, "Export Output", "GameFontHighlight")
+mainFrame.exportModalTitle:SetPoint("TOPLEFT", mainFrame.exportModal, "TOPLEFT", 16, -16)
+
+mainFrame.exportModalHint = mainFrame.exportModalHint or make_label(mainFrame.exportModal, "Select all or copy the generated output into external tools.", "GameFontHighlightSmall")
+mainFrame.exportModalHint:SetPoint("TOPLEFT", mainFrame.exportModalTitle, "BOTTOMLEFT", 0, -8)
+
+mainFrame.exportModalScrollFrame = mainFrame.exportModalScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.exportModal, "BackdropTemplate")
+mainFrame.exportModalScrollFrame:SetPoint("TOPLEFT", mainFrame.exportModalHint, "BOTTOMLEFT", 0, -12)
+mainFrame.exportModalScrollFrame:SetSize(728, 146)
+mainFrame.exportModalScrollFrame:EnableMouseWheel(true)
+mainFrame.exportModalScrollFrame.verticalScroll = mainFrame.exportModalScrollFrame.verticalScroll or 0
+mainFrame.exportModalScrollFrame.verticalScrollRange = mainFrame.exportModalScrollFrame.verticalScrollRange or 0
+if type(mainFrame.exportModalScrollFrame.SetVerticalScroll) ~= "function" then
+    function mainFrame.exportModalScrollFrame:SetVerticalScroll(value)
+        local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+        self.verticalScroll = clamped
+    end
+end
+
+mainFrame.exportModalScrollChild = mainFrame.exportModalScrollChild or _G.CreateFrame("Frame", nil, mainFrame.exportModalScrollFrame, "BackdropTemplate")
+mainFrame.exportModalScrollChild:SetSize(728, 146)
+mainFrame.exportModalScrollFrame:SetScrollChild(mainFrame.exportModalScrollChild)
+
+mainFrame.exportModalOutputInput = mainFrame.exportModalOutputInput or make_export_output_input(mainFrame.exportModalScrollChild, 712, 130)
+mainFrame.exportModalOutputInput:SetPoint("TOPLEFT", mainFrame.exportModalScrollChild, "TOPLEFT", 8, -8)
+
+mainFrame.exportModalSelectAllButton = mainFrame.exportModalSelectAllButton or make_button(mainFrame.exportModal, 84, 28, "Select All")
+mainFrame.exportModalSelectAllButton:SetPoint("BOTTOMLEFT", mainFrame.exportModal, "BOTTOMLEFT", 16, 16)
+
+mainFrame.exportModalCopyButton = mainFrame.exportModalCopyButton or make_button(mainFrame.exportModal, 64, 28, "Copy")
+mainFrame.exportModalCopyButton:SetPoint("LEFT", mainFrame.exportModalSelectAllButton, "RIGHT", 8, 0)
+
+mainFrame.exportModalCloseButton = mainFrame.exportModalCloseButton or make_button(mainFrame.exportModal, 64, 28, "Close")
+mainFrame.exportModalCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportModal, "BOTTOMRIGHT", -16, 16)
+
+mainFrame.exportModalScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+    self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
+end)
+
+mainFrame.exportModalOutputInput:SetScript("OnTextChanged", function()
+    mainFrame:RefreshExportModalScrollMetrics()
+end)
 
 mainFrame.requestApproveButton:SetScript("OnClick", function()
     mainFrame:ApplyRequestAction("APPROVE")
@@ -797,7 +1013,7 @@ mainFrame.minimumAddCancelButton:SetScript("OnClick", function()
 end)
 
 mainFrame.exportPresetSpreadsheetButton:SetScript("OnClick", function()
-    mainFrame:SelectExportPreset("Spreadsheet")
+    mainFrame:SelectExportPreset("CSV")
 end)
 
 mainFrame.exportPresetAuctionatorButton:SetScript("OnClick", function()
@@ -814,6 +1030,25 @@ end)
 
 mainFrame.exportApplyCustomButton:SetScript("OnClick", function()
     mainFrame:ApplyCustomExportTemplate()
+end)
+
+mainFrame.exportModalSelectAllButton:SetScript("OnClick", function()
+    mainFrame.exportModalOutputInput:HighlightText(0, -1)
+    if type(mainFrame.exportModalOutputInput.SetFocus) == "function" then
+        mainFrame.exportModalOutputInput:SetFocus()
+    end
+end)
+
+mainFrame.exportModalCopyButton:SetScript("OnClick", function()
+    mainFrame.exportModalOutputInput.lastCopiedText = mainFrame.exportModalOutputInput:GetText() or ""
+    mainFrame.exportModalOutputInput:HighlightText(0, -1)
+    if type(mainFrame.exportModalOutputInput.SetFocus) == "function" then
+        mainFrame.exportModalOutputInput:SetFocus()
+    end
+end)
+
+mainFrame.exportModalCloseButton:SetScript("OnClick", function()
+    mainFrame.exportModal:Hide()
 end)
 
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Window Transparency", "GameFontHighlight")
@@ -891,6 +1126,9 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
     apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
     apply_panel_style(self.exportsPanel, theme.colors.panel)
+    apply_panel_style(self.exportModal, theme.colors.panelAlt)
+    apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
+    apply_panel_style(self.exportModalScrollChild, theme.colors.background)
     apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
     apply_panel_style(self.tableFilterFrame, theme.colors.background)
     apply_panel_style(self.tableScrollFrame, theme.colors.background)
@@ -937,6 +1175,9 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportPresetCustomButton, theme.colors.panel)
     apply_panel_style(self.exportHeaderToggleButton, theme.colors.panel)
     apply_panel_style(self.exportApplyCustomButton, theme.colors.panelAlt)
+    apply_panel_style(self.exportModalSelectAllButton, theme.colors.panel)
+    apply_panel_style(self.exportModalCopyButton, theme.colors.panelAlt)
+    apply_panel_style(self.exportModalCloseButton, theme.colors.panel)
     apply_panel_style(self.transparencySlider, theme.colors.background)
     apply_panel_style(self.tableScrollBar, theme.colors.panel)
     apply_panel_style(self.tableScrollBar.track, theme.colors.background)
@@ -966,8 +1207,10 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumTabNameInput, theme.colors.background)
     apply_panel_style(self.minimumSearchInput, theme.colors.background)
     apply_panel_style(self.defaultMinimumInput, theme.colors.background)
+    apply_panel_style(self.exportAuctionatorListNameInput, theme.colors.background)
     apply_panel_style(self.exportDelimiterInput, theme.colors.background)
     apply_panel_style(self.exportFieldsInput, theme.colors.background)
+    apply_panel_style(self.exportModalOutputInput, theme.colors.background)
 end
 
 function mainFrame:GetActiveSortState()
@@ -1569,6 +1812,12 @@ function mainFrame:HideMinimumInlineRow(rowFrame)
     if rowFrame.bankTabValueInput then
         rowFrame.bankTabValueInput:Hide()
     end
+    if rowFrame.bankTabDropdownButton then
+        rowFrame.bankTabDropdownButton:Hide()
+    end
+    if rowFrame.bankTabDropdownPanel then
+        rowFrame.bankTabDropdownPanel:Hide()
+    end
     if rowFrame.removeButton then
         rowFrame.removeButton:Hide()
     end
@@ -1641,6 +1890,97 @@ function mainFrame:MarkMinimumRowDeleted(row)
     return row
 end
 
+function mainFrame:GetKnownMinimumBankTabs(row)
+    local tabs = {}
+    local seen = {}
+
+    local function add_tab(tabName)
+        tabName = tostring(tabName or "")
+        if tabName == "" or seen[tabName] then
+            return
+        end
+        seen[tabName] = true
+        table.insert(tabs, tabName)
+    end
+
+    for _, rule in ipairs(self:GetMergedMinimumRules(current_db()) or {}) do
+        add_tab(rule.tabName)
+    end
+
+    for _, item in pairs((self:GetCurrentSnapshot() or {}).items or {}) do
+        for tabName in pairs(item.tabs or {}) do
+            add_tab(tabName)
+        end
+    end
+
+    if type(row) == "table" then
+        add_tab(row.tabName)
+        add_tab(row.tabKey)
+        add_tab(row.bankTab)
+    end
+
+    table.sort(tabs)
+    return tabs
+end
+
+function mainFrame:ConfigureMinimumBankTabDropdown(rowFrame, row, rowIndex, state)
+    if not rowFrame or not row then
+        return
+    end
+
+    rowFrame.bankTabDropdownButton = rowFrame.bankTabDropdownButton or make_button(rowFrame, 74, 20, "")
+    rowFrame.bankTabDropdownPanel = rowFrame.bankTabDropdownPanel or _G.CreateFrame("Frame", nil, rowFrame, "BackdropTemplate")
+    apply_panel_style(rowFrame.bankTabDropdownPanel, theme.colors.panelAlt)
+    rowFrame.bankTabDropdownOptions = rowFrame.bankTabDropdownOptions or {}
+
+    rowFrame.bankTabDropdownButton:ClearAllPoints()
+    rowFrame.bankTabDropdownButton:SetPoint("TOPLEFT", rowFrame.columns[4], "TOPLEFT", -4, -1)
+    rowFrame.bankTabDropdownButton:SetWidth((self.tableColumnLayout[4] and self.tableColumnLayout[4].width or 110) - 12)
+    rowFrame.bankTabDropdownButton.labelText:SetText((state and state.tabName) or row.bankTab or "Select Tab")
+
+    rowFrame.bankTabDropdownPanel:ClearAllPoints()
+    rowFrame.bankTabDropdownPanel:SetPoint("TOPLEFT", rowFrame.bankTabDropdownButton, "BOTTOMLEFT", 0, -2)
+
+    local tabOptions = self:GetKnownMinimumBankTabs(row)
+    rowFrame.bankTabDropdownPanel:SetSize(rowFrame.bankTabDropdownButton:GetWidth(), math.max(28, (#tabOptions * 24) + 8))
+
+    for index, tabName in ipairs(tabOptions) do
+        local option = rowFrame.bankTabDropdownOptions[index] or make_button(rowFrame.bankTabDropdownPanel, rowFrame.bankTabDropdownButton:GetWidth() - 8, 22, "")
+        option.value = tabName
+        option:ClearAllPoints()
+        option:SetPoint("TOPLEFT", rowFrame.bankTabDropdownPanel, "TOPLEFT", 4, -4 - ((index - 1) * 24))
+        option:SetWidth(rowFrame.bankTabDropdownButton:GetWidth() - 8)
+        option.labelText:SetText(tabName)
+        option:SetScript("OnClick", function()
+            local current = self:GetPendingMinimumDraft(row)
+            current.tabName = tabName
+            current.scope = "TAB"
+            self.minimumPendingDirty = self.minimumPendingDirty or {}
+            self.minimumPendingDeleted = self.minimumPendingDeleted or {}
+            self.minimumPendingDirty[row.rowKey] = true
+            self.minimumPendingDeleted[row.rowKey] = nil
+            rowFrame.bankTabDropdownButton.labelText:SetText(tabName)
+            rowFrame.bankTabDropdownPanel:Hide()
+            self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
+        end)
+        option:Show()
+        rowFrame.bankTabDropdownOptions[index] = option
+    end
+
+    for index = #tabOptions + 1, #(rowFrame.bankTabDropdownOptions or {}) do
+        rowFrame.bankTabDropdownOptions[index]:Hide()
+    end
+
+    rowFrame.bankTabDropdownPanel:Hide()
+    rowFrame.bankTabDropdownButton:SetScript("OnClick", function()
+        if rowFrame.bankTabDropdownPanel:IsShown() then
+            rowFrame.bankTabDropdownPanel:Hide()
+        else
+            rowFrame.bankTabDropdownPanel:Show()
+        end
+    end)
+end
+
 function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     if not rowFrame then
         return
@@ -1657,6 +1997,8 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     apply_panel_style(rowFrame.bankTabValueInput, theme.colors.background)
     apply_panel_style(rowFrame.removeButton, MINIMUM_DRAFT_ROW_COLORS.deleted)
     apply_panel_style(rowFrame.undoButton, theme.colors.panelAlt)
+    set_button_icon(rowFrame.removeButton, "remove")
+    set_button_icon(rowFrame.undoButton, "undo")
 
     rowFrame.bankTabValueInput:ClearAllPoints()
     rowFrame.bankTabValueInput:SetPoint("TOPLEFT", rowFrame.columns[4], "TOPLEFT", -4, 0)
@@ -1701,9 +2043,8 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     local state = self:GetPendingMinimumDraft(row)
     local draftState = self:GetMinimumDraftState(row)
     local isDeleted = draftState == "deleted"
-    rowFrame.columns[4]:SetText(state.tabName or "")
-    rowFrame.columns[7]:SetText(tostring(state.quantity or 0))
-    rowFrame.columns[6]:SetText(state.enabled and "Yes" or "No")
+    local baselineRule = self:GetMinimumBaselineRule(row)
+    local allowBankTabSelection = baselineRule == nil
     rowFrame.syncingMinimumDraft = true
     rowFrame.bankTabValueInput:SetText(state.tabName or "")
     rowFrame.minimumValueInput:SetText(tostring(state.quantity or 0))
@@ -1711,13 +2052,40 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
     rowFrame.restockToggleButton.labelText:SetText(state.enabled and "Yes" or "No")
 
     self:ApplyMinimumDraftStyle(rowFrame, rowIndex, draftState)
+    self:ConfigureMinimumBankTabDropdown(rowFrame, row, rowIndex, state)
 
     if isDeleted then
+        rowFrame.columns[4]:SetText(state.tabName or "")
+        rowFrame.columns[6]:SetText(state.enabled and "Yes" or "No")
+        rowFrame.columns[7]:SetText(tostring(state.quantity or 0))
         rowFrame.bankTabValueInput:Hide()
+        if rowFrame.bankTabDropdownButton then
+            rowFrame.bankTabDropdownButton:Hide()
+        end
+        if rowFrame.bankTabDropdownPanel then
+            rowFrame.bankTabDropdownPanel:Hide()
+        end
         rowFrame.minimumValueInput:Hide()
         rowFrame.restockToggleButton:Hide()
     else
-        rowFrame.bankTabValueInput:Show()
+        rowFrame.columns[6]:SetText("")
+        rowFrame.columns[7]:SetText("")
+        if allowBankTabSelection then
+            rowFrame.columns[4]:SetText("")
+            rowFrame.bankTabValueInput:Hide()
+            if rowFrame.bankTabDropdownButton then
+                rowFrame.bankTabDropdownButton:Show()
+            end
+        else
+            rowFrame.columns[4]:SetText(state.tabName or "")
+            rowFrame.bankTabValueInput:Hide()
+            if rowFrame.bankTabDropdownButton then
+                rowFrame.bankTabDropdownButton:Hide()
+            end
+            if rowFrame.bankTabDropdownPanel then
+                rowFrame.bankTabDropdownPanel:Hide()
+            end
+        end
         rowFrame.minimumValueInput:Show()
         rowFrame.restockToggleButton:Show()
     end
@@ -1744,7 +2112,9 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
         self.minimumPendingDirty[row.rowKey] = true
         self.minimumPendingDeleted[row.rowKey] = nil
         rowFrame.restockToggleButton.labelText:SetText(current.enabled and "Yes" or "No")
-        rowFrame.columns[6]:SetText(current.enabled and "Yes" or "No")
+        if self.selectedMinimumKey ~= row.rowKey then
+            rowFrame.columns[6]:SetText(current.enabled and "Yes" or "No")
+        end
         self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
     end)
 
@@ -1758,7 +2128,9 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
         self.minimumPendingDeleted = self.minimumPendingDeleted or {}
         self.minimumPendingDirty[row.rowKey] = true
         self.minimumPendingDeleted[row.rowKey] = nil
-        rowFrame.columns[7]:SetText(tostring(current.quantity or 0))
+        if self.selectedMinimumKey ~= row.rowKey then
+            rowFrame.columns[7]:SetText(tostring(current.quantity or 0))
+        end
         self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
     end)
 
@@ -1773,7 +2145,9 @@ function mainFrame:SyncMinimumInlineRow(rowFrame, row, rowIndex)
         self.minimumPendingDeleted = self.minimumPendingDeleted or {}
         self.minimumPendingDirty[row.rowKey] = true
         self.minimumPendingDeleted[row.rowKey] = nil
-        rowFrame.columns[4]:SetText(current.tabName or "")
+        if self.selectedMinimumKey ~= row.rowKey then
+            rowFrame.columns[4]:SetText(current.tabName or "")
+        end
         self:ApplyMinimumDraftStyle(rowFrame, rowIndex, self:GetMinimumDraftState(row))
     end)
 
@@ -1789,6 +2163,9 @@ end
 function mainFrame:HideMinimumVariantButtons()
     for _, button in ipairs(self.minimumAddMatchButtons or {}) do
         button:Hide()
+    end
+    if self.minimumAddResultsPanel then
+        self.minimumAddResultsPanel:Hide()
     end
 end
 
@@ -1830,6 +2207,9 @@ function mainFrame:ResolveMinimumAddByName()
     end
 
     if resolution.status == "multiple" then
+        if self.minimumAddResultsPanel then
+            self.minimumAddResultsPanel:Show()
+        end
         for index, item in ipairs(self.minimumAddResolvedMatches) do
             local button = self.minimumAddMatchButtons[index]
             if button then
@@ -1934,7 +2314,9 @@ function mainFrame:SaveAllMinimumChanges()
             if (tonumber(normalized.quantity or 0) or 0) <= 0 then
                 normalized.enabled = false
             end
-            if tonumber(normalized.itemID) and tostring(normalized.itemName or "") ~= "" and tostring(normalized.tabName or "") ~= "" then
+            local scope = tostring(normalized.scope or "TAB")
+            local hasRequiredTabName = scope ~= "TAB" or tostring(normalized.tabName or "") ~= ""
+            if tonumber(normalized.itemID) and tostring(normalized.itemName or "") ~= "" and hasRequiredTabName then
                 minimumsView.UpsertWithAudit(db, normalized, {
                     actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
                     timestamp = _G.time(),
@@ -2022,6 +2404,14 @@ function mainFrame:BuildExportRows()
     end
 
     local rows = exportsView and type(exportsView.BuildTableRows) == "function" and exportsView.BuildTableRows(demandPlan, currentSnapshot) or {}
+    local db = current_db()
+
+    for _, row in ipairs(rows) do
+        if (tonumber(row.quality or 0) or 0) <= 0 then
+            row.quality = export_quality_for_item(db, row.itemID)
+        end
+    end
+
     return rows, currentSnapshot
 end
 
@@ -2040,21 +2430,24 @@ function mainFrame:GetExportUiState(db)
     db.ui = db.ui or {}
     db.ui.inventoryColumnWidths = db.ui.inventoryColumnWidths or {}
     db.ui.exportSettings = db.ui.exportSettings or {}
-    db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"
+    db.ui.exportSettings.selectedPreset = normalize_export_preset_name(db.ui.exportSettings.selectedPreset)
+    db.ui.exportSettings.shoppingListName = normalize_shopping_list_name(db.ui.exportSettings.shoppingListName)
     db.ui.exportSettings.customTemplate = clone_export_template(db.ui.exportSettings.customTemplate)
     return db.ui.exportSettings
 end
 
 function mainFrame:LoadExportSettingsFromDb(db)
     local exportSettings = self:GetExportUiState(db)
-    self.exportSelectedPreset = exportSettings.selectedPreset or "Spreadsheet"
+    self.exportSelectedPreset = normalize_export_preset_name(exportSettings.selectedPreset)
+    self.exportShoppingListName = normalize_shopping_list_name(exportSettings.shoppingListName)
     self.exportCustomTemplate = clone_export_template(exportSettings.customTemplate)
     return exportSettings
 end
 
 function mainFrame:PersistExportSettings(db)
     local exportSettings = self:GetExportUiState(db)
-    exportSettings.selectedPreset = self.exportSelectedPreset or "Spreadsheet"
+    exportSettings.selectedPreset = normalize_export_preset_name(self.exportSelectedPreset)
+    exportSettings.shoppingListName = normalize_shopping_list_name(self.exportShoppingListName)
     exportSettings.customTemplate = clone_export_template(self.exportCustomTemplate)
     return exportSettings
 end
@@ -2120,30 +2513,82 @@ function mainFrame:UpdateSharedTableLayout()
     end
 end
 
+function mainFrame:RefreshExportControlVisibility()
+    local showAuctionatorControls = uses_auctionator_controls(self.exportSelectedPreset)
+    local showCustomControls = uses_custom_export_controls(self.exportSelectedPreset)
+
+    set_frame_shown(self.exportAuctionatorListNameInput, showAuctionatorControls)
+    set_frame_shown(self.exportDelimiterInput, showCustomControls)
+    set_frame_shown(self.exportFieldsInput, showCustomControls)
+    set_frame_shown(self.exportHeaderToggleButton, showCustomControls)
+    set_frame_shown(self.exportApplyCustomButton, showCustomControls)
+end
+
+function mainFrame:RefreshExportModalScrollMetrics()
+    local scrollFrame = self.exportModalScrollFrame
+    local scrollChild = self.exportModalScrollChild
+    local outputInput = self.exportModalOutputInput
+    local lineHeight = 14
+    local padding = 16
+    local minimumInputHeight = 130
+    local lineCount = count_lines(outputInput:GetText() or "")
+    local contentHeight = math.max(minimumInputHeight, (lineCount * lineHeight) + 12)
+    local childHeight = math.max(scrollFrame:GetHeight(), contentHeight + padding)
+
+    outputInput:SetHeight(contentHeight)
+    scrollChild:SetHeight(childHeight)
+    scrollFrame.verticalScrollRange = math.max(0, childHeight - scrollFrame:GetHeight())
+    scrollFrame:SetVerticalScroll(scrollFrame.verticalScroll or 0)
+end
+
 function mainFrame:RefreshExportOutput(rows)
     local exportDialog = ns.modules.exportDialog
-    local state = exportDialog and type(exportDialog.BuildPresetState) == "function" and exportDialog.BuildPresetState(rows or {}, self.exportSelectedPreset, self.exportCustomTemplate) or {
-        presetName = self.exportSelectedPreset,
+    local exportState = {
+        shoppingListName = normalize_shopping_list_name(self.exportShoppingListName),
+    }
+
+    for key, value in pairs(self.exportCustomTemplate or {}) do
+        exportState[key] = value
+    end
+
+    local state = exportDialog and type(exportDialog.BuildPresetState) == "function" and exportDialog.BuildPresetState(rows or {}, self.exportSelectedPreset, exportState) or {
+        presetName = normalize_export_preset_name(self.exportSelectedPreset),
+        shoppingListName = exportState.shoppingListName,
         text = "",
     }
 
-    self.exportsPresetTitle:SetText(state.presetName or self.exportSelectedPreset or "Spreadsheet")
-    self.exportsOutputText:SetText(state.text or "")
+    self.exportSelectedPreset = normalize_export_preset_name(state.presetName or self.exportSelectedPreset)
+    self.exportShoppingListName = normalize_shopping_list_name(state.shoppingListName or self.exportShoppingListName)
+    self.exportsPresetTitle:SetText(self.exportSelectedPreset or "CSV")
+    self.isRefreshingExportControls = true
+    self.exportAuctionatorListNameInput:SetText(self.exportShoppingListName)
+    self.isRefreshingExportControls = false
+    self:RefreshExportControlVisibility()
+    self.exportsOutputText:SetText("")
+    self.exportsOutputText:Hide()
+    self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset or "CSV"))
+    self.exportModalOutputInput:SetText(state.text or "")
+    self:PersistExportSettings(ns.state.db or {})
     return state
 end
 
 function mainFrame:RefreshExportCustomControls()
+    self.isRefreshingExportControls = true
+    self.exportAuctionatorListNameInput:SetText(self.exportShoppingListName or "GBankManager")
+    self.isRefreshingExportControls = false
     self.exportDelimiterInput:SetText(self.exportCustomTemplate.delimiter or "|")
     self.exportFieldsInput:SetText(table.concat(self.exportCustomTemplate.fields or {}, ","))
     self.exportHeaderToggleButton.labelText:SetText((self.exportCustomTemplate.includeHeader ~= false) and "Header: Yes" or "Header: No")
+    self:RefreshExportControlVisibility()
 end
 
 function mainFrame:SelectExportPreset(presetName)
-    self.exportSelectedPreset = presetName or "Spreadsheet"
+    self.exportSelectedPreset = normalize_export_preset_name(presetName)
     self:PersistExportSettings(ns.state.db or {})
     if self.activeView == "EXPORTS" then
         local rows = self.tableRowsData or {}
         self:RefreshExportOutput(rows)
+        self.exportModal:Show()
     end
     return self.exportSelectedPreset
 end
@@ -2297,6 +2742,7 @@ function mainFrame:RefreshView()
     self.minimumAddModal:Hide()
     self.minimumEmptyStateText:Hide()
     self.exportsPanel:Hide()
+    self.exportModal:Hide()
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
     self.contentBodyText:Hide()
@@ -2528,6 +2974,17 @@ end)
 mainFrame.minimumAddItemNameInput:SetScript("OnTextChanged", function()
     if mainFrame.activeView == "MINIMUMS" and not mainFrame.isResolvingMinimumAdd then
         mainFrame:ResolveMinimumAddByName()
+    end
+end)
+
+mainFrame.exportAuctionatorListNameInput:SetScript("OnTextChanged", function()
+    if mainFrame.isRefreshingExportControls then
+        return
+    end
+    mainFrame.exportShoppingListName = normalize_shopping_list_name(mainFrame.exportAuctionatorListNameInput:GetText())
+    mainFrame:PersistExportSettings(ns.state.db or {})
+    if mainFrame.activeView == "EXPORTS" and mainFrame.exportSelectedPreset == "Auctionator" then
+        mainFrame:RefreshExportOutput(mainFrame.tableRowsData or {})
     end
 end)
 

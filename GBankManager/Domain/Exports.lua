@@ -28,14 +28,23 @@ function exports.BuildDelimited(rows, template)
     return table.concat(lines, "\n")
 end
 
-function exports.BuildAuctionator(rows)
+function exports.BuildAuctionator(rows, shoppingListName)
     local values = {}
 
-    for _, row in ipairs(rows or {}) do
-        table.insert(values, string.format("%s x%d", row.itemName, row.totalToBuy))
+    shoppingListName = tostring(shoppingListName or "GBankManager")
+    rows = type(rows) == "table" and rows or {}
+
+    for _, row in ipairs(rows) do
+        local itemName = tostring(row.itemName or "")
+        local totalToBuy = tonumber(row.totalToBuy or 0) or 0
+        local quality = math.max(0, math.floor(tonumber(row.quality or row.craftedQuality or 0) or 0))
+
+        if itemName ~= "" and totalToBuy > 0 then
+            table.insert(values, string.format('"%s";0;0;0;0;0;0;0;%d;%d', itemName, quality, totalToBuy))
+        end
     end
 
-    return table.concat(values, "; ")
+    return shoppingListName .. "^" .. table.concat(values, "^")
 end
 
 local function current_total(snapshot, itemID)
@@ -73,6 +82,7 @@ function exports.MaterializePlanRows(plan, snapshot)
 
     for _, row in pairs(plan or {}) do
         if (row.totalToBuy or 0) > 0 then
+            local currentItem = snapshot.items and snapshot.items[row.itemID]
             local reasons = {}
 
             for reason, quantity in pairs(row.sources or {}) do
@@ -90,6 +100,7 @@ function exports.MaterializePlanRows(plan, snapshot)
                 targetQuantity = (row.sources and row.sources.ONE_TIME_TARGET) or 0,
                 requestQuantity = (row.sources and row.sources.REQUEST) or 0,
                 totalToBuy = row.totalToBuy,
+                quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
                 scopeSummary = summarize_scopes(row.details or {}),
                 reason = table.concat(reasons, "|"),
             })
