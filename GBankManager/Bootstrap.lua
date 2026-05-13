@@ -9,8 +9,7 @@ ns.data = ns.data or {}
 local store = ns.data.store or ns.modules.store
 
 if store then
-    _G.GBankManagerDB = store.Normalize(_G.GBankManagerDB)
-    ns.state.db = _G.GBankManagerDB
+    store.GetDatabase()
 end
 
 return ns

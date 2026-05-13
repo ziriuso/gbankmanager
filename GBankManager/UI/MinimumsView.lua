@@ -723,11 +723,8 @@ function minimumsView.ResolveItemQuery(snapshot, query)
 end
 
 function minimumsView.GetMinimumSettings(db)
-    db = db or {}
-    db.ui = db.ui or {}
-    db.ui.minimumSettings = db.ui.minimumSettings or {}
-    db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
-    return db.ui.minimumSettings
+    local store = ns.data.store or ns.modules.store
+    return store.GetMinimumSettings(db)
 end
 
 ns.modules.minimumsView = minimumsView

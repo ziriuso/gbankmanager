@@ -209,7 +209,8 @@ end
 
 function inventoryView.GetColumnLayout(db, totalWidthHint)
     local columns = inventoryView.GetDefaultColumns()
-    local saved = (((db or {}).ui or {}).inventoryColumnWidths) or {}
+    local store = ns.data.store or ns.modules.store
+    local saved = store.GetInventoryColumnWidths(db)
 
     for index, delta in pairs(saved) do
         if columns[index] then

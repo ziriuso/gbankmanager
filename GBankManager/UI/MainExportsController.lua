@@ -18,6 +18,7 @@ function mainExportsController.Attach(mainFrame, options)
     local normalizeShoppingListName = options.normalizeShoppingListName
     local cloneExportTemplate = options.cloneExportTemplate
     local countLines = options.countLines
+    local currentDb = options.currentDb
 
     mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -119,14 +120,13 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportModalCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportModal, "BOTTOMRIGHT", -16, 16)
 
     function mainFrame:GetExportUiState(db)
-        db = db or current_db()
-        db.ui = db.ui or {}
-        db.ui.inventoryColumnWidths = db.ui.inventoryColumnWidths or {}
-        db.ui.exportSettings = db.ui.exportSettings or {}
-        db.ui.exportSettings.selectedPreset = normalizeExportPresetName(db.ui.exportSettings.selectedPreset)
-        db.ui.exportSettings.shoppingListName = normalizeShoppingListName(db.ui.exportSettings.shoppingListName)
-        db.ui.exportSettings.customTemplate = cloneExportTemplate(db.ui.exportSettings.customTemplate)
-        return db.ui.exportSettings
+        db = db or currentDb()
+        local store = ns.data.store or ns.modules.store
+        local exportSettings = store.GetExportSettings(db)
+        exportSettings.selectedPreset = normalizeExportPresetName(exportSettings.selectedPreset)
+        exportSettings.shoppingListName = normalizeShoppingListName(exportSettings.shoppingListName)
+        exportSettings.customTemplate = cloneExportTemplate(exportSettings.customTemplate)
+        return exportSettings
     end
 
     function mainFrame:LoadExportSettingsFromDb(db)

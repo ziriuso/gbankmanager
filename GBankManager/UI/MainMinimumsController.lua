@@ -155,16 +155,8 @@ function mainMinimumsController.Attach(mainFrame, options)
     end
 
     function mainFrame:GetMinimumSettings(db)
-        local minimumsView = ns.modules.minimumsView
-        if type(minimumsView) == "table" and type(minimumsView.GetMinimumSettings) == "function" then
-            return minimumsView.GetMinimumSettings(db or currentDb())
-        end
-
-        db = db or currentDb()
-        db.ui = db.ui or {}
-        db.ui.minimumSettings = db.ui.minimumSettings or { defaultQuantity = 100 }
-        db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
-        return db.ui.minimumSettings
+        local store = ns.data.store or ns.modules.store
+        return store.GetMinimumSettings(db or currentDb())
     end
 
     function mainFrame:LoadMinimumSettingsFromDb(db)
@@ -474,8 +466,8 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     function mainFrame:RememberMinimumSearchItem(item)
         local db = currentDb()
-        db.ui = db.ui or {}
-        db.ui.minimumItemCatalog = db.ui.minimumItemCatalog or {}
+        local store = ns.data.store or ns.modules.store
+        local minimumItemCatalog = store.GetMinimumItemCatalog(db)
 
         local itemID = tonumber((item or {}).itemID)
         local itemName = tostring((item or {}).name or (item or {}).itemName or "")
@@ -483,7 +475,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
-        for _, existing in ipairs(db.ui.minimumItemCatalog) do
+        for _, existing in ipairs(minimumItemCatalog) do
             if tonumber(existing.itemID) == itemID then
                 existing.name = itemName
                 existing.craftedQuality = (item or {}).craftedQuality or existing.craftedQuality
@@ -498,7 +490,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             craftedQuality = (item or {}).craftedQuality,
             craftedQualityIcon = (item or {}).craftedQualityIcon,
         }
-        table.insert(db.ui.minimumItemCatalog, entry)
+        table.insert(minimumItemCatalog, entry)
         return entry
     end
 
@@ -526,7 +518,10 @@ function mainMinimumsController.Attach(mainFrame, options)
             }
         end
 
-        for _, item in ipairs(((db.ui or {}).minimumItemCatalog) or {}) do
+        local store = ns.data.store or ns.modules.store
+        local minimumItemCatalog = store.GetMinimumItemCatalog(db)
+
+        for _, item in ipairs(minimumItemCatalog) do
             append_catalog_item(item)
         end
 

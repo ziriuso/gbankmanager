@@ -47,6 +47,13 @@ assert.truthy(type(store) == "table", "store module should be loaded for specs")
 assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
 assert.truthy(type(migrations) == "table", "migrations module should be loaded for specs")
 assert.truthy(type(scanner) == "table", "scanner module should be loaded for specs")
+assert.truthy(type(store.GetDatabase) == "function", "store should expose a shared database accessor")
+assert.truthy(type(store.GetCurrentSnapshot) == "function", "store should expose a current snapshot accessor")
+assert.truthy(type(store.GetUiState) == "function", "store should expose a shared ui-state accessor")
+assert.truthy(type(store.GetInventoryColumnWidths) == "function", "store should expose saved inventory column-width access")
+assert.truthy(type(store.GetMinimumSettings) == "function", "store should expose minimum-settings access")
+assert.truthy(type(store.GetMinimumItemCatalog) == "function", "store should expose the saved minimum item catalog")
+assert.truthy(type(store.GetExportSettings) == "function", "store should expose export-settings access")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
@@ -98,8 +105,15 @@ assert.truthy(type(persisted.ui) == "table", "normalize should preserve a ui set
 assert.truthy(type(persisted.ui.exportSettings) == "table", "normalize should preserve export ui settings")
 assert.truthy(type(persisted.ui.inventoryColumnWidths) == "table", "normalize should preserve inventory column width settings")
 assert.truthy(type(persisted.ui.minimumSettings) == "table", "normalize should preserve minimum ui settings")
+assert.truthy(type(persisted.ui.minimumItemCatalog) == "table", "normalize should preserve the saved minimum item catalog")
 assert.equal(100, persisted.ui.minimumSettings.defaultQuantity, "normalize should seed the default minimum quantity setting")
 assert.equal(100, db.ui.minimumSettings.defaultQuantity, "fresh databases should default minimum quantity to 100")
+assert.same(persisted.ui, store.GetUiState(persisted), "store ui-state accessor should return the normalized ui container")
+assert.same(persisted.ui.inventoryColumnWidths, store.GetInventoryColumnWidths(persisted), "store should return the normalized inventory column-width table")
+assert.same(persisted.ui.minimumSettings, store.GetMinimumSettings(persisted), "store should return the normalized minimum-settings table")
+assert.same(persisted.ui.minimumItemCatalog, store.GetMinimumItemCatalog(persisted), "store should return the normalized minimum item catalog")
+assert.same(persisted.ui.exportSettings, store.GetExportSettings(persisted), "store should return the normalized export-settings table")
+assert.same(persisted.snapshots["scan-old"], store.GetCurrentSnapshot(persisted), "store current snapshot accessor should resolve the active snapshot row")
 
 _G.GBankManagerDB = persisted
 ns.state.db = _G.GBankManagerDB
@@ -181,3 +195,11 @@ local reboundSnapshot = scanner.FinishScan("OfficerOne", "Persisted Guild")
 assert.same(_G.GBankManagerDB, ns.state.db, "scanner should rebind runtime state back onto the saved variables table before writing")
 assert.truthy(_G.GBankManagerDB.snapshots["scan-old"] ~= nil, "scanner should preserve prior saved snapshots even if runtime state drifted")
 assert.equal(9, _G.GBankManagerDB.snapshots[reboundSnapshot.scanId].items[1001].totalCount, "scanner should append the new snapshot onto the persisted saved-variables history")
+
+_G.GBankManagerDB = {}
+ns.state.db = persisted
+
+local reboundDb = store.GetDatabase()
+
+assert.same(persisted, reboundDb, "store database accessor should prefer the populated runtime state when the saved-variables global is empty")
+assert.same(_G.GBankManagerDB, ns.state.db, "store database accessor should keep the global and runtime db references aligned")

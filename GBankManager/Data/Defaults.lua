@@ -35,8 +35,10 @@ function defaults.CreateDatabase(guildName)
             minimumSettings = {
                 defaultQuantity = 100,
             },
+            minimumItemCatalog = {},
             exportSettings = {
                 selectedPreset = "Spreadsheet",
+                shoppingListName = "GBankManager",
                 customTemplate = defaults.CreateDefaultExportTemplate(),
             },
         },

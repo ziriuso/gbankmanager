@@ -199,47 +199,13 @@ local function label_with_sort_marker(columnLayout, sortState)
     return label .. " ^"
 end
 
-local function is_db_empty(db)
-    db = db or {}
-
-    if db.currentSnapshotId ~= nil then
-        return false
-    end
-
-    if next(db.snapshots or {}) ~= nil then
-        return false
-    end
-
-    if next(db.requests or {}) ~= nil then
-        return false
-    end
-
-    if next(db.minimums or {}) ~= nil then
-        return false
-    end
-
-    if next(db.oneTimeTargets or {}) ~= nil then
-        return false
-    end
-
-    return true
-end
-
 local function current_db()
     local store = ns.data.store or ns.modules.store
-    local runtime = _G.GBankManagerDB or {}
-    local stateDb = ns.state.db or {}
-
-    if runtime ~= stateDb and (is_db_empty(runtime) and not is_db_empty(stateDb)) then
-        runtime = stateDb
-    elseif runtime == nil or next(runtime) == nil then
-        runtime = stateDb
+    if store and type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
     end
 
-    if store and type(store.Normalize) == "function" then
-        runtime = store.Normalize(runtime)
-    end
-
+    local runtime = _G.GBankManagerDB or ns.state.db or {}
     _G.GBankManagerDB = runtime
     ns.state.db = runtime
     return runtime
@@ -372,6 +338,7 @@ mainExportsController.Attach(mainFrame, {
     normalizeShoppingListName = normalize_shopping_list_name,
     cloneExportTemplate = clone_export_template,
     countLines = count_lines,
+    currentDb = current_db,
 })
 
 mainMinimumsController.Attach(mainFrame, {
@@ -590,12 +557,12 @@ function mainFrame:ResizeInventoryColumn(index, delta)
 
     self.tableColumnLayout = inventoryView.ResizeColumnLayout(self.tableColumnLayout, index, delta, self.tableViewportWidth)
     local db = current_db()
-    db.ui = db.ui or {}
-    db.ui.inventoryColumnWidths = db.ui.inventoryColumnWidths or {}
+    local store = ns.data.store or ns.modules.store
+    local inventoryColumnWidths = store.GetInventoryColumnWidths(db)
 
     local defaults = inventoryView.GetDefaultColumns()
     for columnIndex, column in ipairs(self.tableColumnLayout) do
-        db.ui.inventoryColumnWidths[columnIndex] = (column.width or 0) - (defaults[columnIndex].width or 0)
+        inventoryColumnWidths[columnIndex] = (column.width or 0) - (defaults[columnIndex].width or 0)
     end
 
     self:ConfigureTable(self.tableColumnLayout, self.tableRowsData)
@@ -728,10 +695,9 @@ function mainFrame:BuildExportRows()
 end
 
 function mainFrame:GetCurrentSnapshot()
-    local db = current_db()
-
-    if db.currentSnapshotId ~= nil then
-        return (db.snapshots or {})[db.currentSnapshotId] or { items = {} }
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.GetCurrentSnapshot) == "function" then
+        return store.GetCurrentSnapshot(current_db())
     end
 
     return { items = {} }

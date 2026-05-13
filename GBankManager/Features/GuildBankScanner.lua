@@ -19,15 +19,13 @@ local scanner = ns.modules.scanner or {
 
 local function current_db()
     local store = ns.data.store or ns.modules.store
-    local runtime = _G.GBankManagerDB or ns.state.db or {}
-
-    if store and type(store.Normalize) == "function" then
-        runtime = store.Normalize(runtime)
-    else
-        runtime.snapshots = runtime.snapshots or {}
-        runtime.changeLog = runtime.changeLog or {}
+    if store and type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
     end
 
+    local runtime = _G.GBankManagerDB or ns.state.db or {}
+    runtime.snapshots = runtime.snapshots or {}
+    runtime.changeLog = runtime.changeLog or {}
     _G.GBankManagerDB = runtime
     ns.state.db = runtime
     return runtime
