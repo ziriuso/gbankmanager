@@ -80,6 +80,12 @@ local function ensure_v1_shape(db)
     end
     db.syncState = ensure_table(db.syncState)
     db.syncState.lastSyncAt = db.syncState.lastSyncAt or 0
+    db.testing = ensure_table(db.testing)
+    db.testing.liveSmoke = ensure_table(db.testing.liveSmoke)
+    db.testing.liveSmoke.runAt = tonumber(db.testing.liveSmoke.runAt or 0) or 0
+    db.testing.liveSmoke.status = db.testing.liveSmoke.status or "NEVER"
+    db.testing.liveSmoke.summary = db.testing.liveSmoke.summary or ""
+    db.testing.liveSmoke.results = ensure_table(db.testing.liveSmoke.results)
     return db
 end
 

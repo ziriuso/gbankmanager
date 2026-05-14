@@ -11,6 +11,9 @@ _G.C_GuildInfo = _G.C_GuildInfo or {
     motd = "",
     canEditGuildInfo = true,
 }
+_G.DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME or {
+    messages = {},
+}
 
 if _G.time == nil then
     _G.time = function()
@@ -52,6 +55,10 @@ end
 
 function _G.C_GuildInfo.CanEditGuildInfo()
     return _G.C_GuildInfo.canEditGuildInfo == true
+end
+
+function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
+    table.insert(self.messages, tostring(message or ""))
 end
 
 if _G.CreateFrame == nil then
@@ -200,6 +207,12 @@ if _G.CreateFrame == nil then
         function frame:SetFrameLevel() end
         function frame:SetScrollChild(child)
             self.scrollChild = child
+        end
+        function frame:SetVerticalScroll(value)
+            self.verticalScroll = value
+        end
+        function frame:GetVerticalScroll()
+            return self.verticalScroll or 0
         end
         function frame:EnableMouseWheel(enabled)
             self.mouseWheelEnabled = enabled

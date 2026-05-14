@@ -74,6 +74,14 @@ function defaults.CreateDatabase(guildName)
         syncState = {
             lastSyncAt = 0,
         },
+        testing = {
+            liveSmoke = {
+                runAt = 0,
+                status = "NEVER",
+                summary = "",
+                results = {},
+            },
+        },
     }
 end
 

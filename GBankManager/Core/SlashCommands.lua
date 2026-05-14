@@ -31,6 +31,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     local mainFrame = ns.modules.mainFrame
     local auth = ns.modules.auth or ns.modules.permissions
     local authPolicySource = ns.modules.authPolicySource
+    local liveSmoke = ns.modules.liveSmoke
     local store = ns.modules.store or ns.data.store
     local command, remainder = split_command(msg)
     local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
@@ -60,6 +61,12 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             local _, _, snippet = authPolicySource.PushPolicyToGuildInfo(db)
             return snippet
         end
+    elseif command == "test" and type(liveSmoke) == "table" then
+        local subcommand = split_command(remainder)
+        if subcommand == "smoke" and type(liveSmoke.Run) == "function" then
+            return liveSmoke.Run()
+        end
+        return "unknown_test_command"
     elseif command == "ui" and mainFrame then
         if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
             mainFrame:ShowBlockedAccess("Access blocked")

@@ -39,5 +39,6 @@ UI/HistoryView.lua
 UI/ExportsView.lua
 UI/ExportDialog.lua
 UI/RequestDialog.lua
+Testing/LiveSmoke.lua
 Core/Events.lua
 Core/SlashCommands.lua

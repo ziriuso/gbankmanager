@@ -39,6 +39,7 @@ Current UI ownership is intentionally split across:
 
 1. Keep the addon folder at `GBankManager/`.
 2. Run `.\tools\lua\lua.exe .\tests\run_all.lua`.
-3. Copy `GBankManager` into `World of Warcraft\_retail_\Interface\AddOns\`.
-4. Use `/gbm ui` to open the officer shell.
-5. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+3. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
+4. Copy `GBankManager` into `World of Warcraft\_retail_\Interface\AddOns\`.
+5. Use `/gbm ui` to open the officer shell.
+6. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
