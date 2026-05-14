@@ -562,10 +562,10 @@ mainFrame.optionsAvailablePermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsA
 mainFrame.optionsAvailablePermissionPanel:SetSize(250, 138)
 apply_panel_style(mainFrame.optionsAvailablePermissionPanel, theme.colors.panel)
 
-mainFrame.optionsAuthRemovePermissionButton = mainFrame.optionsAuthRemovePermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "<< Remove")
+mainFrame.optionsAuthRemovePermissionButton = mainFrame.optionsAuthRemovePermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "Remove >>")
 mainFrame.optionsAuthRemovePermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 16, -36)
 
-mainFrame.optionsAuthAddPermissionButton = mainFrame.optionsAuthAddPermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "Add >>")
+mainFrame.optionsAuthAddPermissionButton = mainFrame.optionsAuthAddPermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "<< Add")
 mainFrame.optionsAuthAddPermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAuthRemovePermissionButton, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsAllowedPermissionButtons = mainFrame.optionsAllowedPermissionButtons or {}
@@ -1092,7 +1092,15 @@ function mainFrame:RefreshAuthOptions()
                 button.labelText:SetText(capability_label(capability))
                 button:SetEnabled(true)
                 button:Show()
-                apply_panel_style(button, selectedCapability == capability and theme.colors.accent or theme.colors.panel)
+                local isSelected = selectedCapability == capability
+                apply_panel_style(button, isSelected and theme.colors.accent or theme.colors.panel)
+                if type(button.labelText.SetTextColor) == "function" then
+                    if isSelected then
+                        button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+                    else
+                        button.labelText:SetTextColor(1, 0.82, 0, 1)
+                    end
+                end
                 button:SetScript("OnClick", function()
                     self:SelectAuthCapability(listKind, capability)
                 end)
@@ -1691,10 +1699,6 @@ function mainFrame:RefreshView()
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
         self:LoadAuthOptionsFromDb(db)
-        self:UpdateOptionsCanvasHeight()
-        self.optionsScrollFrame.verticalScroll = 0
-        self.optionsScrollFrame:SetVerticalScroll(0)
-        self:SyncOptionsScrollVisuals()
         bodyText = ""
     elseif self.activeView == "ABOUT" then
         bodyText = table.concat({
@@ -1793,6 +1797,10 @@ function mainFrame:RefreshView()
     if self.activeView == "OPTIONS" then
         self.optionsPanel:Show()
         self.optionsViewportFrame:Show()
+        self.optionsScrollFrame.verticalScroll = 0
+        self.optionsScrollFrame:SetVerticalScroll(0)
+        self:UpdateOptionsCanvasHeight()
+        self:SyncOptionsScrollVisuals()
     else
         self.optionsPanel:Hide()
         self.optionsViewportFrame:Hide()

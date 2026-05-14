@@ -309,19 +309,35 @@ function mainFrameShell.AttachScrollBehavior(scrollFrame, scrollBar, options)
 
     function controller:GetViewportHeight()
         if type(self.options.getViewportHeight) == "function" then
-            return math.max(0, self.options.getViewportHeight(self) or 0)
+            local measured = math.max(0, self.options.getViewportHeight(self) or 0)
+            if measured > 0 then
+                return measured
+            end
         end
 
-        return math.max(0, scrollFrame:GetHeight() or 0)
+        local measured = math.max(0, scrollFrame:GetHeight() or 0)
+        if measured > 0 then
+            return measured
+        end
+
+        return math.max(0, self.lastViewportHeight or 0)
     end
 
     function controller:GetContentHeight()
         if type(self.options.getContentHeight) == "function" then
-            return math.max(0, self.options.getContentHeight(self) or 0)
+            local measured = math.max(0, self.options.getContentHeight(self) or 0)
+            if measured > 0 then
+                return measured
+            end
         end
 
         local child = scrollFrame.scrollChild
-        return math.max(0, child and (child:GetHeight() or 0) or 0)
+        local measured = math.max(0, child and (child:GetHeight() or 0) or 0)
+        if measured > 0 then
+            return measured
+        end
+
+        return math.max(0, self.lastContentHeight or 0)
     end
 
     function controller:NormalizeOffset(offset, range)
@@ -347,15 +363,21 @@ function mainFrameShell.AttachScrollBehavior(scrollFrame, scrollBar, options)
     end
 
     function controller:SetOffset(offset, contentHeight, viewportHeight)
-        contentHeight = math.max(0, contentHeight or self:GetContentHeight())
-        viewportHeight = math.max(0, viewportHeight or self:GetViewportHeight())
+        contentHeight = math.max(0, contentHeight or self.lastContentHeight or self:GetContentHeight())
+        viewportHeight = math.max(0, viewportHeight or self.lastViewportHeight or self:GetViewportHeight())
+        self.lastContentHeight = contentHeight
+        self.lastViewportHeight = viewportHeight
 
         local range = math.max(0, contentHeight - viewportHeight)
         offset = self:NormalizeOffset(offset, range)
 
         scrollFrame.verticalScrollRange = range
         scrollFrame.verticalScroll = offset
-        scrollFrame:SetVerticalScroll(offset)
+        if type(self.options.applyScrollOffset) == "function" then
+            self.options.applyScrollOffset(self, offset, range)
+        else
+            scrollFrame:SetVerticalScroll(offset)
+        end
 
         if type(self.options.onOffsetChanged) == "function" then
             self.options.onOffsetChanged(self, offset, range)
@@ -379,6 +401,8 @@ function mainFrameShell.AttachScrollBehavior(scrollFrame, scrollBar, options)
     function controller:Refresh(contentHeight, viewportHeight)
         contentHeight = math.max(0, contentHeight or self:GetContentHeight())
         viewportHeight = math.max(0, viewportHeight or self:GetViewportHeight())
+        self.lastContentHeight = contentHeight
+        self.lastViewportHeight = viewportHeight
         return self:SetOffset(scrollFrame.verticalScroll or 0, contentHeight, viewportHeight)
     end
 

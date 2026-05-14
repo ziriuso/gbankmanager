@@ -63,6 +63,10 @@ function mainTableController.Attach(mainFrame, options)
                 local rowHeight = math.max(1, mainFrame.tableRowHeight or 24)
                 return math.floor((offset / rowHeight) + 0.5) * rowHeight
             end,
+            applyScrollOffset = function(_, offset, range)
+                mainFrame.tableScrollFrame.verticalScroll = offset
+                mainFrame.tableScrollFrame.verticalScrollRange = range
+            end,
             onOffsetChanged = function(_, offset)
                 if mainFrame.tableSyncingScroll then
                     return
@@ -216,16 +220,16 @@ function mainTableController.Attach(mainFrame, options)
     function mainFrame:RefreshVisibleTableRows(fromScrollController)
         local maxOffset = math.max(0, #self.tableRowsData - self.tableVisibleCount)
         self.tableScrollOffset = math.max(0, math.min(self.tableScrollOffset or 0, maxOffset))
-        local pixelOffset = self.tableScrollOffset * self.tableRowHeight
+        local rowHeight = math.max(1, self.tableRowHeight or 24)
+        local pixelOffset = self.tableScrollOffset * rowHeight
 
         if self.tableScrollController and not fromScrollController then
             self.tableSyncingScroll = true
-            self.tableScrollController:SetOffset(pixelOffset, #self.tableRowsData * self.tableRowHeight, self.tableViewportHeight)
+            self.tableScrollController:SetOffset(pixelOffset, #self.tableRowsData * rowHeight, self.tableViewportHeight)
             self.tableSyncingScroll = false
         elseif self.tableScrollFrame then
             self.tableScrollFrame.verticalScroll = pixelOffset
-            self.tableScrollFrame.verticalScrollRange = math.max(0, (#self.tableRowsData * self.tableRowHeight) - self.tableViewportHeight)
-            self.tableScrollFrame:SetVerticalScroll(pixelOffset)
+            self.tableScrollFrame.verticalScrollRange = math.max(0, (#self.tableRowsData * rowHeight) - self.tableViewportHeight)
         end
 
         for rowIndex, rowFrame in ipairs(self.tableRows) do
@@ -239,7 +243,7 @@ function mainTableController.Attach(mainFrame, options)
             rowFrame.rowData = row
             if row then
                 rowFrame:ClearAllPoints()
-                rowFrame:SetPoint("TOPLEFT", self.tableScrollChild, "TOPLEFT", 0, -((dataIndex - 1) * self.tableRowHeight))
+                rowFrame:SetPoint("TOPLEFT", self.tableScrollChild, "TOPLEFT", 0, -((rowIndex - 1) * rowHeight))
                 rowFrame:Show()
                 applyTableRowStyle(rowFrame, rowIndex, isSelectedTableRow(self, row))
                 rowFrame:SetScript("OnClick", function(frame)

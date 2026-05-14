@@ -42,3 +42,8 @@ assert.equal("minimal-scrollbar-small-thumb-top", mainFrame.tableScrollBar.thumb
 mainFrame.tableScrollFrame:GetScript("OnMouseWheel")(mainFrame.tableScrollFrame, -1)
 assert.truthy((mainFrame.tableScrollOffset or 0) > 0, "inventory mouse-wheel scrolling should advance the shared table offset")
 assert.truthy((mainFrame.tableScrollBar.thumb.progress or 0) > 0, "inventory scroll thumb should move forward when the table scrolls")
+
+mainFrame.tableScrollFrame.height = 0
+mainFrame.tableScrollChild.height = 0
+mainFrame.tableScrollFrame:GetScript("OnMouseWheel")(mainFrame.tableScrollFrame, -1)
+assert.truthy(mainFrame.tableScrollBar:IsShown(), "inventory scrollbar should stay visible while scrolling even if the live client reports a transient zero height")

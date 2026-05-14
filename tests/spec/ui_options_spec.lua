@@ -25,9 +25,31 @@ assert.equal("minimal-scrollbar-small-thumb-top", mainFrame.optionsScrollBar.thu
 assert.equal(nil, mainFrame.optionsScrollUpButton, "options view should stop rendering the old scroll-up button")
 assert.equal(nil, mainFrame.optionsScrollDownButton, "options view should stop rendering the old scroll-down button")
 assert.equal(nil, mainFrame.optionsScrollStatusText, "options view should stop rendering the old scroll percentage label")
+assert.truthy(mainFrame.optionsScrollBar:IsShown(), "options view should keep the shared scrollbar visible when the content overflows")
 assert.equal("Guild Master", mainFrame.optionsAuthRankButton.labelText:GetText(), "options auth should default the selected rank picker to the guildmaster label")
 assert.truthy((mainFrame.optionsAvailablePermissionPanel:GetHeight() or 0) >= 132, "options auth should give available permissions enough height to avoid clipping the last row")
 assert.truthy((mainFrame.optionsAuthPanel:GetHeight() or 0) < 800, "options auth should size to its actual content instead of leaving a giant dead zone")
+assert.equal("<< Add", mainFrame.optionsAuthAddPermissionButton.labelText:GetText(), "options auth add button should point toward the allowed-permissions list")
+assert.equal("Remove >>", mainFrame.optionsAuthRemovePermissionButton.labelText:GetText(), "options auth remove button should point toward the available-permissions list")
+
+mainFrame:SelectAuthRank(0)
+mainFrame:SelectAuthCapability("available", "request_submit")
+assert.equal("request_submit", mainFrame.selectedAvailableCapability, "options auth should track the selected available capability")
+local selectedAvailableButton
+for _, button in ipairs(mainFrame.optionsAvailablePermissionButtons or {}) do
+    if button:IsShown() and button.labelText and button.labelText:GetText() == "Request Submit" then
+        selectedAvailableButton = button
+        break
+    end
+end
+assert.truthy(selectedAvailableButton ~= nil, "options auth should render the selected available capability button")
+assert.truthy((selectedAvailableButton.backdropColor or {})[1] == 0.58, "options auth should visibly highlight the selected available capability")
+assert.truthy((selectedAvailableButton.labelText.textColor or {})[1] == 0.85, "options auth should brighten selected capability text")
+
+mainFrame.optionsScrollFrame.height = 0
+mainFrame.optionsScrollChild.height = 0
+mainFrame.optionsScrollFrame:GetScript("OnMouseWheel")(mainFrame.optionsScrollFrame, -1)
+assert.truthy(mainFrame.optionsScrollBar:IsShown(), "options scrollbar should stay visible while scrolling even if the live client reports a transient zero height")
 
 local alphaAfterDown
 mainFrame.transparencyDecreaseButton:GetScript("OnClick")(mainFrame.transparencyDecreaseButton)
