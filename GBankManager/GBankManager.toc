@@ -1,0 +1,44 @@
+## Interface: 120005
+## Title: GBankManager
+## Notes: Guild bank inventory and procurement manager
+## Category: Guild
+## Author: ziriuso
+## SavedVariables: GBankManagerDB
+
+Core/Namespace.lua
+Core/Constants.lua
+Data/Defaults.lua
+Data/Migrations.lua
+Data/Store.lua
+Domain/AuthPolicyCodec.lua
+Domain/Permissions.lua
+Domain/AuthPolicySource.lua
+Domain/Snapshots.lua
+Domain/Diff.lua
+Domain/Planning.lua
+Domain/Exports.lua
+Domain/Requests.lua
+Bootstrap.lua
+Features/GuildBankScanner.lua
+Features/GuildBankScannerEvents.lua
+Sync/Codec.lua
+Sync/Coordinator.lua
+Sync/Transport.lua
+Sync/SyncEvents.lua
+UI/MainFrameShell.lua
+UI/MainTableController.lua
+UI/MainRequestsController.lua
+UI/MainExportsController.lua
+UI/MainMinimumsController.lua
+UI/MainFrame.lua
+UI/DashboardView.lua
+UI/InventoryView.lua
+UI/MinimumsView.lua
+UI/RequestsView.lua
+UI/HistoryView.lua
+UI/ExportsView.lua
+UI/ExportDialog.lua
+UI/RequestDialog.lua
+Testing/LiveSmoke.lua
+Core/Events.lua
+Core/SlashCommands.lua
