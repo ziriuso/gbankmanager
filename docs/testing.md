@@ -30,7 +30,7 @@
   - migration/default-shape coverage, including the persisted live-smoke result container
 - `ui`
   - shell layout, shared table behavior, requests, exports, minimums, and options/auth ownership specs
-  - focused regression checks for shared scrollbars, request-only layout, and options auth state
+  - focused regression checks for shared scrollbars, request-only layout, options auth state, bundled indexed item-search behavior, and the Minimums modal handoff from search into details
 - `integration`
   - TOC order and duplicate-load protection
   - shared namespace/module registration after bootstrap
@@ -43,11 +43,17 @@
 - `live smoke`
   - in-client checks run only when you explicitly invoke `/gbm test smoke`
   - confirms shell open/close, options scroll wiring, opacity controls, request-only vs full-shell access, minimum staging/save, and scan gating
+  - auth policy publishing is manual in Retail: use `Save`, copy the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
+  - item search should use the required bundled `GBankManager_ItemData` payload; if that payload is unavailable, the search UI should report the unavailable state clearly instead of showing misleading sparse local-only name results
+  - Minimums should open a centered details modal after a confirmed add-search selection instead of dropping the user into the old footer editor flow
+  - Minimums draft rows should clearly show green `added`, yellow `changed`, and red `deleted` state before `Save All`
+  - Minimums should backfill crafted tier from the bundled catalog when snapshot or scan data omits `craftedQuality` and `craftedQualityIcon`
 
 ## Failure Reading
 
 - `unit` failures usually mean a domain or persistence regression and should be fixed before looking at UI fallout.
 - `ui` failures usually mean a shell/controller contract drifted, even if the live client still partly renders.
+- Minimums-specific UI failures should be read against the new modal contract first: search-to-details handoff, details-shell reuse for existing rows, and draft-state styling are now the primary behavior surface instead of the old footer editor.
 - `integration` failures usually mean load order, slash routing, or smoke harness wiring broke.
 - `wowless` failures usually mean a Docker/runtime issue, a broken Wowless product target, or a headless addon-load regression under Wowless.
 - `live smoke` failures mean the addon loaded but a real in-client workflow no longer behaved as expected.
@@ -59,6 +65,8 @@
 3. Confirm the GitHub Actions workflow is green.
 4. Run `/gbm test smoke` in retail and review the chat summary.
 5. Do a short visual spot-check only where automation cannot prove correctness.
+6. During live Minimums and Requests search checks, confirm known query families such as `flask of`, `flask of the sha`, `flask sun`, and `thalassian phoenix oil` return the expected bundled result families and crafted-tier splits.
+7. During live Minimums editing checks, confirm add flow moves from the search modal into the centered details modal, existing rows open the same modal, and draft row colors match add/edit/remove state before `Save All`.
 
 ## Wowless Companion Repo
 

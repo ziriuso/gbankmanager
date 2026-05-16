@@ -28,10 +28,17 @@ local function write_guild_info_text(text)
     end
 
     if type(_G.SetGuildInfoText) == "function" then
-        wrote = _G.SetGuildInfoText(text) == true or wrote
+        local result = _G.SetGuildInfoText(text)
+        wrote = result ~= false or wrote
     end
 
     return wrote
+end
+
+local function guild_info_contains_policy(text, policyString)
+    text = tostring(text or "")
+    policyString = tostring(policyString or "")
+    return policyString ~= "" and string.find(text, policyString, 1, true) ~= nil
 end
 
 local function rehydrate_blacklist_details(localPolicy, nextPolicy)
@@ -146,6 +153,13 @@ function source.PushPolicyToGuildInfo(db, options)
 
     local wrote = write_guild_info_text(nextText)
     if not wrote then
+        policy.guildPolicySource = "local"
+        db.auth = policy
+        return false, "write_failed", policyString
+    end
+
+    local confirmedText = read_guild_info_text()
+    if not guild_info_contains_policy(confirmedText, policyString) then
         policy.guildPolicySource = "local"
         db.auth = policy
         return false, "write_failed", policyString

@@ -11,6 +11,7 @@ local permissions = ns.modules.permissions
 local migrations = ns.modules.migrations
 local scanner = ns.modules.scanner
 local events = ns.modules.events
+local itemCatalog = ns.modules.itemCatalog
 local db = store and store.CreateFreshDatabase("My Guild")
 local normalizedMalformed = migrations and migrations.Apply({
     meta = "broken",
@@ -55,6 +56,8 @@ assert.truthy(type(store.GetInventoryColumnWidths) == "function", "store should 
 assert.truthy(type(store.GetMinimumSettings) == "function", "store should expose minimum-settings access")
 assert.truthy(type(store.GetMinimumItemCatalog) == "function", "store should expose the saved minimum item catalog")
 assert.truthy(type(store.GetExportSettings) == "function", "store should expose export-settings access")
+assert.truthy(type(itemCatalog) == "table", "item catalog module should load from the toc")
+assert.truthy(itemCatalog.IsBundledDataLoaded() ~= true, "bundled item data should remain unloaded until a search path requests it")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")

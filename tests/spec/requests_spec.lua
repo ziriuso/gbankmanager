@@ -99,8 +99,14 @@ local requestDb = {
 }
 
 local storedRequest = requests.CreateAndStore(requestDb, {
-    requester = "MemberOne",
-    role = "MEMBER",
+    actorContext = {
+        characterKey = "Stormrage-MemberOne",
+        name = "MemberOne",
+        guildRankName = "Member",
+        guildRankIndex = 4,
+        isGuildMaster = false,
+        inGuild = true,
+    },
     itemID = 1001,
     itemName = "Flask Alpha",
     quantity = 5,
@@ -161,3 +167,70 @@ local deniedApproval = requests.ApproveStored(deniedDb, "request-1", {
 assert.truthy(deniedApproval == nil, "request approvals should be denied when the actor lacks request-approve permission")
 assert.equal("PENDING", deniedDb.requests[1].approval, "denied request approvals should leave the saved request unchanged")
 assert.equal(0, #deniedDb.auditLog, "denied request approvals should not write audit entries")
+
+local invalidTransitionDb = {
+    auth = {
+        capabilities = {
+            full_ui = { [1] = true },
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "request-pending",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1001,
+            itemName = "Flask Alpha",
+            quantity = 2,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 10,
+        },
+        {
+            requestId = "request-open",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 1002,
+            itemName = "Rune Delta",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 12,
+        },
+    },
+    auditLog = {},
+}
+
+local invalidFulfill = requests.MarkFulfilledStored(invalidTransitionDb, "request-pending", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 200)
+assert.truthy(invalidFulfill == nil, "pending requests should not be fulfillable before approval")
+assert.equal("PENDING", invalidTransitionDb.requests[1].approval, "invalid fulfill attempts should not change approval state")
+assert.equal("OPEN", invalidTransitionDb.requests[1].fulfillment, "invalid fulfill attempts should not change fulfillment state")
+assert.equal(0, #invalidTransitionDb.auditLog, "invalid fulfill attempts should not write audit entries")
+
+local invalidReopen = requests.ReopenStored(invalidTransitionDb, "request-open", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 201)
+assert.truthy(invalidReopen == nil, "open requests should not reopen when they are not fulfilled")
+assert.equal("OPEN", invalidTransitionDb.requests[2].fulfillment, "invalid reopen attempts should not change fulfillment state")
+assert.equal(0, #invalidTransitionDb.auditLog, "invalid reopen attempts should not write audit entries")

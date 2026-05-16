@@ -188,6 +188,223 @@ onEvent(events, "CHAT_MSG_ADDON", "GBankManager", remoteRequestPayload, "GUILD",
 assert.equal(1, #db.requests, "sync events should accept guild request-created payloads from allowed members")
 assert.equal("req-remote-1", db.requests[1].requestId, "sync events should persist synced request ids")
 
+local forgedRequestPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 92,
+    payload = {
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-forged-1",
+            requester = "OfficerOne",
+            requesterCharacterKey = "Stormrage-OfficerOne",
+            itemID = 2003,
+            itemName = "Elixir Gamma",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 92,
+        },
+    },
+})
+local forgedCreateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", forgedRequestPayload, "GUILD", "MemberOne")
+assert.truthy(not forgedCreateAccepted, "sync events should reject request-created payloads whose requester identity does not match the actor context")
+assert.equal(1, #db.requests, "forged request-created payloads should not append requests")
+
+db.requests[1].itemName = "Potion Beta Local"
+db.requests[1].updatedAt = 120
+local staleDuplicateCreatePayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 91,
+    payload = {
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2002,
+            itemName = "Potion Beta Remote",
+            quantity = 9,
+            note = "Older remote copy",
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 91,
+        },
+    },
+})
+local staleCreateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", staleDuplicateCreatePayload, "GUILD", "MemberOne")
+assert.truthy(staleCreateAccepted, "sync events should treat duplicate request-created payloads as handled even when they are stale")
+assert.equal("Potion Beta Local", db.requests[1].itemName, "stale duplicate request-created payloads should not overwrite newer local request state")
+assert.equal(120, db.requests[1].updatedAt, "stale duplicate request-created payloads should keep the newer local timestamp")
+
+local missingUpdatePayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 130,
+    payload = {
+        action = "APPROVE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-missing-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2005,
+            itemName = "Missing Request",
+            quantity = 2,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 130,
+        },
+    },
+})
+local missingUpdateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", missingUpdatePayload, "GUILD", "OfficerOne")
+assert.truthy(not missingUpdateAccepted, "sync events should reject request updates for unknown request ids")
+assert.equal(1, #db.requests, "request updates for unknown request ids should not create new rows")
+
+local staleUpdatePayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 100,
+    payload = {
+        action = "APPROVE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2002,
+            itemName = "Potion Beta Stale Update",
+            quantity = 4,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 100,
+        },
+    },
+})
+local staleUpdateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", staleUpdatePayload, "GUILD", "OfficerOne")
+assert.truthy(staleUpdateAccepted, "sync events should treat stale request updates as handled messages")
+assert.equal("Potion Beta Local", db.requests[1].itemName, "stale request updates should not overwrite newer local request data")
+assert.equal(120, db.requests[1].updatedAt, "stale request updates should keep the newer local timestamp")
+
+local invalidTransitionUpdatePayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 140,
+    payload = {
+        action = "FULFILL",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2002,
+            itemName = "Potion Beta Invalid Fulfill",
+            quantity = 4,
+            approval = "PENDING",
+            fulfillment = "FULFILLED",
+            updatedAt = 140,
+        },
+    },
+})
+local invalidTransitionAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", invalidTransitionUpdatePayload, "GUILD", "OfficerOne")
+assert.truthy(not invalidTransitionAccepted, "sync events should reject impossible request state transitions")
+assert.equal("Potion Beta Local", db.requests[1].itemName, "invalid request updates should not overwrite local state")
+assert.equal("OPEN", db.requests[1].fulfillment, "invalid request updates should not change fulfillment state")
+
+local immutableFieldMutationPayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 141,
+    payload = {
+        action = "APPROVE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "DifferentRequester",
+            requesterCharacterKey = "Stormrage-DifferentRequester",
+            itemID = 9999,
+            itemName = "Forged Identity Update",
+            quantity = 4,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            createdAt = 1,
+            createdBy = "Stormrage-OtherCreator",
+            updatedAt = 141,
+        },
+    },
+})
+local immutableMutationAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", immutableFieldMutationPayload, "GUILD", "OfficerOne")
+assert.truthy(not immutableMutationAccepted, "sync events should reject request updates that mutate immutable request identity fields")
+assert.equal("MemberOne", db.requests[1].requester, "invalid sync updates should not rewrite requester identity")
+assert.equal("Stormrage-MemberOne", db.requests[1].requesterCharacterKey, "invalid sync updates should not rewrite requester character keys")
+assert.equal(2002, db.requests[1].itemID, "invalid sync updates should not rewrite item identity")
+
+local forgedSenderPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 150,
+    payload = {
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-forged-sender-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2010,
+            itemName = "Sender Forgery",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 150,
+        },
+    },
+})
+local forgedSenderAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", forgedSenderPayload, "GUILD", "DifferentSender")
+assert.truthy(not forgedSenderAccepted, "sync events should reject payloads whose actor context does not match the addon-message sender")
+assert.equal(1, #db.requests, "forged sender payloads should not append requests")
+
 local remoteAuthPayload = codec.EncodeTable({
     type = "AUTH_POLICY_SNAPSHOT",
     updatedAt = 101,

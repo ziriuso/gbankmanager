@@ -24,6 +24,17 @@ local function split_command(rawMessage)
     return string.lower(command or ""), rest or ""
 end
 
+local function push_chat_line(message)
+    if type(_G.DEFAULT_CHAT_FRAME) == "table" and type(_G.DEFAULT_CHAT_FRAME.AddMessage) == "function" then
+        _G.DEFAULT_CHAT_FRAME:AddMessage(tostring(message or ""))
+        return
+    end
+
+    if type(_G.print) == "function" then
+        _G.print(message)
+    end
+end
+
 _G.SLASH_GBANKMANAGER1 = "/gbm"
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.SlashCmdList.GBANKMANAGER = function(msg)
@@ -61,11 +72,18 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             local _, _, snippet = authPolicySource.PushPolicyToGuildInfo(db)
             return snippet
         end
-    elseif command == "test" and type(liveSmoke) == "table" then
+    elseif command == "test" then
         local subcommand = split_command(remainder)
-        if subcommand == "smoke" and type(liveSmoke.Run) == "function" then
-            return liveSmoke.Run()
+        if subcommand == "smoke" then
+            if type(liveSmoke) == "table" and type(liveSmoke.Run) == "function" then
+                return liveSmoke.Run()
+            end
+
+            push_chat_line("GBankManager smoke test unavailable.")
+            return "smoke_test_unavailable"
         end
+
+        push_chat_line("GBankManager unknown test command.")
         return "unknown_test_command"
     elseif command == "ui" and mainFrame then
         if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then

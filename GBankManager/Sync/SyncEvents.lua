@@ -11,6 +11,7 @@ local permissions = ns.modules.permissions or ns.modules.auth or {}
 local coordinator = ns.modules.syncCoordinator or {}
 local authPolicySource = ns.modules.authPolicySource or {}
 local authPolicyCodec = ns.modules.authPolicyCodec or {}
+local requestsModule = ns.modules.requests or {}
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -49,17 +50,103 @@ local function upsert_request(db, request)
     return request, #db.requests, true
 end
 
+local function find_request(db, requestId)
+    for index, existing in ipairs((db or {}).requests or {}) do
+        if existing.requestId == requestId then
+            return existing, index
+        end
+    end
+end
+
+local function requester_matches_actor(actorContext, request)
+    actorContext = type(actorContext) == "table" and actorContext or {}
+    request = type(request) == "table" and request or {}
+
+    local actorCharacterKey = tostring(actorContext.characterKey or "")
+    local requesterCharacterKey = tostring(request.requesterCharacterKey or "")
+    if actorCharacterKey == "" or requesterCharacterKey == "" or actorCharacterKey ~= requesterCharacterKey then
+        return false
+    end
+
+    local actorName = tostring(actorContext.name or "")
+    local requesterName = tostring(request.requester or "")
+    if actorName ~= "" and requesterName ~= "" and actorName ~= requesterName then
+        return false
+    end
+
+    return true
+end
+
+local function actor_matches_sender(actorContext, sender)
+    actorContext = type(actorContext) == "table" and actorContext or {}
+    sender = tostring(sender or "")
+    if sender == "" then
+        return false
+    end
+
+    local senderName = sender:match("^([^%-]+)") or sender
+    local actorName = tostring(actorContext.name or "")
+    if actorName ~= "" and actorName ~= sender and actorName ~= senderName then
+        return false
+    end
+
+    local actorCharacterKey = tostring(actorContext.characterKey or "")
+    if actorCharacterKey ~= "" and actorCharacterKey ~= sender then
+        local actorKeyCharacter = actorCharacterKey:match("^[^%-]+%-(.+)$") or actorCharacterKey
+        if actorKeyCharacter ~= sender and actorKeyCharacter ~= senderName then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function request_is_newer(remoteRequest, localRequest)
+    remoteRequest = type(remoteRequest) == "table" and remoteRequest or {}
+    localRequest = type(localRequest) == "table" and localRequest or {}
+    return tonumber(remoteRequest.updatedAt or 0) >= tonumber(localRequest.updatedAt or 0)
+end
+
+local function immutable_request_fields_match(existing, incoming)
+    existing = type(existing) == "table" and existing or {}
+    incoming = type(incoming) == "table" and incoming or {}
+
+    local immutableKeys = {
+        "requestId",
+        "requester",
+        "requesterCharacterKey",
+        "requesterRankName",
+        "requesterRankIndex",
+        "role",
+        "itemID",
+        "createdAt",
+        "createdBy",
+    }
+
+    for _, key in ipairs(immutableKeys) do
+        if incoming[key] ~= nil and existing[key] ~= incoming[key] then
+            return false
+        end
+    end
+
+    return true
+end
+
 local function actor_can(context, capability, policy)
     return type(permissions.Can) == "function" and permissions.Can(context or {}, capability, policy) or true
 end
 
-local function handle_auth_policy_snapshot(db, payload)
+local function handle_auth_policy_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
     local remotePolicy = type(payload.policy) == "table" and payload.policy or nil
     local localPolicy = current_policy(db)
 
     if not remotePolicy or permissions.IsBlacklisted(actorContext, localPolicy) then
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
         return false
     end
 
@@ -80,7 +167,7 @@ local function handle_auth_policy_snapshot(db, payload)
     return true
 end
 
-local function handle_request_created(db, payload)
+local function handle_request_created(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
     local request = type(payload.request) == "table" and payload.request or nil
@@ -94,11 +181,24 @@ local function handle_request_created(db, payload)
         return false
     end
 
+    if not actor_matches_sender(actorContext, sender) then
+        return false
+    end
+
+    if not requester_matches_actor(actorContext, request) then
+        return false
+    end
+
+    local existing = find_request(db, request.requestId)
+    if existing and not request_is_newer(request, existing) then
+        return true
+    end
+
     upsert_request(db, request)
     return true
 end
 
-local function handle_request_updated(db, payload)
+local function handle_request_updated(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
     local request = type(payload.request) == "table" and payload.request or nil
@@ -118,6 +218,27 @@ local function handle_request_updated(db, payload)
 
     local capability = capabilityByAction[action]
     if capability and not actor_can(actorContext, capability, localPolicy) then
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        return false
+    end
+
+    local existing = find_request(db, request.requestId)
+    if not existing then
+        return false
+    end
+
+    if not request_is_newer(request, existing) then
+        return true
+    end
+
+    if not immutable_request_fields_match(existing, request) then
+        return false
+    end
+
+    if type(requestsModule.CanApplyAction) == "function" and not requestsModule.CanApplyAction(existing, action) then
         return false
     end
 
@@ -181,15 +302,15 @@ function syncEvents.HandleEvent(event, ...)
         ns.state.lastSyncMessage.sender = sender
         local db = current_db()
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
-            return handle_auth_policy_snapshot(db, ns.state.lastSyncMessage.payload)
+            return handle_auth_policy_snapshot(db, ns.state.lastSyncMessage.payload, sender)
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_CREATED" then
-            return handle_request_created(db, ns.state.lastSyncMessage.payload)
+            return handle_request_created(db, ns.state.lastSyncMessage.payload, sender)
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_UPDATED" then
-            return handle_request_updated(db, ns.state.lastSyncMessage.payload)
+            return handle_request_updated(db, ns.state.lastSyncMessage.payload, sender)
         end
 
         return true

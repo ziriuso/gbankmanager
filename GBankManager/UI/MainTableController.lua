@@ -165,6 +165,11 @@ function mainTableController.Attach(mainFrame, options)
             if type(label.SetJustifyH) == "function" then
                 label:SetJustifyH(columnLayout.justifyH or "LEFT")
             end
+            if width == 0 then
+                label:Hide()
+            else
+                label:Show()
+            end
 
             local input = self.tableFilterInputs[index]
             input:ClearAllPoints()
@@ -184,6 +189,11 @@ function mainTableController.Attach(mainFrame, options)
                 column:SetWidth(width)
                 if type(column.SetJustifyH) == "function" then
                     column:SetJustifyH(columnLayout.justifyH or "LEFT")
+                end
+                if width == 0 then
+                    column:Hide()
+                else
+                    column:Show()
                 end
             end
 

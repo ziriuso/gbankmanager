@@ -103,6 +103,39 @@ assert.truthy(type(slashExport) == "string" and string.find(slashExport, "[GBMAU
 local pushed = slash.command("auth push")
 assert.truthy(type(pushed) == "string" and string.find(_G.guildInfoText, pushed, 1, true) ~= nil, "slash auth push should write or refresh the durable snippet in guild info text")
 
+local originalCGuildInfo = _G.C_GuildInfo
+local originalSetGuildInfoText = _G.SetGuildInfoText
+_G.C_GuildInfo = nil
+_G.SetGuildInfoText = function(text)
+    _G.guildInfoText = text
+end
+
+local legacyWriteOk, legacyWriteReason, legacyPolicyString = source.PushPolicyToGuildInfo(db)
+assert.truthy(legacyWriteOk == true, "auth source push should treat the legacy Guild Info write shim as a successful write when it does not return false")
+assert.equal("written", legacyWriteReason, "auth source push should report a successful legacy Guild Info write")
+assert.truthy(type(legacyPolicyString) == "string" and string.find(_G.guildInfoText, legacyPolicyString, 1, true) ~= nil, "auth source push should still refresh guild info text through the legacy write shim")
+
+_G.C_GuildInfo = originalCGuildInfo
+_G.SetGuildInfoText = originalSetGuildInfoText
+
+_G.guildInfoText = "Guild rules only"
+_G.C_GuildInfo.infoText = _G.guildInfoText
+local beforeBlockedWrite = _G.guildInfoText
+_G.C_GuildInfo.SetInfoText = function(_text)
+end
+_G.SetGuildInfoText = function(_text)
+end
+
+local blockedWriteOk, blockedWriteReason = source.PushPolicyToGuildInfo(db)
+assert.truthy(blockedWriteOk == false, "auth source push should fail when the Guild Info write API call does not actually change the live guild info text")
+assert.equal("write_failed", blockedWriteReason, "auth source push should report an unverified Guild Info write as a write failure")
+assert.equal(beforeBlockedWrite, _G.guildInfoText, "auth source push should leave guild info text unchanged when the live write call is ignored")
+
+_G.C_GuildInfo.SetInfoText = function(text)
+    _G.C_GuildInfo.infoText = text or ""
+end
+_G.SetGuildInfoText = originalSetGuildInfoText
+
 db.auth.revision = 0
 db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}

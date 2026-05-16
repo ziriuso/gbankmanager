@@ -90,6 +90,40 @@ local function can_act(actor, capability, db)
     return true
 end
 
+local function normalize_approval(value)
+    return tostring(value or "PENDING")
+end
+
+local function normalize_fulfillment(value)
+    return tostring(value or "OPEN")
+end
+
+function requests.CanApplyAction(request, action)
+    request = request or {}
+    action = tostring(action or "")
+
+    local approval = normalize_approval(request.approval)
+    local fulfillment = normalize_fulfillment(request.fulfillment)
+
+    if action == "APPROVE" or action == "REJECT" then
+        return approval == "PENDING"
+    end
+
+    if action == "FULFILL" then
+        return approval == "APPROVED" and (fulfillment == "OPEN" or fulfillment == "SUGGESTED_FULFILLED")
+    end
+
+    if action == "REOPEN" then
+        return fulfillment == "FULFILLED" or fulfillment == "SUGGESTED_FULFILLED"
+    end
+
+    if action == "EDIT" then
+        return fulfillment ~= "FULFILLED"
+    end
+
+    return false
+end
+
 function requests.Create(input)
     input = input or {}
     local context = actor_context(input, input.db)
@@ -200,7 +234,7 @@ end
 function requests.ApproveStored(db, requestId, actor, decidedAt)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)
-    if not request or not can_act(actor, "request_approve", db) then
+    if not request or not can_act(actor, "request_approve", db) or not requests.CanApplyAction(request, "APPROVE") then
         return nil
     end
 
@@ -218,7 +252,7 @@ end
 function requests.RejectStored(db, requestId, actor, note, decidedAt)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)
-    if not request or not can_act(actor, "request_reject", db) then
+    if not request or not can_act(actor, "request_reject", db) or not requests.CanApplyAction(request, "REJECT") then
         return nil
     end
 
@@ -237,7 +271,7 @@ end
 function requests.MarkFulfilledStored(db, requestId, actor, updatedAt)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)
-    if not request or not can_act(actor, "request_fulfill", db) then
+    if not request or not can_act(actor, "request_fulfill", db) or not requests.CanApplyAction(request, "FULFILL") then
         return nil
     end
 
@@ -255,7 +289,7 @@ end
 function requests.ReopenStored(db, requestId, actor, updatedAt)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)
-    if not request or not can_act(actor, "request_reopen", db) then
+    if not request or not can_act(actor, "request_reopen", db) or not requests.CanApplyAction(request, "REOPEN") then
         return nil
     end
 

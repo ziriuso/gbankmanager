@@ -63,6 +63,7 @@ end
 function mainRequestsController.Attach(mainFrame, options)
     options = options or {}
     local applyPanelStyle = options.applyPanelStyle
+    local createItemSearchSelector = options.createItemSearchSelector
     local makeLabel = options.makeLabel
     local makeButton = options.makeButton
     local makeInput = options.makeInput
@@ -104,7 +105,7 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestCreatePanel = mainFrame.requestCreatePanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.requestCreatePanel:SetPoint("TOPLEFT", mainFrame.requestActionsPanel, "BOTTOMLEFT", 0, -12)
     mainFrame.requestCreatePanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.requestCreatePanel:SetHeight(146)
+    mainFrame.requestCreatePanel:SetHeight(286)
     applyPanelStyle(mainFrame.requestCreatePanel, theme.colors.panel)
     mainFrame.requestCreatePanel:Hide()
 
@@ -129,18 +130,6 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestCreateStatusText = mainFrame.requestCreateStatusText or makeLabel(mainFrame.requestCreatePanel, "", "GameFontHighlightSmall")
     mainFrame.requestCreateStatusText:SetPoint("TOPLEFT", mainFrame.requestCreateRequesterLabel, "BOTTOMLEFT", 0, -10)
 
-    mainFrame.requestCreateItemIDLabel = mainFrame.requestCreateItemIDLabel or makeLabel(mainFrame.requestCreatePanel, "Item ID", "GameFontHighlightSmall")
-    mainFrame.requestCreateItemIDLabel:SetPoint("TOPLEFT", mainFrame.requestCreateStatusText, "BOTTOMLEFT", 0, -12)
-
-    mainFrame.requestCreateItemNameLabel = mainFrame.requestCreateItemNameLabel or makeLabel(mainFrame.requestCreatePanel, "Item Name", "GameFontHighlightSmall")
-    mainFrame.requestCreateItemNameLabel:SetPoint("LEFT", mainFrame.requestCreateItemIDLabel, "RIGHT", 84, 0)
-
-    mainFrame.requestCreateQuantityLabel = mainFrame.requestCreateQuantityLabel or makeLabel(mainFrame.requestCreatePanel, "Quantity", "GameFontHighlightSmall")
-    mainFrame.requestCreateQuantityLabel:SetPoint("LEFT", mainFrame.requestCreateItemNameLabel, "RIGHT", 168, 0)
-
-    mainFrame.requestCreateNoteLabel = mainFrame.requestCreateNoteLabel or makeLabel(mainFrame.requestCreatePanel, "Note", "GameFontHighlightSmall")
-    mainFrame.requestCreateNoteLabel:SetPoint("LEFT", mainFrame.requestCreateQuantityLabel, "RIGHT", 64, 0)
-
     mainFrame.requestCreateRequesterInput = mainFrame.requestCreateRequesterInput or makeInput(mainFrame.requestCreatePanel, 88, 22)
     mainFrame.requestCreateRequesterInput:SetPoint("TOPLEFT", mainFrame.requestCreateTitle, "BOTTOMLEFT", 0, -16)
     mainFrame.requestCreateRequesterInput:Hide()
@@ -149,17 +138,70 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestCreateRoleInput:SetPoint("LEFT", mainFrame.requestCreateRequesterInput, "RIGHT", 8, 0)
     mainFrame.requestCreateRoleInput:Hide()
 
-    mainFrame.requestCreateItemIDInput = mainFrame.requestCreateItemIDInput or makeInput(mainFrame.requestCreatePanel, 72, 22)
-    mainFrame.requestCreateItemIDInput:SetPoint("TOPLEFT", mainFrame.requestCreateItemIDLabel, "BOTTOMLEFT", 0, -6)
+    mainFrame.requestCreateSearchSelector = mainFrame.requestCreateSearchSelector or createItemSearchSelector(mainFrame.requestCreatePanel, {
+        width = 520,
+        itemIDInputWidth = 92,
+        itemNameInputWidth = 240,
+        selectedItemTextWidth = 488,
+        resultsPanelWidth = 520,
+        resultsPanelHeight = 74,
+        minimumNameQueryLength = 2,
+        resolveQuery = function(query)
+            local itemCatalog = ns.modules.itemCatalog
+            return itemCatalog and type(itemCatalog.ResolveSearchSessionQuery) == "function"
+                and itemCatalog.ResolveSearchSessionQuery(mainFrame:GetRequestSearchSession(), query)
+                or { status = "missing", matches = {} }
+        end,
+        onResolved = function(item)
+            if not item then
+                return
+            end
 
-    mainFrame.requestCreateItemNameInput = mainFrame.requestCreateItemNameInput or makeInput(mainFrame.requestCreatePanel, 160, 22)
-    mainFrame.requestCreateItemNameInput:SetPoint("LEFT", mainFrame.requestCreateItemIDInput, "RIGHT", 8, 0)
+            local db = current_db()
+            local itemCatalog = ns.modules.itemCatalog
+            if itemCatalog and type(itemCatalog.StoreResolvedItem) == "function" then
+                itemCatalog.StoreResolvedItem(db, item)
+                mainFrame.requestSearchSession = nil
+                mainFrame.minimumSearchSession = nil
+            end
+        end,
+        onSelectionChanged = function(item)
+            mainFrame.requestCreateSelectedCatalogItem = item
+            if item and mainFrame.requestCreateUserMessage == "Select an item from the catalog first." then
+                mainFrame.requestCreateUserMessage = nil
+                if type(mainFrame.RefreshRequestEditorState) == "function" then
+                    mainFrame:RefreshRequestEditorState()
+                end
+            end
+            if type(mainFrame.UpdateRequestCreateButtonState) == "function" then
+                mainFrame:UpdateRequestCreateButtonState()
+            end
+        end,
+    })
+    mainFrame.requestCreateSearchSelector:SetPoint("TOPLEFT", mainFrame.requestCreateStatusText, "BOTTOMLEFT", 0, -12)
 
-    mainFrame.requestCreateQuantityInput = mainFrame.requestCreateQuantityInput or makeInput(mainFrame.requestCreatePanel, 56, 22)
-    mainFrame.requestCreateQuantityInput:SetPoint("LEFT", mainFrame.requestCreateItemNameInput, "RIGHT", 8, 0)
+    mainFrame.requestCreateItemIDLabel = mainFrame.requestCreateSearchSelector.itemIDLabel
+    mainFrame.requestCreateItemNameLabel = mainFrame.requestCreateSearchSelector.itemNameLabel
+    mainFrame.requestCreateItemIDInput = mainFrame.requestCreateSearchSelector.itemIDInput
+    mainFrame.requestCreateItemNameInput = mainFrame.requestCreateSearchSelector.itemNameInput
+    mainFrame.requestCreateSelectedItemLabel = mainFrame.requestCreateSearchSelector.selectedItemLabel
+    mainFrame.requestCreateSelectedItemNameText = mainFrame.requestCreateSearchSelector.selectedItemNameText
+    mainFrame.requestCreateSelectedItemQualityIcon = mainFrame.requestCreateSearchSelector.selectedItemQualityIcon
+    mainFrame.requestCreateMatchesLabel = mainFrame.requestCreateSearchSelector.resultsLabel
+    mainFrame.requestCreateResultsPanel = mainFrame.requestCreateSearchSelector.resultsPanel
+    mainFrame.requestCreateMatchButtons = mainFrame.requestCreateSearchSelector.matchButtons
 
-    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestCreatePanel, 116, 22)
-    mainFrame.requestCreateNoteInput:SetPoint("LEFT", mainFrame.requestCreateQuantityInput, "RIGHT", 8, 0)
+    mainFrame.requestCreateQuantityLabel = mainFrame.requestCreateQuantityLabel or makeLabel(mainFrame.requestCreatePanel, "Quantity", "GameFontHighlightSmall")
+    mainFrame.requestCreateQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestCreateSearchSelector.resultsPanel, "BOTTOMLEFT", 0, -12)
+
+    mainFrame.requestCreateNoteLabel = mainFrame.requestCreateNoteLabel or makeLabel(mainFrame.requestCreatePanel, "Note", "GameFontHighlightSmall")
+    mainFrame.requestCreateNoteLabel:SetPoint("LEFT", mainFrame.requestCreateQuantityLabel, "RIGHT", 92, 0)
+
+    mainFrame.requestCreateQuantityInput = mainFrame.requestCreateQuantityInput or makeInput(mainFrame.requestCreatePanel, 72, 22)
+    mainFrame.requestCreateQuantityInput:SetPoint("TOPLEFT", mainFrame.requestCreateQuantityLabel, "BOTTOMLEFT", 0, -6)
+
+    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestCreatePanel, 296, 22)
+    mainFrame.requestCreateNoteInput:SetPoint("TOPLEFT", mainFrame.requestCreateNoteLabel, "BOTTOMLEFT", 0, -6)
 
     mainFrame.requestCreateButton = mainFrame.requestCreateButton or makeButton(mainFrame.requestCreatePanel, 68, 28, "Create")
     mainFrame.requestCreateButton:SetPoint("LEFT", mainFrame.requestCreateNoteInput, "RIGHT", 12, 0)
@@ -215,11 +257,108 @@ function mainRequestsController.Attach(mainFrame, options)
             self.requestCreateStatusText:SetText("Submit requests using your live guild identity.")
         end
 
-        self.requestCreateItemIDInput:SetEnabled(canSubmit)
-        self.requestCreateItemNameInput:SetEnabled(canSubmit)
+        if self.requestCreateSearchSelector then
+            self.requestCreateSearchSelector:SetSearchEnabled(canSubmit)
+        else
+            self.requestCreateItemIDInput:SetEnabled(canSubmit)
+            self.requestCreateItemNameInput:SetEnabled(canSubmit)
+        end
         self.requestCreateQuantityInput:SetEnabled(canSubmit)
         self.requestCreateNoteInput:SetEnabled(canSubmit)
-        self.requestCreateButton:SetEnabled(canSubmit)
+        self:UpdateRequestCreateButtonState()
+    end
+
+    function mainFrame:GetConfirmedRequestCreateItem()
+        if self.requestCreateSelectedCatalogItem then
+            return self.requestCreateSelectedCatalogItem
+        end
+
+        if self.requestCreateSearchSelector then
+            return self.requestCreateSearchSelector.selectedItem
+        end
+
+        return nil
+    end
+
+    function mainFrame:UpdateRequestCreateButtonState()
+        local db = current_db()
+        local context = current_context(db)
+        local policy = current_policy(db)
+        local canSubmit = can(context, "request_submit", policy)
+        local hasConfirmedSelection = self:GetConfirmedRequestCreateItem() ~= nil
+        local profile = access_profile(context, policy)
+        local shouldEnable = canSubmit and (hasConfirmedSelection or profile == "request_only")
+        self.requestCreateButton:SetEnabled(shouldEnable)
+        return self.requestCreateButton.enabled
+    end
+
+    function mainFrame:HideRequestVariantButtons()
+        if self.requestCreateSearchSelector then
+            self.requestCreateSearchSelector:HideMatches()
+        end
+    end
+
+    function mainFrame:GetRequestSearchSnapshot()
+        local db = current_db()
+        local snapshot = type(self.GetCurrentSnapshot) == "function" and self:GetCurrentSnapshot() or { items = {} }
+        local itemCatalog = ns.modules.itemCatalog
+        snapshot.searchCatalog = itemCatalog and type(itemCatalog.BuildSearchCatalog) == "function"
+            and itemCatalog.BuildSearchCatalog(db, snapshot, {
+                includeBundled = false,
+            })
+            or {}
+        return snapshot
+    end
+
+    function mainFrame:GetRequestSearchSession()
+        local itemCatalog = ns.modules.itemCatalog
+        if type(itemCatalog) ~= "table" or type(itemCatalog.CreateSearchSession) ~= "function" then
+            return nil
+        end
+
+        local bundledReady = type(itemCatalog.IsBundledDataLoaded) == "function" and itemCatalog.IsBundledDataLoaded() or false
+        local sessionIndexedReady = type(itemCatalog.IsSearchSessionIndexedReady) == "function"
+            and itemCatalog.IsSearchSessionIndexedReady(self.requestSearchSession)
+            or false
+
+        if self.requestSearchSession == nil or (bundledReady and not sessionIndexedReady) then
+            self.requestSearchSession = itemCatalog.CreateSearchSession(self:GetRequestSearchSnapshot())
+        end
+
+        return self.requestSearchSession
+    end
+
+    function mainFrame:ApplyRequestResolvedItem(item)
+        if not item then
+            return nil
+        end
+
+        if self.requestCreateSearchSelector then
+            self.requestCreateSearchSelector:ApplySelectedItem(item, true)
+            return item
+        end
+
+        self.isResolvingRequestCreate = true
+        self.requestCreateItemIDInput:SetText(tostring(item.itemID or ""))
+        self.requestCreateItemNameInput:SetText(item.name or item.itemName or "")
+        self.isResolvingRequestCreate = false
+        return item
+    end
+
+    function mainFrame:ResolveRequestCreateByItemID()
+        if self.requestCreateSearchSelector then
+            return self.requestCreateSearchSelector:ResolveQuery(self.requestCreateItemIDInput:GetText() or "")
+        end
+
+        return nil
+    end
+
+    function mainFrame:ResolveRequestCreateByName()
+        if self.requestCreateSearchSelector then
+            return self.requestCreateSearchSelector:ResolveQuery(self.requestCreateItemNameInput:GetText() or "")
+        end
+
+        return nil
     end
 
     function mainFrame:RefreshRequestActionButtons()
@@ -293,8 +432,9 @@ function mainRequestsController.Attach(mainFrame, options)
         local db = current_db()
         local context = current_context(db)
         local policy = current_policy(db)
-        local itemID = parseNumber(self.requestCreateItemIDInput:GetText() or "")
-        local itemName = self.requestCreateItemNameInput:GetText() or ""
+        local selectedItem = self:GetConfirmedRequestCreateItem()
+        local itemID = tonumber((selectedItem or {}).itemID)
+        local itemName = tostring((selectedItem or {}).name or (selectedItem or {}).itemName or "")
         local quantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
         local note = self.requestCreateNoteInput:GetText() or ""
 
@@ -304,14 +444,8 @@ function mainRequestsController.Attach(mainFrame, options)
             return nil
         end
 
-        if not itemID then
-            self.requestCreateUserMessage = "Item ID is required."
-            self.requestCreateStatusText:SetText(self.requestCreateUserMessage)
-            return nil
-        end
-
-        if itemName == "" then
-            self.requestCreateUserMessage = "Item Name is required."
+        if not selectedItem or not itemID or itemName == "" then
+            self.requestCreateUserMessage = "Select an item from the catalog first."
             self.requestCreateStatusText:SetText(self.requestCreateUserMessage)
             return nil
         end
@@ -350,12 +484,24 @@ function mainRequestsController.Attach(mainFrame, options)
         self.selectedRequestId = request and request.requestId or nil
         self.requestCreateRequesterInput:SetText("")
         self.requestCreateRoleInput:SetText("")
-        self.requestCreateItemIDInput:SetText("")
-        self.requestCreateItemNameInput:SetText("")
+        self.requestCreateSelectedCatalogItem = nil
+        if self.requestCreateSearchSelector then
+            self.requestCreateSearchSelector.isResolving = true
+            self.requestCreateItemIDInput:SetText("")
+            self.requestCreateItemNameInput:SetText("")
+            self.requestCreateSearchSelector.isResolving = false
+            self.requestCreateSearchSelector:ClearSelection()
+        else
+            self.requestCreateItemIDInput:SetText("")
+            self.requestCreateItemNameInput:SetText("")
+        end
         self.requestCreateQuantityInput:SetText("")
         self.requestCreateNoteInput:SetText("")
+        self:HideRequestVariantButtons()
+        self.requestSearchSession = nil
         self.requestCreateUserMessage = request and string.format("Created request for %s x%d.", itemName, quantity) or "Unable to create request."
         self.requestCreateStatusText:SetText(self.requestCreateUserMessage)
+        self:UpdateRequestCreateButtonState()
         self:RefreshRequestActionButtons()
         self:RefreshView()
         return request

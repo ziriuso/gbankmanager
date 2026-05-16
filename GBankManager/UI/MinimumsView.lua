@@ -21,7 +21,6 @@ local DEFAULT_COLUMNS = {
     { key = "current", label = "Current", width = 60, justifyH = "LEFT", filterMode = "none", sortable = true },
     { key = "restock", label = "Restock", width = 68, justifyH = "LEFT", filterMode = "none", sortable = true },
     { key = "quantity", label = "Minimum", width = 66, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restockFrom", label = "", width = 0, justifyH = "LEFT", filterMode = "none", sortable = false },
 }
 
 local function copy_columns(columns)
@@ -80,6 +79,7 @@ local function normalize_rule(rule, previous)
         originalItemID = rule.originalItemID or previous.originalItemID,
         originalScope = rule.originalScope or previous.originalScope,
         originalTabName = rule.originalTabName ~= nil and rule.originalTabName or previous.originalTabName,
+        isNewlyAdded = rule.isNewlyAdded == true or previous.isNewlyAdded == true,
     }
 end
 
@@ -421,6 +421,7 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             configured = true,
             craftedQuality = qualitySource.craftedQuality,
             craftedQualityIcon = qualitySource.craftedQualityIcon,
+            isNewlyAdded = row.isNewlyAdded == true,
         })
         seen[row.itemID] = true
     end
@@ -518,97 +519,6 @@ local function compare_with_direction(left, right, direction)
     return left < right
 end
 
-local function item_id_from_link(link)
-    return tonumber(string.match(tostring(link or ""), "item:(%d+)"))
-end
-
-local function resolve_item_from_client_cache(query)
-    local getter = _G.GetItemInfo
-    if type(getter) ~= "function" then
-        return nil
-    end
-
-    local itemName, itemLink = getter(query)
-    if itemName == nil or itemName == "" then
-        local requestor = _G.C_Item and _G.C_Item.RequestLoadItemDataByID
-        local numericId = tonumber(query)
-        if numericId and type(requestor) == "function" then
-            requestor(numericId)
-        end
-        return nil
-    end
-
-    local itemID = tonumber(query) or item_id_from_link(itemLink)
-    if not itemID then
-        return nil
-    end
-
-    return {
-        itemID = itemID,
-        name = itemName,
-    }
-end
-
-local function append_unique_match(matches, item)
-    if not item then
-        return matches
-    end
-
-    matches = matches or {}
-    for _, existing in ipairs(matches) do
-        if tonumber(existing.itemID) == tonumber(item.itemID) then
-            return matches
-        end
-    end
-
-    table.insert(matches, item)
-    return matches
-end
-
-local function collect_search_items(snapshot)
-    local items = {}
-    local seen = {}
-
-    local function add_item(item)
-        if type(item) ~= "table" then
-            return
-        end
-
-        local itemID = tonumber(item.itemID)
-        local itemName = tostring(item.name or item.itemName or "")
-        if not itemID or itemName == "" or seen[itemID] then
-            return
-        end
-
-        seen[itemID] = true
-        table.insert(items, {
-            itemID = itemID,
-            name = itemName,
-            craftedQuality = item.craftedQuality,
-            craftedQualityIcon = item.craftedQualityIcon,
-            totalCount = item.totalCount,
-            tabs = item.tabs,
-        })
-    end
-
-    for _, item in pairs(((snapshot or {}).items) or {}) do
-        add_item(item)
-    end
-
-    for _, item in ipairs(((snapshot or {}).searchCatalog) or {}) do
-        add_item(item)
-    end
-
-    table.sort(items, function(left, right)
-        if tostring(left.name or "") ~= tostring(right.name or "") then
-            return tostring(left.name or "") < tostring(right.name or "")
-        end
-        return crafted_quality_rank(left) < crafted_quality_rank(right)
-    end)
-
-    return items
-end
-
 function minimumsView.SortRows(rows, sortState)
     rows = rows or {}
     sortState = sortState or {}
@@ -644,76 +554,9 @@ function minimumsView.SortRows(rows, sortState)
 end
 
 function minimumsView.ResolveItemQuery(snapshot, query)
-    local items = collect_search_items(snapshot)
-    local raw = tostring(query or "")
-    local numericId = tonumber(raw)
-    local lowered = string.lower(raw)
-
-    if numericId then
-        for _, item in ipairs(items) do
-            if tonumber(item.itemID) == numericId then
-                return {
-                    status = "resolved",
-                    item = item,
-                    matches = { item },
-                }
-            end
-        end
-
-        local cachedItem = resolve_item_from_client_cache(numericId)
-        if cachedItem then
-            return {
-                status = "resolved",
-                item = cachedItem,
-                matches = { cachedItem },
-            }
-        end
-
-        return {
-            status = "missing",
-            matches = {},
-        }
-    end
-
-    local matches = {}
-    for _, item in ipairs(items) do
-        if lowered ~= "" and string.find(string.lower(item.name or ""), lowered, 1, true) ~= nil then
-            table.insert(matches, item)
-        end
-    end
-
-    local cachedItem = resolve_item_from_client_cache(raw)
-    if cachedItem and lowered ~= "" and string.find(string.lower(cachedItem.name or ""), lowered, 1, true) ~= nil then
-        matches = append_unique_match(matches, cachedItem)
-        table.sort(matches, function(left, right)
-            if tostring(left.name or "") ~= tostring(right.name or "") then
-                return tostring(left.name or "") < tostring(right.name or "")
-            end
-            return (tonumber(left.itemID or 0) or 0) < (tonumber(right.itemID or 0) or 0)
-        end)
-    end
-
-    if #matches == 1 then
-        return {
-            status = "resolved",
-            item = matches[1],
-            matches = matches,
-        }
-    end
-
-    if #matches > 1 then
-        return {
-            status = "multiple",
-            matches = matches,
-        }
-    end
-
-    if cachedItem then
-        return {
-            status = "resolved",
-            item = cachedItem,
-            matches = { cachedItem },
-        }
+    local itemCatalog = ns.modules.itemCatalog
+    if itemCatalog and type(itemCatalog.ResolveQuery) == "function" then
+        return itemCatalog.ResolveQuery(snapshot, query)
     end
 
     return {

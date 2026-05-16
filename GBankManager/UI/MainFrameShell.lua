@@ -102,8 +102,22 @@ function mainFrameShell.SetButtonIcon(button, kind)
     if type(button.iconTexture.SetAllPoints) == "function" then
         button.iconTexture:SetAllPoints()
     end
+    local atlasByKind = {
+        add = "common-icon-plus",
+        remove = "common-icon-redx",
+        undo = "common-icon-undo",
+    }
+    local tintByKind = {
+        add = { 0.35, 1.0, 0.35, 1.0 },
+        remove = { 1.0, 0.35, 0.35, 1.0 },
+        undo = { 1.0, 0.82, 0.0, 1.0 },
+    }
     if type(button.iconTexture.SetAtlas) == "function" then
-        button.iconTexture:SetAtlas(kind == "remove" and "common-icon-redx" or "common-icon-undo", true)
+        button.iconTexture:SetAtlas(atlasByKind[kind] or "common-icon-undo", true)
+    end
+    button.iconTexture.tint = tintByKind[kind] or { 1, 1, 1, 1 }
+    if type(button.iconTexture.SetVertexColor) == "function" then
+        button.iconTexture:SetVertexColor(unpack(button.iconTexture.tint))
     end
 
     button.iconLabel = button.iconLabel or mainFrameShell.MakeLabel(button, "", "GameFontHighlightSmall")
@@ -111,7 +125,8 @@ function mainFrameShell.SetButtonIcon(button, kind)
         button.iconLabel:ClearAllPoints()
     end
     button.iconLabel:SetPoint("CENTER", button, "CENTER", 0, 0)
-    button.iconLabel:SetText(kind == "remove" and "X" or "U")
+    button.iconLabel:SetText("")
+    button.iconLabel:Hide()
 end
 
 function mainFrameShell.MakeInput(parent, width, height)
@@ -135,6 +150,560 @@ function mainFrameShell.MakeInput(parent, width, height)
     end
     input:SetText("")
     return input
+end
+
+local function item_result_key(item)
+    if type(item) ~= "table" then
+        return nil
+    end
+
+    return table.concat({
+        tostring(item.itemID or ""),
+        tostring(item.craftedQuality or ""),
+        tostring(item.name or item.itemName or ""),
+    }, "::")
+end
+
+local function create_virtualized_item_results_list(parent, options)
+    options = options or {}
+
+    local list = {}
+    list.parent = parent
+    list.width = math.max(0, options.width or 0)
+    list.viewportHeight = math.max(0, options.viewportHeight or 0)
+    list.rowHeight = math.max(1, options.rowHeight or 22)
+    list.rowSpacing = math.max(0, options.rowSpacing or 2)
+    list.scrollFrame = options.scrollFrame
+    list.scrollChild = options.scrollChild
+    list.scrollController = options.scrollController
+    list.scrollBar = options.scrollBar
+    list.formatLabel = options.formatLabel or function(item)
+        return tostring((item or {}).name or (item or {}).itemName or "")
+    end
+    list.onItemSelected = options.onItemSelected
+    list.dataProvider = _G.CreateDataProvider()
+    list.scrollBox = _G.CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    list.scrollBox:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    list.scrollBox:SetWidth(list.width)
+    list.scrollBox:SetHeight(list.viewportHeight)
+    list.rowPool = {}
+    list.selectedItem = nil
+    list.selectedKey = nil
+    list.contentHeight = list.viewportHeight
+    list.visibleStartIndex = 0
+    list.visibleEndIndex = 0
+
+    list.scrollBox.dataProvider = list.dataProvider
+
+    function list:GetStride()
+        return self.rowHeight + self.rowSpacing
+    end
+
+    function list:GetVisibleCapacity()
+        local stride = math.max(1, self:GetStride())
+        return math.max(1, math.ceil(math.max(0, self.viewportHeight) / stride) + 1)
+    end
+
+    function list:EnsureRow(slotIndex)
+        local row = self.rowPool[slotIndex]
+        if row then
+            return row
+        end
+
+        row = mainFrameShell.MakeButton(self.scrollBox, self.width, self.rowHeight, "")
+        row:SetPoint("TOPLEFT", self.scrollBox, "TOPLEFT", 0, -((slotIndex - 1) * self:GetStride()))
+        row:SetWidth(self.width)
+        if row.labelText then
+            row.labelText:Hide()
+        end
+
+        row.qualityIcon = row.qualityIcon or row:CreateTexture()
+        row.qualityIcon:SetPoint("LEFT", row, "LEFT", 6, 0)
+        if type(row.qualityIcon.SetWidth) == "function" then
+            row.qualityIcon:SetWidth(16)
+        end
+        if type(row.qualityIcon.SetHeight) == "function" then
+            row.qualityIcon:SetHeight(16)
+        end
+        row.qualityIcon:Hide()
+
+        row.itemText = row.itemText or mainFrameShell.MakeLabel(row, "", "GameFontHighlightSmall")
+        row.itemText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
+        if type(row.itemText.SetWidth) == "function" then
+            row.itemText:SetWidth(math.max(0, self.width - 36))
+        end
+
+        row:SetScript("OnClick", function(button)
+            if button.elementData then
+                self:SetSelectedItem(button.elementData, true)
+            end
+        end)
+
+        self.rowPool[slotIndex] = row
+        return row
+    end
+
+    function list:HideExtraRows(startIndex)
+        for slotIndex = startIndex, #(self.rowPool or {}) do
+            self.rowPool[slotIndex].elementData = nil
+            self.rowPool[slotIndex].resolvedItem = nil
+            self.rowPool[slotIndex].isSelected = false
+            self.rowPool[slotIndex]:Hide()
+        end
+    end
+
+    function list:RefreshVisibleRows()
+        local size = self.dataProvider:GetSize()
+        if size <= 0 then
+            self.visibleStartIndex = 0
+            self.visibleEndIndex = 0
+            self:HideExtraRows(1)
+            return
+        end
+
+        local offset = 0
+        if self.scrollFrame and type(self.scrollFrame.GetVerticalScroll) == "function" then
+            offset = math.max(0, self.scrollFrame:GetVerticalScroll() or 0)
+        end
+
+        local stride = math.max(1, self:GetStride())
+        local firstIndex = math.floor(offset / stride) + 1
+        firstIndex = math.max(1, math.min(size, firstIndex))
+        local lastIndex = math.min(size, firstIndex + self:GetVisibleCapacity() - 1)
+
+        self.visibleStartIndex = firstIndex
+        self.visibleEndIndex = lastIndex
+
+        local slotIndex = 1
+        for dataIndex = firstIndex, lastIndex do
+            local row = self:EnsureRow(slotIndex)
+            local elementData = self.dataProvider:Find(dataIndex)
+            row.virtualIndex = dataIndex
+            row.elementData = elementData
+            row.resolvedItem = elementData
+            row.itemText:SetText(self.formatLabel(elementData))
+
+            local atlas = tostring((elementData or {}).craftedQualityIcon or "")
+            if atlas ~= "" then
+                row.qualityIcon.atlas = atlas
+                if type(row.qualityIcon.SetAtlas) == "function" then
+                    row.qualityIcon:SetAtlas(atlas, true)
+                end
+                row.qualityIcon:Show()
+            else
+                row.qualityIcon.atlas = nil
+                row.qualityIcon:Hide()
+            end
+
+            local isSelected = item_result_key(elementData) ~= nil and item_result_key(elementData) == self.selectedKey
+            row.isSelected = isSelected
+            mainFrameShell.ApplyPanelStyle(row, isSelected and theme().colors.panelAlt or theme().colors.panel)
+            row:Show()
+            slotIndex = slotIndex + 1
+        end
+
+        self:HideExtraRows(slotIndex)
+    end
+
+    function list:RefreshMetrics()
+        local size = self.dataProvider:GetSize()
+        local stride = self:GetStride()
+        if size > 0 then
+            self.contentHeight = math.max(self.viewportHeight, (size * stride) - self.rowSpacing)
+        else
+            self.contentHeight = self.viewportHeight
+        end
+
+        if self.scrollChild and type(self.scrollChild.SetSize) == "function" then
+            self.scrollChild:SetSize(self.width, self.contentHeight)
+        end
+        if self.scrollBox and type(self.scrollBox.SetSize) == "function" then
+            self.scrollBox:SetSize(self.width, self.contentHeight)
+        end
+    end
+
+    function list:SetSelectedItem(item, notify)
+        self.selectedItem = item
+        self.selectedKey = item_result_key(item)
+        self:RefreshVisibleRows()
+        if notify == true and type(self.onItemSelected) == "function" then
+            self.onItemSelected(item)
+        end
+    end
+
+    function list:SetData(items)
+        self.dataProvider:Flush()
+        for _, item in ipairs(items or {}) do
+            self.dataProvider:Insert(item)
+        end
+
+        self.scrollBox.dataProvider = self.dataProvider
+
+        self:RefreshMetrics()
+        if self.scrollController then
+            self.scrollController:Refresh(self.contentHeight, self.viewportHeight)
+        else
+            self:RefreshVisibleRows()
+        end
+    end
+
+    if list.scrollController then
+        list.scrollController.options = list.scrollController.options or {}
+        list.scrollController.options.getContentHeight = function()
+            return list.contentHeight
+        end
+        list.scrollController.options.getViewportHeight = function()
+            return list.viewportHeight
+        end
+        list.scrollController.options.onOffsetChanged = function()
+            list:RefreshVisibleRows()
+        end
+    end
+
+    return list
+end
+
+function mainFrameShell.CreateItemSearchSelector(parent, options)
+    options = options or {}
+
+    local selector = _G.CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    selector:SetSize(options.width or 360, options.height or 156)
+
+    local idLabelText = options.itemIDLabelText or "Search Item ID"
+    local nameLabelText = options.itemNameLabelText or "Search Item Name"
+    local selectedLabelText = options.selectedItemLabelText or "Selected Item"
+    local resultsLabelText = options.resultsLabelText or "Matches"
+    local idInputWidth = options.itemIDInputWidth or 92
+    local nameInputWidth = options.itemNameInputWidth or 180
+    local selectedTextWidth = options.selectedItemTextWidth or math.max(120, (options.width or 360) - 64)
+    local resultsPanelWidth = options.resultsPanelWidth or (options.width or 360)
+    local resultsPanelHeight = options.resultsPanelHeight or 74
+    local resultRowHeight = options.resultRowHeight or 22
+    local resultRowSpacing = options.resultRowSpacing or 2
+    local resultsPanelInset = 4
+    local resultsScrollBarWidth = 14
+    local resultsViewportRightInset = resultsScrollBarWidth + 6
+    local resultsContentWidth = math.max(0, resultsPanelWidth - resultsPanelInset - resultsViewportRightInset)
+    local resultsViewportHeight = math.max(0, resultsPanelHeight - (resultsPanelInset * 2))
+    local onResolved = options.onResolved
+    local onSelectionChanged = options.onSelectionChanged
+    local resolveQuery = options.resolveQuery
+    local minimumNameQueryLength = math.max(0, tonumber(options.minimumNameQueryLength) or 0)
+
+    local function trim_text(value)
+        return (tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+    end
+
+    local function match_label(item)
+        local name = tostring((item or {}).name or (item or {}).itemName or "")
+        local itemID = tostring((item or {}).itemID or "")
+        local craftedQuality = tonumber((item or {}).craftedQuality)
+        if craftedQuality and craftedQuality > 0 then
+            return string.format("[T%d] %s (%s)", craftedQuality, name, itemID)
+        end
+        return string.format("%s (%s)", name, itemID)
+    end
+
+    local function should_auto_apply(source, rawQuery, resolutionItem)
+        if source == "id" then
+            local queryItemID = tonumber(trim_text(rawQuery))
+            return queryItemID ~= nil and queryItemID == tonumber((resolutionItem or {}).itemID)
+        end
+
+        local queryName = string.lower(trim_text(rawQuery))
+        local resolvedName = string.lower(tostring((resolutionItem or {}).name or (resolutionItem or {}).itemName or ""))
+        return queryName ~= "" and queryName == resolvedName
+    end
+
+    selector.itemIDLabel = mainFrameShell.MakeLabel(selector, idLabelText, "GameFontHighlightSmall")
+    selector.itemIDLabel:SetPoint("TOPLEFT", selector, "TOPLEFT", 0, 0)
+
+    selector.itemNameLabel = mainFrameShell.MakeLabel(selector, nameLabelText, "GameFontHighlightSmall")
+    selector.itemNameLabel:SetPoint("TOPLEFT", selector.itemIDLabel, "TOPRIGHT", idInputWidth + 16, 0)
+
+    selector.itemIDInput = mainFrameShell.MakeInput(selector, idInputWidth, 22)
+    selector.itemIDInput:SetPoint("TOPLEFT", selector.itemIDLabel, "BOTTOMLEFT", 0, -4)
+
+    selector.itemNameInput = mainFrameShell.MakeInput(selector, nameInputWidth, 22)
+    selector.itemNameInput:SetPoint("TOPLEFT", selector.itemNameLabel, "BOTTOMLEFT", 0, -4)
+
+    selector.selectedItemLabel = mainFrameShell.MakeLabel(selector, selectedLabelText, "GameFontHighlightSmall")
+    selector.selectedItemLabel:SetPoint("TOPLEFT", selector.itemIDInput, "BOTTOMLEFT", 0, -12)
+
+    selector.selectedItemQualityIcon = selector.selectedItemQualityIcon or selector:CreateTexture()
+    selector.selectedItemQualityIcon:SetPoint("TOPLEFT", selector.selectedItemLabel, "BOTTOMLEFT", 0, -6)
+    if type(selector.selectedItemQualityIcon.SetWidth) == "function" then
+        selector.selectedItemQualityIcon:SetWidth(18)
+    end
+    if type(selector.selectedItemQualityIcon.SetHeight) == "function" then
+        selector.selectedItemQualityIcon:SetHeight(18)
+    end
+    selector.selectedItemQualityIcon:Hide()
+
+    selector.selectedItemNameText = mainFrameShell.MakeLabel(selector, "No item selected.", "GameFontNormal")
+    selector.selectedItemNameText:SetPoint("LEFT", selector.selectedItemQualityIcon, "RIGHT", 6, 0)
+    if type(selector.selectedItemNameText.SetWidth) == "function" then
+        selector.selectedItemNameText:SetWidth(selectedTextWidth)
+    end
+
+    selector.statusText = mainFrameShell.MakeLabel(selector, "", "GameFontHighlightSmall")
+    selector.statusText:SetPoint("TOPLEFT", selector.selectedItemQualityIcon, "BOTTOMLEFT", 0, -6)
+    if type(selector.statusText.SetWidth) == "function" then
+        selector.statusText:SetWidth(selectedTextWidth)
+    end
+    selector.statusText:Hide()
+
+    selector.resultsLabel = mainFrameShell.MakeLabel(selector, resultsLabelText, "GameFontHighlightSmall")
+    selector.resultsLabel:SetPoint("TOPLEFT", selector.statusText, "BOTTOMLEFT", 0, -10)
+
+    selector.resultsPanel = _G.CreateFrame("Frame", nil, selector, "BackdropTemplate")
+    selector.resultsPanel:SetPoint("TOPLEFT", selector.resultsLabel, "BOTTOMLEFT", 0, -6)
+    selector.resultsPanel:SetSize(resultsPanelWidth, resultsPanelHeight)
+    mainFrameShell.ApplyPanelStyle(selector.resultsPanel, theme().colors.background)
+    selector.resultsPanel:Hide()
+
+    local resultsOverflow = mainFrameShell.CreateTableOverflowViewport(selector.resultsPanel, {
+        viewportInsetLeft = resultsPanelInset,
+        viewportInsetTop = resultsPanelInset,
+        viewportInsetRight = resultsViewportRightInset,
+        viewportInsetBottom = resultsPanelInset,
+        scrollInsetLeft = 0,
+        scrollInsetTop = 0,
+        scrollInsetRight = 0,
+        scrollInsetBottom = 0,
+        scrollBarWidth = resultsScrollBarWidth,
+        scrollBarRightInset = resultsPanelInset,
+        scrollBarTopInset = resultsPanelInset,
+        scrollBarBottomInset = resultsPanelInset,
+        viewportColor = theme().colors.background,
+        controllerOptions = {
+            wheelStep = resultRowHeight,
+        },
+    })
+
+    selector.resultsViewportFrame = resultsOverflow.viewportFrame
+    selector.resultsScrollFrame = resultsOverflow.scrollFrame
+    selector.resultsScrollChild = resultsOverflow.scrollChild
+    selector.resultsScrollBar = resultsOverflow.scrollBar
+    selector.resultsScrollController = resultsOverflow.controller
+    selector.resultsScrollChild:SetSize(resultsContentWidth, resultsViewportHeight)
+    selector.resultRowHeight = resultRowHeight
+    selector.resultRowSpacing = resultRowSpacing
+    selector.resultsViewportHeight = resultsViewportHeight
+
+    selector.resultsList = selector.resultsList or create_virtualized_item_results_list(selector.resultsScrollChild, {
+        width = resultsContentWidth,
+        viewportHeight = resultsViewportHeight,
+        rowHeight = resultRowHeight,
+        rowSpacing = resultRowSpacing,
+        scrollFrame = selector.resultsScrollFrame,
+        scrollChild = selector.resultsScrollChild,
+        scrollController = selector.resultsScrollController,
+        scrollBar = selector.resultsScrollBar,
+        formatLabel = match_label,
+        onItemSelected = function(item)
+            selector:ApplySelectedItem(item, true)
+        end,
+    })
+    selector.resultsScrollBox = selector.resultsList.scrollBox
+    selector.resultsDataProvider = selector.resultsList.dataProvider
+    selector.resultRows = selector.resultsList.rowPool
+    selector.matchButtons = selector.resultRows
+    selector.pendingProgrammaticInputs = selector.pendingProgrammaticInputs or {}
+
+    function selector:SetProgrammaticInputValue(fieldKey, input, value)
+        local resolvedValue = tostring(value or "")
+        self.pendingProgrammaticInputs[fieldKey] = resolvedValue
+        self.isResolving = true
+        input:SetText(resolvedValue)
+        self.isResolving = false
+    end
+
+    function selector:ConsumeProgrammaticInputValue(fieldKey, value)
+        local pendingInputs = self.pendingProgrammaticInputs or {}
+        local expectedValue = pendingInputs[fieldKey]
+        if expectedValue == nil then
+            return false
+        end
+
+        pendingInputs[fieldKey] = nil
+        return tostring(value or "") == expectedValue
+    end
+
+    function selector:HideMatches()
+        if self.resultsList then
+            self.resultsList:SetData({})
+            self.resultsList:SetSelectedItem(self.selectedItem, false)
+            self.resultsContentHeight = self.resultsList.contentHeight
+        end
+        if self.resultsScrollController then
+            self.resultsScrollController:SetOffset(0, 0, resultsViewportHeight)
+        end
+        self.resultsPanel:Hide()
+        self.resolvedMatches = {}
+    end
+
+    function selector:SetStatusMessage(message)
+        local resolvedMessage = tostring(message or "")
+        if resolvedMessage == "" then
+            self.statusText:SetText("")
+            self.statusText:Hide()
+            return
+        end
+
+        self.statusText:SetText(resolvedMessage)
+        self.statusText:Show()
+    end
+
+    function selector:ApplySelectedItem(item, shouldPopulateInputs)
+        self.selectedItem = item
+        if shouldPopulateInputs ~= false then
+            self:SetProgrammaticInputValue("id", self.itemIDInput, tostring((item or {}).itemID or ""))
+            self:SetProgrammaticInputValue("name", self.itemNameInput, tostring((item or {}).name or (item or {}).itemName or ""))
+        end
+
+        if item then
+            self.selectedItemNameText:SetText(tostring(item.name or item.itemName or ""))
+            local atlas = tostring(item.craftedQualityIcon or "")
+            if atlas ~= "" then
+                self.selectedItemQualityIcon.atlas = atlas
+                if type(self.selectedItemQualityIcon.SetAtlas) == "function" then
+                self.selectedItemQualityIcon:SetAtlas(atlas, true)
+                end
+                self.selectedItemQualityIcon:Show()
+            else
+                self.selectedItemQualityIcon.atlas = nil
+                self.selectedItemQualityIcon:Hide()
+            end
+            self:SetStatusMessage(nil)
+        else
+            self.selectedItemNameText:SetText("No item selected.")
+            self.selectedItemQualityIcon.atlas = nil
+            self.selectedItemQualityIcon:Hide()
+        end
+
+        if self.resultsList then
+            self.resultsList:SetSelectedItem(item, false)
+        end
+
+        self:HideMatches()
+        if type(onResolved) == "function" then
+            onResolved(item)
+        end
+        if type(onSelectionChanged) == "function" then
+            onSelectionChanged(item)
+        end
+        return item
+    end
+
+    function selector:ClearSelection(source)
+        if source == "id" then
+            self:SetProgrammaticInputValue("name", self.itemNameInput, "")
+        elseif source == "name" then
+            self:SetProgrammaticInputValue("id", self.itemIDInput, "")
+        end
+        if self.resultsList then
+            self.resultsList:SetSelectedItem(nil, false)
+        end
+        self:SetStatusMessage(nil)
+        return self:ApplySelectedItem(nil, false)
+    end
+
+    function selector:ShowMatches(matches)
+        self.resolvedMatches = matches or {}
+        if #self.resolvedMatches == 0 then
+            self:HideMatches()
+            return
+        end
+
+        self.resultsPanel:Show()
+        if self.resultsList then
+            self.resultsList:SetData(self.resolvedMatches)
+            self.resultsList:SetSelectedItem(self.selectedItem, false)
+            self.resultsContentHeight = self.resultsList.contentHeight
+        end
+    end
+
+    function selector:ResolveQuery(rawQuery, source)
+        if type(resolveQuery) ~= "function" then
+            return nil
+        end
+
+        local normalizedQuery = trim_text(rawQuery)
+        source = source or "name"
+        if normalizedQuery == "" then
+            self:HideMatches()
+            self:ClearSelection(source)
+            return nil
+        end
+
+        if source == "name" and minimumNameQueryLength > 0 and string.len(normalizedQuery) < minimumNameQueryLength then
+            self:HideMatches()
+            self:ClearSelection(source)
+            return nil
+        end
+
+        local resolution = resolveQuery(rawQuery, source) or { status = "missing", matches = {} }
+        self:HideMatches()
+
+        if resolution.status == "resolved" then
+            if source == "name" and not should_auto_apply(source, rawQuery, resolution.item) then
+                self:ClearSelection(source)
+                self:ShowMatches(resolution.matches or { resolution.item })
+                return nil
+            end
+            return self:ApplySelectedItem(resolution.item, true)
+        end
+
+        if resolution.status == "multiple" then
+            self:ClearSelection(source)
+            self:ShowMatches(resolution.matches or {})
+            return nil
+        end
+
+        if resolution.status == "unavailable" then
+            self:ClearSelection(source)
+            self:SetStatusMessage(resolution.message or "Bundled item database unavailable.")
+            return nil
+        end
+
+        self:ClearSelection(source)
+        return nil
+    end
+
+    function selector:SetSearchEnabled(enabled)
+        self.itemIDInput:SetEnabled(enabled)
+        self.itemNameInput:SetEnabled(enabled)
+        for _, row in ipairs(self.resultRows or {}) do
+            row:SetEnabled(enabled)
+        end
+    end
+
+    selector.itemIDInput:SetScript("OnTextChanged", function()
+        if selector.isResolving then
+            return
+        end
+        local value = selector.itemIDInput:GetText() or ""
+        if selector:ConsumeProgrammaticInputValue("id", value) then
+            return
+        end
+        selector:ResolveQuery(value, "id")
+    end)
+
+    selector.itemNameInput:SetScript("OnTextChanged", function()
+        if selector.isResolving then
+            return
+        end
+        local value = selector.itemNameInput:GetText() or ""
+        if selector:ConsumeProgrammaticInputValue("name", value) then
+            return
+        end
+        selector:ResolveQuery(value, "name")
+    end)
+
+    selector:ClearSelection()
+
+    return selector
 end
 
 function mainFrameShell.MakeSlider(parent, width, height, minValue, maxValue, initialValue)

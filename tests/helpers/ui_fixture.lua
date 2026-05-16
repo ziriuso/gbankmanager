@@ -32,9 +32,17 @@ end
 
 function M.load()
     apply_default_character_globals()
+    _G.GBankManagerNamespace = nil
+    _G.GBankManagerDB = nil
 
+    assert.load_addon_from_toc("GBankManager_ItemData/GBankManager_ItemData.toc")
     local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
     local mainFrame = ns.modules.mainFrame
+    local store = ns.modules.store
+    if store and type(store.CreateFreshDatabase) == "function" then
+        _G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
+        ns.state.db = _G.GBankManagerDB
+    end
 
     return {
         addonName = addonName,

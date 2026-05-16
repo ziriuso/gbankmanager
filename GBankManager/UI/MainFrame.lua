@@ -321,7 +321,9 @@ mainFrame.tableVisibleCount = math.floor(mainFrame.tableViewportHeight / mainFra
 mainFrame.selectedRequestId = mainFrame.selectedRequestId or nil
 mainFrame.selectedMinimumKey = mainFrame.selectedMinimumKey or nil
 mainFrame.selectedMinimumEnabled = mainFrame.selectedMinimumEnabled or false
-mainFrame.minimumShowAllRows = mainFrame.minimumShowAllRows or false
+if mainFrame.minimumShowAllRows == nil then
+    mainFrame.minimumShowAllRows = true
+end
 mainFrame.minimumManualOnlyRows = mainFrame.minimumManualOnlyRows or false
 mainFrame.exportSelectedPreset = normalize_export_preset_name(mainFrame.exportSelectedPreset)
 mainFrame.exportCustomTemplate = mainFrame.exportCustomTemplate or clone_export_template()
@@ -386,6 +388,7 @@ mainRequestsController.Attach(mainFrame, {
     makeLabel = make_label,
     makeButton = make_button,
     makeInput = make_input,
+    createItemSearchSelector = mainFrameShell.CreateItemSearchSelector,
     theme = theme,
     parseNumber = parse_number,
 })
@@ -410,6 +413,7 @@ mainMinimumsController.Attach(mainFrame, {
     makeLabel = make_label,
     makeButton = make_button,
     makeInput = make_input,
+    createItemSearchSelector = mainFrameShell.CreateItemSearchSelector,
     setButtonIcon = set_button_icon,
     parseNumber = parse_number,
     currentDb = current_db,
@@ -622,20 +626,24 @@ mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsAllowedP
 mainFrame.optionsPolicyStringInput = mainFrame.optionsPolicyStringInput or make_input(mainFrame.optionsAuthPanel, 250, 22)
 mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -4)
 
+mainFrame.optionsPolicyStringHelpText = mainFrame.optionsPolicyStringHelpText or make_label(mainFrame.optionsAuthPanel, "Compact auth policy string stored in Guild Info so addon users can read guild permissions. Save updates it locally. Copy the policy string into Guild Information, paste it with your guild notes, press Accept, then use Refresh Guild Info to confirm the live string.", "GameFontHighlightSmall")
+mainFrame.optionsPolicyStringHelpText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsPolicyStringHelpText:SetWidth(320)
+if type(mainFrame.optionsPolicyStringHelpText.SetJustifyH) == "function" then
+    mainFrame.optionsPolicyStringHelpText:SetJustifyH("LEFT")
+end
+
 mainFrame.optionsAuthStatusText = mainFrame.optionsAuthStatusText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
-mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringHelpText, "BOTTOMLEFT", 0, -8)
 
 mainFrame.optionsAuthSaveButton = mainFrame.optionsAuthSaveButton or make_button(mainFrame.optionsAuthPanel, 88, 24, "Save")
-mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "BOTTOMLEFT", 236, -16)
-
-mainFrame.optionsAuthWriteButton = mainFrame.optionsAuthWriteButton or make_button(mainFrame.optionsAuthPanel, 112, 24, "Write Guild Info")
-mainFrame.optionsAuthWriteButton:SetPoint("RIGHT", mainFrame.optionsAuthSaveButton, "LEFT", -8, 0)
+mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringHelpText, "BOTTOMLEFT", 0, -44)
 
 mainFrame.optionsAuthReadButton = mainFrame.optionsAuthReadButton or make_button(mainFrame.optionsAuthPanel, 128, 24, "Refresh Guild Info")
-mainFrame.optionsAuthReadButton:SetPoint("RIGHT", mainFrame.optionsAuthWriteButton, "LEFT", -8, 0)
+mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthSaveButton, "RIGHT", 8, 0)
 
 mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 24, "Revert")
-mainFrame.optionsAuthResetButton:SetPoint("RIGHT", mainFrame.optionsAuthReadButton, "LEFT", -8, 0)
+mainFrame.optionsAuthResetButton:SetPoint("LEFT", mainFrame.optionsAuthReadButton, "RIGHT", 8, 0)
 
 local function refresh_alpha_text()
     local percentage = math.floor(mainFrame.currentAlpha * 100 + 0.5)
@@ -723,7 +731,7 @@ function mainFrame:UpdateOptionsAuthLayout(allowedCount, availableCount)
 
     self.optionsAllowedPermissionPanel:SetHeight(permissionPanelHeight)
     self.optionsAvailablePermissionPanel:SetHeight(permissionPanelHeight)
-    self.optionsAuthPanel:SetHeight(560 + math.max(0, permissionPanelHeight - 118))
+    self.optionsAuthPanel:SetHeight(620 + math.max(0, permissionPanelHeight - 118))
     self:UpdateOptionsCanvasHeight()
 end
 
@@ -950,7 +958,10 @@ function mainFrame:SaveAuthPolicy()
 
     db.auth = draft
     self.authDraftPolicy = clone_table(draft)
-    self.optionsAuthStatusText:SetText("Saved guild auth policy.")
+    if self.optionsPolicyStringInput and type(self.optionsPolicyStringInput.SetText) == "function" then
+        self.optionsPolicyStringInput:SetText(draft.guildPolicyString or "")
+    end
+    self.optionsAuthStatusText:SetText("Saved guild auth policy locally. Copy the policy string into Guild Information and press Accept.")
 
     if transport and type(transport.Send) == "function" then
         transport.Send("GUILD", "GUILD", {
@@ -967,52 +978,35 @@ function mainFrame:SaveAuthPolicy()
     return draft
 end
 
-function mainFrame:WriteAuthPolicyToGuildInfo()
-    local db = current_db()
-    local authPolicyCodec = ns.modules.authPolicyCodec
-    if not authPolicyCodec then
-        self.optionsAuthStatusText:SetText("Auth policy codec is unavailable.")
-        return nil
-    end
-
-    local draft = self:SaveAuthPolicy()
-    if not draft then
-        return nil
-    end
-
-    local policyString = draft.guildPolicyString or ""
-    self.optionsPolicyStringInput:SetText(policyString)
-
-    if not (authPolicyCodec.CanWriteGuildInfo and authPolicyCodec.CanWriteGuildInfo()) then
-        self.optionsAuthStatusText:SetText("Policy saved locally. Copy the policy string into Guild Info manually.")
-        return policyString
-    end
-
-    local currentText = _G.C_GuildInfo and type(_G.C_GuildInfo.GetInfoText) == "function" and _G.C_GuildInfo.GetInfoText() or ""
-    local nextText = type(authPolicyCodec.InjectPolicyString) == "function" and authPolicyCodec.InjectPolicyString(currentText, policyString) or policyString
-    if string.len(nextText or "") > 499 then
-        self.optionsAuthStatusText:SetText("Guild Info would exceed 499 characters. Reduce blacklist size or manual notes.")
-        return nil
-    end
-
-    if _G.C_GuildInfo and type(_G.C_GuildInfo.SetInfoText) == "function" then
-        _G.C_GuildInfo.SetInfoText(nextText)
-        db.auth.guildPolicySource = "guild_info"
-        self.optionsAuthStatusText:SetText("Saved auth policy and wrote compact string to Guild Info.")
-    end
-
-    self:RefreshAuthOptions()
-    return policyString
-end
-
 function mainFrame:RefreshAuthPolicyFromGuildInfo()
     local db = current_db()
-    local permissions = ns.modules.auth or ns.modules.permissions
-    if permissions and type(permissions.RefreshPolicyFromGuild) == "function" then
-        permissions.RefreshPolicyFromGuild(db)
+    local authPolicySource = ns.modules.authPolicySource
+    local authPolicyCodec = ns.modules.authPolicyCodec
+
+    if authPolicySource and type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
+        local pulled, reason = authPolicySource.PullPolicyFromGuildInfo(db, {
+            force = true,
+        })
+
+        if pulled then
+            self.optionsAuthStatusText:SetText("Reloaded auth policy from Guild Info.")
+        elseif reason == "missing_snippet" then
+            self.optionsAuthStatusText:SetText("Guild Info does not contain a GBankManager policy string.")
+        else
+            self.optionsAuthStatusText:SetText("Unable to reload auth policy from Guild Info.")
+        end
+    elseif authPolicyCodec and type(authPolicyCodec.PolicyStringFromGuildInfo) == "function" then
+        local policyString = authPolicyCodec.PolicyStringFromGuildInfo()
+        if policyString then
+            self.optionsAuthStatusText:SetText("Reloaded auth policy string from Guild Info.")
+        else
+            self.optionsAuthStatusText:SetText("Guild Info does not contain a GBankManager policy string.")
+        end
+    else
+        self.optionsAuthStatusText:SetText("Guild Info refresh is unavailable.")
     end
+
     self.authDraftPolicy = clone_table(db.auth or {})
-    self.optionsAuthStatusText:SetText("Reloaded auth policy from Guild Info and local cache.")
     self:RefreshAuthOptions()
 end
 
@@ -1149,7 +1143,6 @@ function mainFrame:RefreshAuthOptions()
     self.optionsBlacklistAddButton:SetEnabled(canManage)
     self.optionsBlacklistRemoveButton:SetEnabled(canManage and (self.authBlacklistSelectedKey ~= nil))
     self.optionsAuthSaveButton:SetEnabled(canManage)
-    self.optionsAuthWriteButton:SetEnabled(canManage)
     self.optionsAuthReadButton:SetEnabled(true)
     self.optionsAuthResetButton:SetEnabled(true)
 end
@@ -1176,10 +1169,6 @@ end)
 
 mainFrame.optionsAuthSaveButton:SetScript("OnClick", function()
     mainFrame:SaveAuthPolicy()
-end)
-
-mainFrame.optionsAuthWriteButton:SetScript("OnClick", function()
-    mainFrame:WriteAuthPolicyToGuildInfo()
 end)
 
 mainFrame.optionsAuthReadButton:SetScript("OnClick", function()
@@ -1273,6 +1262,7 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
     apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
+    apply_panel_style(self.minimumDetailsModal, theme.colors.panelAlt)
     apply_panel_style(self.exportsPanel, theme.colors.panel)
     apply_panel_style(self.exportModal, theme.colors.panelAlt)
     apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
@@ -1334,14 +1324,26 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.requestFulfillButton, theme.colors.panelAlt)
     apply_panel_style(self.requestReopenButton, theme.colors.panel)
     apply_panel_style(self.requestCreateButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestCreateResultsPanel, theme.colors.background)
     apply_panel_style(self.minimumRestockToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumShowAllToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumManualOnlyToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumNewButton, theme.colors.panel)
     apply_panel_style(self.minimumSaveButton, theme.colors.panelAlt)
     apply_panel_style(self.minimumSaveAllButton, theme.colors.panel)
+    apply_panel_style(self.minimumEditorPanel, theme.colors.background)
+    apply_panel_style(self.minimumEditorBankTabDropdownButton, theme.colors.panel)
+    apply_panel_style(self.minimumEditorBankTabDropdownPanel, theme.colors.panelAlt)
+    apply_panel_style(self.minimumEditorRestockToggleButton, theme.colors.panel)
+    apply_panel_style(self.minimumEditorRemoveButton, theme.colors.panel)
+    apply_panel_style(self.minimumEditorUndoButton, theme.colors.panelAlt)
     apply_panel_style(self.minimumAddButton, theme.colors.panelAlt)
     apply_panel_style(self.minimumAddCancelButton, theme.colors.panel)
+    apply_panel_style(self.minimumDetailsRestockToggleButton, theme.colors.panel)
+    apply_panel_style(self.minimumDetailsConfirmButton, theme.colors.panelAlt)
+    apply_panel_style(self.minimumDetailsRemoveButton, theme.colors.panel)
+    apply_panel_style(self.minimumDetailsUndoButton, theme.colors.panel)
+    apply_panel_style(self.minimumDetailsCancelButton, theme.colors.panel)
     apply_panel_style(self.defaultMinimumSaveButton, theme.colors.panelAlt)
     apply_panel_style(self.optionsAuthRankButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthAddPermissionButton, theme.colors.panelAlt)
@@ -1349,11 +1351,20 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsBlacklistAddButton, theme.colors.panelAlt)
     apply_panel_style(self.optionsBlacklistRemoveButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthSaveButton, theme.colors.panelAlt)
-    apply_panel_style(self.optionsAuthWriteButton, theme.colors.panelAlt)
     apply_panel_style(self.optionsAuthReadButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthResetButton, theme.colors.panel)
+    for _, button in ipairs(self.requestCreateMatchButtons or {}) do
+        if button:IsShown() then
+            apply_panel_style(button, theme.colors.panel)
+        end
+    end
     for _, button in ipairs(self.minimumAddMatchButtons or {}) do
         apply_panel_style(button, theme.colors.panel)
+    end
+    for _, button in ipairs(self.minimumEditorBankTabDropdownOptions or {}) do
+        if button:IsShown() then
+            apply_panel_style(button, theme.colors.panel)
+        end
     end
     for _, button in ipairs(self.optionsBlacklistButtons or {}) do
         apply_panel_style(button, theme.colors.panel)
@@ -1410,6 +1421,8 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumScopeInput, theme.colors.background)
     apply_panel_style(self.minimumTabNameInput, theme.colors.background)
     apply_panel_style(self.minimumSearchInput, theme.colors.background)
+    apply_panel_style(self.minimumEditorQuantityInput, theme.colors.background)
+    apply_panel_style(self.minimumDetailsQuantityInput, theme.colors.background)
     apply_panel_style(self.defaultMinimumInput, theme.colors.background)
     apply_panel_style(self.optionsPolicyStringInput, theme.colors.background)
     apply_panel_style(self.optionsBlacklistNameInput, theme.colors.background)
@@ -1518,7 +1531,8 @@ function mainFrame:HandleTableRowClick(row)
     if self.activeView == "MINIMUMS" and row.itemID then
         self.selectedMinimumKey = row.rowKey
         self:ApplyMinimumFilters()
-        return row
+        local refreshedRow = self:GetMinimumRowByKey(self.selectedMinimumKey) or row
+        return self:OpenMinimumDetailsModal(refreshedRow) or refreshedRow
     end
 
     return nil
@@ -1598,6 +1612,7 @@ function mainFrame:RefreshView()
     self.requestCreatePanel:Hide()
     self.minimumsPanel:Hide()
     self.minimumAddModal:Hide()
+    self.minimumDetailsModal:Hide()
     self.minimumEmptyStateText:Hide()
     self.exportsPanel:Hide()
     self.exportModal:Hide()
@@ -1785,6 +1800,7 @@ function mainFrame:RefreshView()
         self.minimumsPanel:Show()
     else
         self.minimumsPanel:Hide()
+        self.minimumDetailsModal:Hide()
         self.minimumEmptyStateText:Hide()
     end
 

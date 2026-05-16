@@ -1,2 +1,9 @@
 .worktrees/
 .superpowers/
+tests/tmp/
+tools/catalog/runtime/item-catalog-extracted.json
+tools/catalog/runtime/item-catalog-input.json
+tools/catalog/runtime/state/
+tools/catalog/runtime/wow.export/
+tools/catalog/runtime/wow-export-data/
+tools/catalog/runtime/runtime.log

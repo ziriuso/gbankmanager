@@ -4,6 +4,7 @@
 ## Category: Guild
 ## Author: ziriuso
 ## SavedVariables: GBankManagerDB
+## Dependencies: GBankManager_ItemData
 
 Core/Namespace.lua
 Core/Constants.lua
@@ -13,6 +14,7 @@ Data/Store.lua
 Domain/AuthPolicyCodec.lua
 Domain/Permissions.lua
 Domain/AuthPolicySource.lua
+Domain/ItemCatalog.lua
 Domain/Snapshots.lua
 Domain/Diff.lua
 Domain/Planning.lua

@@ -61,6 +61,69 @@ function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
     table.insert(self.messages, tostring(message or ""))
 end
 
+_G.CreateDataProvider = _G.CreateDataProvider or function(initial)
+    local provider = {
+        data = {},
+    }
+
+    function provider:Flush()
+        self.data = {}
+    end
+
+    function provider:Insert(value)
+        table.insert(self.data, value)
+    end
+
+    function provider:GetSize()
+        return #self.data
+    end
+
+    function provider:Find(index)
+        return self.data[index]
+    end
+
+    function provider:SetCollection(collection)
+        self.data = {}
+        for _, value in ipairs(collection or {}) do
+            table.insert(self.data, value)
+        end
+    end
+
+    provider:SetCollection(initial or {})
+    return provider
+end
+
+_G.CreateScrollBoxListLinearView = _G.CreateScrollBoxListLinearView or function(top, bottom, left, right, spacing)
+    local view = {
+        padding = {
+            top = top,
+            bottom = bottom,
+            left = left,
+            right = right,
+        },
+        spacing = spacing or 0,
+    }
+
+    function view:SetElementInitializer(template, initializer)
+        self.template = template
+        self.elementInitializer = initializer
+    end
+
+    return view
+end
+
+_G.ScrollUtil = _G.ScrollUtil or {}
+_G.ScrollUtil.InitScrollBoxListWithScrollBar = _G.ScrollUtil.InitScrollBoxListWithScrollBar or function(scrollBox, scrollBar, view)
+    if type(scrollBar) ~= "table" or type(scrollBar.RegisterCallback) ~= "function" then
+        error("ScrollUtil.InitScrollBoxListWithScrollBar requires a Blizzard-compatible scrollbar")
+    end
+    scrollBox.view = view
+    scrollBox.scrollBar = scrollBar
+    scrollBox.SetDataProvider = scrollBox.SetDataProvider or function(self, dataProvider)
+        self.dataProvider = dataProvider
+    end
+end
+
 if _G.CreateFrame == nil then
     local function make_region()
         return {
@@ -78,10 +141,17 @@ if _G.CreateFrame == nil then
             SetJustifyH = function(self, value) self.justifyH = value end,
             SetJustifyV = function(self, value) self.justifyV = value end,
             SetFontObject = function() end,
+            SetSize = function(self, width, height)
+                self.width = width
+                self.height = height
+            end,
             SetWidth = function(self, value) self.width = value end,
             SetHeight = function(self, value) self.height = value end,
+            GetWidth = function(self) return self.width end,
+            GetHeight = function(self) return self.height end,
             Show = function(self) self.shown = true end,
             Hide = function(self) self.shown = false end,
+            IsShown = function(self) return self.shown ~= false end,
         }
     end
 
@@ -165,6 +235,7 @@ if _G.CreateFrame == nil then
             local region = make_region()
             region.SetColorTexture = function() end
             region.SetAllPoints = function() end
+            region.SetAtlas = function(self, atlas) self.atlas = atlas end
             table.insert(self.children, region)
             return region
         end

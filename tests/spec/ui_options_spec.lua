@@ -1,8 +1,23 @@
 local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
+_G.UnitName = function()
+    return "GuildLead"
+end
+
+_G.GetRealmName = function()
+    return "Stormrage"
+end
+
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Guild Master", 0
+end
+
 local env = fixture.load()
 local mainFrame = env.mainFrame
+
+_G.GBankManagerDB.auth.capabilities.auth_manage[0] = true
+_G.GBankManagerDB.auth.capabilities.auth_manage[1] = true
 
 _G.GBankManagerDB.auth.updatedAt = 0
 _G.GBankManagerDB.auth.updatedBy = "Stormrage-OfficerOne"
@@ -29,6 +44,12 @@ assert.truthy(mainFrame.optionsScrollBar:IsShown(), "options view should keep th
 assert.equal("Guild Master", mainFrame.optionsAuthRankButton.labelText:GetText(), "options auth should default the selected rank picker to the guildmaster label")
 assert.truthy((mainFrame.optionsAvailablePermissionPanel:GetHeight() or 0) >= 132, "options auth should give available permissions enough height to avoid clipping the last row")
 assert.truthy((mainFrame.optionsAuthPanel:GetHeight() or 0) < 800, "options auth should size to its actual content instead of leaving a giant dead zone")
+assert.equal("Save", mainFrame.optionsAuthSaveButton.labelText:GetText(), "options auth should expose a dedicated local save button")
+assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Guild Info", 1, true) ~= nil, "options auth should explain that the policy string lives in Guild Info")
+assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Copy", 1, true) ~= nil, "options auth should explain that publishing to Guild Info is now a manual copy step")
+assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Accept", 1, true) ~= nil, "options auth should explain that the Guild Information dialog must be accepted after pasting")
+assert.same(mainFrame.optionsPolicyStringHelpText, (mainFrame.optionsAuthSaveButton.points[1] or {})[2], "options auth save row should anchor from the policy-string help text so it stays visible")
+assert.equal(nil, mainFrame.optionsAuthWriteButton, "options auth should remove the unreliable Write Guild Info button")
 assert.equal("<< Add", mainFrame.optionsAuthAddPermissionButton.labelText:GetText(), "options auth add button should point toward the allowed-permissions list")
 assert.equal("Remove >>", mainFrame.optionsAuthRemovePermissionButton.labelText:GetText(), "options auth remove button should point toward the available-permissions list")
 
@@ -59,3 +80,24 @@ assert.equal("Opacity 95%", mainFrame.transparencyValueText:GetText(), "opacity 
 assert.equal(nil, mainFrame.transparencySlider, "options should remove the faux slider after the live-client cleanup")
 mainFrame.transparencyIncreaseButton:GetScript("OnClick")(mainFrame.transparencyIncreaseButton)
 assert.truthy(mainFrame.currentAlpha > alphaAfterDown, "transparency up should increase alpha")
+
+mainFrame:SaveAuthPolicy()
+assert.truthy(string.find(mainFrame.optionsAuthStatusText:GetText() or "", "Copy the policy string", 1, true) ~= nil, "options auth save should remind the user to copy the policy string into Guild Information manually")
+
+local authPolicySource = env.ns.modules.authPolicySource
+local pullCalled
+local originalPullPolicyFromGuildInfo = authPolicySource.PullPolicyFromGuildInfo
+authPolicySource.PullPolicyFromGuildInfo = function(db, options)
+    pullCalled = options and options.force == true
+    db.auth.guildPolicyString = "[GBMAUTH:1;Z;Y;3;-]"
+    db.auth.guildPolicySource = "guild_info"
+    db.auth.capabilities.request_submit[0] = true
+    return true, "applied", db.auth
+end
+
+mainFrame:RefreshAuthPolicyFromGuildInfo()
+assert.truthy(pullCalled == true, "options auth refresh should force a fresh pull from Guild Info")
+assert.equal("[GBMAUTH:1;Z;Y;3;-]", mainFrame.optionsPolicyStringInput:GetText(), "options auth refresh should reload the current Guild Info snippet into the visible policy string")
+assert.equal("Reloaded auth policy from Guild Info.", mainFrame.optionsAuthStatusText:GetText(), "options auth refresh should report a successful Guild Info reload")
+
+authPolicySource.PullPolicyFromGuildInfo = originalPullPolicyFromGuildInfo
