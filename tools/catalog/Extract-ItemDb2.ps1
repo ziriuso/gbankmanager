@@ -100,10 +100,35 @@ function Write-ExtractionResult {
     exit $ExitCode
 }
 
+function Get-NodeExecutablePath {
+    $fallbackCandidates = @(
+        (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe")
+    )
+    foreach ($candidate in $fallbackCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+
+    $commandCandidates = @("node.exe", "node")
+    foreach ($commandName in $commandCandidates) {
+        try {
+            $command = Get-Command $commandName -ErrorAction Stop | Select-Object -First 1
+            if ($command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+                return $command.Source
+            }
+        } catch {
+        }
+    }
+
+    throw "Unable to locate a usable Node.js executable for item catalog extraction."
+}
+
 try {
     $helperPath = Join-Path $PSScriptRoot "runtime\extract-item-db2.js"
     $wowExportRoot = Join-Path $PSScriptRoot "runtime\wow.export\portable-wow-export-win-x64-0.2.17"
     $runtimeDataPath = Join-Path $PSScriptRoot "runtime\wow-export-data"
+    $nodeExecutablePath = Get-NodeExecutablePath
     $resolvedOutputPath = if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
         Get-AbsolutePath -Path $OutputPath
     } else {
@@ -158,7 +183,7 @@ try {
         )
     }
 
-    $helperOutput = & node $helperPath @arguments 2>&1
+    $helperOutput = & $nodeExecutablePath $helperPath @arguments 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw ("wow.export extraction helper failed: {0}" -f (($helperOutput | Out-String).Trim()))
     }
