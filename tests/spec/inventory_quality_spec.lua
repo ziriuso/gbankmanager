@@ -117,9 +117,9 @@ assert.equal(
     "inventory should derive tier 1 from live-client reagent-quality icon markup variants"
 )
 assert.equal(
-    "|A:Professions-Icon-Quality-2-Inv:22:22|a",
+    "|A:Professions-ChatIcon-Quality-Tier2:22:22|a",
     rowsByName["Algari Mana Oil"].tier,
-    "inventory should wrap plain quality atlas variants for display"
+    "inventory should normalize plain quality atlas variants into the shared visible crafted-quality icon family"
 )
 assert.equal(
     2,

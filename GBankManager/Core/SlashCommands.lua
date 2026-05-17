@@ -43,6 +43,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     local auth = ns.modules.auth or ns.modules.permissions
     local authPolicySource = ns.modules.authPolicySource
     local liveSmoke = ns.modules.liveSmoke
+    local inGameUnit = ns.modules.inGameUnit
     local store = ns.modules.store or ns.data.store
     local command, remainder = split_command(msg)
     local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
@@ -81,6 +82,13 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
 
             push_chat_line("GBankManager smoke test unavailable.")
             return "smoke_test_unavailable"
+        elseif subcommand == "unit" then
+            if type(inGameUnit) == "table" and type(inGameUnit.Run) == "function" then
+                return inGameUnit.Run()
+            end
+
+            push_chat_line("GBankManager in-game unit test unavailable.")
+            return "unit_test_unavailable"
         end
 
         push_chat_line("GBankManager unknown test command.")

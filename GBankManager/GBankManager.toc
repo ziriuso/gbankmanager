@@ -14,10 +14,12 @@ Data/Store.lua
 Domain/AuthPolicyCodec.lua
 Domain/Permissions.lua
 Domain/AuthPolicySource.lua
+Domain/OfficerNoteBlacklist.lua
 Domain/ItemCatalog.lua
 Domain/Snapshots.lua
 Domain/Diff.lua
 Domain/Planning.lua
+Domain/CraftedQuality.lua
 Domain/Exports.lua
 Domain/Requests.lua
 Bootstrap.lua
@@ -42,6 +44,7 @@ UI/HistoryView.lua
 UI/ExportsView.lua
 UI/ExportDialog.lua
 UI/RequestDialog.lua
+Testing/InGameUnit.lua
 Testing/LiveSmoke.lua
 Core/Events.lua
 Core/SlashCommands.lua

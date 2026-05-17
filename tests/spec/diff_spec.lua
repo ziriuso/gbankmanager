@@ -203,3 +203,49 @@ assert.equal(1, #scanner.rawTabs, "scanner should append scanned tabs to the raw
 scanner.OnGuildBankSlotsChanged()
 assert.equal(3, queriedTabs[2], "scanner should request the next queued tab after a tab finishes loading")
 assert.equal("Scanning 1/2 tabs", scanner:GetStatusText(), "scanner should report completed tab progress")
+
+local originalTime = _G.time
+local originalBeginScan = scanner.BeginScan
+local autoScanCalls = 0
+_G.time = function()
+    return 1000
+end
+
+ns.state.db.meta.updatedAt = 0
+scanner.scanInProgress = false
+scanner.BeginScan = function()
+    autoScanCalls = autoScanCalls + 1
+    scanner.scanInProgress = true
+    return "Scanning 0/2 tabs"
+end
+
+scanner.OnGuildBankOpened()
+assert.equal(1, autoScanCalls, "opening the guild bank should auto-scan when there is no prior scan timestamp")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 500
+scanner.OnGuildBankOpened()
+assert.equal(1, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
+
+scanner.scanInProgress = false
+_G.time = function()
+    return 1100
+end
+scanner.OnGuildBankOpened()
+assert.equal(2, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
+
+scanner.scanInProgress = true
+_G.time = function()
+    return 1800
+end
+scanner.OnGuildBankOpened()
+assert.equal(2, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
+
+scanner.BeginScan = originalBeginScan
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1750
+queriedTabs = {}
+scanner.BeginScan()
+assert.equal(1, queriedTabs[1], "manual scan should still run even inside the auto-scan throttle window")
+
+_G.time = originalTime

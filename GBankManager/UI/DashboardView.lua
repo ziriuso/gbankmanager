@@ -55,6 +55,151 @@ local function format_timestamp(timestamp)
     return tostring(timestamp)
 end
 
+local function current_count_for_rule(snapshotItem, rule)
+    if type(snapshotItem) ~= "table" then
+        return 0
+    end
+
+    local tabName = tostring((rule or {}).tabName or "")
+    if tabName ~= "" then
+        return tonumber(((snapshotItem.tabs or {})[tabName]) or 0) or 0
+    end
+
+    return tonumber(snapshotItem.totalCount or 0) or 0
+end
+
+local function sorted_snapshots(db)
+    local ordered = {}
+
+    for scanId, snapshot in pairs((db or {}).snapshots or {}) do
+        if type(snapshot) == "table" then
+            snapshot.scanId = snapshot.scanId or scanId
+            table.insert(ordered, snapshot)
+        end
+    end
+
+    table.sort(ordered, function(left, right)
+        local leftAt = normalize_timestamp(left.scannedAt)
+        local rightAt = normalize_timestamp(right.scannedAt)
+        if leftAt == rightAt then
+            return tostring(left.scanId or "") < tostring(right.scanId or "")
+        end
+        return leftAt < rightAt
+    end)
+
+    return ordered
+end
+
+local function build_stocking_history_rankings(db)
+    local rankingsByItem = {}
+    local snapshots = sorted_snapshots(db)
+    if #snapshots == 0 then
+        return {}
+    end
+
+    for _, rule in ipairs((db or {}).minimums or {}) do
+        local itemID = tonumber((rule or {}).itemID)
+        local minimumQuantity = tonumber((rule or {}).quantity or 0) or 0
+        if itemID and minimumQuantity > 0 and rule.enabled ~= false then
+            local itemKey = tostring(itemID)
+            local metric = rankingsByItem[itemKey] or {
+                itemID = itemID,
+                itemName = tostring(rule.itemName or ("Item " .. itemKey)),
+                restockCount = 0,
+                totalShortage = 0,
+                maxShortage = 0,
+                lastShortageAt = 0,
+            }
+
+            local episodeMaxShortage = 0
+            local episodeLastAt = 0
+            local inShortage = false
+
+            for _, snapshot in ipairs(snapshots) do
+                local snapshotItem = ((snapshot or {}).items or {})[itemID]
+                local shortage = math.max(0, minimumQuantity - current_count_for_rule(snapshotItem, rule))
+                if shortage > 0 then
+                    inShortage = true
+                    episodeMaxShortage = math.max(episodeMaxShortage, shortage)
+                    episodeLastAt = math.max(episodeLastAt, normalize_timestamp(snapshot.scannedAt))
+                    if metric.itemName == "" and snapshotItem and snapshotItem.name then
+                        metric.itemName = tostring(snapshotItem.name)
+                    end
+                elseif inShortage then
+                    metric.restockCount = metric.restockCount + 1
+                    metric.totalShortage = metric.totalShortage + episodeMaxShortage
+                    metric.maxShortage = math.max(metric.maxShortage, episodeMaxShortage)
+                    metric.lastShortageAt = math.max(metric.lastShortageAt, episodeLastAt)
+                    inShortage = false
+                    episodeMaxShortage = 0
+                    episodeLastAt = 0
+                end
+            end
+
+            if inShortage then
+                metric.restockCount = metric.restockCount + 1
+                metric.totalShortage = metric.totalShortage + episodeMaxShortage
+                metric.maxShortage = math.max(metric.maxShortage, episodeMaxShortage)
+                metric.lastShortageAt = math.max(metric.lastShortageAt, episodeLastAt)
+            end
+
+            if metric.restockCount > 0 then
+                rankingsByItem[itemKey] = metric
+            end
+        end
+    end
+
+    local ranked = {}
+    for _, metric in pairs(rankingsByItem) do
+        table.insert(ranked, metric)
+    end
+
+    table.sort(ranked, function(left, right)
+        if left.restockCount ~= right.restockCount then
+            return left.restockCount > right.restockCount
+        end
+        if left.totalShortage ~= right.totalShortage then
+            return left.totalShortage > right.totalShortage
+        end
+        if left.lastShortageAt ~= right.lastShortageAt then
+            return left.lastShortageAt > right.lastShortageAt
+        end
+        return tostring(left.itemName or "") < tostring(right.itemName or "")
+    end)
+
+    return ranked
+end
+
+local function build_withdrawal_rankings(db)
+    local withdrawals = {}
+
+    for _, entry in ipairs((db or {}).changeLog or {}) do
+        if entry.type == "QUANTITY_DECREASED" or entry.type == "ITEM_REMOVED" then
+            local key = tostring(entry.name or "Unknown")
+            local current = withdrawals[key] or {
+                itemName = key,
+                quantity = 0,
+            }
+            current.quantity = current.quantity + tonumber(entry.delta or 0)
+            withdrawals[key] = current
+        end
+    end
+
+    local ranked = {}
+    for _, item in pairs(withdrawals) do
+        table.insert(ranked, item)
+    end
+
+    table.sort(ranked, function(left, right)
+        if left.quantity == right.quantity then
+            return left.itemName < right.itemName
+        end
+        return left.quantity > right.quantity
+    end)
+
+    return ranked
+end
+
 function dashboard.BuildSummary(db, planRows)
     db = db or {}
     db.meta = db.meta or {}
@@ -74,8 +219,11 @@ function dashboard.BuildSummary(db, planRows)
     local exportReadyCount = 0
     local totalPurchaseQuantity = 0
     for _, row in pairs(planRows or {}) do
-        exportReadyCount = exportReadyCount + 1
-        totalPurchaseQuantity = totalPurchaseQuantity + (row.totalToBuy or 0)
+        local totalToBuy = tonumber((row or {}).totalToBuy or 0) or 0
+        if totalToBuy > 0 then
+            exportReadyCount = exportReadyCount + 1
+            totalPurchaseQuantity = totalPurchaseQuantity + totalToBuy
+        end
     end
 
     return {
@@ -101,39 +249,25 @@ end
 
 function dashboard.BuildCards(db, planRows)
     local summary = dashboard.BuildSummary(db, planRows)
-    local withdrawals = {}
-
-    for _, entry in ipairs((db or {}).changeLog or {}) do
-        if entry.type == "QUANTITY_DECREASED" or entry.type == "ITEM_REMOVED" then
-            local key = tostring(entry.name or "Unknown")
-            local current = withdrawals[key] or {
-                itemName = key,
-                quantity = 0,
-            }
-            current.quantity = current.quantity + tonumber(entry.delta or 0)
-            withdrawals[key] = current
-        end
+    local topItems = build_stocking_history_rankings(db)
+    local usesStockingHistory = #topItems > 0
+    if not usesStockingHistory then
+        topItems = build_withdrawal_rankings(db)
     end
-
-    local topItems = {}
-    for _, item in pairs(withdrawals) do
-        table.insert(topItems, item)
-    end
-
-    table.sort(topItems, function(left, right)
-        if left.quantity == right.quantity then
-            return left.itemName < right.itemName
-        end
-        return left.quantity > right.quantity
-    end)
 
     local ranked = {}
     for index = 1, math.min(5, #topItems) do
-        table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
+        if usesStockingHistory then
+            local item = topItems[index]
+            local restockLabel = item.restockCount == 1 and "restock" or "restocks"
+            table.insert(ranked, string.format("%d. %s - %d %s", index, item.itemName, item.restockCount, restockLabel))
+        else
+            table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
+        end
     end
 
     if #ranked == 0 then
-        table.insert(ranked, "No withdrawal data yet.")
+        table.insert(ranked, "No stocking history yet.")
     end
 
     local snapshot = nil

@@ -6,7 +6,9 @@ ns.modules = ns.modules or {}
 local historyView = ns.modules.historyView or {}
 
 local action_labels = {
+    AUTH_POLICY_UPDATED = "Updated",
     REQUEST_CREATED = "Created",
+    REQUEST_UPDATED = "Updated",
     REQUEST_APPROVED = "Approved",
     REQUEST_REJECTED = "Rejected",
     REQUEST_FULFILLED = "Fulfilled",
@@ -23,6 +25,7 @@ local action_labels = {
 }
 
 local category_labels = {
+    OPTIONS = "Options",
     REQUEST = "Request",
     MINIMUM = "Minimum",
     TARGET = "Target",
@@ -133,7 +136,7 @@ function historyView.FilterProcurementEntries(entries)
     local filtered = {}
 
     for _, entry in ipairs(entries or {}) do
-        if procurement_categories[entry.category] then
+        if procurement_categories[entry.category] or (entry.category == "OPTIONS" and entry.type == "AUTH_POLICY_UPDATED") then
             table.insert(filtered, entry)
         end
     end

@@ -27,6 +27,17 @@ for index = 1, 30 do
     }
 end
 
+_G.GBankManagerDB.snapshots["inventory-scroll"].items[2001] = {
+    itemID = 2001,
+    name = "Two-Rank Crafted Test",
+    totalCount = 1,
+    craftedQuality = 2,
+    craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+    tabs = {
+        Consumables = 1,
+    },
+}
+
 env.ns.state.db = _G.GBankManagerDB
 mainFrame:SelectView("INVENTORY")
 
@@ -48,7 +59,8 @@ assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "inventory sh
 assert.equal("Current", mainFrame.tableHeaderLabels[5]:GetText(), "inventory should use the minimums table layout current column")
 assert.equal("Restock", mainFrame.tableHeaderLabels[6]:GetText(), "inventory should use the minimums table layout restock column")
 assert.equal("Minimum", mainFrame.tableHeaderLabels[7]:GetText(), "inventory should use the minimums table layout minimum column")
-assert.truthy((mainFrame.tableColumnLayout[3].width or 0) >= 288, "inventory item column should still absorb most of the available width for item names")
+assert.truthy((mainFrame.tableColumnLayout[3].width or 0) >= 280, "inventory item column should still absorb most of the available width for item names")
+assert.truthy((mainFrame.tableColumnLayout[7].width or 0) >= 80, "inventory minimum column should leave enough room for the header near the right edge")
 mainFrame.tableFilterInputs[1]:SetText("1015")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 assert.equal(1, #mainFrame.tableRowsData, "inventory shared table filters should search by Item ID")
@@ -61,6 +73,19 @@ assert.equal(nil, mainFrame.tableScrollBar.scrollDownButton, "inventory should r
 assert.equal(nil, mainFrame.tableScrollBar.valueText, "inventory should remove the old row-range text label")
 assert.equal("minimal-scrollbar-track-top", mainFrame.tableScrollBar.track.Begin.atlas, "inventory should reuse the Blizzard-style track art")
 assert.equal("minimal-scrollbar-small-thumb-top", mainFrame.tableScrollBar.thumb.Begin.atlas, "inventory should reuse the Blizzard-style thumb art")
+mainFrame.tableFilterInputs[1]:SetText("2001")
+mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.tableRowsData[1].tier, "inventory should keep the shared visible two-rank crafted icon family in table rows")
+mainFrame.tableFilterInputs[1]:SetText("")
+mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
+
+local originalRowHeight = mainFrame.tableRowHeight
+local originalVisibleCount = mainFrame.tableVisibleCount
+mainFrame:SetTableDensity(1.15)
+assert.truthy(mainFrame.tableRowHeight > originalRowHeight, "table density should increase shared table row height")
+assert.truthy(mainFrame.tableVisibleCount > 0, "table density should keep a positive visible row count while the linked shell relayout runs")
+assert.equal(mainFrame.tableRowHeight, mainFrame.tableScrollController.options.wheelStep, "table density should keep the table wheel step aligned to the active row height")
+assert.equal(mainFrame.tableRowHeight, math.abs((((mainFrame.tableRows[2].points[1] or {})[5] or 0) - ((mainFrame.tableRows[1].points[1] or {})[5] or 0))), "table density should keep shared rows spaced to the active row height")
 
 mainFrame.tableScrollFrame:GetScript("OnMouseWheel")(mainFrame.tableScrollFrame, -1)
 assert.truthy((mainFrame.tableScrollOffset or 0) > 0, "inventory mouse-wheel scrolling should advance the shared table offset")
@@ -70,3 +95,22 @@ mainFrame.tableScrollFrame.height = 0
 mainFrame.tableScrollChild.height = 0
 mainFrame.tableScrollFrame:GetScript("OnMouseWheel")(mainFrame.tableScrollFrame, -1)
 assert.truthy(mainFrame.tableScrollBar:IsShown(), "inventory scrollbar should stay visible while scrolling even if the live client reports a transient zero height")
+
+local originalViewportWidth = mainFrame.tableViewportWidth
+mainFrame:SetShellScale(0.85)
+local shrunkenTotalWidth = 0
+for _, column in ipairs(mainFrame.tableColumnLayout or {}) do
+    shrunkenTotalWidth = shrunkenTotalWidth + (column.width or 0)
+end
+assert.truthy(mainFrame.tableViewportWidth < originalViewportWidth, "shell scale should shrink the shared table viewport when the shell gets smaller")
+assert.truthy(shrunkenTotalWidth <= (mainFrame.tableViewportWidth or 0), "shell scale should keep shared table columns inside the available viewport width")
+assert.truthy((mainFrame.tableViewportHeight or 0) <= ((mainFrame.content:GetHeight() or 0) - 120), "smaller shell scale should clamp the viewport height so footer buttons stay inside the shell")
+
+mainFrame:SetShellScale(1.2)
+local expandedTotalWidth = 0
+for _, column in ipairs(mainFrame.tableColumnLayout or {}) do
+    expandedTotalWidth = expandedTotalWidth + (column.width or 0)
+end
+assert.truthy(mainFrame.tableViewportWidth > originalViewportWidth, "shell scale should expand the shared table viewport when the shell gets larger")
+assert.truthy(expandedTotalWidth <= (mainFrame.tableViewportWidth or 0), "expanded shell scale should still keep shared table columns inside the available viewport width")
+assert.truthy((mainFrame.tableViewportHeight or 0) <= ((mainFrame.content:GetHeight() or 0) - 120), "larger shell scale should still clamp the viewport height so footer buttons stay inside the shell")

@@ -10,8 +10,10 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 - Officer-first dashboard shell with inventory, history, minimums, requests, exports, about, and options workspaces
 - Recurring stock minimum helpers with a modal-based add/edit flow and procurement-planning export workflows
 - Member request submission with explicit approval workflow and no auto-approval path
-- Auctionator, CSV, and custom-delimited export builders
-- Guild sync foundation with authority-first conflict resolution and login hello messages
+- Auctionator, CSV, and custom-delimited export builders, including current caret-delimited Auctionator list import output
+- Guild sync foundation with authority-first conflict resolution, chat-visible sync milestones, and login hello messages
+- Local appearance customization with theme presets, linked shell-and-table scaling, shell opacity, modal opacity, collapsed-nav icons, and direct slider interaction plus steppers
+- In-client verification commands for both workflow smoke (`/gbm test smoke`) and deterministic in-game unit checks (`/gbm test unit`)
 
 ## Architecture
 
@@ -71,21 +73,20 @@ Current UI ownership is intentionally split across:
    This now refreshes the default procurement-only current-expansion search catalog unless you explicitly override the catalog profile.
    Before the first refresh on a fresh clone, place the local manifest at `.\tools\catalog\runtime\item-catalog-input.json` and the extractor runtime under `.\tools\catalog\runtime\wow.export\`.
 4. If a long refresh is interrupted, rerun the same target with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Refresh-ItemCatalog.ps1 -Target Retail -Resume`. Extraction resumes from the last saved `itemID`, while merge and generated addon rebuild restart from the last safe completed phase boundary.
-5. Optionally run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath <path>` before a PTR or Beta refresh if addon-learned discoveries need to be preserved.
-6. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
-7. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`.
-8. Use `/gbm ui` to open the officer shell.
-9. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+5. Optionally launch the local maintainer workflow UI with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Open-ItemCatalogMaintainer.ps1` for target selection, saved status, refresh, and deploy. See [docs/maintainer-catalog-workflow.md](docs/maintainer-catalog-workflow.md).
+6. Optionally run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath <path>` before a PTR or Beta refresh if addon-learned discoveries need to be preserved.
+7. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
+8. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`, or use `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`.
+9. Use `/gbm ui` to open the officer shell.
+10. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+11. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
 
 ## Next Roadmap
 
-The next planned work after the request workflow slice is:
+The next planned work after the completed pre-polish workflow block is:
 
-1. Rework the Exports UI after the request/admin split.
-2. Finish broader UI polish such as theme customization, resize/scale, and spacing cleanup.
-3. Build an in-game unit-test lane through the unit test addon after the product-facing UI slices above are stable.
-4. Strengthen addon communication between guild users so history, requests, and minimums sync reliably across addon-enabled guild clients.
-5. Fully document the maintainer deployment flow and add a small maintainer UI for choosing the WoW target path (`Retail`, `PTR`, `Beta`) plus surfacing current status, last sync time, and the WoW patch/build used for the last sync.
+1. Continue the shelved UI polish refinement pass from [docs/ui-polish-suggestions.md](docs/ui-polish-suggestions.md), focusing on action-strip icon expansion, softer less-blocky surfaces, spacing cleanup, and theme tuning on top of the already-landed linked scale, opacity, preset, and nav-icon foundation.
+2. Revisit deeper sync catch-up only if live guild testing shows the current request, history, auth, and approval-side minimum syncing still leaves workflow gaps.
 
 ### Recently Completed
 
@@ -98,3 +99,26 @@ The next planned work after the request workflow slice is:
 - `/gbm request` now opens a smaller end-user workflow window with `Guild Bank Manager` in the header, a four-column own-request status table, row-click details, request cancellation for pending own requests, and a three-step `New Request` wizard.
 - Request approval now requires the approver to choose a Bank Tab, persists the Decision Note back into request details, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested item and amount.
 - Request details now show Requested By above Date Requested, keep Updated By, Date Updated, and Decision Note at the bottom of the fixed-row detail list, hide the decision-note editor after approval or denial, block click-through while request modals are open, normalize request history actors to character names, and keep shared table scrollbars inside the table viewport.
+- Request deletion is now a distinct permission in the guild auth model, and authorized users can delete a request directly from the request-details workflow popup.
+- Request Admin now highlights the active bottom filter, keeps `Add` on the far left, right-aligns the `All`, `Pending Approval`, and `Pending Fulfillment` filters, uses the shared table height, and keeps the `Date Fulfilled` filter within bounds.
+- Exports now shows `Excess Stock`, uses `None` for missing alternate stock, renders crafted-quality icons in the visible `Item Tier` column, and emits the newer Auctionator shopping-list line format while keeping numeric tier values for CSV-style outputs.
+- Minimums now uses separate `Enabled Only` and `Show All` buttons with an obvious active-state highlight instead of a single toggle label.
+- The guild auth policy string now carries the shared Restock Default plus updater metadata, pulls from Guild Info on load and guild updates, refreshes the Options restock input from live Guild Info data, and appends policy-update history rows that now show in the History view.
+- `Options -> Auth` now includes a `Select All` helper beside the compact `Policy String`, so officers can focus, highlight, and copy the full Guild Info snippet without manual drag selection.
+- Blacklist entry guidance now explicitly uses `Character-Server` input, and guild-shared blacklist membership now comes from appended `[GBMBL]` officer-note tags instead of the Guild Info policy string.
+- Dashboard mismatch investigation did not land a code change: the obvious local machine paths did not reveal a live SavedVariables file, and the dashboard plus Exports count paths both reduce from the same demand-plan shape, so live repro should come before any dashboard fix.
+- Opening the guild bank now auto-starts a scan when at least 10 minutes have elapsed since the last successful scan. Manual slash or button scans still work immediately.
+- Synced request create and update messages now append local history rows on receiving clients, approved request sync recreates the tab-scoped Minimums side effect on receivers, and request conflict resolution now prefers higher-authority updaters before timestamp tie-breaks.
+- The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still preserving local updater attribution when it can be rehydrated from live or previously known state.
+- Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned blacklist reasons stay local and continue to travel through addon sync snapshots.
+- Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, automatically append or remove `[GBMBL]` in officer notes when officers save changes, and preserve the rest of the officer note text whenever the tag fits inside Blizzard's 31-character note limit.
+- Crafted-quality rendering now normalizes the low-tier and max-tier atlas variants so Exports, Inventory, Minimums, Requests, and request-details all show the same visible quality symbols whether the source came from live scan data or fallback catalog/search data.
+- Two-rank crafted items now stay on one shared visible chat-icon family across table rows, details, request review, exports, and the manual shopping list instead of switching to a mismatched inventory-atlas family.
+- The shell now supports local-only theme presets (`Current`, `Contrast`, `Horde`, `Alliance`, `Void`, `Adventurer`, `Moonglade`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
+- Appearance sliders now use a safer drag-release surface and a more polished thumb or track treatment so releasing the mouse off the bar does not leave the slider latched into drag mode.
+- Shell scaling now clamps shared table height inside the content area so footer action strips stay visible, keeps the top-bar scan and status controls from overlapping at smaller scales, and preserves the floating manual shopping list across tab switches or shell close while remembering its saved position.
+- The addon shell now opts into top-level window ordering so other dragged UI can come above it, and clicking back onto the addon brings the shell and its registered modals forward again.
+- Dashboard `Top 5 Most Used` now ranks repeated shortage or restock cycles from persisted snapshot history and active Minimums rules before falling back to raw withdrawal totals when no stocking history exists.
+- `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering so more pure-domain regressions can be caught in-client without relying on workflow smoke alone.
+- `/gbm test smoke` now follows the real Minimums modal add flow during its draft-stage check and hard-resets request selector state before the confirmed-selection gating check, so those two live smoke results match the current product workflow instead of the retired footer-editor path.
+- Maintainers now have repo-local deployment helpers plus a small local PowerShell maintainer launcher for target selection, saved status, refresh, and deploying both addon folders into `Retail`, `PTR`, or `Beta`.

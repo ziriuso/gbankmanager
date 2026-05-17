@@ -57,6 +57,70 @@ assert.truthy(checksById.minimums_render ~= nil, "live smoke should cover minimu
 assert.truthy(checksById.request_selection_gating ~= nil, "live smoke should cover confirmed-selection gating for request creation")
 assert.truthy(checksById.scan_access_gating ~= nil, "live smoke should cover scan/officer gating")
 
+local mainFrame = ns.modules.mainFrame
+
+local restrictiveAuthDb = store.CreateFreshDatabase("Guild Testers")
+restrictiveAuthDb.auth.capabilities.request_submit = {
+    [3] = true,
+    [4] = true,
+}
+restrictiveAuthDb.auth.capabilities.full_ui = {
+    [1] = true,
+}
+_G.GBankManagerDB = restrictiveAuthDb
+ns.state.db = restrictiveAuthDb
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
+local restrictiveSummary = liveSmoke.Run()
+
+assert.truthy(type(restrictiveSummary) == "string" and string.find(restrictiveSummary, "PASS", 1, true) ~= nil, "live smoke should stay deterministic even when the ambient auth policy denies raider request submission")
+local restrictiveChecksById = {}
+for _, result in ipairs(restrictiveAuthDb.testing.liveSmoke.results or {}) do
+    restrictiveChecksById[result.id] = result
+end
+assert.truthy(restrictiveChecksById.request_access_modes ~= nil and restrictiveChecksById.request_access_modes.passed == true, "request access smoke should seed its own auth contract instead of inheriting live guild policy")
+
+local staleStateDb = store.CreateFreshDatabase("Guild Testers")
+_G.GBankManagerDB = staleStateDb
+ns.state.db = staleStateDb
+mainFrame.requestCreateSelectedCatalogItem = {
+    itemID = 7007,
+    name = "Algari Mana Oil",
+}
+if mainFrame.requestCreateSearchSelector then
+    mainFrame.requestCreateSearchSelector:ApplySelectedItem({
+        itemID = 7007,
+        name = "Algari Mana Oil",
+    }, true)
+end
+mainFrame.minimumPendingRules = {
+    staleDraft = {
+        draftKey = "staleDraft",
+        itemID = 9999,
+        itemName = "Stale Draft",
+        quantity = 1,
+        scope = "TAB",
+        tabName = "Alchemy",
+    },
+}
+mainFrame.minimumPendingDirty = {
+    staleDraft = true,
+}
+mainFrame.minimumPendingDeleted = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
+local staleStateSummary = liveSmoke.Run()
+
+assert.truthy(type(staleStateSummary) == "string" and string.find(staleStateSummary, "PASS", 1, true) ~= nil, "live smoke should clear stale request and minimum editor state before asserting gating behavior")
+local staleChecksById = {}
+for _, result in ipairs(staleStateDb.testing.liveSmoke.results or {}) do
+    staleChecksById[result.id] = result
+end
+assert.truthy(staleChecksById.minimums_render ~= nil and staleChecksById.minimums_render.passed == true, "minimums smoke should reset pending draft state before staging a new draft")
+assert.truthy(staleChecksById.request_selection_gating ~= nil and staleChecksById.request_selection_gating.passed == true, "request selection smoke should clear prior confirmed selections before checking disabled-by-default behavior")
+assert.truthy(#(staleStateDb.minimums or {}) >= 1, "minimums smoke should still persist a staged draft after the modal-driven add flow resets stale state")
+assert.truthy(#(staleStateDb.requests or {}) >= 1, "request selection smoke should still create a request after stale editor state is cleared")
+
 local originalLiveSmoke = ns.modules.liveSmoke
 _G.DEFAULT_CHAT_FRAME.messages = {}
 ns.modules.liveSmoke = nil

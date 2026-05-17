@@ -1,5 +1,7 @@
 local assert = require("tests.helpers.assert")
 
+dofile("tests/helpers/wow_stubs.lua")
+
 _G.UnitName = function()
     return "GuildLead"
 end
@@ -39,9 +41,18 @@ assert.truthy(type(db.auth) == "table", "fresh databases should include an auth 
 assert.truthy(type(db.auth.capabilities) == "table", "fresh databases should include capability allowlists")
 assert.truthy(type(db.auth.blacklist) == "table", "fresh databases should include a blacklist table")
 assert.equal("GuildLead-Stormrage", permissions.DisplayCharacterKey("Stormrage-GuildLead"), "auth display formatting should render Character-Realm for UI text")
+assert.equal("GuildLead-Stormrage", permissions.NormalizeEnteredCharacterKey("GuildLead-Stormrage", "Stormrage"), "blacklist entry normalization should store Character-Server values canonically")
+assert.equal(permissions.HashCharacterKey("GuildLead-Stormrage"), permissions.HashCharacterKey("Stormrage-GuildLead"), "blacklist hashing should treat old and new key orderings as the same identity")
 db.auth.rankMetadata[0] = { name = "Rank 0", order = 0 }
 permissions.NormalizePolicy(db.auth, permissions.GetGuildRankMetadata())
 assert.equal("Guild Master", db.auth.rankMetadata[0].name, "live guild rank metadata should overwrite stale saved rank labels")
+db.auth.blacklist["Stormrage-Troublemaker"] = {
+    name = "Troublemaker",
+    reason = "Legacy order",
+    updatedAt = 1,
+}
+permissions.NormalizePolicy(db.auth, permissions.GetGuildRankMetadata())
+assert.truthy(db.auth.blacklist["Troublemaker-Stormrage"] ~= nil, "policy normalization should migrate legacy realm-character blacklist keys into Character-Server order")
 
 local guildmasterContext = permissions.GetLivePlayerContext(db)
 
@@ -52,6 +63,7 @@ assert.truthy(permissions.Can(guildmasterContext, "auth_manage", db.auth), "guil
 assert.equal("full_shell", permissions.GetEffectiveAccessProfile(guildmasterContext, db.auth), "guildmaster should resolve to full-shell access")
 
 db.auth.capabilities.auth_manage[1] = true
+db.auth.capabilities.request_delete[1] = true
 local delegatedAdminContext = {
     characterKey = "Stormrage-OfficerOne",
     name = "OfficerOne",
@@ -63,6 +75,7 @@ local delegatedAdminContext = {
 }
 
 assert.truthy(permissions.Can(delegatedAdminContext, "auth_manage", db.auth), "delegated admin ranks should be able to manage auth when configured")
+assert.truthy(permissions.Can(delegatedAdminContext, "request_delete", db.auth), "delegated admin ranks should be able to delete requests when configured")
 assert.truthy(permissions.Can(delegatedAdminContext, "full_ui", db.auth), "officer-equivalent fallback ranks should keep full ui access")
 
 local memberContext = {

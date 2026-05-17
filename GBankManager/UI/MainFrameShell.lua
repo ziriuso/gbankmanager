@@ -5,8 +5,12 @@ ns.modules = ns.modules or {}
 ns.ui = ns.ui or {}
 
 local mainFrameShell = ns.modules.mainFrameShell or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
-ns.ui.theme = ns.ui.theme or {
+local baseTheme = {
     colors = {
         background = { 0.07, 0.09, 0.13, 0.96 },
         panel = { 0.10, 0.14, 0.20, 0.98 },
@@ -25,6 +29,164 @@ ns.ui.theme = ns.ui.theme or {
     },
 }
 
+local themePresets = {
+    default = {
+        label = "Current",
+        colors = {
+            background = { 0.07, 0.09, 0.13, 0.96 },
+            panel = { 0.10, 0.14, 0.20, 0.98 },
+            panelAlt = { 0.13, 0.17, 0.24, 0.98 },
+            border = { 0.24, 0.31, 0.40, 0.90 },
+            accent = { 0.58, 0.67, 0.78, 1.00 },
+            accentStrong = { 0.85, 0.89, 0.94, 1.00 },
+            muted = { 0.56, 0.65, 0.76, 1.00 },
+        },
+    },
+    contrast = {
+        label = "Contrast",
+        colors = {
+            background = { 0.04, 0.05, 0.07, 0.98 },
+            panel = { 0.08, 0.10, 0.14, 0.98 },
+            panelAlt = { 0.12, 0.15, 0.20, 0.98 },
+            border = { 0.34, 0.42, 0.54, 0.96 },
+            accent = { 0.36, 0.63, 0.88, 1.00 },
+            accentStrong = { 0.93, 0.96, 1.00, 1.00 },
+            muted = { 0.66, 0.74, 0.86, 1.00 },
+        },
+    },
+    horde = {
+        label = "Horde",
+        colors = {
+            background = { 0.09, 0.05, 0.05, 0.97 },
+            panel = { 0.16, 0.08, 0.08, 0.98 },
+            panelAlt = { 0.22, 0.10, 0.09, 0.98 },
+            border = { 0.44, 0.18, 0.16, 0.94 },
+            accent = { 0.83, 0.24, 0.18, 1.00 },
+            accentStrong = { 0.98, 0.79, 0.67, 1.00 },
+            muted = { 0.80, 0.54, 0.46, 1.00 },
+        },
+    },
+    alliance = {
+        label = "Alliance",
+        colors = {
+            background = { 0.05, 0.08, 0.14, 0.97 },
+            panel = { 0.08, 0.13, 0.22, 0.98 },
+            panelAlt = { 0.11, 0.18, 0.29, 0.98 },
+            border = { 0.19, 0.37, 0.60, 0.94 },
+            accent = { 0.30, 0.58, 0.94, 1.00 },
+            accentStrong = { 0.89, 0.95, 1.00, 1.00 },
+            muted = { 0.55, 0.71, 0.90, 1.00 },
+        },
+    },
+    void = {
+        label = "Void",
+        colors = {
+            background = { 0.06, 0.05, 0.12, 0.97 },
+            panel = { 0.11, 0.08, 0.19, 0.98 },
+            panelAlt = { 0.15, 0.11, 0.27, 0.98 },
+            border = { 0.34, 0.27, 0.56, 0.94 },
+            accent = { 0.60, 0.42, 0.92, 1.00 },
+            accentStrong = { 0.84, 0.78, 1.00, 1.00 },
+            muted = { 0.62, 0.58, 0.86, 1.00 },
+        },
+    },
+    adventurer = {
+        label = "Adventurer",
+        colors = {
+            background = { 0.11, 0.09, 0.07, 0.97 },
+            panel = { 0.18, 0.14, 0.10, 0.98 },
+            panelAlt = { 0.24, 0.19, 0.14, 0.98 },
+            border = { 0.44, 0.34, 0.22, 0.94 },
+            accent = { 0.78, 0.58, 0.32, 1.00 },
+            accentStrong = { 0.95, 0.88, 0.72, 1.00 },
+            muted = { 0.77, 0.67, 0.51, 1.00 },
+        },
+    },
+    warm = {
+        label = "Warm",
+        colors = {
+            background = { 0.11, 0.09, 0.07, 0.97 },
+            panel = { 0.18, 0.14, 0.10, 0.98 },
+            panelAlt = { 0.24, 0.19, 0.14, 0.98 },
+            border = { 0.44, 0.34, 0.22, 0.94 },
+            accent = { 0.78, 0.58, 0.32, 1.00 },
+            accentStrong = { 0.95, 0.88, 0.72, 1.00 },
+            muted = { 0.77, 0.67, 0.51, 1.00 },
+        },
+    },
+    moonglade = {
+        label = "Moonglade",
+        colors = {
+            background = { 0.05, 0.10, 0.08, 0.97 },
+            panel = { 0.09, 0.16, 0.12, 0.98 },
+            panelAlt = { 0.12, 0.22, 0.16, 0.98 },
+            border = { 0.23, 0.43, 0.31, 0.94 },
+            accent = { 0.49, 0.77, 0.52, 1.00 },
+            accentStrong = { 0.84, 0.96, 0.84, 1.00 },
+            muted = { 0.62, 0.79, 0.63, 1.00 },
+        },
+    },
+}
+
+local orderedThemePresetKeys = {
+    "default",
+    "contrast",
+    "horde",
+    "alliance",
+    "void",
+    "adventurer",
+    "moonglade",
+}
+
+ns.ui.theme = ns.ui.theme or {}
+
+local function copy_table(source)
+    local out = {}
+
+    for key, value in pairs(source or {}) do
+        if type(value) == "table" then
+            out[key] = copy_table(value)
+        else
+            out[key] = value
+        end
+    end
+
+    return out
+end
+
+local function assign_number_array(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then
+        return source
+    end
+
+    for index = 1, math.max(#target, #source) do
+        target[index] = source[index]
+    end
+
+    return target
+end
+
+local function ensure_theme_shape(themeState)
+    themeState.colors = themeState.colors or copy_table(baseTheme.colors)
+    themeState.spacing = themeState.spacing or copy_table(baseTheme.spacing)
+
+    for key, value in pairs(baseTheme.colors) do
+        if type(themeState.colors[key]) ~= "table" then
+            themeState.colors[key] = copy_table(value)
+        end
+    end
+
+    for key, value in pairs(baseTheme.spacing) do
+        if tonumber(themeState.spacing[key]) == nil then
+            themeState.spacing[key] = value
+        end
+    end
+
+    themeState.themePreset = themeState.themePreset or "default"
+    themeState.shellScale = tonumber(themeState.shellScale or 1) or 1
+    return themeState
+end
+
 local backdrop = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -38,11 +200,57 @@ local backdrop = {
 }
 
 local function theme()
-    return ns.ui.theme
+    return ensure_theme_shape(ns.ui.theme or {})
+end
+
+local function clamp_scale(value)
+    value = tonumber(value or 1) or 1
+    return math.max(0.85, math.min(1.2, value))
+end
+
+local function next_window_level()
+    ns.state.uiWindowLevelCounter = math.max(tonumber(ns.state.uiWindowLevelCounter or 30) or 30, 30) + 10
+    return ns.state.uiWindowLevelCounter
 end
 
 function mainFrameShell.GetTheme()
     return theme()
+end
+
+function mainFrameShell.GetThemePresets()
+    return themePresets
+end
+
+function mainFrameShell.GetThemePresetOrder()
+    local order = {}
+    for index, presetKey in ipairs(orderedThemePresetKeys) do
+        order[index] = presetKey
+    end
+    return order
+end
+
+function mainFrameShell.ApplyThemePreset(presetKey)
+    local themeState = theme()
+    local preset = themePresets[presetKey] or themePresets.default
+
+    for key, value in pairs(preset.colors or {}) do
+        themeState.colors[key] = assign_number_array(themeState.colors[key] or {}, value)
+    end
+
+    themeState.themePreset = presetKey or "default"
+    return themeState
+end
+
+function mainFrameShell.ApplyShellScale(scale)
+    local themeState = theme()
+    local clamped = clamp_scale(scale)
+
+    for key, value in pairs(baseTheme.spacing) do
+        themeState.spacing[key] = math.max(1, math.floor((value * clamped) + 0.5))
+    end
+
+    themeState.shellScale = clamped
+    return themeState
 end
 
 function mainFrameShell.ApplyPanelStyle(frame, color)
@@ -50,12 +258,14 @@ function mainFrameShell.ApplyPanelStyle(frame, color)
         return
     end
 
+    frame.gbmBackdropBaseColor = { unpack(color or theme().colors.panel) }
+
     if type(frame.SetBackdrop) == "function" then
         frame:SetBackdrop(backdrop)
     end
 
     if type(frame.SetBackdropColor) == "function" then
-        frame:SetBackdropColor(unpack(color or theme().colors.panel))
+        frame:SetBackdropColor(unpack(frame.gbmBackdropBaseColor))
     end
 
     if type(frame.SetBackdropBorderColor) == "function" then
@@ -284,10 +494,11 @@ local function create_virtualized_item_results_list(parent, options)
             row.itemText:SetText(self.formatLabel(elementData))
 
             local atlas = tostring((elementData or {}).craftedQualityIcon or "")
-            if atlas ~= "" then
-                row.qualityIcon.atlas = atlas
+            local displayAtlas = type(craftedQuality.NormalizeDisplayAtlas) == "function" and craftedQuality.NormalizeDisplayAtlas(atlas) or atlas
+            if displayAtlas ~= "" then
+                row.qualityIcon.atlas = displayAtlas
                 if type(row.qualityIcon.SetAtlas) == "function" then
-                    row.qualityIcon:SetAtlas(atlas, true)
+                    row.qualityIcon:SetAtlas(displayAtlas, true)
                 end
                 row.qualityIcon:Show()
             else
@@ -565,10 +776,11 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
         if item then
             self.selectedItemNameText:SetText(tostring(item.name or item.itemName or ""))
             local atlas = tostring(item.craftedQualityIcon or "")
-            if atlas ~= "" then
-                self.selectedItemQualityIcon.atlas = atlas
+            local displayAtlas = type(craftedQuality.NormalizeDisplayAtlas) == "function" and craftedQuality.NormalizeDisplayAtlas(atlas) or atlas
+            if displayAtlas ~= "" then
+                self.selectedItemQualityIcon.atlas = displayAtlas
                 if type(self.selectedItemQualityIcon.SetAtlas) == "function" then
-                self.selectedItemQualityIcon:SetAtlas(atlas, true)
+                self.selectedItemQualityIcon:SetAtlas(displayAtlas, true)
                 end
                 self.selectedItemQualityIcon:Show()
             else
@@ -712,6 +924,7 @@ function mainFrameShell.MakeSlider(parent, width, height, minValue, maxValue, in
     slider.minValue = minValue or 0
     slider.maxValue = maxValue or 1
     slider.value = initialValue or slider.minValue
+    slider.valueStep = nil
     mainFrameShell.ApplyPanelStyle(slider, theme().colors.background)
     if type(slider.SetBackdropColor) == "function" then
         slider:SetBackdropColor(0, 0, 0, 0)
@@ -725,20 +938,49 @@ function mainFrameShell.MakeSlider(parent, width, height, minValue, maxValue, in
     slider.track:SetWidth(width)
     slider.track:SetHeight(math.max(6, math.floor((height or 18) / 3)))
     mainFrameShell.ApplyPanelStyle(slider.track, theme().colors.panel)
+    if type(slider.track.SetBackdropBorderColor) == "function" then
+        slider.track:SetBackdropBorderColor(0, 0, 0, 0)
+    end
 
     slider.fill = slider.fill or _G.CreateFrame("Frame", nil, slider.track, "BackdropTemplate")
     slider.fill:SetPoint("TOPLEFT", slider.track, "TOPLEFT", 0, 0)
     slider.fill:SetPoint("BOTTOMLEFT", slider.track, "BOTTOMLEFT", 0, 0)
     slider.fill:SetWidth(0)
     mainFrameShell.ApplyPanelStyle(slider.fill, theme().colors.accent)
+    if type(slider.fill.SetBackdropBorderColor) == "function" then
+        slider.fill:SetBackdropBorderColor(0, 0, 0, 0)
+    end
 
     slider.thumb = slider.thumb or _G.CreateFrame("Frame", nil, slider, "BackdropTemplate")
-    slider.thumb:SetSize(8, math.max(12, height or 18))
+    slider.thumb:SetSize(18, math.max(18, height or 18))
     slider.thumb:SetPoint("CENTER", slider.track, "LEFT", 0, 0)
     mainFrameShell.ApplyPanelStyle(slider.thumb, theme().colors.accentStrong)
+    if type(slider.thumb.SetBackdropBorderColor) == "function" then
+        slider.thumb:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    slider.thumbCore = slider.thumbCore or _G.CreateFrame("Frame", nil, slider.thumb, "BackdropTemplate")
+    slider.thumbCore:SetSize(10, 10)
+    slider.thumbCore:SetPoint("CENTER", slider.thumb, "CENTER", 0, 0)
+    mainFrameShell.ApplyPanelStyle(slider.thumbCore, theme().colors.background)
+    if type(slider.thumbCore.SetBackdropBorderColor) == "function" then
+        slider.thumbCore:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    slider.dragReleaseTarget = slider.dragReleaseTarget or _G.CreateFrame("Frame", nil, _G.UIParent, "BackdropTemplate")
+    slider.dragReleaseTarget:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", 0, 0)
+    slider.dragReleaseTarget:SetPoint("BOTTOMRIGHT", _G.UIParent, "BOTTOMRIGHT", 0, 0)
+    if type(slider.dragReleaseTarget.EnableMouse) == "function" then
+        slider.dragReleaseTarget:EnableMouse(true)
+    end
+    slider.dragReleaseTarget:Hide()
 
     local function clamp_value(self, value)
-        return math.max(self.minValue, math.min(self.maxValue, value or self.minValue))
+        value = math.max(self.minValue, math.min(self.maxValue, value or self.minValue))
+        local step = tonumber(self.valueStep or 0) or 0
+        if step > 0 then
+            value = self.minValue + (math.floor(((value - self.minValue) / step) + 0.5) * step)
+            value = math.max(self.minValue, math.min(self.maxValue, value))
+        end
+        return value
     end
 
     local function sync_visuals(self, value)
@@ -765,14 +1007,94 @@ function mainFrameShell.MakeSlider(parent, width, height, minValue, maxValue, in
         end
     end
 
-    if type(slider.EnableMouse) == "function" then
-        slider:EnableMouse(false)
+    function slider:SetValueFromRatio(ratio)
+        ratio = math.max(0, math.min(1, tonumber(ratio or 0) or 0))
+        local span = (self.maxValue or 1) - (self.minValue or 0)
+        self:SetValue((self.minValue or 0) + (span * ratio))
     end
-    if type(slider.track.EnableMouse) == "function" then
-        slider.track:EnableMouse(false)
+
+    function slider:SetValueStep(step)
+        self.valueStep = tonumber(step or 0) or 0
     end
-    if type(slider.thumb.EnableMouse) == "function" then
-        slider.thumb:EnableMouse(false)
+
+    local function cursor_ratio(frame)
+        local track = frame and frame.track or slider.track
+        if type(_G.GetCursorPosition) == "function"
+            and track
+            and type(track.GetLeft) == "function"
+            and type(track.GetRight) == "function"
+        then
+            local left = track:GetLeft()
+            local right = track:GetRight()
+            if left ~= nil and right ~= nil and right > left then
+                local cursorX = _G.GetCursorPosition()
+                local scale = (_G.UIParent and type(_G.UIParent.GetEffectiveScale) == "function" and _G.UIParent:GetEffectiveScale()) or 1
+                cursorX = (tonumber(cursorX or 0) or 0) / math.max(0.001, scale)
+                return (cursorX - left) / (right - left)
+            end
+        end
+
+        return nil
+    end
+
+    local function update_from_cursor(frame, ratio)
+        ratio = tonumber(ratio)
+        if ratio == nil then
+            ratio = cursor_ratio(frame)
+        end
+        if ratio ~= nil then
+            slider:SetValueFromRatio(ratio)
+        end
+
+        return slider.value
+    end
+
+    local function begin_drag(frame, _, ratio)
+        slider.dragging = true
+        return update_from_cursor(frame, ratio)
+    end
+
+    local function end_drag()
+        slider.dragging = false
+        if slider.dragReleaseTarget then
+            slider.dragReleaseTarget:Hide()
+        end
+    end
+
+    for _, target in ipairs({ slider, slider.track, slider.thumb }) do
+        if type(target.EnableMouse) == "function" then
+            target:EnableMouse(true)
+        end
+        if type(target.SetScript) == "function" then
+            target:SetScript("OnMouseDown", begin_drag)
+            target:SetScript("OnMouseUp", end_drag)
+        end
+    end
+    if type(slider.SetScript) == "function" then
+        slider:SetScript("OnUpdate", function()
+            if slider.dragging then
+                update_from_cursor(slider)
+            end
+        end)
+        slider:SetScript("OnHide", end_drag)
+    end
+    if slider.dragReleaseTarget and type(slider.dragReleaseTarget.SetScript) == "function" then
+        slider.dragReleaseTarget:SetScript("OnMouseUp", end_drag)
+    end
+
+    local original_begin_drag = begin_drag
+    begin_drag = function(frame, button, ratio)
+        slider.dragging = true
+        if slider.dragReleaseTarget then
+            slider.dragReleaseTarget:Show()
+        end
+        return update_from_cursor(frame, ratio)
+    end
+    for _, target in ipairs({ slider, slider.track, slider.thumb }) do
+        if type(target.SetScript) == "function" then
+            target:SetScript("OnMouseDown", begin_drag)
+            target:SetScript("OnMouseUp", end_drag)
+        end
     end
 
     slider:SetValue(slider.value)
@@ -1098,6 +1420,40 @@ function mainFrameShell.CreateTableOverflowViewport(parent, options)
     return create_overflow_viewport(parent, options)
 end
 
+function mainFrameShell.ApplyFrameLayer(frame, strata, level)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    frame.frameStrata = strata or frame.frameStrata or "DIALOG"
+    frame.frameLevel = tonumber(level or frame.frameLevel or 0) or 0
+
+    if type(frame.SetFrameStrata) == "function" then
+        frame:SetFrameStrata(frame.frameStrata)
+    end
+    if type(frame.SetFrameLevel) == "function" then
+        frame:SetFrameLevel(frame.frameLevel)
+    end
+    if type(frame.SetToplevel) == "function" then
+        frame:SetToplevel(true)
+    end
+
+    return frame.frameLevel
+end
+
+function mainFrameShell.BringFrameToFront(frame, strata)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    local nextLevel = next_window_level()
+    mainFrameShell.ApplyFrameLayer(frame, strata or frame.frameStrata or "MEDIUM", nextLevel)
+    if type(frame.Raise) == "function" then
+        frame:Raise()
+    end
+    return nextLevel
+end
+
 function mainFrameShell.SetFrameShown(frame, shouldShow)
     if not frame then
         return
@@ -1125,7 +1481,7 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame:RegisterForDrag("LeftButton")
     mainFrame:SetResizable(true)
     mainFrame:SetResizeBounds(920, 560, 1280, 760)
-    mainFrame:SetFrameStrata("DIALOG")
+    mainFrameShell.ApplyFrameLayer(mainFrame, "MEDIUM", tonumber(mainFrame.frameLevel or 40) or 40)
     mainFrame.currentAlpha = mainFrame.currentAlpha or 0.96
     mainFrame:SetAlpha(mainFrame.currentAlpha)
     mainFrameShell.ApplyPanelStyle(mainFrame, currentTheme.colors.background)

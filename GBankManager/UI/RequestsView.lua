@@ -4,6 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local requestsView = ns.modules.requestsView or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function format_timestamp(timestamp)
     if not timestamp or timestamp == 0 then
@@ -19,6 +23,10 @@ local function format_timestamp(timestamp)
 end
 
 local function crafted_quality_markup(atlasName)
+    if type(craftedQuality.ToMarkup) == "function" then
+        return craftedQuality.ToMarkup(atlasName, 22)
+    end
+
     if atlasName == nil or atlasName == "" then
         return ""
     end

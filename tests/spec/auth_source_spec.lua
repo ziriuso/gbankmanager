@@ -53,7 +53,9 @@ local context = permissions.GetLivePlayerContext(db)
 
 permissions.SetCapabilityRank(db.auth, "full_ui", 1, true)
 permissions.SetCapabilityRank(db.auth, "auth_manage", 1, true)
+permissions.SetCapabilityRank(db.auth, "request_delete", 1, true)
 permissions.UpsertBlacklist(db.auth, "Stormrage-Troublemaker", "Troublemaker", "Blocked", 44)
+db.auth.restockDefault = 250
 permissions.StampPolicy(db.auth, context, 111)
 
 local exportString = source.ExportPolicyString(db.auth)
@@ -61,8 +63,12 @@ assert.truthy(type(exportString) == "string" and (string.find(exportString, "[GB
 
 local decodedPolicy = source.DecodePolicyString(exportString)
 assert.equal(db.auth.revision, decodedPolicy.revision, "auth source export should preserve revisions")
-assert.truthy(decodedPolicy.blacklistHashes[permissions.HashCharacterKey("Stormrage-Troublemaker")] == true, "auth source export should preserve hashed blacklist entries")
+assert.truthy(string.find(exportString, "Stormrage%-GuildLead", 1, false) == nil, "auth source export should not store the full updater name in the compact guild-info string")
+assert.equal(permissions.HashCharacterKey("Stormrage-GuildLead"), decodedPolicy.updatedByHash, "auth source export should preserve the compact updater hash")
+assert.equal(250, decodedPolicy.restockDefault, "auth source export should preserve the shared restock default")
+assert.truthy(next(decodedPolicy.blacklistHashes or {}) == nil, "auth source export should no longer store blacklist membership in Guild Info")
 assert.truthy(decodedPolicy.capabilities.full_ui[1] == true, "auth source export should preserve capability rank masks")
+assert.truthy(decodedPolicy.capabilities.request_delete[1] == true, "auth source export should preserve the request-delete capability")
 
 local olderGuildDb = store.CreateFreshDatabase("Guild Testers")
 permissions.StampPolicy(olderGuildDb.auth, context, 90)
@@ -77,13 +83,45 @@ db.auth.revision = 0
 db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}
 db.auth.blacklistHashes = {}
+db.ui.minimumSettings.defaultQuantity = 100
+db.auditLog = {}
 
 local appliedNewer, newerReason = source.ApplyPolicyString(db, exportString)
 assert.truthy(appliedNewer, "newer durable revisions should apply to the local cache")
 assert.equal("applied", newerReason, "newer durable revisions should report a successful apply")
 assert.equal(decodedPolicy.revision, db.auth.revision, "applied durable policy should set the local revision")
+assert.equal("Stormrage-GuildLead", db.auth.updatedBy, "applied durable policy should restore the last-updated actor identity")
+assert.equal(permissions.HashCharacterKey("Stormrage-GuildLead"), db.auth.updatedByHash, "applied durable policy should keep the updater hash alongside the local actor identity")
+assert.equal(250, db.ui.minimumSettings.defaultQuantity, "applied durable policy should restore the shared restock default into options settings")
 assert.truthy(db.auth.capabilities.full_ui[1] == true, "applied durable policy should restore rank capability masks")
-assert.truthy(db.auth.blacklistHashes[permissions.HashCharacterKey("Stormrage-Troublemaker")] == true, "applied durable policy should restore blacklist hashes")
+assert.truthy(next(db.auth.blacklistHashes or {}) == nil, "applied durable policy should not restore blacklist membership from Guild Info")
+assert.equal("AUTH_POLICY_UPDATED", db.auditLog[1].type, "applying a newer durable policy should append an auth-policy history entry")
+assert.equal("OPTIONS", db.auditLog[1].category, "auth-policy history entries should appear in the options category")
+
+local cachedBlacklistDb = store.CreateFreshDatabase("Guild Testers")
+cachedBlacklistDb.auth.blacklist = {}
+cachedBlacklistDb.auth.blacklistHashes = {}
+cachedBlacklistDb.auth.blacklistDirectory = {
+    [permissions.HashCharacterKey("Ziriously-Stormrage")] = {
+        characterKey = "Ziriously-Stormrage",
+        name = "Ziriously",
+        reason = "Abused System",
+        updatedAt = 77,
+        hash = permissions.HashCharacterKey("Ziriously-Stormrage"),
+    },
+}
+cachedBlacklistDb.ui.minimumSettings.defaultQuantity = 100
+cachedBlacklistDb.auditLog = {}
+
+local cachedPolicyDb = store.CreateFreshDatabase("Guild Testers")
+permissions.UpsertBlacklist(cachedPolicyDb.auth, "Ziriously-Stormrage", "Ziriously", "Abused System", 77)
+permissions.StampPolicy(cachedPolicyDb.auth, context, 222)
+local cachedPolicyString = source.ExportPolicyString(cachedPolicyDb.auth)
+
+local cachedApplied, cachedReason = source.ApplyPolicyString(cachedBlacklistDb, cachedPolicyString)
+assert.truthy(cachedApplied, "compact policy import should rehydrate blacklist details from the learned local hash directory")
+assert.equal("applied", cachedReason, "compact policy import should report a successful apply when it uses the learned local hash directory")
+assert.truthy(next(cachedBlacklistDb.auth.blacklist or {}) == nil, "compact policy import should not restore active blacklist membership from Guild Info now that officer notes are the shared source of truth")
 
 _G.guildInfoText = "Guild rules\n" .. exportString .. "\nHave fun"
 _G.C_GuildInfo.infoText = _G.guildInfoText
@@ -91,11 +129,13 @@ db.auth.revision = 0
 db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}
 db.auth.blacklistHashes = {}
+db.ui.minimumSettings.defaultQuantity = 100
 
 local pulled, pullReason = source.PullPolicyFromGuildInfo(db)
 assert.truthy(pulled, "guild-info pull should apply an embedded auth snippet")
 assert.equal("applied", pullReason, "guild-info pull should report a successful apply")
 assert.truthy(db.auth.capabilities.full_ui[1] == true, "guild-info pull should restore capability state")
+assert.equal(250, db.ui.minimumSettings.defaultQuantity, "guild-info pull should restore the shared restock default into options settings")
 
 local slashExport = slash.command("auth export")
 assert.truthy(type(slashExport) == "string" and string.find(slashExport, "[GBMAUTH:", 1, true) ~= nil, "slash auth export should return the durable guild-info snippet")

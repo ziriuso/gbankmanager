@@ -25,6 +25,12 @@ powershell -ExecutionPolicy Bypass -File .\tools\catalog\Refresh-ItemCatalog.ps1
 powershell -ExecutionPolicy Bypass -File .\tools\catalog\Refresh-ItemCatalog.ps1 -Target Beta -Fresh
 ```
 
+Maintainer launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Open-ItemCatalogMaintainer.ps1
+```
+
 Default catalog profile:
 
 - `ProcurementCurrentExpansion`
@@ -85,6 +91,12 @@ Resolve a named target or explicit install override without running extraction y
 powershell -ExecutionPolicy Bypass -File .\tools\catalog\Resolve-WoWTarget.ps1 -Target Retail
 ```
 
+Read the saved maintainer status for a target, including last sync time, build, and resolved AddOns path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Get-ItemCatalogMaintainerStatus.ps1 -Target Retail
+```
+
 Validate a target end-to-end and emit a readiness summary. In Phase 5, extractable targets continue through local ItemSparse extraction, normalization, manifest merge, and generated addon rebuild:
 
 ```powershell
@@ -103,6 +115,12 @@ Import runtime-learned rows from an addon export into the checked-in manifest:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath .\tools\catalog\runtime\item-catalog-learned.json
 powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath .\tools\catalog\runtime\item-catalog-learned.json -OutputPath .\tests\tmp\item-catalog-imported.json
+```
+
+Deploy both addon folders into the resolved target:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail
 ```
 
 Maintainer smoke recipe:
@@ -419,9 +437,32 @@ It remains useful for experimentation or one-off enrichment, but it is no longer
   - merges normalized extracted rows into the checked-in manifest with deterministic ordering and retention rules
 - `Build-ItemDataAddon.ps1`
   - converts the manifest into the load-on-demand item addon data file
+- `Get-ItemCatalogMaintainerStatus.ps1`
+  - UI-ready status adapter for saved progress, last sync time, build, and resolved AddOns path
+- `Deploy-AddonsToTarget.ps1`
+  - copies `GBankManager/` and `GBankManager_ItemData/` into the selected target's `Interface\AddOns\`
+- `Open-ItemCatalogMaintainer.ps1`
+  - local PowerShell launcher for target selection, status, refresh, and deployment
 - `Export-StaticItemCatalog.ps1`
   - lower-level manifest-to-Lua exporter used by the build script
 - `Update-CredentialFreeItemCatalog.ps1`
   - legacy fallback for refreshing the manifest from public AH item universes and then regenerating Lua
 - `Update-BlizzardItemMetadata.ps1`
   - legacy fallback for enriching manifest rows with official Blizzard item metadata using maintainer credentials
+
+## Maintainer UI
+
+`Open-ItemCatalogMaintainer.ps1` is a local-only convenience launcher over the same scripts documented above.
+
+Current actions:
+
+- `Refresh Status`
+  - wraps `Get-ItemCatalogMaintainerStatus.ps1`
+- `Run Fresh Sync`
+  - wraps `Refresh-ItemCatalog.ps1 -Fresh`
+- `Resume Sync`
+  - wraps `Refresh-ItemCatalog.ps1 -Resume`
+- `Deploy Addons`
+  - wraps `Deploy-AddonsToTarget.ps1`
+
+The launcher is intentionally thin so the canonical workflow still lives in normal scripts and tests. If the UI is unavailable, every action still has a one-command CLI equivalent.

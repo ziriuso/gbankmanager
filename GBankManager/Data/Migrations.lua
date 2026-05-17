@@ -37,6 +37,7 @@ local function ensure_v1_shape(db)
     db.auth.revision = tonumber(db.auth.revision or 0) or 0
     db.auth.updatedAt = tonumber(db.auth.updatedAt or 0) or 0
     db.auth.updatedBy = db.auth.updatedBy or ""
+    db.auth.updatedByHash = db.auth.updatedByHash or nil
     db.auth.updatedByRankIndex = db.auth.updatedByRankIndex
     db.auth.guildPolicyString = db.auth.guildPolicyString or ""
     db.auth.guildPolicySource = db.auth.guildPolicySource or "local"
@@ -54,19 +55,31 @@ local function ensure_v1_shape(db)
         "minimum_edit",
         "minimum_delete",
         "auth_manage",
+        "request_delete",
     }) do
         db.auth.capabilities[capability] = ensure_table(db.auth.capabilities[capability])
     end
     db.auth.blacklist = ensure_table(db.auth.blacklist)
     db.auth.blacklistHashes = ensure_table(db.auth.blacklistHashes)
+    db.auth.blacklistDirectory = ensure_table(db.auth.blacklistDirectory)
+    db.auth.blacklistRosterDirectory = ensure_table(db.auth.blacklistRosterDirectory)
     db.ui = ensure_table(db.ui)
     db.ui.inventoryColumnWidths = ensure_table(db.ui.inventoryColumnWidths)
+    db.ui.appearance = ensure_table(db.ui.appearance)
+    db.ui.appearance.themePreset = db.ui.appearance.themePreset or "default"
+    db.ui.appearance.shellScale = tonumber(db.ui.appearance.shellScale or 1) or 1
+    db.ui.appearance.tableDensity = tonumber(db.ui.appearance.tableDensity or 1) or 1
+    db.ui.appearance.shellOpacity = tonumber(db.ui.appearance.shellOpacity or 0.96) or 0.96
+    db.ui.appearance.modalOpacity = tonumber(db.ui.appearance.modalOpacity or 1) or 1
     db.ui.minimumSettings = ensure_table(db.ui.minimumSettings)
     db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
     db.ui.minimumItemCatalog = ensure_table(db.ui.minimumItemCatalog)
     db.ui.exportSettings = ensure_table(db.ui.exportSettings)
     db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"
     db.ui.exportSettings.shoppingListName = db.ui.exportSettings.shoppingListName or "GBankManager"
+    if type(db.ui.exportSettings.manualShoppingListPosition) ~= "table" then
+        db.ui.exportSettings.manualShoppingListPosition = nil
+    end
     db.ui.exportSettings.customTemplate = ensure_table(db.ui.exportSettings.customTemplate)
     db.ui.exportSettings.customTemplate.delimiter = db.ui.exportSettings.customTemplate.delimiter or "|"
     if db.ui.exportSettings.customTemplate.includeHeader == nil then
@@ -86,6 +99,11 @@ local function ensure_v1_shape(db)
     db.testing.liveSmoke.status = db.testing.liveSmoke.status or "NEVER"
     db.testing.liveSmoke.summary = db.testing.liveSmoke.summary or ""
     db.testing.liveSmoke.results = ensure_table(db.testing.liveSmoke.results)
+    db.testing.inGameUnit = ensure_table(db.testing.inGameUnit)
+    db.testing.inGameUnit.runAt = tonumber(db.testing.inGameUnit.runAt or 0) or 0
+    db.testing.inGameUnit.status = db.testing.inGameUnit.status or "NEVER"
+    db.testing.inGameUnit.summary = db.testing.inGameUnit.summary or ""
+    db.testing.inGameUnit.results = ensure_table(db.testing.inGameUnit.results)
     return db
 end
 

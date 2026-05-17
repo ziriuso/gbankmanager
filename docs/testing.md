@@ -7,6 +7,7 @@
 - `integration`: addon bootstrap, slash wiring, and opt-in smoke harness routing
 - `wowless`: companion-repo Docker smoke that loads the addon through Wowless
 - `live smoke`: explicit retail-client validation after the automated lanes are green
+- `in-game unit`: explicit retail-client deterministic checks run through `/gbm test unit`
 
 ## Commands
 
@@ -27,10 +28,11 @@
 
 - `unit`
   - domain rules for auth, requests, exports, planning, sync, store, and scan persistence
+  - dashboard ranking and stocking-history coverage for the `Top 5 Most Used` card
   - migration/default-shape coverage, including the persisted live-smoke result container
 - `ui`
   - shell layout, shared table behavior, requests, exports, minimums, and options/auth ownership specs
-  - focused regression checks for shared scrollbars, request-only layout, options auth state, bundled indexed item-search behavior, and the Minimums modal handoff from search into details
+  - focused regression checks for shared scrollbars, request-only layout, options auth state, bundled indexed item-search behavior, the Minimums modal handoff from search into details, shared visible crafted-tier symbols, and slider drag-release behavior
 - `integration`
   - TOC order and duplicate-load protection
   - shared namespace/module registration after bootstrap
@@ -42,8 +44,14 @@
   - optional and non-blocking until the runtime is proven stable
 - `live smoke`
   - in-client checks run only when you explicitly invoke `/gbm test smoke`
-  - confirms shell open/close, options scroll wiring, opacity controls, request-only vs full-shell access, minimum staging/save, and scan gating
-  - auth policy publishing is manual in Retail: use `Save`, copy the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
+  - seeds its own request-access auth shape and clears stale request/minimum selector state first, so prior live guild policy or leftover UI state does not create false failures
+  - confirms shell open/close, options scroll wiring, opacity controls, request-only vs full-shell access, current Minimums modal staging/save, and scan gating
+  - confirms appearance sliders support both direct slider interaction and plus/minus stepping
+  - confirms local appearance controls cover theme presets, linked shell-and-table scaling, shell opacity, modal opacity, active-nav glow, and collapsed-nav icons
+  - confirms the shell yields behind other dragged UI until clicked back to the front again
+  - confirms the manual shopping list can stay open across tab switches or shell close, remembers its moved position, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot
+  - auth policy publishing is manual in Retail: use `Save`, use `Select All` or mouse selection on the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
+  - blacklist membership is no longer stored in Guild Info: save blacklist changes from `Options -> Auth` and verify the target officer note gains or loses `[GBMBL]`
   - item search should use the required bundled `GBankManager_ItemData` payload; if that payload is unavailable, the search UI should report the unavailable state clearly instead of showing misleading sparse local-only name results
   - Minimums should open a centered details modal after a confirmed add-search selection instead of dropping the user into the old footer editor flow
   - Inventory and Minimums should share the same table layout, and Minimums should use a compact transparent action strip instead of the old boxed footer search/editor panel
@@ -53,6 +61,13 @@
   - `Request Admin` should use details-modal workflow actions only, with the bottom `All` / `Pending Approval` / `Pending Fulfillment` filter strip and no top workflow action box.
   - Approved open requests should be auto-marked fulfilled by a guild-bank scan once scanned inventory meets the requested quantity, and fulfilled requests should retain Date Fulfilled.
   - Exports should show a bottom action strip, visible-table CSV output, Auctionator and TSM all-vs-missing modal choices, and a stocked-elsewhere tab/quantity detail modal.
+  - sync should report milestone chat feedback for login hello, accepted incoming updates, and rejected forged sync payloads without turning the chat frame into a step-by-step spam log
+  - dashboard `Top 5 Most Used` should rank repeated shortage cycles from stocking history above one-off raw withdrawal spikes when minimum-backed history exists
+- `in-game unit`
+  - in-client deterministic checks run only when you explicitly invoke `/gbm test unit`
+  - persists results under `GBankManagerDB.testing.inGameUnit`
+  - currently covers auth policy round-tripping, request workflow invariants, crafted-quality normalization, dashboard stocking-history ranking, sync sender validation, blacklist normalization, officer queue prioritization, and unresolved minimum repair-row ordering
+  - crafted-quality coverage will reload the helper if the module registry dropped it, matching the live UI modules' fallback behavior instead of failing on a harness-only lookup miss
 
 ## Failure Reading
 
@@ -62,25 +77,29 @@
 - `integration` failures usually mean load order, slash routing, or smoke harness wiring broke.
 - `wowless` failures usually mean a Docker/runtime issue, a broken Wowless product target, or a headless addon-load regression under Wowless.
 - `live smoke` failures mean the addon loaded but a real in-client workflow no longer behaved as expected.
+- because the smoke lane now resets its own auth and selector scratch state, a remaining `live smoke` failure is much more likely to be a real workflow regression than leftover local UI state
+- `in-game unit` failures mean a deterministic module contract regressed even if the higher-level workflow smoke still passes.
 
 ## Release Order
 
 1. Run the local `unit`, `ui`, and `integration` lanes until they are green.
 2. Optionally run `.\tools\test\run-wowless.ps1` once the companion repo and Docker Desktop are set up.
 3. Confirm the GitHub Actions workflow is green.
-4. Run `/gbm test smoke` in retail and review the chat summary.
-5. Do a short visual spot-check only where automation cannot prove correctness.
-6. During live Minimums and Requests search checks, confirm known query families such as `flask of`, `flask of the sha`, `flask sun`, and `thalassian phoenix oil` return the expected bundled result families and crafted-tier splits.
-7. During live Minimums editing checks, confirm add flow moves from the search modal into the centered details modal, existing rows open the same modal, and draft row colors match add/edit/remove state before `Save All`.
+4. Run `/gbm test unit` in retail and review the chat summary.
+5. Run `/gbm test smoke` in retail and review the chat summary.
+6. Do a short visual spot-check only where automation cannot prove correctness.
+7. During live Minimums and Requests search checks, confirm known query families such as `flask of`, `flask of the sha`, `flask sun`, and `thalassian phoenix oil` return the expected bundled result families and crafted-tier splits.
+8. During live Minimums editing checks, confirm add flow moves from the search modal into the centered details modal, existing rows open the same modal, and draft row colors match add/edit/remove state before `Save All`.
 
 ## Next Test Priorities
 
 The next planned validation work should follow product priority, not test-only convenience:
 
-1. Validate the new pre-polish workflow block first: request deletion auth, Exports formatting/icon corrections, Request Admin and Minimums active-filter highlights, Request Admin bottom-bar layout with right-aligned filters plus a far-left `Add` action, Request Admin shared-height table sizing plus the `Date Fulfilled` filter overflow fix, Restock Default in the guild permission string, Options-page preload from Guild Info on addon load, explicit blacklist `Character-Server` guidance, correct last-updated policy metadata from Guild Info, permission-policy history auditing/sync, dashboard export-row mismatch triage plus future critical-shortage card rules, and guild-bank-open auto-scan throttling.
-2. During communication work, compare GBankManager behavior against Guild Roster Manager patterns for addon-to-addon conflict resolution before broadening sync regression coverage, including permission-policy history and auth authority resolution.
-3. After those workflow slices settle, broaden UI polish validation across the shared table shells, nav active-state styling, quality-tier icon rendering, and separate shell/modal opacity slider behavior.
-4. After the UI and workflow slices stabilize, build the dedicated in-game unit-test addon lane so live client verification can move beyond manual smoke.
+1. Live-verify the completed auth, auto-scan, and request-sync slices together: Guild Info preload, Restock Default propagation, auth-policy history visibility, guild-bank-open auto-scan throttling, and synced request approval creating the matching Minimums rule on receiving clients.
+2. Recheck the dashboard `Ready to Buy` mismatch against real live SavedVariables before making any code change. No local repro-backed code fix landed in this slice.
+3. Broaden UI polish validation across the shared table shells, nav active-state styling, quality-tier icon rendering, scalable theme or sizing controls, collapsed-nav icons, separate shell or modal opacity slider behavior, and the newer window ordering behavior around other draggable UI.
+4. Live-verify the broadened in-game unit lane in retail after the automated lanes are green.
+5. Live-verify the maintainer status adapter, deployment helper, and local maintainer launcher against a real WoW target path.
 
 ### Recent Regression Coverage
 
@@ -95,13 +114,29 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/ui_requests_spec.lua` also verifies request-only mode uses the smaller titled request window, own-request status columns, row-click details, and the item -> quantity/reason -> review request wizard.
 - `tests/spec/ui_requests_spec.lua` verifies request details align values to fixed modal columns, labels the Decision Note input, keeps details open after approval, prompts approvers for Bank Tab, and saves approval-created Minimums rules.
 - `tests/spec/ui_requests_spec.lua` also verifies request modals block table click-through, request details use fixed label/value rows, show Requested By above Date Requested, show Updated By and Date Updated near the bottom with Decision Note, hide the decision-note editor after approval or denial, and align workflow buttons with Close.
+- `tests/spec/requests_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/auth_source_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_requests_spec.lua` verify the new request-delete permission, stored delete action, delete sync handling, and the request-details `Delete` workflow path.
 - `tests/spec/requests_spec.lua` verifies stored request actions still work when no explicit auth policy is present, while auth-policy-backed denial paths remain covered, no request auto-approves, non-guildmaster self-approval is blocked, Guild Master self-approval remains an explicit workflow action, approval metadata preserves Decision Note and Bank Tab, and authors can cancel pending own requests.
 - `tests/spec/requests_spec.lua` verifies request audit history stores actor names instead of Lua actor tables, and approved open requests can be auto-fulfilled from a bank scan when inventory meets the requested quantity.
 - `tests/spec/store_spec.lua` verifies fresh guild-bank scans auto-fulfill approved open requests and store Date Fulfilled from the scan timestamp.
-- `tests/spec/exports_spec.lua` and `tests/spec/ui_exports_spec.lua` verify the reworked Exports table columns, stocked-elsewhere modal, CSV output modal, Auctionator all-vs-missing choice flow, and TSM item-ID import output.
-- `tests/spec/sync_spec.lua` verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
+- `tests/spec/exports_spec.lua` and `tests/spec/ui_exports_spec.lua` verify the reworked Exports table columns, stocked-elsewhere modal, `Excess Stock` and `None` labeling, crafted-quality icon rendering, CSV output modal, Auctionator all-vs-missing choice flow, and TSM item-ID import output.
+- `tests/spec/exports_spec.lua` and `tests/spec/ui_exports_spec.lua` also verify Auctionator's current caret-delimited import format and quality-icon rendering inside the manual shopping list helper.
+- `tests/spec/inventory_quality_spec.lua`, `tests/spec/ui_table_spec.lua`, `tests/spec/ui_exports_spec.lua`, `tests/spec/ui_minimums_spec.lua`, and `tests/spec/ui_requests_spec.lua` verify two-rank crafted items now stay on the shared visible chat-icon family instead of drifting into a mismatched inventory-atlas family on some surfaces.
+- `tests/spec/ui_requests_spec.lua` verifies Request Admin active-filter styling, the far-left `Add` launcher, right-aligned bottom filters, and shared-height table sizing.
+- `tests/spec/ui_minimums_spec.lua` verifies Minimums now uses separate `Enabled Only` and `Show All` buttons with active-state highlighting.
+- `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History, and blacklist entry input accepts `Character-Server`.
+- `tests/spec/auth_source_spec.lua` and `tests/spec/auth_spec.lua` also verify the compact updater-hash policy-string encoding, the removal of Guild Info blacklist membership export, and legacy blacklist-key normalization behavior.
+- `tests/spec/officer_note_blacklist_spec.lua` and `tests/spec/ui_options_spec.lua` verify appended `[GBMBL]` officer-note tags, guild-roster-driven blacklist refresh, and automatic officer-note writes from the Options save flow.
+- `tests/spec/diff_spec.lua` and `tests/spec/sync_spec.lua` verify opening the guild bank auto-scans only after the 10-minute throttle window while manual scan remains unaffected and the scanner event adapter now owns `GUILDBANKFRAME_OPENED`.
+- `tests/spec/sync_spec.lua` verifies synced request creation writes local history, higher-authority request updates win conflict resolution, synced approvals recreate the matching Minimums rule plus history rows on receiving clients, and sync milestone chat feedback is emitted for hello, accepted sync, and ignored forged payloads.
+- `tests/spec/sync_spec.lua` also verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
 - `tests/spec/planning_spec.lua` verifies approved requests converted into Minimums rules do not double-count demand as both request demand and restock demand.
+- `tests/spec/dashboard_spec.lua` verifies the dashboard ignores zero-shortage demand rows for `Ready to Buy` counting and now ranks the `Top 5 Most Used` card by repeated stocking-history shortage cycles before falling back to raw withdrawal totals.
+- `tests/spec/ui_shell_spec.lua` verifies the shell opts into top-level ordering, raises on click, and keeps registered modals layered above the shell when focus changes.
+- `tests/spec/ui_shell_spec.lua`, `tests/spec/ui_table_spec.lua`, `tests/spec/ui_requests_spec.lua`, and `tests/spec/ui_options_spec.lua` verify the shell now defaults below higher-priority dialogs, hides zero-range shared scrollbars, preloads auth policy from Guild Info on options open, applies modal opacity to every workflow modal, keeps scaled table layouts inside the shell viewport, keeps top-bar scan plus status controls from overlapping when scaled, and lets appearance sliders release cleanly even when the mouse-up happens off the bar.
+- `tests/spec/ui_exports_spec.lua` verifies the floating manual shopping list stays independent from the main shell, remembers its saved position, and keeps normalized low-tier crafted icons in fallback rows.
 - `tests/spec/test_runner_spec.lua` verifies the local Lua test runner emits progress before and after each spec.
+- `tests/spec/in_game_unit_spec.lua` verifies `/gbm test unit` availability, persistence, chat output, and the broadened deterministic in-client unit checks.
+- `tests/spec/item_catalog_maintainer_spec.lua` verifies the maintainer status adapter and deployment helper for resolved target paths, saved sync-state reporting, and copying both addon folders into `Interface\AddOns`.
 
 ## Wowless Companion Repo
 
@@ -143,5 +178,5 @@ Run these in retail only after the automated lanes pass:
 
 1. Run `/gbm test smoke`.
 2. Confirm chat prints one overall `PASS` or `FAIL` line plus individual check lines.
-3. If it fails, inspect `GBankManagerDB.testing.liveSmoke` after `/reload` for the last persisted summary and check details.
+3. If it fails, inspect `GBankManagerDB.testing.liveSmoke` after `/reload` for the last persisted summary and check details. Pay special attention to `minimums_render` and `request_selection_gating`, because those now exercise the live modal workflow and confirmed-selection reset path rather than the older footer-editor assumptions.
 4. If it passes, still do a short visual spot-check in `Options`, `Requests`, and `Minimums` for layout/art regressions the smoke cannot prove.

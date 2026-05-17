@@ -100,6 +100,14 @@ local function append_audit(db, entry)
     return entry
 end
 
+local function copy_request(request)
+    local copy = {}
+    for key, value in pairs(request or {}) do
+        copy[key] = value
+    end
+    return copy
+end
+
 local function actor_context_for_action(actor, db)
     if type(actor) == "table" then
         return actor
@@ -158,6 +166,10 @@ function requests.CanApplyAction(request, action)
         return approval == "PENDING" and fulfillment ~= "FULFILLED"
     end
 
+    if action == "DELETE" then
+        return true
+    end
+
     return false
 end
 
@@ -181,6 +193,7 @@ function requests.Create(input)
     input = input or {}
     local context = actor_context(input, input.db)
     local requesterName = context.name or input.requester
+    local createdAt = input.createdAt or _G.time()
 
     return {
         requestId = input.requestId or build_request_id(input, context),
@@ -197,9 +210,11 @@ function requests.Create(input)
         note = input.note or "",
         approval = "PENDING",
         fulfillment = "OPEN",
-        createdAt = input.createdAt or _G.time(),
+        createdAt = createdAt,
         createdBy = context.characterKey or requesterName,
-        updatedAt = input.createdAt or _G.time(),
+        updatedAt = createdAt,
+        updatedBy = context.characterKey or requesterName,
+        updatedByRankIndex = context.guildRankIndex,
     }
 end
 
@@ -225,6 +240,8 @@ function requests.Approve(request, approver, noteOrDecidedAt, decidedAtOrBankTab
     request.tabName = selectedBankTab or request.tabName
     request.decidedAt = decidedAt or _G.time()
     request.updatedAt = request.decidedAt
+    request.updatedBy = actor_character_key(approver) or actor_name(approver)
+    request.updatedByRankIndex = type(approver) == "table" and approver.guildRankIndex or request.updatedByRankIndex
     return request
 end
 
@@ -234,6 +251,8 @@ function requests.Reject(request, actor, note, decidedAt)
     request.decisionNote = note or ""
     request.decidedAt = decidedAt or _G.time()
     request.updatedAt = request.decidedAt
+    request.updatedBy = actor_character_key(actor) or actor_name(actor)
+    request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
     return request
 end
 
@@ -249,6 +268,8 @@ function requests.MarkFulfilled(request, actor, updatedAt)
     request.fulfilledBy = actor_name(actor)
     request.fulfillmentUpdatedAt = updatedAt or _G.time()
     request.updatedAt = request.fulfillmentUpdatedAt
+    request.updatedBy = actor_character_key(actor) or actor_name(actor)
+    request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
     return request
 end
 
@@ -266,6 +287,8 @@ function requests.Cancel(request, actor, note, canceledAt)
     request.decisionNote = note or ""
     request.canceledAt = canceledAt or _G.time()
     request.updatedAt = request.canceledAt
+    request.updatedBy = actor_character_key(actor) or actor_name(actor)
+    request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
     return request
 end
 
@@ -425,6 +448,8 @@ function requests.ReopenStored(db, requestId, actor, updatedAt)
 
     local oldValue = request.fulfillment
     requests.Reopen(request, updatedAt)
+    request.updatedBy = actor_character_key(actor) or actor_name(actor)
+    request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
     append_audit(db, requests.BuildAuditEntry("REQUEST_REOPENED", request, {
         actor = actor,
         timestamp = request.fulfillmentUpdatedAt,
@@ -432,6 +457,31 @@ function requests.ReopenStored(db, requestId, actor, updatedAt)
         newValue = request.fulfillment,
     }))
     return request
+end
+
+function requests.DeleteStored(db, requestId, actor, note, deletedAt)
+    db = ensure_tables(db or {})
+    local request, requestIndex = find_request(db, requestId)
+    if not request or not requestIndex or not can_act(actor, "request_delete", db) or not requests.CanActorApplyAction(request, "DELETE", actor) then
+        return nil
+    end
+
+    local deletedRequest = copy_request(request)
+    deletedRequest.deletedBy = actor_name(actor)
+    deletedRequest.decisionNote = note or deletedRequest.decisionNote or ""
+    deletedRequest.deletedAt = deletedAt or _G.time()
+    deletedRequest.updatedAt = deletedRequest.deletedAt
+    deletedRequest.updatedBy = actor_character_key(actor) or actor_name(actor)
+    deletedRequest.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or deletedRequest.updatedByRankIndex
+    table.remove(db.requests, requestIndex)
+    append_audit(db, requests.BuildAuditEntry("REQUEST_DELETED", deletedRequest, {
+        actor = actor,
+        timestamp = deletedRequest.deletedAt,
+        oldValue = request.approval,
+        newValue = "DELETED",
+        note = deletedRequest.decisionNote,
+    }))
+    return deletedRequest
 end
 
 ns.modules.requests = requests

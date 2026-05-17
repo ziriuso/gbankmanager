@@ -81,6 +81,10 @@ function store.GetMinimumSettings(db)
     return store.GetUiState(db).minimumSettings
 end
 
+function store.GetAppearanceSettings(db)
+    return store.GetUiState(db).appearance
+end
+
 function store.GetMinimumItemCatalog(db)
     return store.GetUiState(db).minimumItemCatalog
 end

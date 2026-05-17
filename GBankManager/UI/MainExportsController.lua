@@ -4,6 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local mainExportsController = ns.modules.mainExportsController or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 function mainExportsController.Attach(mainFrame, options)
     options = options or {}
@@ -97,6 +101,9 @@ function mainExportsController.Attach(mainFrame, options)
     end
     applyPanelStyle(mainFrame.exportModal, theme.colors.panelAlt)
     mainFrame.exportModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.exportModal, 20, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.exportModalTitle = mainFrame.exportModalTitle or makeLabel(mainFrame.exportModal, "Export Output", "GameFontHighlight")
     mainFrame.exportModalTitle:SetPoint("TOPLEFT", mainFrame.exportModal, "TOPLEFT", 16, -16)
@@ -161,6 +168,9 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportStockedElsewhereModal:EnableMouse(true)
     applyPanelStyle(mainFrame.exportStockedElsewhereModal, theme.colors.panelAlt)
     mainFrame.exportStockedElsewhereModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.exportStockedElsewhereModal, 20, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.exportStockedElsewhereTitle = mainFrame.exportStockedElsewhereTitle or makeLabel(mainFrame.exportStockedElsewhereModal, "Stocked Elsewhere", "GameFontHighlight")
     mainFrame.exportStockedElsewhereTitle:SetPoint("TOPLEFT", mainFrame.exportStockedElsewhereModal, "TOPLEFT", 16, -16)
@@ -170,9 +180,9 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportStockedElsewhereCloseButton = mainFrame.exportStockedElsewhereCloseButton or makeButton(mainFrame.exportStockedElsewhereModal, 64, 28, "Close")
     mainFrame.exportStockedElsewhereCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportStockedElsewhereModal, "BOTTOMRIGHT", -16, 16)
 
-    mainFrame.exportManualShoppingListModal = mainFrame.exportManualShoppingListModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.exportManualShoppingListModal = mainFrame.exportManualShoppingListModal or _G.CreateFrame("Frame", nil, _G.UIParent, "BackdropTemplate")
     mainFrame.exportManualShoppingListModal:SetSize(440, 320)
-    mainFrame.exportManualShoppingListModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+    mainFrame.exportManualShoppingListModal:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
     mainFrame.exportManualShoppingListModal.frameStrata = "FULLSCREEN_DIALOG"
     if type(mainFrame.exportManualShoppingListModal.SetFrameStrata) == "function" then
         mainFrame.exportManualShoppingListModal:SetFrameStrata(mainFrame.exportManualShoppingListModal.frameStrata)
@@ -189,9 +199,15 @@ function mainExportsController.Attach(mainFrame, options)
     end)
     mainFrame.exportManualShoppingListModal:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        if type(mainFrame.PersistManualShoppingListPosition) == "function" then
+            mainFrame:PersistManualShoppingListPosition()
+        end
     end)
     applyPanelStyle(mainFrame.exportManualShoppingListModal, theme.colors.panelAlt)
     mainFrame.exportManualShoppingListModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.exportManualShoppingListModal, 20, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.exportManualShoppingListTitle = mainFrame.exportManualShoppingListTitle or makeLabel(mainFrame.exportManualShoppingListModal, "Manual Shopping List", "GameFontHighlight")
     mainFrame.exportManualShoppingListTitle:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListModal, "TOPLEFT", 16, -16)
@@ -218,12 +234,30 @@ function mainExportsController.Attach(mainFrame, options)
     end
 
     local function manual_shopping_quality_label(row)
-        local quality = tonumber((row or {}).quality or (row or {}).itemTier or 0) or 0
-        if quality > 0 then
-            return string.format("T%d", quality)
+        row = row or {}
+
+        local markup = tostring(row.itemTier or "")
+        if string.sub(markup, 1, 3) == "|A:" or string.sub(markup, 1, 2) == "|T" then
+            return markup
         end
 
-        return "-"
+        local atlasName = tostring(row.craftedQualityIcon or "")
+        if atlasName ~= "" then
+            if type(craftedQuality.ToMarkup) == "function" then
+                return craftedQuality.ToMarkup(atlasName, 22)
+            end
+            return string.format("|A:%s:22:22|a", atlasName)
+        end
+
+        local quality = tonumber(row.quality or row.itemTierValue or 0) or 0
+        if quality > 0 and type(craftedQuality.ToMarkup) == "function" then
+            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22)
+        end
+        if quality > 0 then
+            return string.format("|A:Professions-ChatIcon-Quality-Tier%d:22:22|a", quality)
+        end
+
+        return ""
     end
 
     local function build_manual_shopping_rows(rows)
@@ -257,7 +291,13 @@ function mainExportsController.Attach(mainFrame, options)
             rowFrame.rowData = row
             rowFrame.checked = false
             rowFrame.checkButton.labelText:SetText("")
-            rowFrame.itemText:SetText(string.format("%s  %s  x%s", manual_shopping_quality_label(row), tostring(row.itemName or "Unknown"), tostring(row.amountToStock or row.totalToBuy or 0)))
+            local qualityMarkup = manual_shopping_quality_label(row)
+            local quantityText = tostring(row.amountToStock or row.totalToBuy or 0)
+            if qualityMarkup ~= "" then
+                rowFrame.itemText:SetText(string.format("%s  %s  x%s", qualityMarkup, tostring(row.itemName or "Unknown"), quantityText))
+            else
+                rowFrame.itemText:SetText(string.format("%s  x%s", tostring(row.itemName or "Unknown"), quantityText))
+            end
             rowFrame.strikeLine:Hide()
             rowFrame.checkButton:SetScript("OnClick", function()
                 rowFrame.checked = not rowFrame.checked
@@ -282,6 +322,44 @@ function mainExportsController.Attach(mainFrame, options)
         end
     end
 
+    local function first_point(frame)
+        if frame and type(frame.GetPoint) == "function" then
+            return frame:GetPoint(1)
+        end
+
+        local point = frame and frame.points and frame.points[1]
+        if point then
+            return unpack(point)
+        end
+
+        return nil
+    end
+
+    function mainFrame:RestoreManualShoppingListPosition(db)
+        local exportSettings = self:GetExportUiState(db)
+        local saved = exportSettings.manualShoppingListPosition or {}
+        local point = tostring(saved.point or "CENTER")
+        local relativePoint = tostring(saved.relativePoint or point)
+        local offsetX = tonumber(saved.x or 0) or 0
+        local offsetY = tonumber(saved.y or 0) or 0
+
+        self.exportManualShoppingListModal:ClearAllPoints()
+        self.exportManualShoppingListModal:SetPoint(point, _G.UIParent, relativePoint, offsetX, offsetY)
+        return saved
+    end
+
+    function mainFrame:PersistManualShoppingListPosition(db)
+        local exportSettings = self:GetExportUiState(db)
+        local point, _, relativePoint, offsetX, offsetY = first_point(self.exportManualShoppingListModal)
+        exportSettings.manualShoppingListPosition = {
+            point = point or "CENTER",
+            relativePoint = relativePoint or point or "CENTER",
+            x = tonumber(offsetX or 0) or 0,
+            y = tonumber(offsetY or 0) or 0,
+        }
+        return exportSettings.manualShoppingListPosition
+    end
+
     function mainFrame:GetExportUiState(db)
         db = db or currentDb()
         local store = ns.data.store or ns.modules.store
@@ -289,6 +367,7 @@ function mainExportsController.Attach(mainFrame, options)
         exportSettings.selectedPreset = normalizeExportPresetName(exportSettings.selectedPreset)
         exportSettings.shoppingListName = normalizeShoppingListName(exportSettings.shoppingListName)
         exportSettings.customTemplate = cloneExportTemplate(exportSettings.customTemplate)
+        exportSettings.manualShoppingListPosition = exportSettings.manualShoppingListPosition or nil
         return exportSettings
     end
 
@@ -297,6 +376,7 @@ function mainExportsController.Attach(mainFrame, options)
         self.exportSelectedPreset = normalizeExportPresetName(exportSettings.selectedPreset)
         self.exportShoppingListName = normalizeShoppingListName(exportSettings.shoppingListName)
         self.exportCustomTemplate = cloneExportTemplate(exportSettings.customTemplate)
+        self:RestoreManualShoppingListPosition(db)
         return exportSettings
     end
 
@@ -305,6 +385,10 @@ function mainExportsController.Attach(mainFrame, options)
         exportSettings.selectedPreset = normalizeExportPresetName(self.exportSelectedPreset)
         exportSettings.shoppingListName = normalizeShoppingListName(self.exportShoppingListName)
         exportSettings.customTemplate = cloneExportTemplate(self.exportCustomTemplate)
+        if self.exportManualShoppingListModal then
+            local position = self:PersistManualShoppingListPosition(db)
+            exportSettings.manualShoppingListPosition = position
+        end
         return exportSettings
     end
 
@@ -435,6 +519,7 @@ function mainExportsController.Attach(mainFrame, options)
 
     function mainFrame:OpenManualShoppingList(rows)
         build_manual_shopping_rows(rows or self.tableRowsData or {})
+        self:RestoreManualShoppingListPosition(currentDb())
         self.exportManualShoppingListModal:Show()
         return self.exportManualShoppingListModal
     end

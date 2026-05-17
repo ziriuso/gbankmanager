@@ -28,7 +28,7 @@ local auctionator = exports.BuildAuctionator({
     { itemName = "Feast Gamma", totalToBuy = 0, quality = 1 },
 }, "Raid Prep")
 
-assert.equal('Raid Prep^"Flask Alpha";0;0;0;0;0;0;0;3;4^"Potion Beta";0;0;0;0;0;0;0;0;2', auctionator, "auctionator export should match the approved shopping-list sample format")
+assert.equal("Raid Prep^Flask Alpha^Potion Beta", auctionator, "auctionator export should use Auctionator's current caret-delimited import format")
 
 local rows = exports.MaterializePlanRows({
     [2002] = {
@@ -64,6 +64,7 @@ local outOfStockQualityRows = exports.MaterializePlanRows({
 })
 
 assert.equal(2, outOfStockQualityRows[1].quality, "materialized rows should preserve row quality when an item is missing from the current snapshot")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", outOfStockQualityRows[1].itemTier, "materialized rows should normalize two-rank fallback icons to the shared visible crafted-quality icon family")
 
 local enrichedRows = exports.MaterializePlanRows({
     [3003] = {
@@ -95,7 +96,7 @@ assert.equal(0, enrichedRows[1].targetQuantity, "materialized rows should expose
 assert.equal(1, enrichedRows[1].requestQuantity, "materialized rows should expose approved request contribution")
 assert.equal("GLOBAL", enrichedRows[1].scopeSummary, "materialized rows should summarize involved scopes")
 assert.equal(3, enrichedRows[1].quality, "materialized rows should expose crafted quality for Auctionator exports")
-assert.equal("Not In Guild Bank", enrichedRows[1].excessStockIn, "materialized rows without another tab should show that the item is not stocked elsewhere in the guild bank")
+assert.equal("None", enrichedRows[1].excessStockIn, "materialized rows without another tab should show no excess stock elsewhere")
 
 local exportDialog = dofile("GBankManager/UI/ExportDialog.lua")
 local defaultState = exportDialog.BuildPresetState(rows)
@@ -113,7 +114,7 @@ assert.equal("CSV", defaultState.presetName, "export dialog should default to th
 assert.equal("CSV", spreadsheetState.presetName, "export dialog should map legacy spreadsheet state to the visible CSV preset name")
 assert.equal("Auctionator", auctionatorState.presetName, "export dialog should preserve the selected preset")
 assert.equal("Raid Prep", auctionatorState.shoppingListName, "auctionator preset state should preserve the officer-selected shopping-list name")
-assert.equal('Raid Prep^"Flask Alpha";0;0;0;0;0;0;0;0;5^"Potion Beta";0;0;0;0;0;0;0;0;2', auctionatorState.text, "auctionator preset should build the approved caret-delimited shopping-list output")
+assert.equal("Raid Prep^Flask Alpha^Potion Beta", auctionatorState.text, "auctionator preset should build Auctionator's current importable shopping-list text")
 assert.equal("5|Flask Alpha\n2|Potion Beta", customState.text, "custom preset should honor caller template settings")
 
 local exportsView = dofile("GBankManager/UI/ExportsView.lua")
@@ -121,7 +122,7 @@ local spreadsheetText = exportsView.BuildSpreadsheetText(enrichedRows)
 local csvText = exportsView.BuildCsvText(enrichedRows)
 local tsmText = exportsView.BuildTsmItemIdText(enrichedRows)
 
-assert.equal("Item ID,Item Tier,Item Name,Bank Tab,Amount to Stock,Excess Stock In\n1001,3,Flask Alpha,GLOBAL,5,Not In Guild Bank", csvText, "csv preset should mirror the visible export columns")
+assert.equal("Item ID,Tier,Item Name,Bank Tab,Amount to Stock,Excess Stock\n1001,3,Flask Alpha,GLOBAL,5,None", csvText, "csv preset should mirror the visible export columns")
 assert.equal(csvText, spreadsheetText, "spreadsheet alias should preserve the visible CSV output")
 assert.equal("1001", tsmText, "TSM export should provide the supported comma-delimited item id import list")
 

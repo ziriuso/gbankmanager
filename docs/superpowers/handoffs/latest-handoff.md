@@ -7,9 +7,9 @@
 - Remote tracking: `origin/codex/gbankmanager-v1`
 - Latest pushed branch commit: `28de907` (`feat: land item search and minimums workflow improvements`)
 - Latest local-only committed work in this phase: `e3e97ea` (`feat: rework request and export workflows`)
-- Current repo status at handoff time: uncommitted export polish and minimums validation slice on `codex/gbankmanager-v1` unless this handoff is committed after deployment
+- Current repo status at handoff time: uncommitted auth compaction, linked-scale and floating-shopping-list morning-review fixes, sync chat feedback, dashboard stocking-history, broadened in-game unit coverage, maintainer catalog status and deploy tooling, policy-string select-all, smoke-harness modal/gating refresh, two-rank crafted-icon normalization, slider drag-release polish, docs, and shell-focus slice on `codex/gbankmanager-v1`
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
-- Latest verified result: `PASS tests/run_all.lua` after adding per-lane and per-spec test-runner progress output
+- Latest verified result: `PASS tests/run_all.lua`
 
 ## Read First
 
@@ -40,7 +40,7 @@
 - Crafted tier can now backfill from the bundled search catalog when scan or snapshot data omits it.
 - Scan snapshots now persist tab-scoped `itemRows` in addition to aggregate `items`, and Inventory plus Minimums `Show All` render one row per bank tab with per-tab quantities.
 - Inventory and Minimums now share the same table layout: `Item ID`, `Tier`, `Item`, `Bank Tab`, `Current`, `Restock`, and `Minimum`, with a wider Item column consuming the old right-side whitespace.
-- Minimums uses the shared header/filter row instead of the old bottom search box, and its footer is now a compact transparent action strip with `Add`, `Save All`, and `Enabled Only` controls.
+- Minimums uses the shared header/filter row instead of the old bottom search box, and its footer is now a compact transparent action strip with `Add`, `Save All`, `Enabled Only`, and `Show All` controls.
 - The full-shell request surface is now `Request Admin`: workflow actions remain visible with more bottom spacing, inline request creation is hidden, shared table search is enabled, and the admin table exposes date requested, requestor, item ID, tier, item name, quantity, approval, fulfillment, and note.
 - `/gbm request` now opens a separate end-user request workflow panel with own-request status rows and a `New Request` wizard entrypoint.
 - Requests never auto-approve. Officers/admins cannot approve their own requests; the Guild Master can approve their own request only through an explicit workflow approval action.
@@ -53,14 +53,39 @@
 - Approved open requests are now auto-marked `FULFILLED` by a guild-bank scan when scanned inventory for the requested item meets the requested quantity. Fulfillment records `fulfilledBy = Bank Scan` and Date Fulfilled.
 - Request dates now display with an abbreviated timezone and no `(Local)` suffix.
 - Shared table scrollbars now sit just outside the table viewport so the table frame ends before the bar and rightmost columns are not overlapped.
-- Exports now uses the shared table plus a bottom action strip. The table shows `Item ID`, `Item Tier`, `Item Name`, `Bank Tab`, `Amount to Stock`, and `Excess Stock In`.
-- `Excess Stock In` now shows the alternate guild-bank tab with the highest quantity, and the stocked-elsewhere detail modal still lists every alternate tab and quantity.
+- Exports now uses the shared table plus a bottom action strip. The table shows `Item ID`, `Tier`, `Item Name`, `Bank Tab`, `Amount to Stock`, and `Excess Stock`.
+- `Excess Stock` now shows either `None` or the alternate guild-bank tab with the highest quantity, and the stocked-elsewhere detail modal still lists every alternate tab and quantity.
+- Exports now renders crafted-quality icons in the visible `Item Tier` column while keeping numeric tier values available for CSV-style outputs.
+- Auctionator export now emits the modern shopping-list line format instead of the older quantity or quality overloaded string.
+- Request deletion is now a distinct permission capability, and authorized users can delete requests from the request-details workflow popup.
+- Request Admin now highlights the active bottom filter, right-aligns `All`, `Pending Approval`, and `Pending Fulfillment`, keeps a far-left `Add` launcher, and uses the shared table height without the `Date Fulfilled` filter overflowing.
+- The guild auth policy string now carries the shared Restock Default plus updater metadata. Guild Info pull now refreshes those values into the local Options state, auth-policy updates now write History rows, and those auth-policy rows are now visible in the History view.
+- Blacklist entry UI now explicitly asks for `Character-Server` input, and guild-shared blacklist membership now comes from appended `[GBMBL]` officer-note tags instead of the Guild Info policy string.
+- Dashboard `Ready to Buy` mismatch investigation did not land a code fix in this slice. Obvious local machine paths did not reveal a live SavedVariables file, and the dashboard card count plus Exports row count both currently derive from the same demand-plan shape in code, so this should be reproed live before changing code.
+- Opening the guild bank now auto-starts a scan only when at least 10 minutes have elapsed since the last successful scan. Manual scan button or slash behavior is unchanged.
+- Synced request create and update messages now append local History rows on receiving clients, approved request sync recreates the tab-scoped Minimums side effect on receivers, and request conflict resolution now prefers higher-authority updaters before timestamp tie-breaks.
 - CSV, Auctionator, and TSM export modals now remove the nested inner text box, and the output area now uses a dedicated scrollable edit-box surface so `Select All` and manual mouse selection both target a real copyable field. The old `Copy` button has been removed.
 - Auctionator and TSM now use the choice label `Not In Guild Bank` for the missing-only path.
 - Exports now includes a movable `Manual Shopping List` window with one-session checklist strike-through rows, plain checkbox marks, and an explicit `Does not sync back to addon.` note.
 - Minimums rows with unresolved `GLOBAL` Bank Tab now sort to the top in orange, open into an editable Bank Tab picker, and `Save All` blocks with `Bank Tab must be set on Orange Rows.` until the row is corrected.
 - Approved open requests that already carry a bank tab but are missing `minimumRuleKey` now self-heal on refresh by creating or rebinding the matching tab-scoped Minimums rule automatically. Only the truly tab-less legacy requests still surface as orange repair rows.
 - Approved open requests that lost both `minimumRuleKey` and request-side bank-tab data now attempt one more self-heal: if there is exactly one enabled tab-scoped Minimums rule for that item, the request binds to that existing rule automatically instead of surfacing a duplicate orange orphan row.
+- The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still rehydrating a real updater name locally when the addon can infer it from live or previously known policy state.
+- Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned reasons stay local and continue to sync through addon auth snapshots.
+- Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, automatically append or remove `[GBMBL]` when officers save changes, and preserve the rest of the officer note text whenever the tag fits within Blizzard's 31-character note limit.
+- Crafted-quality rendering now normalizes the two-rank and max-rank atlas variants so Exports, Inventory, Minimums, Requests, and request details show the same visible tier symbols whether the source came from live scan data or fallback catalog/search data.
+- The appearance foundation is now live: local-only theme presets (`Current`, `Contrast`, `Horde`, `Alliance`, `Void`, `Adventurer`, `Moonglade`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
+- Appearance sliders now support direct slider interaction in addition to `+` / `-` stepping, and opening `Options` proactively reloads the current Guild Info auth policy before populating the visible auth controls.
+- Two-rank crafted items now stay on the shared visible chat-icon family across Inventory, Minimums, Requests, Exports, and the manual shopping list, and appearance sliders now stop dragging cleanly even when the mouse is released off the bar.
+- Sync now reports milestone chat feedback for login hello, accepted incoming updates, and ignored forged payloads without writing per-step noise into chat.
+- The shell now participates in top-level window ordering so other dragged addon or Blizzard UI can come above it, and clicking back onto the shell or its registered modals brings `GBankManager` back to the front.
+- The shell now defaults to a lower dialog stratum, keeps shared columns fitted inside the shell viewport, clamps shared table height so bottom action strips stay inside the window, hides zero-range scrollbars on Request Admin and Exports, applies modal opacity across Minimums and Exports workflow modals, keeps the top-bar scan plus status controls separated at smaller scales, and keeps the manual shopping list plus Auctionator export output aligned with the live product expectations.
+- The floating manual shopping list now lives independently from the main shell, survives tab switches and shell close, remembers its moved position locally, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot.
+- Dashboard `Top 5 Most Used` now ranks repeated shortage cycles from persisted snapshot history plus active Minimums rules before falling back to raw withdrawal totals when there is no stocking history yet.
+- `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering, with persisted results under `GBankManagerDB.testing.inGameUnit`.
+- `/gbm test smoke` now seeds deterministic request-access auth and clears stale request/minimum selector state before its gating checks, so live guild policy or leftover UI selections do not create false negatives. `/gbm test unit` also reloads the crafted-quality helper if the module registry lost it, matching the UI modules' existing fallback behavior.
+- `Options -> Auth` now includes a `Select All` helper for the compact policy string, and the smoke lane now exercises the live Minimums modal handoff plus a hard reset of request confirmed-selection state before its gating assertions.
+- Maintainers now have repo-local catalog status and deployment helpers plus `tools/catalog/Open-ItemCatalogMaintainer.ps1` for target selection, saved sync status, refresh, and deploying both addon folders into `Retail`, `PTR`, or `Beta`.
 
 ### Current Navigation
 
@@ -88,70 +113,24 @@
 
 Work these in the exact order below unless a new blocking regression appears:
 
-1. `Requests follow-up`
-   - Add a new permission that allows request deletion.
-   - Add a `Delete` workflow action in the request details popup.
+1. `UI polish`
+   - Continue the refinement pass on top of the landed appearance foundation.
+   - Expand icons carefully from collapsed-nav only into expanded nav and then selective action-strip buttons.
+   - Do the less-blocky pass: lighter panel treatment, tighter gaps, slimmer grouped controls, and calmer corners.
+   - Live-QA the new shell focus ordering against other draggable UI.
+   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the implementation shelf for tomorrow.
 
-2. `Exports follow-up`
-   - Inspect the Auctionator addon import path and verify the shopping-list string format is still correct for quantity and quality, not accidentally feeding min/max price slots.
-   - Rename the table column/value behavior to `Excess Stock`, with row output showing either `None` or the tab name with the highest excess quantity.
-   - Tighten the shared Exports column spacing so Bank Tab text does not overflow.
-   - Fix Exports tier rendering so it shows the crafted-quality icon instead of raw `0`.
+2. `In-game unit test lane`
+   - Live-verify the broadened `/gbm test unit` lane in retail after the automated lanes are green.
 
-3. `Request Admin follow-up`
-   - Highlight the active bottom filter button so the selected state is obvious.
-   - Right-align the bottom filter options in Request Admin.
-   - Add an `Add` button on the far left of the bottom action strip to launch the add-request workflow from Request Admin.
-   - Match the Request Admin table height to the shared table height used by the other major tabs.
-   - Fix the `Date Fulfilled` filter box so it no longer overflows off the right edge.
+3. `Dashboard follow-up only if live repro exists`
+   - Recheck the `Ready to Buy` mismatch against a real SavedVariables file or live client session.
+   - Do not change dashboard math unless the mismatch reproduces against current live data.
+   - If it does reproduce, add the dedicated `Critical Shortages` card with explicit ranking rules in that same dashboard pass.
 
-4. `Minimums follow-up`
-   - Split the `Enabled Only` / `All` toggle into two separate buttons.
-   - Highlight the active Minimums filter button.
-
-5. `Guild auth string follow-up`
-   - Add the Restock Default setting to the guild permission string stored in Guild Info.
-   - On addon load, preload the Options permission UI from the current Guild Info auth string so the panel reflects live stored policy data immediately.
-   - Update the blacklist text box guidance so it explicitly requires `Character-Server` formatting.
-   - Encode the last-updated person into the Guild Info policy string so the loaded policy metadata identifies the correct updater.
-   - Track permission-policy updates in History if that audit trail is not already present.
-   - Sync permission-policy update history cleanly between addon-enabled guild clients.
-
-6. `Dashboard investigation`
-   - Investigate why the dashboard `Ready to Buy` card reports 5 export rows while Exports currently shows 4.
-   - Inspect live addon/saved data first.
-   - If this is only stale local test data, clear or reset the local saved variables and do not implement a code change.
-   - Add a dedicated dashboard card for critical shortages when the dashboard slice is revisited, with clear ranking/selection rules so the card surfaces the most urgent shortages rather than a generic duplicate count.
-
-7. `Guild bank scan automation`
-   - Trigger a scan automatically when the guild bank opens.
-   - On subsequent opens, auto-scan only if at least 10 minutes have elapsed since the last scan.
-   - Keep manual scan support unchanged.
-
-8. `Communication and sync hardening`
-   - Review how the Guild Roster Manager addon handles addon-to-addon communication, conflict resolution, and authoritative winners.
-   - Use that research to strengthen GBankManager sync behavior for history, requests, and minimums.
-   - Include permission-policy history sync and authority rules in that same research-backed communication pass.
-   - Treat this as a product workflow slice, not just a transport-only change.
-
-9. `UI polish`
-   - Theme customization
-   - Resize / scale
-   - Spacing and gap cleanup
-   - Highlight the active nav button so the selected tab is obvious.
-   - Review the two-tier crafted-quality icon mapping and match the in-game convention where the lower tier uses the single silver diamond and the max tier uses the gold pentagon everywhere quality is shown.
-   - Revisit Window Transparency as slider-based controls instead of a simple toggle/input flow.
-   - Research how addons such as Deadly Boss Mods and Horizon Suite implement opacity sliders before building the control.
-   - Support separate opacity settings for the main shell and for modal popup windows so they can be tuned independently.
-
-10. `In-game unit test lane`
-   - Build out unit tests that can be run in-game through the unit test addon.
-
-11. `Maintainer deployment and sync UI`
-   - Fully document the maintainer deployment and usage workflow.
-   - Build a small maintainer-facing UI for the catalog/deployment pipeline.
-   - It should allow choosing the WoW target path for `Retail`, `PTR`, or `Beta`.
-   - It should show current status, last sync time, and the WoW patch/build the catalog was synced from.
+4. `Deeper sync catch-up only if needed`
+   - If live guild testing still shows gaps, add direct minimum delta sync plus richer `SYNC_HELLO` catch-up behavior.
+   - Keep using authoritative entity mutations and locally rebuilt history rather than shipping `auditLog` wholesale.
 
 ## Completed In Current Slice
 
@@ -170,15 +149,29 @@ Work these in the exact order below unless a new blocking regression appears:
 - Exports regression coverage now spans `exports_spec` and `ui_exports_spec`, including highest-quantity excess-stock labeling, CSV output, Auctionator scoped output, TSM item-ID output, copy-guidance feedback, nested-box removal, and the manual shopping-list modal.
 - Export modal regression coverage now also verifies that the output surface is a real scrollable edit box, that `Select All` focuses it, rewinds the cursor, and highlights the full output for manual `Ctrl+C`.
 - Minimums regression coverage now includes unresolved `GLOBAL` row ordering, orange highlighting, editable Bank Tab recovery, save-time validation blocking, and approved-request self-heal when a bank tab already exists but the minimum binding is missing.
+- Request deletion regression coverage now spans auth, auth-source, request-domain, sync, and request-UI specs.
+- Request Admin regression coverage now also covers active-filter highlighting, far-left `Add`, right-aligned filters, and shared-height sizing.
+- Minimums regression coverage now also covers the split `Enabled Only` and `Show All` filter buttons plus active-state highlighting.
+- Auth policy regression coverage now spans auth-source, auth, options UI, sync, history, and officer-note blacklist specs for Restock Default propagation, Guild Info updater metadata, Guild Info blacklist removal, officer-note tag writes, blacklist input normalization, and visible auth-policy history rows.
+- Scanner regression coverage now spans unit and sync specs for guild-bank-open auto-scan throttling plus the new `GUILDBANKFRAME_OPENED` event adapter.
+- Sync-hardening regression coverage now spans request history parity on receiving clients, authority-first request conflict resolution, and approved-request minimum recreation on receiving clients.
+- Appearance regression coverage now spans `ui_shell_spec`, `ui_options_spec`, and `live_smoke_spec` for theme presets, shell scale, table density, split shell-vs-modal opacity controls, active-state glow, collapsed-nav icons, and shell-top-level focus behavior.
+- Appearance and crafted-quality regression coverage now also spans shared two-rank icon normalization plus slider drag-release behavior in `inventory_quality_spec`, `ui_table_spec`, `ui_exports_spec`, `ui_minimums_spec`, `ui_requests_spec`, and `ui_options_spec`.
+- Auth regression coverage now also spans compact updater-hash policy encoding plus legacy blacklist-key normalization.
+- Dashboard regression coverage now spans `dashboard_spec` for zero-shortage `Ready to Buy` counting and shortage-cycle ranking in `Top 5 Most Used`.
+- Sync regression coverage now also includes milestone chat feedback for hello, accepted sync, and ignored forged payloads.
+- In-game unit-lane regression coverage now spans `in_game_unit_spec.lua` plus `store_spec.lua` for slash availability, persistence, chat output, the saved-variables shape of `testing.inGameUnit`, blacklist normalization, officer queue prioritization, and unresolved minimum repair-row ordering.
+- Live-smoke regression coverage now also verifies deterministic behavior when ambient auth policy denies raider request submission and when stale request/minimum selector state existed before the smoke run.
+- Live-smoke and options regression coverage now also verify the policy-string `Select All` affordance, the current modal-driven Minimums staging flow, and successful request creation after the gating check clears stale selector state.
+- Maintainer tooling regression coverage now spans `item_catalog_maintainer_spec.lua` for the status adapter and deployment helper, and the repo now ships `Open-ItemCatalogMaintainer.ps1` as the small local maintainer-facing launcher over the catalog pipeline.
 
 ## Immediate Engineering Focus
 
 When resuming, begin with the next roadmap item unless the user explicitly redirects:
 
-1. Start with the request and export follow-up block before broader UI polish.
-2. Investigate the dashboard export-row mismatch against live saved data before writing a code fix.
-3. Fold Guild Roster Manager communication research into the sync-hardening phase rather than treating sync as a blind transport-only task.
-4. Keep the admin `Request Admin` surface focused on officer/guildmaster management.
+1. Start with the shelved UI polish pass in [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md), but keep it as a deliberate implementation pass rather than ad hoc visual edits.
+2. Keep the dashboard `Ready to Buy` mismatch as a live-repro-only follow-up unless real current data proves it is a product bug.
+3. If more sync work is still needed after live guild testing, extend catch-up and direct minimum delta sync without abandoning the current authority-first approach.
 
 ## Important Constraints
 
@@ -205,15 +198,8 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume with the new pre-polish roadmap block:
-> 1. Requests delete permission plus popup delete action
-> 2. Exports Auctionator format verification plus Exports column/icon follow-ups
-> 3. Request Admin active-filter highlight
-> 4. Minimums split filter buttons plus active highlight
-> 5. Restock Default in guild permission string plus Options-page preload from Guild Info
->    and policy metadata/history sync follow-ups
-> 6. Dashboard `Ready to Buy` mismatch investigation
-> 7. Guild-bank-open auto-scan with 10-minute throttle
-> 8. Communication and sync hardening informed by Guild Roster Manager research
->
-> After that block, continue with broader UI polish, the in-game unit-test lane, and finally the maintainer deployment/status UI.
+> Resume with the post-workflow roadmap:
+> 1. Implement the shelved UI polish pass using `docs/ui-polish-suggestions.md`
+> 2. Live-verify the broadened `/gbm test unit` lane in retail
+> 3. Only revisit the dashboard `Ready to Buy` mismatch if a live SavedVariables repro exists
+> 4. Only broaden sync catch-up beyond the current request/history/auth slice if live guild testing still shows gaps

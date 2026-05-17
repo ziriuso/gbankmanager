@@ -4,14 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local minimumsView = ns.modules.minimumsView or {}
-
-local QUALITY_RANK_BY_ATLAS = {
-    ["Professions-ChatIcon-Quality-Tier1"] = 1,
-    ["Professions-ChatIcon-Quality-Tier2"] = 2,
-    ["Professions-ChatIcon-Quality-Tier3"] = 3,
-    ["Professions-ChatIcon-Quality-Tier4"] = 4,
-    ["Professions-ChatIcon-Quality-Tier5"] = 5,
-}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function copy_columns(columns)
     local out = {}
@@ -65,6 +61,9 @@ local function normalize_rule(rule, previous)
         scope = scope,
         tabName = tabName,
         enabled = enabled,
+        updatedAt = rule.updatedAt or previous.updatedAt,
+        updatedBy = rule.updatedBy or previous.updatedBy,
+        updatedByRankIndex = rule.updatedByRankIndex ~= nil and rule.updatedByRankIndex or previous.updatedByRankIndex,
         craftedQuality = rule.craftedQuality or previous.craftedQuality,
         craftedQualityIcon = rule.craftedQualityIcon or previous.craftedQualityIcon,
         draftKey = rule.draftKey or previous.draftKey,
@@ -76,6 +75,10 @@ local function normalize_rule(rule, previous)
 end
 
 local function crafted_quality_markup(atlasName)
+    if type(craftedQuality.ToMarkup) == "function" then
+        return craftedQuality.ToMarkup(atlasName, 22)
+    end
+
     if atlasName == nil or atlasName == "" then
         return ""
     end
@@ -86,15 +89,11 @@ end
 local function crafted_quality_rank(item)
     item = item or {}
 
-    local atlasName = tostring(item.craftedQualityIcon or "")
-    if QUALITY_RANK_BY_ATLAS[atlasName] ~= nil then
-        return QUALITY_RANK_BY_ATLAS[atlasName]
-    end
-
-    local tierText = string.match(atlasName, "[Tt]ier%s*[_%-]?(%d+)")
-    local parsedTier = tonumber(tierText or "")
-    if parsedTier and parsedTier >= 1 and parsedTier <= 5 then
-        return parsedTier
+    if type(craftedQuality.ParseTier) == "function" then
+        local parsedTier = craftedQuality.ParseTier(item.craftedQualityIcon, item.craftedQuality)
+        if parsedTier > 0 then
+            return parsedTier
+        end
     end
 
     local quality = tonumber(item.craftedQuality or 0) or 0
@@ -350,6 +349,9 @@ function minimumsView.UpsertWithAudit(db, rule, metadata)
     end
 
     local normalizedRule = normalize_rule(rule, previous)
+    normalizedRule.updatedAt = metadata.timestamp or normalizedRule.updatedAt or _G.time()
+    normalizedRule.updatedBy = metadata.actor or normalizedRule.updatedBy or "Unknown"
+    normalizedRule.updatedByRankIndex = metadata.actorRankIndex ~= nil and metadata.actorRankIndex or normalizedRule.updatedByRankIndex
     if previousIndex ~= nil then
         db.minimums[previousIndex] = normalizedRule
     else
@@ -368,6 +370,37 @@ function minimumsView.UpsertWithAudit(db, rule, metadata)
     })
 
     return db.minimums
+end
+
+function minimumsView.SaveForApprovedRequest(db, request, bankTab, metadata)
+    db = db or {}
+    request = request or {}
+    metadata = metadata or {}
+
+    local itemID = tonumber(request.itemID)
+    local itemName = tostring(request.itemName or "")
+    local quantity = tonumber(request.quantity)
+    bankTab = tostring(bankTab or "")
+    if not itemID or itemName == "" or not quantity or quantity <= 0 or bankTab == "" then
+        return nil
+    end
+
+    local rule = {
+        itemID = itemID,
+        itemName = itemName,
+        quantity = quantity,
+        scope = "TAB",
+        tabName = bankTab,
+        enabled = true,
+        craftedQuality = request.craftedQuality,
+        craftedQualityIcon = request.craftedQualityIcon,
+    }
+
+    minimumsView.UpsertWithAudit(db, rule, metadata)
+    request.minimumRuleKey = table.concat({ tostring(itemID), "TAB", bankTab }, "|")
+    request.tabName = bankTab
+    request.approvedBankTab = bankTab
+    return rule
 end
 
 function minimumsView.SetEnabledWithAudit(db, rule, enabled, metadata)

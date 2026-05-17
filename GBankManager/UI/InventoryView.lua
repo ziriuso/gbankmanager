@@ -4,25 +4,14 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local inventoryView = ns.modules.inventoryView or {}
-
-local QUALITY_RANK_BY_ATLAS = {
-    ["Professions-ChatIcon-Quality-Tier1"] = 1,
-    ["Professions-ChatIcon-Quality-Tier2"] = 2,
-    ["Professions-ChatIcon-Quality-Tier3"] = 3,
-    ["Professions-ChatIcon-Quality-Tier4"] = 4,
-    ["Professions-ChatIcon-Quality-Tier5"] = 5,
-}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function crafted_quality_icon_text(icon)
-    if type(icon) == "table" then
-        for _, key in ipairs({ "atlas", "iconInventory", "iconMixed", "iconChat", "iconSmall", "icon", "texture", "markup" }) do
-            local nested = crafted_quality_icon_text(icon[key])
-            if nested ~= "" then
-                return nested
-            end
-        end
-
-        return ""
+    if type(craftedQuality.GetIconText) == "function" then
+        return craftedQuality.GetIconText(icon)
     end
 
     if icon == nil then
@@ -33,6 +22,10 @@ local function crafted_quality_icon_text(icon)
 end
 
 local function crafted_quality_markup(icon)
+    if type(craftedQuality.ToMarkup) == "function" then
+        return craftedQuality.ToMarkup(icon, 22)
+    end
+
     local atlasName = crafted_quality_icon_text(icon)
     if atlasName == "" then
         return ""
@@ -46,22 +39,11 @@ local function crafted_quality_markup(icon)
 end
 
 local function parsed_quality_tier(icon)
-    local atlasName = crafted_quality_icon_text(icon)
-    if QUALITY_RANK_BY_ATLAS[atlasName] ~= nil then
-        return QUALITY_RANK_BY_ATLAS[atlasName]
-    end
-
-    local tierText = string.match(atlasName, "[Tt]ier%s*[_%-]?(%d+)")
-    if tierText == nil then
-        tierText = string.match(atlasName, "[Qq]uality%s*[_%-]?(%d+)")
-    end
-    if tierText == nil then
-        tierText = string.match(atlasName, "[Rr]ank%s*[_%-]?(%d+)")
-    end
-
-    local parsedTier = tonumber(tierText or "")
-    if parsedTier and parsedTier >= 1 and parsedTier <= 5 then
-        return parsedTier
+    if type(craftedQuality.ParseTier) == "function" then
+        local parsedTier = craftedQuality.ParseTier(icon, 0)
+        if parsedTier > 0 then
+            return parsedTier
+        end
     end
 
     return nil

@@ -20,7 +20,9 @@ function defaults.CreateDefaultAuthPolicy()
         revision = 0,
         updatedAt = 0,
         updatedBy = "",
+        updatedByHash = nil,
         updatedByRankIndex = nil,
+        restockDefault = nil,
         guildPolicyString = "",
         guildPolicySource = "local",
         rankMetadata = {},
@@ -36,9 +38,12 @@ function defaults.CreateDefaultAuthPolicy()
             minimum_edit = {},
             minimum_delete = {},
             auth_manage = {},
+            request_delete = {},
         },
         blacklist = {},
         blacklistHashes = {},
+        blacklistDirectory = {},
+        blacklistRosterDirectory = {},
     }
 end
 
@@ -61,6 +66,13 @@ function defaults.CreateDatabase(guildName)
         auth = defaults.CreateDefaultAuthPolicy(),
         ui = {
             inventoryColumnWidths = {},
+            appearance = {
+                themePreset = "default",
+                shellScale = 1,
+                tableDensity = 1,
+                shellOpacity = 0.96,
+                modalOpacity = 1,
+            },
             minimumSettings = {
                 defaultQuantity = 100,
             },
@@ -69,6 +81,7 @@ function defaults.CreateDatabase(guildName)
                 selectedPreset = "Spreadsheet",
                 shoppingListName = "GBankManager",
                 customTemplate = defaults.CreateDefaultExportTemplate(),
+                manualShoppingListPosition = nil,
             },
         },
         syncState = {
@@ -76,6 +89,12 @@ function defaults.CreateDatabase(guildName)
         },
         testing = {
             liveSmoke = {
+                runAt = 0,
+                status = "NEVER",
+                summary = "",
+                results = {},
+            },
+            inGameUnit = {
                 runAt = 0,
                 status = "NEVER",
                 summary = "",

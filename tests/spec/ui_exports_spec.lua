@@ -38,7 +38,7 @@ _G.GBankManagerDB = {
     },
     minimums = {
         { itemID = 1001, itemName = "Flask Alpha", quantity = 5, scope = "TAB", tabName = "Raid Buffer", enabled = true },
-        { itemID = 2002, itemName = "Potion Beta", quantity = 3, scope = "TAB", tabName = "Raid Buffer", enabled = true },
+        { itemID = 2002, itemName = "Potion Beta", quantity = 3, scope = "TAB", tabName = "Raid Buffer", enabled = true, craftedQuality = 2, craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2" },
     },
     requests = {},
     auditLog = {},
@@ -49,12 +49,16 @@ mainFrame:SelectView("EXPORTS")
 assert.truthy(mainFrame.exportsPanel:IsShown(), "exports should expose a bottom action strip")
 assert.same(mainFrame.tableViewportFrame, (mainFrame.exportsPanel.points[1] or {})[2], "exports buttons should sit below the table viewport")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "exports table should start with Item ID")
-assert.equal("Item Tier", mainFrame.tableHeaderLabels[2]:GetText(), "exports table should show Item Tier")
+assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "exports table should label the crafted-quality column as Tier")
 assert.equal("Item Name", mainFrame.tableHeaderLabels[3]:GetText(), "exports table should show Item Name")
 assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "exports table should show Bank Tab")
 assert.equal("Amount to Stock", mainFrame.tableHeaderLabels[5]:GetText(), "exports table should show Amount to Stock")
-assert.equal("Excess Stock In", mainFrame.tableHeaderLabels[6]:GetText(), "exports table should show the highest-quantity excess-stock tab")
+assert.equal("Excess Stock", mainFrame.tableHeaderLabels[6]:GetText(), "exports table should show the highest-quantity excess-stock tab")
+assert.truthy((mainFrame.tableColumnLayout[6].width or 0) >= 120, "exports should give Excess Stock enough width for longer tab names")
 assert.equal("Freebiez", mainFrame.tableRowsData[1].excessStockIn, "exports rows should name the other guild-bank tab with excess stock")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier3:22:22|a", mainFrame.tableRowsData[1].itemTier, "exports rows should show the crafted-quality icon instead of a raw tier number")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.tableRowsData[2].itemTier, "exports rows should normalize two-rank fallback icons even when the item has no live stock snapshot")
+assert.truthy((mainFrame.tableColumnLayout[2].width or 0) >= 56 and (mainFrame.tableColumnLayout[2].width or 0) <= 60, "exports should keep the Tier column compact to give text columns more room")
 assert.truthy(not mainFrame.exportPresetCustomButton:IsShown(), "exports should remove the custom option")
 assert.truthy(mainFrame.exportPresetTsmButton:IsShown(), "exports should expose a TSM item-id import option when supported")
 mainFrame:OpenExportStockedElsewhereModal(mainFrame.tableRowsData[1])
@@ -68,12 +72,11 @@ assert.truthy(mainFrame.exportModalBuyAllButton:IsShown(), "auctionator export s
 assert.truthy(mainFrame.exportModalMissingOnlyButton:IsShown(), "auctionator export should offer skipping items available in another tab")
 assert.equal("Not In Guild Bank", mainFrame.exportModalMissingOnlyButton.labelText:GetText(), "auctionator export should label the missing-only path the same way as the exports table")
 mainFrame.exportModalMissingOnlyButton:GetScript("OnClick")(mainFrame.exportModalMissingOnlyButton)
-assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "Potion Beta", 1, true) ~= nil, "auctionator missing-only output should include unavailable rows")
-assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "Flask Alpha", 1, true) == nil, "auctionator missing-only output should exclude rows stocked elsewhere")
+assert.equal("GBankManager^Potion Beta", mainFrame.exportModalOutputInput:GetText(), "auctionator missing-only output should use the current import format and exclude stocked-elsewhere rows")
 
 mainFrame.exportPresetSpreadsheetButton:GetScript("OnClick")(mainFrame.exportPresetSpreadsheetButton)
 assert.truthy(mainFrame.exportModalOutputInput:IsShown(), "csv export should show the output box immediately")
-assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "Item ID,Item Tier,Item Name,Bank Tab,Amount to Stock,Excess Stock In", 1, true) ~= nil, "csv export should include the visible table header row")
+assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "Item ID,Tier,Item Name,Bank Tab,Amount to Stock,Excess Stock", 1, true) ~= nil, "csv export should include the visible table header row")
 assert.truthy(type(mainFrame.exportModalOutputInput.EditBox) == "table", "export modal should use a real scrollable edit box for manual selection")
 assert.truthy(type(mainFrame.exportModalOutputInput.EditBox:GetScript("OnTextChanged")) == "function", "export modal should bind text-change sizing on the embedded edit box")
 assert.equal(nil, mainFrame.exportModalScrollFrame.backdrop, "export modal should remove the nested scroll-frame box around the output")
@@ -100,10 +103,27 @@ mainFrame.exportManualShoppingListButton:GetScript("OnClick")(mainFrame.exportMa
 assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should open in a separate modal")
 assert.truthy(mainFrame.exportManualShoppingListModal.mouseEnabled == true, "manual shopping list modal should be draggable")
 assert.equal("LeftButton", (mainFrame.exportManualShoppingListModal.dragButtons or {})[1], "manual shopping list modal should register left-button dragging")
+assert.equal(_G.UIParent, mainFrame.exportManualShoppingListModal.parent, "manual shopping list should live on UIParent so it can stay open independently of the shell")
 assert.equal("Check off purchases as you work through the list. Does not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should explain that it is a one-session helper only")
 assert.truthy(#(mainFrame.exportManualShoppingListRows or {}) >= 2, "manual shopping list should build one checklist row per purchase row")
 local manualShoppingRow = (mainFrame.exportManualShoppingListRows or {})[1]
+assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "|A:", 1, true) ~= nil, "manual shopping list rows should render the crafted-quality icon inline")
+assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "T3", 1, true) == nil, "manual shopping list rows should stop falling back to raw T-tier text")
+local missingSnapshotRow = (mainFrame.exportManualShoppingListRows or {})[2]
+assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions%-ChatIcon%-Quality%-Tier2", 1) ~= nil, "manual shopping list rows should normalize low-tier fallback icons for items without live stock")
 assert.equal("", manualShoppingRow.checkButton.labelText:GetText(), "unchecked manual shopping rows should use an empty checkbox instead of bracket text")
 manualShoppingRow.checkButton:GetScript("OnClick")(manualShoppingRow.checkButton)
 assert.equal("x", manualShoppingRow.checkButton.labelText:GetText(), "checked manual shopping rows should use a simple x inside the checkbox")
 assert.truthy(manualShoppingRow.strikeLine:IsShown(), "checking a manual shopping list row should strike it through for the current session")
+mainFrame:SelectView("DASHBOARD")
+assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should stay open when switching tabs")
+mainFrame.exportManualShoppingListModal:ClearAllPoints()
+mainFrame.exportManualShoppingListModal:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", 40, -60)
+mainFrame:PersistManualShoppingListPosition()
+mainFrame.exportManualShoppingListModal:ClearAllPoints()
+mainFrame:RestoreManualShoppingListPosition()
+assert.equal(40, select(4, mainFrame.exportManualShoppingListModal:GetPoint(1)), "manual shopping list should restore its saved horizontal position")
+assert.equal(-60, select(5, mainFrame.exportManualShoppingListModal:GetPoint(1)), "manual shopping list should restore its saved vertical position")
+mainFrame.closeButton:GetScript("OnClick")(mainFrame.closeButton)
+assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should stay visible when the main addon shell closes")
+assert.truthy(not mainFrame.tableScrollBar:IsShown(), "exports should keep the shared table scrollbar hidden when the export rows fit without scrolling")

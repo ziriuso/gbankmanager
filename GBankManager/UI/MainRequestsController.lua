@@ -4,6 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local mainRequestsController = ns.modules.mainRequestsController or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function current_db()
     local store = ns.modules.store or ns.data.store
@@ -61,6 +65,11 @@ local function actor_summary(context)
 end
 
 local function crafted_quality_markup(atlasName)
+    if type(craftedQuality.ToMarkup) == "function" then
+        local markup = craftedQuality.ToMarkup(atlasName, 22)
+        return markup ~= "" and markup or "-"
+    end
+
     if atlasName == nil or atlasName == "" then
         return "-"
     end
@@ -178,12 +187,40 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestAdminFilterPanel:Hide()
 
     mainFrame.requestAdminFilterMode = mainFrame.requestAdminFilterMode or "ALL"
-    mainFrame.requestAdminFilterAllButton = mainFrame.requestAdminFilterAllButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "All")
-    mainFrame.requestAdminFilterAllButton:SetPoint("BOTTOMLEFT", mainFrame.requestAdminFilterPanel, "BOTTOMLEFT", 16, 30)
-    mainFrame.requestAdminFilterPendingApprovalButton = mainFrame.requestAdminFilterPendingApprovalButton or makeButton(mainFrame.requestAdminFilterPanel, 134, 28, "Pending Approval")
-    mainFrame.requestAdminFilterPendingApprovalButton:SetPoint("LEFT", mainFrame.requestAdminFilterAllButton, "RIGHT", 8, 0)
+    mainFrame.requestAdminAddButton = mainFrame.requestAdminAddButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "Add")
+    mainFrame.requestAdminAddButton:SetPoint("BOTTOMLEFT", mainFrame.requestAdminFilterPanel, "BOTTOMLEFT", 16, 30)
+
     mainFrame.requestAdminFilterPendingFulfillmentButton = mainFrame.requestAdminFilterPendingFulfillmentButton or makeButton(mainFrame.requestAdminFilterPanel, 152, 28, "Pending Fulfillment")
-    mainFrame.requestAdminFilterPendingFulfillmentButton:SetPoint("LEFT", mainFrame.requestAdminFilterPendingApprovalButton, "RIGHT", 8, 0)
+    mainFrame.requestAdminFilterPendingFulfillmentButton:SetPoint("BOTTOMRIGHT", mainFrame.requestAdminFilterPanel, "BOTTOMRIGHT", -16, 30)
+    mainFrame.requestAdminFilterPendingApprovalButton = mainFrame.requestAdminFilterPendingApprovalButton or makeButton(mainFrame.requestAdminFilterPanel, 134, 28, "Pending Approval")
+    mainFrame.requestAdminFilterPendingApprovalButton:SetPoint("RIGHT", mainFrame.requestAdminFilterPendingFulfillmentButton, "LEFT", -8, 0)
+    mainFrame.requestAdminFilterAllButton = mainFrame.requestAdminFilterAllButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "All")
+    mainFrame.requestAdminFilterAllButton:SetPoint("RIGHT", mainFrame.requestAdminFilterPendingApprovalButton, "LEFT", -8, 0)
+
+    local function set_filter_button_visual(button, active)
+        if not button then
+            return
+        end
+
+        button.filterActive = active == true
+        applyPanelStyle(button, button.filterActive and theme.colors.accent or theme.colors.panel)
+        if type(button.SetBackdropBorderColor) == "function" then
+            if button.filterActive then
+                button:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
+            else
+                button:SetBackdropBorderColor(unpack(theme.colors.border))
+            end
+        end
+        if button.labelText and type(button.labelText.SetTextColor) == "function" then
+            button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+        end
+    end
+
+    function mainFrame:RefreshRequestAdminFilterButtons()
+        set_filter_button_visual(self.requestAdminFilterAllButton, self.requestAdminFilterMode == "ALL")
+        set_filter_button_visual(self.requestAdminFilterPendingApprovalButton, self.requestAdminFilterMode == "PENDING_APPROVAL")
+        set_filter_button_visual(self.requestAdminFilterPendingFulfillmentButton, self.requestAdminFilterMode == "PENDING_FULFILLMENT")
+    end
 
     mainFrame.requestWorkflowPanel = mainFrame.requestWorkflowPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.requestWorkflowPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -218,6 +255,9 @@ function mainRequestsController.Attach(mainFrame, options)
         mainFrame.requestWizardModal:SetBackdropColor(0, 0, 0, 1)
     end
     mainFrame.requestWizardModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.requestWizardModal, 22, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.requestWizardTitle = mainFrame.requestWizardTitle or makeLabel(mainFrame.requestWizardModal, "New Request", "GameFontHighlight")
     mainFrame.requestWizardTitle:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 16, -16)
@@ -295,6 +335,9 @@ function mainRequestsController.Attach(mainFrame, options)
         mainFrame.requestDetailsModal:SetBackdropColor(0, 0, 0, 1)
     end
     mainFrame.requestDetailsModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.requestDetailsModal, 24, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.requestDetailsTitle = mainFrame.requestDetailsTitle or makeLabel(mainFrame.requestDetailsModal, "Request Details", "GameFontHighlight")
     mainFrame.requestDetailsTitle:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 16, -16)
@@ -388,6 +431,9 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsReopenButton:SetPoint("LEFT", mainFrame.requestDetailsFulfillButton, "RIGHT", 8, 0)
     mainFrame.requestDetailsCancelRequestButton = mainFrame.requestDetailsCancelRequestButton or makeButton(mainFrame.requestDetailsModal, 96, 26, "Cancel Request")
     mainFrame.requestDetailsCancelRequestButton:SetPoint("LEFT", mainFrame.requestDetailsReopenButton, "RIGHT", 8, 0)
+
+    mainFrame.requestDetailsDeleteButton = mainFrame.requestDetailsDeleteButton or makeButton(mainFrame.requestDetailsModal, 66, 26, "Delete")
+    mainFrame.requestDetailsDeleteButton:SetPoint("LEFT", mainFrame.requestDetailsCancelRequestButton, "RIGHT", 8, 0)
 
     mainFrame.requestDetailsCloseButton = mainFrame.requestDetailsCloseButton or makeButton(mainFrame.requestDetailsModal, 72, 28, "Close")
     mainFrame.requestDetailsCloseButton:SetPoint("TOPRIGHT", mainFrame.requestDetailsModal, "TOPRIGHT", -24, -366)
@@ -638,37 +684,15 @@ function mainRequestsController.Attach(mainFrame, options)
     function mainFrame:SaveMinimumForApprovedRequest(request, bankTab, actor)
         local minimumsView = ns.modules.minimumsView
         local db = current_db()
-        if type(minimumsView) ~= "table" or type(minimumsView.UpsertWithAudit) ~= "function" then
+        if type(minimumsView) ~= "table" or type(minimumsView.SaveForApprovedRequest) ~= "function" then
             return nil
         end
 
-        local itemID = tonumber((request or {}).itemID)
-        local itemName = tostring((request or {}).itemName or "")
-        local quantity = tonumber((request or {}).quantity)
-        bankTab = tostring(bankTab or "")
-        if not itemID or itemName == "" or not quantity or quantity <= 0 or bankTab == "" then
-            return nil
-        end
-
-        local rule = {
-            itemID = itemID,
-            itemName = itemName,
-            quantity = quantity,
-            scope = "TAB",
-            tabName = bankTab,
-            enabled = true,
-            craftedQuality = request.craftedQuality,
-            craftedQualityIcon = request.craftedQualityIcon,
-        }
-
-        minimumsView.UpsertWithAudit(db, rule, {
+        return minimumsView.SaveForApprovedRequest(db, request, bankTab, {
             actor = actor_summary(actor):gsub("^Acting As: ", ""),
+            actorRankIndex = type(actor) == "table" and actor.guildRankIndex or nil,
             timestamp = request.decidedAt or (_G.time and _G.time() or 0),
         })
-        request.minimumRuleKey = table.concat({ tostring(itemID), "TAB", bankTab }, "|")
-        request.tabName = bankTab
-        request.approvedBankTab = bankTab
-        return rule
     end
 
     function mainFrame:SelfHealApprovedRequestMinimums(db)
@@ -756,9 +780,11 @@ function mainRequestsController.Attach(mainFrame, options)
         local policy = current_policy(db)
         local requestsModule = ns.modules.requests
         local canActorApply = requestsModule and type(requestsModule.CanActorApplyAction) == "function" and requestsModule.CanActorApplyAction or nil
-        local canApprove = can(context, "request_approve", policy) and (not canActorApply or canActorApply(request, "APPROVE", context))
-        local canReject = can(context, "request_reject", policy) and (not canActorApply or canActorApply(request, "REJECT", context))
-        local canReopen = can(context, "request_reopen", policy) and (not canActorApply or canActorApply(request, "REOPEN", context))
+        local allowAdminWorkflow = self.requestOnlyMode ~= true
+        local canApprove = allowAdminWorkflow and can(context, "request_approve", policy) and (not canActorApply or canActorApply(request, "APPROVE", context))
+        local canReject = allowAdminWorkflow and can(context, "request_reject", policy) and (not canActorApply or canActorApply(request, "REJECT", context))
+        local canReopen = allowAdminWorkflow and can(context, "request_reopen", policy) and (not canActorApply or canActorApply(request, "REOPEN", context))
+        local canDelete = allowAdminWorkflow and can(context, "request_delete", policy) and (not canActorApply or canActorApply(request, "DELETE", context))
         local canCancel = actor_owns_request(request, context) and (not canActorApply or canActorApply(request, "CANCEL", context))
 
         self.requestDetailsItemNameText:SetText(tostring(request.itemName or ""))
@@ -792,6 +818,7 @@ function mainRequestsController.Attach(mainFrame, options)
         show_action_button(self.requestDetailsFulfillButton, false)
         show_action_button(self.requestDetailsReopenButton, canReopen)
         show_action_button(self.requestDetailsCancelRequestButton, canCancel)
+        show_action_button(self.requestDetailsDeleteButton, canDelete)
         local needsDecisionNote = canApprove or canReject or canCancel
         set_shown(self.requestDetailsActionNoteLabel, needsDecisionNote)
         set_shown(self.requestDetailsActionNoteInput, needsDecisionNote)
@@ -972,6 +999,7 @@ function mainRequestsController.Attach(mainFrame, options)
 
     function mainFrame:SetRequestAdminFilterMode(mode)
         self.requestAdminFilterMode = tostring(mode or "ALL")
+        self:RefreshRequestAdminFilterButtons()
         if self.activeView == "REQUESTS" and self.requestOnlyMode ~= true then
             self:RefreshView()
         end
@@ -1011,6 +1039,8 @@ function mainRequestsController.Attach(mainFrame, options)
             request = requestsModule.ReopenStored(db, request.requestId, actor, _G.time())
         elseif action == "CANCEL" and type(requestsModule.CancelStored) == "function" then
             request = requestsModule.CancelStored(db, request.requestId, actor, note, _G.time())
+        elseif action == "DELETE" and type(requestsModule.DeleteStored) == "function" then
+            request = requestsModule.DeleteStored(db, request.requestId, actor, note, _G.time())
         else
             return nil
         end
@@ -1025,7 +1055,9 @@ function mainRequestsController.Attach(mainFrame, options)
             self.requestDetailsActionNoteInput:SetText("")
         end
         self.requestActionStatusText:SetText(string.format("%s updated.", tostring(request.itemName or "Request")))
-        if request and requestsModule then
+        if action == "DELETE" then
+            self.selectedRequestId = nil
+        elseif request and requestsModule then
             self.selectedRequestId = request.requestId
         end
         if action == "APPROVE" then
@@ -1045,8 +1077,10 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self:RefreshRequestActionButtons()
         self:RefreshView()
-        if wasDetailsOpen then
+        if wasDetailsOpen and action ~= "DELETE" then
             self:OpenRequestDetailsModal(request.requestId)
+        elseif action == "DELETE" and self.requestDetailsModal then
+            self.requestDetailsModal:Hide()
         end
         return request
     end
@@ -1221,6 +1255,10 @@ function mainRequestsController.Attach(mainFrame, options)
         mainFrame:SetRequestAdminFilterMode("PENDING_FULFILLMENT")
     end)
 
+    mainFrame.requestAdminAddButton:SetScript("OnClick", function()
+        mainFrame:OpenRequestWizard()
+    end)
+
     mainFrame.requestCreateButton:SetScript("OnClick", function()
         mainFrame:CreateRequestFromEditor()
     end)
@@ -1272,6 +1310,12 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsCancelRequestButton:SetScript("OnClick", function()
         mainFrame:ApplyRequestAction("CANCEL")
     end)
+
+    mainFrame.requestDetailsDeleteButton:SetScript("OnClick", function()
+        mainFrame:ApplyRequestAction("DELETE")
+    end)
+
+    mainFrame:RefreshRequestAdminFilterButtons()
 
     return mainFrame
 end

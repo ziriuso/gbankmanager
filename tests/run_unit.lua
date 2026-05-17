@@ -14,6 +14,7 @@ local specs = {
     "tests/spec/auth_source_spec.lua",
     "tests/spec/exports_spec.lua",
     "tests/spec/history_spec.lua",
+    "tests/spec/dashboard_spec.lua",
     "tests/spec/inventory_quality_spec.lua",
     "tests/spec/planning_spec.lua",
     "tests/spec/requests_spec.lua",
@@ -23,6 +24,7 @@ local specs = {
     "tests/spec/item_catalog_target_spec.lua",
     "tests/spec/item_catalog_extract_spec.lua",
     "tests/spec/item_catalog_merge_spec.lua",
+    "tests/spec/item_catalog_maintainer_spec.lua",
 }
 
 runner.run_specs(specs)

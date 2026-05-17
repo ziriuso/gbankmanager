@@ -72,6 +72,137 @@ local function with_guild_rank(name, zeroBasedIndex, callback)
     return value
 end
 
+local function deep_copy(value, seen)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    seen = seen or {}
+    if seen[value] then
+        return seen[value]
+    end
+
+    local clone = {}
+    seen[value] = clone
+    for key, nestedValue in pairs(value) do
+        clone[deep_copy(key, seen)] = deep_copy(nestedValue, seen)
+    end
+
+    return clone
+end
+
+local function deterministic_request_access_auth()
+    local permissions = ns.modules.permissions or {}
+    local auth = type(permissions.CreateDefaultPolicy) == "function" and permissions.CreateDefaultPolicy() or {
+        capabilities = {},
+        blacklist = {},
+        blacklistHashes = {},
+    }
+
+    auth.capabilities = auth.capabilities or {}
+    auth.capabilities.full_ui = auth.capabilities.full_ui or {}
+    auth.capabilities.request_submit = {}
+    auth.blacklist = auth.blacklist or {}
+    auth.blacklistHashes = auth.blacklistHashes or {}
+    return auth
+end
+
+local function with_temporary_auth(db, auth, callback)
+    local original = deep_copy((db or {}).auth)
+    db.auth = deep_copy(auth)
+
+    local ok, value = pcall(callback)
+    db.auth = original
+    if not ok then
+        error(value)
+    end
+
+    return value
+end
+
+local function reset_request_editor_state(mainFrame)
+    if not mainFrame then
+        return
+    end
+
+    mainFrame.requestOnlyMode = false
+    mainFrame.selectedRequestId = nil
+    mainFrame.requestCreateSelectedCatalogItem = nil
+    mainFrame.requestCreateUserMessage = nil
+    mainFrame.requestSearchSession = nil
+
+    if mainFrame.requestDetailsModal then
+        mainFrame.requestDetailsModal:Hide()
+    end
+    if mainFrame.requestWizardModal then
+        mainFrame.requestWizardModal:Hide()
+    end
+
+    if mainFrame.requestCreateSearchSelector then
+        mainFrame.requestCreateSearchSelector.pendingProgrammaticInputs = {}
+        mainFrame.requestCreateSearchSelector.selectedItem = nil
+        mainFrame.requestCreateSearchSelector.isResolving = true
+        mainFrame.requestCreateItemIDInput:SetText("")
+        mainFrame.requestCreateItemNameInput:SetText("")
+        mainFrame.requestCreateSearchSelector.isResolving = false
+        mainFrame.requestCreateSearchSelector:ClearSelection()
+    else
+        if mainFrame.requestCreateItemIDInput then
+            mainFrame.requestCreateItemIDInput:SetText("")
+        end
+        if mainFrame.requestCreateItemNameInput then
+            mainFrame.requestCreateItemNameInput:SetText("")
+        end
+    end
+
+    if mainFrame.requestCreateQuantityInput then
+        mainFrame.requestCreateQuantityInput:SetText("")
+    end
+    if mainFrame.requestCreateNoteInput then
+        mainFrame.requestCreateNoteInput:SetText("")
+    end
+    if mainFrame.requestActionNoteInput then
+        mainFrame.requestActionNoteInput:SetText("")
+    end
+    if mainFrame.requestDetailsActionNoteInput then
+        mainFrame.requestDetailsActionNoteInput:SetText("")
+    end
+
+    if type(mainFrame.RefreshRequestEditorState) == "function" then
+        mainFrame:RefreshRequestEditorState()
+    end
+end
+
+local function reset_minimum_editor_state(mainFrame)
+    if not mainFrame then
+        return
+    end
+
+    mainFrame.minimumPendingRules = {}
+    mainFrame.minimumPendingDirty = {}
+    mainFrame.minimumPendingDeleted = {}
+    mainFrame.selectedMinimumKey = nil
+    mainFrame.minimumDetailsSourceRow = nil
+    mainFrame.minimumDetailsWorkingState = nil
+    mainFrame.minimumSearchSession = nil
+
+    if mainFrame.minimumDetailsModal then
+        mainFrame.minimumDetailsModal:Hide()
+    end
+
+    if type(mainFrame.ResetMinimumAddRow) == "function" then
+        if mainFrame.minimumAddSearchSelector then
+            mainFrame.minimumAddSearchSelector.pendingProgrammaticInputs = {}
+            mainFrame.minimumAddSearchSelector.selectedItem = nil
+        end
+        mainFrame:ResetMinimumAddRow()
+    elseif mainFrame.minimumAddSearchSelector then
+        mainFrame.minimumAddSearchSelector.pendingProgrammaticInputs = {}
+        mainFrame.minimumAddSearchSelector.selectedItem = nil
+        mainFrame.minimumAddSearchSelector:ClearSelection()
+    end
+end
+
 local function run_shell_open_close(mainFrame)
     local slash = ns.modules.slash or {}
     local closeScript = mainFrame and mainFrame.closeButton and mainFrame.closeButton:GetScript("OnClick") or nil
@@ -129,27 +260,54 @@ local function run_options_render_scroll(mainFrame)
 end
 
 local function run_opacity_controls(mainFrame)
-    local decrease = mainFrame and mainFrame.transparencyDecreaseButton and mainFrame.transparencyDecreaseButton:GetScript("OnClick") or nil
-    local increase = mainFrame and mainFrame.transparencyIncreaseButton and mainFrame.transparencyIncreaseButton:GetScript("OnClick") or nil
-    if type(decrease) ~= "function" or type(increase) ~= "function" then
-        return smoke_result("opacity_controls", false, "opacity controls were not fully wired")
+    if not mainFrame or type(mainFrame.SelectView) ~= "function" then
+        return smoke_result("opacity_controls", false, "main frame appearance controls were unavailable")
     end
 
-    local baseline = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
-    decrease(mainFrame.transparencyDecreaseButton)
-    local lowered = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
-    increase(mainFrame.transparencyIncreaseButton)
-    local restored = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+    mainFrame:ShowDashboard()
+    mainFrame:SelectView("OPTIONS")
 
-    if lowered >= baseline then
-        return smoke_result("opacity_controls", false, "opacity decrement did not lower shell alpha")
+    local shellDecrease = mainFrame.optionsShellOpacityDecreaseButton and mainFrame.optionsShellOpacityDecreaseButton:GetScript("OnClick") or nil
+    local shellIncrease = mainFrame.optionsShellOpacityIncreaseButton and mainFrame.optionsShellOpacityIncreaseButton:GetScript("OnClick") or nil
+    local modalDecrease = mainFrame.optionsModalOpacityDecreaseButton and mainFrame.optionsModalOpacityDecreaseButton:GetScript("OnClick") or nil
+    local modalIncrease = mainFrame.optionsModalOpacityIncreaseButton and mainFrame.optionsModalOpacityIncreaseButton:GetScript("OnClick") or nil
+    if type(shellDecrease) ~= "function"
+        or type(shellIncrease) ~= "function"
+        or type(modalDecrease) ~= "function"
+        or type(modalIncrease) ~= "function" then
+        return smoke_result("opacity_controls", false, "shell or modal opacity controls were not fully wired")
     end
 
-    if restored < lowered then
-        return smoke_result("opacity_controls", false, "opacity increment did not raise shell alpha")
+    local baselineShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+    local baselineModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+
+    shellDecrease(mainFrame.optionsShellOpacityDecreaseButton)
+    local loweredShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+    shellIncrease(mainFrame.optionsShellOpacityIncreaseButton)
+    local restoredShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+
+    modalDecrease(mainFrame.optionsModalOpacityDecreaseButton)
+    local loweredModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+    modalIncrease(mainFrame.optionsModalOpacityIncreaseButton)
+    local restoredModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+
+    if loweredShellAlpha >= baselineShellAlpha then
+        return smoke_result("opacity_controls", false, "shell opacity decrement did not lower shell alpha")
     end
 
-    return smoke_result("opacity_controls", true, "opacity controls changed shell alpha in both directions")
+    if restoredShellAlpha < loweredShellAlpha then
+        return smoke_result("opacity_controls", false, "shell opacity increment did not raise shell alpha")
+    end
+
+    if loweredModalAlpha >= baselineModalAlpha then
+        return smoke_result("opacity_controls", false, "modal opacity decrement did not lower modal alpha")
+    end
+
+    if restoredModalAlpha < loweredModalAlpha then
+        return smoke_result("opacity_controls", false, "modal opacity increment did not raise modal alpha")
+    end
+
+    return smoke_result("opacity_controls", true, "shell and modal opacity controls changed alpha in both directions")
 end
 
 local function run_request_access_modes(mainFrame)
@@ -158,29 +316,35 @@ local function run_request_access_modes(mainFrame)
         return smoke_result("request_access_modes", false, "slash command missing for access smoke")
     end
 
-    local fullShellCheck = with_guild_rank("Guild Master", 0, function()
-        slash.command("ui")
-        return mainFrame.activeView == "DASHBOARD" and mainFrame.requestOnlyMode ~= true and mainFrame:IsShown()
+    local db = current_db()
+    return with_temporary_auth(db, deterministic_request_access_auth(), function()
+        reset_request_editor_state(mainFrame)
+
+        local fullShellCheck = with_guild_rank("Guild Master", 0, function()
+            slash.command("ui")
+            return mainFrame.activeView == "DASHBOARD" and mainFrame.requestOnlyMode ~= true and mainFrame:IsShown()
+        end)
+
+        if not fullShellCheck then
+            return smoke_result("request_access_modes", false, "guildmaster access did not open the full shell")
+        end
+
+        reset_request_editor_state(mainFrame)
+        local requestOnlyCheck = with_guild_rank("Raider", 2, function()
+            slash.command("ui")
+            return mainFrame.activeView == "REQUESTS"
+                and mainFrame.requestOnlyMode == true
+                and mainFrame:IsShown()
+                and mainFrame.requestCreateButton
+                and mainFrame.requestCreateButton.enabled ~= false
+        end)
+
+        if not requestOnlyCheck then
+            return smoke_result("request_access_modes", false, "member access did not fall back to request-only mode with the lightweight create affordance")
+        end
+
+        return smoke_result("request_access_modes", true, "slash ui respected both full-shell access and lightweight request-only access")
     end)
-
-    if not fullShellCheck then
-        return smoke_result("request_access_modes", false, "guildmaster access did not open the full shell")
-    end
-
-    local requestOnlyCheck = with_guild_rank("Raider", 2, function()
-        slash.command("ui")
-        return mainFrame.activeView == "REQUESTS"
-            and mainFrame.requestOnlyMode == true
-            and mainFrame:IsShown()
-            and mainFrame.requestCreateButton
-            and mainFrame.requestCreateButton.enabled ~= false
-    end)
-
-    if not requestOnlyCheck then
-        return smoke_result("request_access_modes", false, "member access did not fall back to request-only mode with the lightweight create affordance")
-    end
-
-    return smoke_result("request_access_modes", true, "slash ui respected both full-shell access and lightweight request-only access")
 end
 
 local function seed_request_sync_smoke_db(db)
@@ -190,16 +354,16 @@ local function seed_request_sync_smoke_db(db)
     db.auth.blacklist = db.auth.blacklist or {}
     db.auth.blacklistHashes = db.auth.blacklistHashes or {}
     db.auth.capabilities.request_submit = db.auth.capabilities.request_submit or {}
-    db.auth.capabilities.request_approve = { [1] = true }
-    db.auth.capabilities.request_reject = { [1] = true }
-    db.auth.capabilities.request_edit = { [1] = true }
-    db.auth.capabilities.request_fulfill = { [1] = true }
-    db.auth.capabilities.request_reopen = { [1] = true }
-    db.auth.capabilities.full_ui = { [1] = true }
-    db.auth.capabilities.minimum_add = { [1] = true }
-    db.auth.capabilities.minimum_edit = { [1] = true }
-    db.auth.capabilities.minimum_delete = { [1] = true }
-    db.auth.capabilities.auth_manage = { [1] = true }
+    db.auth.capabilities.request_approve = { [0] = true, [1] = true }
+    db.auth.capabilities.request_reject = { [0] = true, [1] = true }
+    db.auth.capabilities.request_edit = { [0] = true, [1] = true }
+    db.auth.capabilities.request_fulfill = { [0] = true, [1] = true }
+    db.auth.capabilities.request_reopen = { [0] = true, [1] = true }
+    db.auth.capabilities.full_ui = { [0] = true, [1] = true }
+    db.auth.capabilities.minimum_add = { [0] = true, [1] = true }
+    db.auth.capabilities.minimum_edit = { [0] = true, [1] = true }
+    db.auth.capabilities.minimum_delete = { [0] = true, [1] = true }
+    db.auth.capabilities.auth_manage = { [0] = true, [1] = true }
 end
 
 local function run_request_sync_contract(db)
@@ -310,6 +474,7 @@ end
 
 local function run_minimums_render(mainFrame, db)
     seed_minimums_smoke_db(db)
+    reset_minimum_editor_state(mainFrame)
     mainFrame:SelectView("MINIMUMS")
     mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
     mainFrame.minimumAddItemIDInput:SetText("7007")
@@ -322,8 +487,7 @@ local function run_minimums_render(mainFrame, db)
     end
 
     mainFrame.minimumAddSearchSelector:ClearSelection()
-    mainFrame.minimumAddQuantityInput:SetText("250")
-    if mainFrame:CreateMinimumFromAddRow() ~= nil then
+    if mainFrame:BeginMinimumDraftFromSelectedItem() ~= nil then
         return smoke_result("minimums_render", false, "minimum add flow accepted raw text without a confirmed selected item")
     end
     if mainFrame.minimumPendingRules and next(mainFrame.minimumPendingRules) ~= nil then
@@ -333,7 +497,22 @@ local function run_minimums_render(mainFrame, db)
     if type(resolveByItemID) == "function" then
         resolveByItemID(mainFrame.minimumAddItemIDInput)
     end
-    local rule = mainFrame:CreateMinimumFromAddRow()
+    local modal = mainFrame:BeginMinimumDraftFromSelectedItem()
+    if type(modal) ~= "table" or not modal:IsShown() then
+        return smoke_result("minimums_render", false, "minimum add flow did not open the details modal for a confirmed item")
+    end
+
+    mainFrame.minimumDetailsWorkingState = mainFrame.minimumDetailsWorkingState or {}
+    mainFrame.minimumDetailsWorkingState.tabName = "Alchemy"
+    if mainFrame.minimumDetailsQuantityInput then
+        mainFrame.minimumDetailsQuantityInput:SetText("250")
+        local onQuantityChanged = mainFrame.minimumDetailsQuantityInput:GetScript("OnTextChanged")
+        if type(onQuantityChanged) == "function" then
+            onQuantityChanged(mainFrame.minimumDetailsQuantityInput)
+        end
+    end
+
+    local rule = mainFrame:ConfirmMinimumDetailsModal()
     if type(rule) ~= "table" then
         return smoke_result("minimums_render", false, "minimum add flow did not stage a draft rule")
     end
@@ -343,7 +522,6 @@ local function run_minimums_render(mainFrame, db)
         return smoke_result("minimums_render", false, "minimum draft was not tracked after staging")
     end
 
-    pending.tabName = "Alchemy"
     local changed = mainFrame:SaveAllMinimumChanges()
     if changed ~= true then
         return smoke_result("minimums_render", false, "minimum save did not commit the staged draft")
@@ -359,50 +537,56 @@ end
 local function run_request_selection_gating(mainFrame, db)
     return with_guild_rank("Guild Master", 0, function()
         seed_request_sync_smoke_db(db)
-        mainFrame:SelectView("REQUESTS")
-        if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled ~= false then
-            return smoke_result("request_selection_gating", false, "request create button started enabled before any confirmed item selection existed")
-        end
+        return with_temporary_auth(db, db.auth, function()
+            reset_request_editor_state(mainFrame)
+            mainFrame:SelectView("REQUESTS")
+            if type(mainFrame.RefreshRequestEditorState) == "function" then
+                mainFrame:RefreshRequestEditorState()
+            end
+            if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled ~= false then
+                return smoke_result("request_selection_gating", false, "request create button started enabled before any confirmed item selection existed")
+            end
 
-        mainFrame.requestCreateItemIDInput:SetText("7007")
-        mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
-        if mainFrame:GetConfirmedRequestCreateItem() == nil then
-            return smoke_result("request_selection_gating", false, "request create did not promote an exact item-id match into confirmed selection state")
-        end
-        if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled == false then
-            return smoke_result("request_selection_gating", false, "request create button did not enable after confirmed selection was established")
-        end
-
-        mainFrame.requestCreateSearchSelector:ClearSelection()
-        if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled ~= false then
-            return smoke_result("request_selection_gating", false, "request create button did not disable after confirmed selection was cleared")
-        end
-        mainFrame.requestCreateQuantityInput:SetText("3")
-        mainFrame.requestCreateNoteInput:SetText("Smoke gating check")
-        local rawTextAttempt = mainFrame:CreateRequestFromEditor()
-        if rawTextAttempt ~= nil then
-            return smoke_result("request_selection_gating", false, "request create accepted raw text fields without a confirmed selected item")
-        end
-
-        if type(mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")) == "function" then
+            mainFrame.requestCreateItemIDInput:SetText("7007")
             mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
-        end
-        if mainFrame:GetConfirmedRequestCreateItem() == nil then
-            return smoke_result("request_selection_gating", false, "request create did not restore confirmed selection after re-resolving the exact item id")
-        end
-        if mainFrame.requestCreateStatusText and mainFrame.requestCreateStatusText:GetText() == "Select an item from the catalog first." then
-            return smoke_result("request_selection_gating", false, "request create left a stale selection error visible after a valid catalog item was reselected")
-        end
-        if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled == false then
-            return smoke_result("request_selection_gating", false, "request create button did not re-enable after confirmed selection was restored")
-        end
+            if mainFrame:GetConfirmedRequestCreateItem() == nil then
+                return smoke_result("request_selection_gating", false, "request create did not promote an exact item-id match into confirmed selection state")
+            end
+            if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled == false then
+                return smoke_result("request_selection_gating", false, "request create button did not enable after confirmed selection was established")
+            end
 
-        local request = mainFrame:CreateRequestFromEditor()
-        if type(request) ~= "table" then
-            return smoke_result("request_selection_gating", false, "request create did not succeed after confirmed selection was established")
-        end
+            mainFrame.requestCreateSearchSelector:ClearSelection()
+            if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled ~= false then
+                return smoke_result("request_selection_gating", false, "request create button did not disable after confirmed selection was cleared")
+            end
+            mainFrame.requestCreateQuantityInput:SetText("3")
+            mainFrame.requestCreateNoteInput:SetText("Smoke gating check")
+            local rawTextAttempt = mainFrame:CreateRequestFromEditor()
+            if rawTextAttempt ~= nil then
+                return smoke_result("request_selection_gating", false, "request create accepted raw text fields without a confirmed selected item")
+            end
 
-        return smoke_result("request_selection_gating", true, "request create required confirmed selection before submission and still succeeded after exact resolution")
+            if type(mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")) == "function" then
+                mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
+            end
+            if mainFrame:GetConfirmedRequestCreateItem() == nil then
+                return smoke_result("request_selection_gating", false, "request create did not restore confirmed selection after re-resolving the exact item id")
+            end
+            if mainFrame.requestCreateStatusText and mainFrame.requestCreateStatusText:GetText() == "Select an item from the catalog first." then
+                return smoke_result("request_selection_gating", false, "request create left a stale selection error visible after a valid catalog item was reselected")
+            end
+            if mainFrame.requestCreateButton and mainFrame.requestCreateButton.enabled == false then
+                return smoke_result("request_selection_gating", false, "request create button did not re-enable after confirmed selection was restored")
+            end
+
+            local request = mainFrame:CreateRequestFromEditor()
+            if type(request) ~= "table" then
+                return smoke_result("request_selection_gating", false, "request create did not succeed after confirmed selection was established")
+            end
+
+            return smoke_result("request_selection_gating", true, "request create required confirmed selection before submission and still succeeded after exact resolution")
+        end)
     end)
 end
 

@@ -1,6 +1,8 @@
 local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
+dofile("tests/helpers/wow_stubs.lua")
+
 _G.UnitName = function()
     return "GuildLead"
 end
@@ -45,13 +47,67 @@ assert.equal("Guild Master", mainFrame.optionsAuthRankButton.labelText:GetText()
 assert.truthy((mainFrame.optionsAvailablePermissionPanel:GetHeight() or 0) >= 132, "options auth should give available permissions enough height to avoid clipping the last row")
 assert.truthy((mainFrame.optionsAuthPanel:GetHeight() or 0) < 800, "options auth should size to its actual content instead of leaving a giant dead zone")
 assert.equal("Save", mainFrame.optionsAuthSaveButton.labelText:GetText(), "options auth should expose a dedicated local save button")
+assert.truthy(type(mainFrame.optionsThemeDefaultButton) == "table", "options appearance should expose a default theme preset button")
+assert.truthy(type(mainFrame.optionsThemeContrastButton) == "table", "options appearance should expose a high-contrast theme preset button")
+assert.truthy(type((mainFrame.optionsThemeButtons or {}).horde) == "table", "options appearance should expose a horde theme preset button")
+assert.truthy(type((mainFrame.optionsThemeButtons or {}).alliance) == "table", "options appearance should expose an alliance theme preset button")
+assert.truthy(type((mainFrame.optionsThemeButtons or {}).void) == "table", "options appearance should expose a void theme preset button")
+assert.truthy(type((mainFrame.optionsThemeButtons or {}).adventurer) == "table", "options appearance should expose an adventurer theme preset button")
+assert.truthy(type((mainFrame.optionsThemeButtons or {}).moonglade) == "table", "options appearance should expose a moonglade theme preset button")
+assert.truthy(type(mainFrame.optionsShellScaleSlider) == "table", "options appearance should expose a shell scale slider")
+assert.truthy(type(mainFrame.optionsTableDensitySlider) == "table", "options appearance should expose a table density slider")
+assert.truthy(type(mainFrame.optionsShellOpacitySlider) == "table", "options appearance should expose a shell opacity slider")
+assert.truthy(type(mainFrame.optionsModalOpacitySlider) == "table", "options appearance should expose a modal opacity slider")
+assert.truthy(string.find(mainFrame.optionsHint:GetText() or "", "also drives table density", 1, true) ~= nil, "options appearance should explain that shell scale now keeps table density linked")
+assert.equal("Table Density (Linked)", mainFrame.optionsTableDensityLabel:GetText(), "options appearance should label table density as linked to shell scale")
 assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Guild Info", 1, true) ~= nil, "options auth should explain that the policy string lives in Guild Info")
 assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Copy", 1, true) ~= nil, "options auth should explain that publishing to Guild Info is now a manual copy step")
 assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Accept", 1, true) ~= nil, "options auth should explain that the Guild Information dialog must be accepted after pasting")
-assert.same(mainFrame.optionsPolicyStringHelpText, (mainFrame.optionsAuthSaveButton.points[1] or {})[2], "options auth save row should anchor from the policy-string help text so it stays visible")
+assert.equal("Select All", mainFrame.optionsPolicyStringSelectAllButton.labelText:GetText(), "options auth should expose a select-all button for the compact policy string")
+assert.truthy(string.find(mainFrame.optionsAuthHint:GetText() or "", "Character-Server", 1, true) ~= nil, "options auth should explicitly document Character-Server blacklist formatting")
+assert.equal("Character-Server", mainFrame.optionsBlacklistCharacterLabel:GetText(), "options auth should label blacklist input with the canonical Character-Server format")
+assert.truthy((mainFrame.optionsPolicyStringHelpText:GetWidth() or 0) <= 280, "options auth help copy should stay narrow enough to avoid bleeding into the blacklist column")
+assert.truthy((mainFrame.optionsAuthStatusText:GetWidth() or 0) <= 280, "options auth status copy should stay narrow enough to avoid bleeding into the blacklist column")
+assert.same(mainFrame.optionsAuthStatusText, (mainFrame.optionsAuthSaveButton.points[1] or {})[2], "options auth save row should anchor below the status line so wrapped policy copy stays readable")
 assert.equal(nil, mainFrame.optionsAuthWriteButton, "options auth should remove the unreliable Write Guild Info button")
 assert.equal("<< Add", mainFrame.optionsAuthAddPermissionButton.labelText:GetText(), "options auth add button should point toward the allowed-permissions list")
 assert.equal("Remove >>", mainFrame.optionsAuthRemovePermissionButton.labelText:GetText(), "options auth remove button should point toward the available-permissions list")
+
+_G.GBankManagerDB.auth.blacklist = {
+    ["Stormrage-Ziriously"] = {
+        name = "Ziriously",
+        reason = "Abused System",
+        updatedAt = 77,
+    },
+}
+mainFrame.authDraftPolicy = nil
+mainFrame:RefreshAuthOptions()
+assert.equal(
+    "Ziriously-Stormrage - Abused System",
+    ((mainFrame.optionsBlacklistButtons or {})[1] or {}).labelText:GetText(),
+    "options auth should render blacklist rows in Character-Server display order"
+)
+
+_G.C_GuildInfo.setNotes = {}
+_G.GBankManagerDB.auth.blacklist = {}
+_G.GBankManagerDB.auth.blacklistHashes = {}
+_G.GBankManagerDB.auth.blacklistDirectory = {}
+_G.GBankManagerDB.auth.blacklistRosterDirectory = {
+    ["Ziriously-Stormrage"] = {
+        guid = "guid-ziriously",
+        officerNote = "Raid bench",
+        isBlacklisted = false,
+        updatedAt = 77,
+    },
+}
+mainFrame.authDraftPolicy = nil
+mainFrame.optionsBlacklistNameInput:SetText("Ziriously-Stormrage")
+mainFrame.optionsBlacklistReasonInput:SetText("Abused System")
+mainFrame:StageBlacklistEntry()
+mainFrame:SaveAuthPolicy()
+assert.equal(1, #(_G.C_GuildInfo.setNotes or {}), "options auth save should automatically write guild-shared blacklist membership into the target officer note")
+assert.equal("guid-ziriously", ((_G.C_GuildInfo.setNotes or {})[1] or {}).guid, "options auth save should target the roster member guid when updating the officer note")
+assert.equal("Raid bench [GBMBL]", ((_G.C_GuildInfo.setNotes or {})[1] or {}).text, "options auth save should append the shared blacklist tag while preserving the existing officer note text")
 
 mainFrame:SelectAuthRank(0)
 mainFrame:SelectAuthCapability("available", "request_submit")
@@ -72,17 +128,90 @@ mainFrame.optionsScrollChild.height = 0
 mainFrame.optionsScrollFrame:GetScript("OnMouseWheel")(mainFrame.optionsScrollFrame, -1)
 assert.truthy(mainFrame.optionsScrollBar:IsShown(), "options scrollbar should stay visible while scrolling even if the live client reports a transient zero height")
 
-local alphaAfterDown
-mainFrame.transparencyDecreaseButton:GetScript("OnClick")(mainFrame.transparencyDecreaseButton)
-alphaAfterDown = mainFrame.currentAlpha
-assert.truthy(alphaAfterDown < 0.96, "transparency down should reduce alpha")
-assert.equal("Opacity 95%", mainFrame.transparencyValueText:GetText(), "opacity decrease should keep the visible percentage label in sync")
-assert.equal(nil, mainFrame.transparencySlider, "options should remove the faux slider after the live-client cleanup")
-mainFrame.transparencyIncreaseButton:GetScript("OnClick")(mainFrame.transparencyIncreaseButton)
-assert.truthy(mainFrame.currentAlpha > alphaAfterDown, "transparency up should increase alpha")
+local originalWidth = mainFrame:GetWidth()
+local originalRowHeight = mainFrame.tableRowHeight
+mainFrame:SetThemePreset("horde")
+assert.equal("horde", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should persist in local appearance settings")
+assert.truthy((mainFrame.sidebar.backdropColor or {})[1] ~= 0.10, "theme preset changes should update visible shell colors")
+mainFrame:SetThemePreset("moonglade")
+assert.equal("moonglade", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should support the expanded preset list")
+mainFrame:SetShellScale(1.1)
+assert.truthy(mainFrame:GetWidth() > originalWidth, "shell scale should grow the main shell width")
+assert.equal(1.1, _G.GBankManagerDB.ui.appearance.shellScale, "shell scale changes should persist in local appearance settings")
+assert.equal(1.1, _G.GBankManagerDB.ui.appearance.tableDensity, "shell scale should keep persisted table density linked to the same scale")
+assert.equal("110%", mainFrame.optionsShellScaleValueText:GetText(), "shell scale changes should refresh the visible percentage label")
+assert.equal("110%", mainFrame.optionsTableDensityValueText:GetText(), "shell scale changes should keep the linked table density percentage in sync")
+mainFrame:SetTableDensity(1.15)
+assert.truthy(mainFrame.tableRowHeight > originalRowHeight, "table density should grow shared table row height")
+assert.equal(1.15, _G.GBankManagerDB.ui.appearance.shellScale, "table density adjustments should route through the linked shell scale setting")
+assert.equal(1.15, _G.GBankManagerDB.ui.appearance.tableDensity, "table density changes should persist in local appearance settings")
+assert.equal("115%", mainFrame.optionsTableDensityValueText:GetText(), "table density changes should refresh the visible percentage label")
+mainFrame:SetShellOpacity(0.95)
+assert.equal(0.95, mainFrame.currentAlpha, "shell opacity should update the main shell alpha")
+assert.equal("95%", mainFrame.optionsShellOpacityValueText:GetText(), "shell opacity changes should refresh the visible percentage label")
+mainFrame:SetModalOpacity(0.88)
+assert.equal(0.88, _G.GBankManagerDB.ui.appearance.modalOpacity, "modal opacity changes should persist in local appearance settings")
+assert.equal(0.88, mainFrame.requestDetailsModal.alpha, "modal opacity should update request details modal alpha")
+assert.equal(0.88, mainFrame.minimumAddModal.alpha, "modal opacity should update the minimum-add modal alpha")
+assert.equal(0.88, mainFrame.minimumDetailsModal.alpha, "modal opacity should update the minimum-details modal alpha")
+assert.equal(0.88, mainFrame.exportModal.alpha, "modal opacity should update the export modal alpha")
+assert.equal(0.88, mainFrame.exportStockedElsewhereModal.alpha, "modal opacity should update the stocked-elsewhere modal alpha")
+assert.equal(0.88, mainFrame.exportManualShoppingListModal.alpha, "modal opacity should update the manual shopping-list modal alpha")
+assert.equal("88%", mainFrame.optionsModalOpacityValueText:GetText(), "modal opacity changes should refresh the visible percentage label")
+local loweredBackdropAlpha = ((mainFrame.minimumAddModal.backdropColor or {})[4] or 0)
+mainFrame:SetModalOpacity(0.99)
+assert.truthy((((mainFrame.minimumAddModal.backdropColor or {})[4] or 0) > loweredBackdropAlpha), "raising modal opacity should restore modal backdrop alpha instead of getting stuck at the lower setting")
+mainFrame:SetModalOpacity(0.88)
+
+local scaleBeforeButtons = _G.GBankManagerDB.ui.appearance.shellScale
+mainFrame.optionsShellScaleIncreaseButton:GetScript("OnClick")(mainFrame.optionsShellScaleIncreaseButton)
+assert.truthy(_G.GBankManagerDB.ui.appearance.shellScale > scaleBeforeButtons, "shell-scale plus should step the slider value upward")
+mainFrame.optionsShellScaleDecreaseButton:GetScript("OnClick")(mainFrame.optionsShellScaleDecreaseButton)
+assert.equal(scaleBeforeButtons, _G.GBankManagerDB.ui.appearance.shellScale, "shell-scale minus should step the slider value back down")
+assert.truthy(mainFrame.optionsShellScaleSlider.mouseEnabled == true, "shell-scale slider should allow direct mouse interaction")
+assert.truthy(mainFrame.optionsShellScaleSlider.track.mouseEnabled == true, "shell-scale slider track should allow direct mouse interaction")
+assert.truthy(mainFrame.optionsShellScaleSlider.thumb.mouseEnabled == true, "shell-scale slider thumb should allow direct mouse interaction")
+assert.truthy(mainFrame.optionsShellScaleSlider.dragReleaseTarget.mouseEnabled == true, "shell-scale slider should install a drag-release catcher so mouse-up outside the track still ends the drag")
+assert.truthy(type(mainFrame.optionsShellScaleSlider.thumbCore) == "table", "shell-scale slider should expose a polished inner thumb core")
+mainFrame.optionsShellScaleSlider:SetValue(1.2)
+assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.shellScale or 0) - 1.2) < 0.0001, "dragging the shell-scale slider should persist the new shell scale")
+mainFrame.optionsShellScaleSlider:SetValue(0.95)
+mainFrame.optionsShellScaleSlider:GetScript("OnMouseDown")(mainFrame.optionsShellScaleSlider)
+assert.truthy(mainFrame.optionsShellScaleSlider.dragging == true, "shell-scale slider should enter dragging state on mouse down")
+mainFrame.optionsShellScaleSlider.dragReleaseTarget:GetScript("OnMouseUp")(mainFrame.optionsShellScaleSlider.dragReleaseTarget)
+assert.truthy(mainFrame.optionsShellScaleSlider.dragging ~= true, "shell-scale slider should stop dragging when the mouse is released off the track")
+
+local densityBeforeButtons = _G.GBankManagerDB.ui.appearance.tableDensity
+mainFrame.optionsTableDensityIncreaseButton:GetScript("OnClick")(mainFrame.optionsTableDensityIncreaseButton)
+assert.truthy(_G.GBankManagerDB.ui.appearance.tableDensity > densityBeforeButtons, "table-density plus should step the slider value upward")
+mainFrame.optionsTableDensityDecreaseButton:GetScript("OnClick")(mainFrame.optionsTableDensityDecreaseButton)
+assert.equal(densityBeforeButtons, _G.GBankManagerDB.ui.appearance.tableDensity, "table-density minus should step the slider value back down")
+assert.truthy(mainFrame.optionsTableDensitySlider.track.mouseEnabled == true, "table-density slider track should allow direct mouse interaction")
+mainFrame.optionsTableDensitySlider:SetValue(0.95)
+assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.shellScale or 0) - 0.95) < 0.0001, "dragging the linked table-density slider should update shell scale too")
+
+local shellOpacityBeforeButtons = _G.GBankManagerDB.ui.appearance.shellOpacity
+mainFrame.optionsShellOpacityIncreaseButton:GetScript("OnClick")(mainFrame.optionsShellOpacityIncreaseButton)
+assert.truthy(_G.GBankManagerDB.ui.appearance.shellOpacity > shellOpacityBeforeButtons, "shell-opacity plus should step the slider value upward")
+mainFrame.optionsShellOpacityDecreaseButton:GetScript("OnClick")(mainFrame.optionsShellOpacityDecreaseButton)
+assert.equal(shellOpacityBeforeButtons, _G.GBankManagerDB.ui.appearance.shellOpacity, "shell-opacity minus should step the slider value back down")
+assert.truthy(mainFrame.optionsShellOpacitySlider.track.mouseEnabled == true, "shell-opacity slider track should allow direct mouse interaction")
+mainFrame.optionsShellOpacitySlider:SetValue(0.9)
+assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.shellOpacity or 0) - 0.9) < 0.0001, "dragging the shell-opacity slider should persist the new opacity")
+
+local modalOpacityBeforeButtons = _G.GBankManagerDB.ui.appearance.modalOpacity
+mainFrame.optionsModalOpacityIncreaseButton:GetScript("OnClick")(mainFrame.optionsModalOpacityIncreaseButton)
+assert.truthy(_G.GBankManagerDB.ui.appearance.modalOpacity > modalOpacityBeforeButtons, "modal-opacity plus should step the slider value upward")
+mainFrame.optionsModalOpacityDecreaseButton:GetScript("OnClick")(mainFrame.optionsModalOpacityDecreaseButton)
+assert.equal(modalOpacityBeforeButtons, _G.GBankManagerDB.ui.appearance.modalOpacity, "modal-opacity minus should step the slider value back down")
+assert.truthy(mainFrame.optionsModalOpacitySlider.track.mouseEnabled == true, "modal-opacity slider track should allow direct mouse interaction")
+mainFrame.optionsModalOpacitySlider:SetValue(0.93)
+assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.modalOpacity or 0) - 0.93) < 0.0001, "dragging the modal-opacity slider should persist the new opacity")
 
 mainFrame:SaveAuthPolicy()
 assert.truthy(string.find(mainFrame.optionsAuthStatusText:GetText() or "", "Copy the policy string", 1, true) ~= nil, "options auth save should remind the user to copy the policy string into Guild Information manually")
+assert.equal("AUTH_POLICY_UPDATED", ((_G.GBankManagerDB.auditLog or {})[1] or {}).type, "options auth save should append an auth-policy history entry")
+assert.truthy(string.find(mainFrame.optionsPolicyStringInput:GetText() or "", "#", 1, true) ~= nil, "options auth save should persist the compact updater hash into the visible policy string")
 
 local authPolicySource = env.ns.modules.authPolicySource
 local pullCalled
@@ -91,7 +220,10 @@ authPolicySource.PullPolicyFromGuildInfo = function(db, options)
     pullCalled = options and options.force == true
     db.auth.guildPolicyString = "[GBMAUTH:1;Z;Y;3;-]"
     db.auth.guildPolicySource = "guild_info"
+    db.auth.updatedAt = 123
+    db.auth.updatedBy = "Stormrage-GuildLead"
     db.auth.capabilities.request_submit[0] = true
+    db.ui.minimumSettings.defaultQuantity = 275
     return true, "applied", db.auth
 end
 
@@ -99,5 +231,31 @@ mainFrame:RefreshAuthPolicyFromGuildInfo()
 assert.truthy(pullCalled == true, "options auth refresh should force a fresh pull from Guild Info")
 assert.equal("[GBMAUTH:1;Z;Y;3;-]", mainFrame.optionsPolicyStringInput:GetText(), "options auth refresh should reload the current Guild Info snippet into the visible policy string")
 assert.equal("Reloaded auth policy from Guild Info.", mainFrame.optionsAuthStatusText:GetText(), "options auth refresh should report a successful Guild Info reload")
+assert.equal("275", mainFrame.defaultMinimumInput:GetText(), "options auth refresh should also preload the shared restock default from Guild Info")
+assert.truthy(string.find(mainFrame.optionsAuthMetadataText:GetText() or "", "GuildLead-Stormrage", 1, true) ~= nil, "options auth refresh should show the updater loaded from Guild Info metadata")
 
+authPolicySource.PullPolicyFromGuildInfo = originalPullPolicyFromGuildInfo
+
+mainFrame.optionsPolicyStringInput:SetText("[GBMAUTH:2;A;B;4;-]")
+mainFrame.optionsPolicyStringSelectAllButton:GetScript("OnClick")(mainFrame.optionsPolicyStringSelectAllButton)
+assert.truthy(mainFrame.optionsPolicyStringInput:HasFocus(), "policy-string select all should focus the compact policy-string input")
+assert.equal(0, mainFrame.optionsPolicyStringInput.cursorPosition, "policy-string select all should rewind the cursor before highlighting")
+assert.equal(0, mainFrame.optionsPolicyStringInput.highlightStart, "policy-string select all should highlight from the start of the policy string")
+assert.equal(-1, mainFrame.optionsPolicyStringInput.highlightEnd, "policy-string select all should extend the highlight through the entire policy string")
+assert.equal("Selected the policy string. Press Ctrl+C to copy.", mainFrame.optionsAuthStatusText:GetText(), "policy-string select all should give visible copy guidance")
+
+local preloadCalls = 0
+authPolicySource.PullPolicyFromGuildInfo = function(db, options)
+    preloadCalls = preloadCalls + 1
+    db.auth.guildPolicyString = "[GBMAUTH:2;A;B;4;-]"
+    db.auth.guildPolicySource = "guild_info"
+    db.auth.updatedAt = 456
+    db.auth.updatedBy = "Stormrage-PolicyLead"
+    return true, "applied", db.auth
+end
+mainFrame:ShowDashboard()
+mainFrame:SelectView("OPTIONS")
+assert.truthy(preloadCalls > 0, "opening options should pull the latest auth policy from Guild Info before populating the controls")
+assert.equal("[GBMAUTH:2;A;B;4;-]", mainFrame.optionsPolicyStringInput:GetText(), "opening options should preload the current Guild Info policy string into the visible controls")
+assert.truthy(string.find(mainFrame.optionsAuthMetadataText:GetText() or "", "PolicyLead-Stormrage", 1, true) ~= nil, "opening options should refresh the auth metadata after preloading Guild Info")
 authPolicySource.PullPolicyFromGuildInfo = originalPullPolicyFromGuildInfo

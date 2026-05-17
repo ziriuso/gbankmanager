@@ -124,6 +124,7 @@ _G.GBankManagerDB.snapshots = {
     },
 }
 env.ns.state.db = _G.GBankManagerDB
+env.ns.state.db.auth.capabilities.request_delete = { [1] = true }
 
 mainFrame:SelectView("REQUESTS")
 assert.equal("REQUESTS", mainFrame.activeView, "requests tab should be selectable")
@@ -135,9 +136,15 @@ assert.same(mainFrame.viewSubtitle, (mainFrame.tableHeaderFrame.points[1] or {})
 assert.truthy(mainFrame.tableViewportFrame:IsShown(), "requests view should show the shared table viewport")
 assert.truthy(mainFrame.tableFilterFrame:IsShown(), "request admin table should use shared search controls like inventory")
 assert.truthy(mainFrame.requestAdminFilterPanel:IsShown(), "request admin should expose the bottom status filter strip")
+assert.truthy(mainFrame.requestAdminAddButton:IsShown(), "request admin should expose an Add action on the bottom strip")
+assert.equal("Add", mainFrame.requestAdminAddButton.labelText:GetText(), "request admin bottom strip should label the create action clearly")
+assert.equal("BOTTOMLEFT", (mainFrame.requestAdminAddButton.points[1] or {})[1], "request admin Add should anchor from the far left of the bottom strip")
 assert.equal("All", mainFrame.requestAdminFilterAllButton.labelText:GetText(), "request admin should have an All filter")
 assert.equal("Pending Approval", mainFrame.requestAdminFilterPendingApprovalButton.labelText:GetText(), "request admin should have a Pending Approval filter")
 assert.equal("Pending Fulfillment", mainFrame.requestAdminFilterPendingFulfillmentButton.labelText:GetText(), "request admin should have a Pending Fulfillment filter")
+assert.equal("BOTTOMRIGHT", (mainFrame.requestAdminFilterPendingFulfillmentButton.points[1] or {})[1], "request admin rightmost filter should anchor from the right edge")
+assert.equal("RIGHT", (mainFrame.requestAdminFilterPendingApprovalButton.points[1] or {})[1], "request admin middle filter should chain left from the rightmost filter")
+assert.equal("RIGHT", (mainFrame.requestAdminFilterAllButton.points[1] or {})[1], "request admin All filter should chain left from the middle filter")
 assert.equal("Date Requested", mainFrame.tableHeaderLabels[1]:GetText(), "request admin table should expose the request date")
 assert.equal("Requestor", mainFrame.tableHeaderLabels[2]:GetText(), "request admin table should expose Requestor")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[3]:GetText(), "request admin table should expose Item ID")
@@ -145,17 +152,31 @@ assert.equal("Item Name", mainFrame.tableHeaderLabels[4]:GetText(), "request adm
 assert.equal("Quantity", mainFrame.tableHeaderLabels[5]:GetText(), "request admin table should expose quantity")
 assert.equal("Status", mainFrame.tableHeaderLabels[6]:GetText(), "request admin table should expose combined status")
 assert.equal("Date Fulfilled", mainFrame.tableHeaderLabels[7]:GetText(), "request admin table should expose date fulfilled")
+assert.truthy((mainFrame.tableViewportHeight or 0) > 0, "request admin table should keep a positive shared table height")
+assert.truthy((mainFrame.tableViewportHeight or 0) <= (mainFrame.defaultTableViewportHeight or 364), "request admin table should clamp within the shared shell instead of forcing the footer strip offscreen")
+assert.truthy((mainFrame.tableFilterInputs[7]:GetWidth() or 0) <= 116, "request admin Date Fulfilled filter should stay compact enough to fit inside the shared table width")
+assert.truthy(not mainFrame.tableScrollBar:IsShown(), "request admin should hide the shared table scrollbar when there is nothing to scroll")
+assert.truthy(mainFrame.requestAdminFilterAllButton.filterActive == true, "request admin should highlight the active All filter")
+assert.truthy(mainFrame.requestAdminFilterPendingApprovalButton.filterActive ~= true, "request admin should not highlight inactive filters")
+assert.truthy((mainFrame.requestAdminFilterAllButton.backdropBorderColor or {})[1] == 0.85, "request admin should give the active filter a stronger glow")
 assert.truthy(string.match(mainFrame.tableRowsData[1].createdAt or "", "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d$") ~= nil, "request admin rows should include formatted date requested")
 assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request admin rows should include item id")
 assert.equal("Raid Flask", mainFrame.tableRowsData[1].itemName, "request admin rows should include item name")
 assert.equal("Pending", mainFrame.tableRowsData[1].status, "request admin rows should expose a readable combined status")
 assert.equal(4, #mainFrame.tableRowsData, "request admin All filter should include fulfilled and rejected requests")
 mainFrame.requestAdminFilterPendingApprovalButton:GetScript("OnClick")(mainFrame.requestAdminFilterPendingApprovalButton)
+assert.truthy(mainFrame.requestAdminFilterPendingApprovalButton.filterActive == true, "request admin should highlight Pending Approval when selected")
+assert.truthy(mainFrame.requestAdminFilterAllButton.filterActive ~= true, "request admin should clear the All highlight when another filter is selected")
 assert.equal(2, #mainFrame.tableRowsData, "request admin Pending Approval should only show pending requests")
+assert.truthy((mainFrame.requestAdminFilterPendingApprovalButton.backdropBorderColor or {})[1] == 0.85, "request admin should move the stronger glow to the newly selected filter")
 mainFrame.requestAdminFilterPendingFulfillmentButton:GetScript("OnClick")(mainFrame.requestAdminFilterPendingFulfillmentButton)
+assert.truthy(mainFrame.requestAdminFilterPendingFulfillmentButton.filterActive == true, "request admin should highlight Pending Fulfillment when selected")
 assert.equal(1, #mainFrame.tableRowsData, "request admin Pending Fulfillment should only show approved open requests")
 mainFrame.requestAdminFilterAllButton:GetScript("OnClick")(mainFrame.requestAdminFilterAllButton)
 assert.equal(4, #mainFrame.tableRowsData, "request admin All should restore the full admin list")
+mainFrame.requestAdminAddButton:GetScript("OnClick")(mainFrame.requestAdminAddButton)
+assert.truthy(mainFrame.requestWizardModal:IsShown(), "request admin Add should launch the shared request wizard")
+mainFrame.requestWizardCancelButton:GetScript("OnClick")(mainFrame.requestWizardCancelButton)
 mainFrame.tableFilterInputs[4]:SetText("Arcane")
 mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
 assert.equal(1, #mainFrame.tableRowsData, "request admin shared filters should search by item name")
@@ -229,6 +250,7 @@ assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsItemNameText
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsSubmissionNoteText.points[1] or {})[2], "long request details values should use the same fixed modal column")
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsActionNoteLabel.points[1] or {})[2], "request detail action controls should align to fixed modal positions")
 assert.truthy(mainFrame.requestDetailsCancelRequestButton:IsShown(), "request authors should see cancel in details for pending requests")
+assert.truthy(not ((mainFrame.requestDetailsDeleteButton and mainFrame.requestDetailsDeleteButton:IsShown()) == true), "request-only authors should not see request delete in details")
 mainFrame.requestDetailsCloseButton:GetScript("OnClick")(mainFrame.requestDetailsCloseButton)
 
 mainFrame:ShowDashboard()
@@ -276,6 +298,30 @@ assert.equal("Rejected", mainFrame.requestDetailsStatusText:GetText(), "denied r
 assert.equal("Not needed", mainFrame.requestDetailsDecisionNoteText:GetText(), "denied request details should still show the saved decision note")
 assert.truthy(not mainFrame.requestDetailsActionNoteLabel:IsShown(), "denied requests should not show a decision note editor")
 assert.truthy(not mainFrame.requestDetailsActionNoteInput:IsShown(), "denied requests should not accept another decision note")
+
+table.insert(_G.GBankManagerDB.requests, {
+    requestId = "req-delete-target",
+    requester = "RaiderDelete",
+    requesterCharacterKey = "Stormrage-RaiderDelete",
+    itemName = "Cleanup Flask",
+    itemID = 990012,
+    quantity = 9,
+    approval = "REJECTED",
+    fulfillment = "OPEN",
+    note = "Remove after review",
+    createdAt = 450,
+})
+
+_G.C_ChatInfo.sentMessages = {}
+mainFrame:ShowDashboard()
+mainFrame:SelectView("REQUESTS")
+mainFrame:OpenRequestDetailsModal("req-delete-target")
+assert.truthy(mainFrame.requestDetailsDeleteButton:IsShown(), "request admins should see a Delete action in request details when request-delete is allowed")
+mainFrame.requestDetailsDeleteButton:GetScript("OnClick")(mainFrame.requestDetailsDeleteButton)
+assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "deleting a request should close the request details modal")
+assert.equal(nil, mainFrame:SelectRequestById("req-delete-target"), "deleting a request should remove it from the saved request list")
+assert.equal(1, #_G.C_ChatInfo.sentMessages, "deleting a request should sync the request update to guild clients")
+assert.truthy(string.find(_G.C_ChatInfo.sentMessages[1].payload or "", "DELETE", 1, true) ~= nil, "request delete sync should send a delete action payload")
 
 assert.equal("New Request", mainFrame.requestWorkflowCreateButton.labelText:GetText(), "request-only workflow should expose a wizard launch button")
 mainFrame.requestWorkflowCreateButton:GetScript("OnClick")(mainFrame.requestWorkflowCreateButton)
@@ -359,7 +405,7 @@ mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.reques
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
 assert.equal(tostring((selectedRequestVariantItem or {}).itemID or ""), mainFrame.requestCreateItemIDInput:GetText(), "requests view should preserve the explicitly selected duplicate-name item id after delayed input callbacks")
 assert.equal(tostring((selectedRequestVariantItem or {}).name or (selectedRequestVariantItem or {}).itemName or ""), mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should keep the selected item display after delayed input callbacks")
-assert.equal((selectedRequestVariantItem or {}).craftedQualityIcon, mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should keep the selected duplicate-name tier after delayed input callbacks")
+assert.equal("Professions-ChatIcon-Quality-Tier2", mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should keep the selected duplicate-name tier after delayed input callbacks")
 assert.truthy(not mainFrame.requestCreateResultsPanel:IsShown(), "requests view should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
 assert.truthy(mainFrame.requestWizardNextButton.enabled ~= false, "request wizard should keep Next enabled after delayed callbacks on a valid selection")
 
@@ -372,7 +418,7 @@ mainFrame.requestCreateNoteInput:SetText("Need four")
 mainFrame.requestWizardNextButton:GetScript("OnClick")(mainFrame.requestWizardNextButton)
 assert.equal("Step 3 of 3: Review Request", mainFrame.requestWizardStepText:GetText(), "request wizard should advance to review")
 assert.equal("Test Variant Flask", mainFrame.requestWizardReviewItemNameText:GetText(), "request wizard review should read back item name")
-assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.requestWizardReviewQualityText:GetText(), "request wizard review should read back quality")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.requestWizardReviewQualityText:GetText(), "request wizard review should normalize two-rank quality icons to the shared visible icon family")
 assert.equal("4", mainFrame.requestWizardReviewQuantityText:GetText(), "request wizard review should read back quantity")
 assert.equal("Need four", mainFrame.requestWizardReviewReasonText:GetText(), "request wizard review should read back reason")
 assert.same(mainFrame.requestWizardModal, (mainFrame.requestWizardReviewItemNameText.points[1] or {})[2], "request wizard review values should align to a fixed modal column")

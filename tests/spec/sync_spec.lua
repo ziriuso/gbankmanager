@@ -1,5 +1,7 @@
 local assert = require("tests.helpers.assert")
 
+dofile("tests/helpers/wow_stubs.lua")
+
 _G.UnitName = function()
     return "SyncTester"
 end
@@ -39,6 +41,23 @@ local authConflictWinner = coordinator.ResolveAuthConflict(
 )
 
 assert.equal("GuildLead", authConflictWinner.updatedBy, "guildmaster auth policy updates should beat newer delegated-admin policy updates")
+
+local requestConflictWinner = coordinator.ResolveRequestConflict(
+    {
+        updatedAt = 220,
+        updatedBy = "Stormrage-MemberOne",
+        updatedByRankIndex = 2,
+        approval = "CANCELED",
+    },
+    {
+        updatedAt = 180,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+        approval = "APPROVED",
+    }
+)
+
+assert.equal("APPROVED", requestConflictWinner.approval, "officer-authored request updates should beat newer member-authored updates")
 
 local encoded = codec.EncodeTable({
     type = "SYNC_HELLO",
@@ -98,6 +117,9 @@ local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local events = ns.modules.events
 local syncEvents = ns.modules.syncEvents
 local scannerEvents = ns.modules.guildBankScannerEvents
+local function last_chat_message()
+    return (_G.DEFAULT_CHAT_FRAME.messages or {})[#(_G.DEFAULT_CHAT_FRAME.messages or {})]
+end
 
 assert.truthy(type(events) == "table", "events module should load from the toc")
 assert.truthy(type(events.GetScript) == "function", "events module should expose frame scripts")
@@ -109,7 +131,8 @@ assert.truthy(type(scannerEvents.GetRegisteredEvents) == "function", "scanner ev
 assert.truthy(type(scannerEvents.HandleEvent) == "function", "scanner events module should expose a scanner event handler")
 
 local scannerRegisteredEvents = scannerEvents.GetRegisteredEvents()
-assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[1], "scanner event adapter should own the guild bank slot event")
+assert.equal("GUILDBANKFRAME_OPENED", scannerRegisteredEvents[1], "scanner event adapter should own the guild bank opened event")
+assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[2], "scanner event adapter should own the guild bank slot event")
 
 local syncRegisteredEvents = syncEvents.GetRegisteredEvents()
 assert.equal("ADDON_LOADED", syncRegisteredEvents[1], "sync event adapter should own addon initialization")
@@ -143,6 +166,7 @@ onEvent(events, "PLAYER_LOGIN")
 assert.equal("GBankManager", _G.C_ChatInfo.registeredPrefixes[1], "player login should register the addon message prefix")
 assert.equal(1, #_G.C_ChatInfo.sentMessages, "player login should send a sync hello")
 assert.equal("SYNC_HELLO|0|Stormrage-SyncTester", _G.C_ChatInfo.sentMessages[1].payload, "sync hello should include the current player character key")
+assert.equal("GBankManager: Sync hello sent for Stormrage-SyncTester.", last_chat_message(), "player login should report sync hello activity in chat")
 
 local db = ns.state.db
 db.requests = {}
@@ -152,6 +176,7 @@ db.auth.capabilities.request_reject = { [1] = true }
 db.auth.capabilities.request_edit = { [1] = true }
 db.auth.capabilities.request_fulfill = { [1] = true }
 db.auth.capabilities.request_reopen = { [1] = true }
+db.auth.capabilities.request_delete = { [1] = true }
 db.auth.capabilities.full_ui = { [1] = true }
 db.auth.capabilities.minimum_add = { [1] = true }
 db.auth.capabilities.minimum_edit = { [1] = true }
@@ -187,6 +212,8 @@ local remoteRequestPayload = codec.EncodeTable({
 onEvent(events, "CHAT_MSG_ADDON", "GBankManager", remoteRequestPayload, "GUILD", "MemberOne")
 assert.equal(1, #db.requests, "sync events should accept guild request-created payloads from allowed members")
 assert.equal("req-remote-1", db.requests[1].requestId, "sync events should persist synced request ids")
+assert.equal("REQUEST_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "accepted synced request creation should append local history")
+assert.equal("GBankManager: Synced request req-remote-1 from MemberOne.", last_chat_message(), "accepted synced request creation should report chat feedback")
 
 local forgedRequestPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
@@ -481,6 +508,105 @@ assert.truthy(authorCancelAccepted, "sync events should accept request cancel up
 assert.equal("CANCELED", db.requests[1].approval, "accepted author cancel sync updates should persist the canceled status")
 assert.equal("No longer needed", db.requests[1].decisionNote, "accepted author cancel sync updates should preserve the decision note")
 
+db.requests[3] = {
+    requestId = "req-approve-sync",
+    requester = "MemberTwo",
+    requesterCharacterKey = "Stormrage-MemberTwo",
+    itemID = 2013,
+    itemName = "Approval Sync Flask",
+    quantity = 3,
+    approval = "PENDING",
+    fulfillment = "OPEN",
+    updatedAt = 165,
+}
+
+local approveSyncPayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 180,
+    payload = {
+        action = "APPROVE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-approve-sync",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 2013,
+            itemName = "Approval Sync Flask",
+            quantity = 3,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            approvedBankTab = "Alchemy",
+            tabName = "Alchemy",
+            decidedAt = 180,
+            updatedAt = 180,
+            updatedBy = "Stormrage-OfficerOne",
+            updatedByRankIndex = 1,
+        },
+    },
+})
+local approveSyncAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", approveSyncPayload, "GUILD", "OfficerOne")
+assert.truthy(approveSyncAccepted, "sync events should accept officer approval updates for existing requests")
+assert.equal("APPROVED", db.requests[3].approval, "accepted synced approval should update the local request state")
+assert.truthy(db.requests[3].minimumRuleKey ~= nil, "accepted synced approval should recreate the local minimum side effect")
+assert.equal("Alchemy", ((db.minimums or {})[1] or {}).tabName, "accepted synced approval should upsert the approved request minimum on the receiving client")
+local foundApprovedAudit = false
+for _, entry in ipairs(db.auditLog or {}) do
+    if entry.type == "REQUEST_APPROVED" and entry.requestId == "req-approve-sync" then
+        foundApprovedAudit = true
+        break
+    end
+end
+assert.truthy(foundApprovedAudit, "accepted synced approval should append local request history")
+
+db.requests[3] = {
+    requestId = "req-delete-sync",
+    requester = "MemberThree",
+    requesterCharacterKey = "Stormrage-MemberThree",
+    itemID = 2012,
+    itemName = "Delete Sync Flask",
+    quantity = 2,
+    approval = "REJECTED",
+    fulfillment = "OPEN",
+    updatedAt = 170,
+}
+
+local deleteUpdatePayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 171,
+    payload = {
+        action = "DELETE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-delete-sync",
+            requester = "MemberThree",
+            requesterCharacterKey = "Stormrage-MemberThree",
+            itemID = 2012,
+            itemName = "Delete Sync Flask",
+            quantity = 2,
+            approval = "REJECTED",
+            fulfillment = "OPEN",
+            updatedAt = 171,
+        },
+    },
+})
+local deleteUpdateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", deleteUpdatePayload, "GUILD", "OfficerOne")
+assert.truthy(deleteUpdateAccepted, "sync events should accept request delete updates from actors with request-delete permission")
+assert.equal(nil, db.requests[3], "accepted request delete sync updates should remove the request from the local cache")
+
 local requestCountBeforeForgedSender = #db.requests
 local forgedSenderPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
@@ -510,6 +636,7 @@ local forgedSenderPayload = codec.EncodeTable({
 local forgedSenderAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", forgedSenderPayload, "GUILD", "DifferentSender")
 assert.truthy(not forgedSenderAccepted, "sync events should reject payloads whose actor context does not match the addon-message sender")
 assert.equal(requestCountBeforeForgedSender, #db.requests, "forged sender payloads should not append requests")
+assert.equal("GBankManager: Ignored synced request create from DifferentSender.", last_chat_message(), "rejected synced request creates should report chat feedback")
 
 local remoteAuthPayload = codec.EncodeTable({
     type = "AUTH_POLICY_SNAPSHOT",
@@ -524,9 +651,11 @@ local remoteAuthPayload = codec.EncodeTable({
             name = "GuildLead",
         },
         policy = {
+            revision = 3,
             updatedAt = 101,
             updatedBy = "Stormrage-GuildLead",
             updatedByRankIndex = 0,
+            restockDefault = 275,
             rankMetadata = db.auth.rankMetadata,
             blacklist = {
                 ["Stormrage-Troublemaker"] = {
@@ -545,16 +674,31 @@ assert.truthy(
         or db.auth.blacklistHashes[ns.modules.permissions.HashCharacterKey("Stormrage-Troublemaker")] == true,
     "sync events should accept guildmaster auth policy snapshots"
 )
+assert.equal(275, db.ui.minimumSettings.defaultQuantity, "sync auth policy snapshots should also update the shared restock default")
+assert.equal("AUTH_POLICY_UPDATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "sync auth policy snapshots should append auth-policy history")
+assert.equal("GuildLead-Stormrage", ((db.auditLog or {})[#(db.auditLog or {})] or {}).actor, "sync auth policy history should attribute the remote updater")
+assert.equal("GBankManager: Synced auth policy from GuildLead.", last_chat_message(), "accepted synced auth policy snapshots should report chat feedback")
 
 local scanner = ns.modules.scanner
 local scannerCalls = 0
 local originalOnGuildBankSlotsChanged = scanner.OnGuildBankSlotsChanged
+local originalOnGuildBankOpened = scanner.OnGuildBankOpened
+local scannerOpenedCalls = 0
 scanner.OnGuildBankSlotsChanged = function(...)
     scannerCalls = scannerCalls + 1
     return originalOnGuildBankSlotsChanged(...)
 end
+scanner.OnGuildBankOpened = function(...)
+    scannerOpenedCalls = scannerOpenedCalls + 1
+    if originalOnGuildBankOpened then
+        return originalOnGuildBankOpened(...)
+    end
+end
 scanner.scanInProgress = true
+onEvent(events, "GUILDBANKFRAME_OPENED")
 onEvent(events, "GUILDBANKBAGSLOTS_CHANGED", 2)
 scanner.OnGuildBankSlotsChanged = originalOnGuildBankSlotsChanged
+scanner.OnGuildBankOpened = originalOnGuildBankOpened
 
+assert.equal(1, scannerOpenedCalls, "central event dispatcher should forward guild bank opened events to the scanner event adapter")
 assert.equal(1, scannerCalls, "central event dispatcher should forward guild bank slot events to the scanner event adapter")

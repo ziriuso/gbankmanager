@@ -16,9 +16,12 @@ local make_label = mainFrameShell.MakeLabel
 local make_button = mainFrameShell.MakeButton
 local set_button_icon = mainFrameShell.SetButtonIcon
 local make_input = mainFrameShell.MakeInput
+local make_slider = mainFrameShell.MakeSlider
 local make_slim_scroll_bar = mainFrameShell.MakeSlimScrollBar
 local create_page_overflow_viewport = mainFrameShell.CreatePageOverflowViewport
 local set_frame_shown = mainFrameShell.SetFrameShown
+local apply_frame_layer = mainFrameShell.ApplyFrameLayer
+local bring_frame_to_front = mainFrameShell.BringFrameToFront
 
 local function parse_number(value)
     local parsed = tonumber(value)
@@ -98,6 +101,20 @@ local function capability_label(capability)
     end
 
     return title_case_words(capability)
+end
+
+local function chain_frame_script(frame, scriptName, callback)
+    if type(frame) ~= "table" or type(frame.SetScript) ~= "function" or type(callback) ~= "function" then
+        return
+    end
+
+    local previous = type(frame.GetScript) == "function" and frame:GetScript(scriptName) or nil
+    frame:SetScript(scriptName, function(...)
+        if previous then
+            previous(...)
+        end
+        callback(...)
+    end)
 end
 
 local function make_export_output_input(parent, width, height)
@@ -277,7 +294,7 @@ local function auth_metadata_text(policy)
     local updatedAt = format_timestamp(policy.updatedAt)
     local updatedBy = display_character_key(policy.updatedBy)
     if updatedBy == "" then
-        updatedBy = "Unknown"
+        updatedBy = tostring(policy.updatedByHash or "") ~= "" and ("#" .. tostring(policy.updatedByHash or "")) or "Unknown"
     end
 
     return string.format("Last Update: %s by %s", tostring(updatedAt), tostring(updatedBy))
@@ -340,6 +357,25 @@ local function current_db()
     return runtime
 end
 
+local function current_appearance_settings(db)
+    db = db or current_db()
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.GetAppearanceSettings) == "function" then
+        return store.GetAppearanceSettings(db)
+    end
+
+    local ui = (db or {}).ui or {}
+    ui.appearance = ui.appearance or {
+        themePreset = "default",
+        shellScale = 1,
+        tableDensity = 1,
+        shellOpacity = 0.96,
+        modalOpacity = 1,
+    }
+
+    return ui.appearance
+end
+
 local function current_auth_context(db)
     local auth = ns.modules.auth or ns.modules.permissions
     if auth and type(auth.GetLivePlayerContext) == "function" then
@@ -392,6 +428,34 @@ local function request_only_layout(mainFrame)
     return mainFrame.requestOnlyMode == true and mainFrame.activeView == "REQUESTS"
 end
 
+local function clamp_range(value, minValue, maxValue)
+    value = tonumber(value or minValue) or minValue
+    return math.max(minValue, math.min(maxValue, value))
+end
+
+local function percent_text(value)
+    return string.format("%d%%", math.floor(((tonumber(value or 0) or 0) * 100) + 0.5))
+end
+
+local function nearly_equal(left, right)
+    return math.abs((tonumber(left or 0) or 0) - (tonumber(right or 0) or 0)) < 0.0001
+end
+
+local function nav_icon_texture_for(key)
+    local icons = {
+        DASHBOARD = "Interface\\ICONS\\INV_Misc_Map_01",
+        INVENTORY = "Interface\\ICONS\\INV_Crate_03",
+        HISTORY = "Interface\\ICONS\\INV_Misc_Note_01",
+        MINIMUMS = "Interface\\ICONS\\INV_Misc_Coin_01",
+        REQUESTS = "Interface\\ICONS\\INV_Letter_15",
+        EXPORTS = "Interface\\ICONS\\INV_Scroll_03",
+        ABOUT = "Interface\\ICONS\\INV_Misc_Book_09",
+        OPTIONS = "Interface\\ICONS\\INV_Gizmo_02",
+    }
+
+    return icons[key] or "Interface\\ICONS\\INV_Misc_QuestionMark"
+end
+
 mainFrame.collapsedSidebar = mainFrame.collapsedSidebar and true or false
 
 local function set_alpha(nextAlpha)
@@ -436,6 +500,81 @@ mainFrame.minimumManualOnlyRows = mainFrame.minimumManualOnlyRows or false
 mainFrame.exportSelectedPreset = normalize_export_preset_name(mainFrame.exportSelectedPreset)
 mainFrame.exportCustomTemplate = mainFrame.exportCustomTemplate or clone_export_template()
 mainFrame.exportShoppingListName = normalize_shopping_list_name(mainFrame.exportShoppingListName)
+mainFrame.baseTableHeaderHeight = mainFrame.baseTableHeaderHeight or mainFrame.tableHeaderHeight
+mainFrame.baseTableFilterHeight = mainFrame.baseTableFilterHeight or mainFrame.tableFilterHeight
+mainFrame.baseTableRowHeight = mainFrame.baseTableRowHeight or mainFrame.tableRowHeight
+mainFrame.baseShellWidth = mainFrame.baseShellWidth or (theme.spacing.frameWidth or 1040)
+mainFrame.baseShellHeight = mainFrame.baseShellHeight or (theme.spacing.frameHeight or 640)
+mainFrame.baseSidebarExpandedWidth = mainFrame.baseSidebarExpandedWidth or (theme.spacing.sidebarExpanded or 212)
+mainFrame.baseSidebarCollapsedWidth = mainFrame.baseSidebarCollapsedWidth or (theme.spacing.sidebarCollapsed or 72)
+mainFrame.baseTopBarHeight = mainFrame.baseTopBarHeight or (theme.spacing.topBarHeight or 64)
+mainFrame.appearanceThemePreset = mainFrame.appearanceThemePreset or "default"
+mainFrame.appearanceShellScale = mainFrame.appearanceShellScale or 1
+mainFrame.appearanceTableDensity = mainFrame.appearanceTableDensity or 1
+mainFrame.appearanceShellOpacity = mainFrame.appearanceShellOpacity or mainFrame.currentAlpha or 0.96
+mainFrame.appearanceModalOpacity = mainFrame.appearanceModalOpacity or 1
+mainFrame.modalFrames = mainFrame.modalFrames or {}
+mainFrame.modalFrameMap = mainFrame.modalFrameMap or {}
+
+function mainFrame:SyncModalFrameLayers()
+    for _, entry in ipairs(self.modalFrames or {}) do
+        if entry.frame then
+            local frameLevel = (tonumber(self.frameLevel or 0) or 0) + (tonumber(entry.levelOffset or 20) or 20)
+            if apply_frame_layer then
+                apply_frame_layer(entry.frame, entry.strata or "FULLSCREEN_DIALOG", frameLevel)
+            else
+                entry.frame.frameStrata = entry.strata or "FULLSCREEN_DIALOG"
+                entry.frame.frameLevel = frameLevel
+            end
+        end
+    end
+end
+
+function mainFrame:RegisterModalFrame(frame, levelOffset, strata)
+    if type(frame) ~= "table" then
+        return frame
+    end
+
+    local entry = self.modalFrameMap[frame]
+    if not entry then
+        entry = {
+            frame = frame,
+        }
+        table.insert(self.modalFrames, entry)
+        self.modalFrameMap[frame] = entry
+    end
+
+    entry.levelOffset = tonumber(levelOffset or entry.levelOffset or 20) or 20
+    entry.strata = strata or entry.strata or "FULLSCREEN_DIALOG"
+
+    self:SyncModalFrameLayers()
+
+    chain_frame_script(frame, "OnMouseDown", function()
+        self:BringToFront(frame)
+    end)
+    chain_frame_script(frame, "OnShow", function()
+        self:BringToFront(frame)
+    end)
+
+    return frame
+end
+
+function mainFrame:BringToFront(focusFrame)
+    local nextLevel = bring_frame_to_front and bring_frame_to_front(self, self.frameStrata or "DIALOG") or (tonumber(self.frameLevel or 40) or 40)
+    self.frameLevel = tonumber(nextLevel or self.frameLevel or 40) or 40
+    self:SyncModalFrameLayers()
+
+    local entry = focusFrame and self.modalFrameMap and self.modalFrameMap[focusFrame] or nil
+    if entry and apply_frame_layer then
+        apply_frame_layer(focusFrame, entry.strata or "FULLSCREEN_DIALOG", self.frameLevel + (entry.levelOffset or 20))
+    end
+
+    return self.frameLevel
+end
+
+chain_frame_script(mainFrame, "OnMouseDown", function(self)
+    self:BringToFront()
+end)
 
 mainFrame.dashboardCards = mainFrame.dashboardCards or {}
 for index = 1, 4 do
@@ -566,7 +705,7 @@ mainFrame.optionsScrollController = optionsOverflow and optionsOverflow.controll
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(92)
+mainFrame.optionsAppearancePanel:SetHeight(196)
 apply_panel_style(mainFrame.optionsAppearancePanel, theme.colors.panelAlt)
 
 mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -581,25 +720,129 @@ mainFrame.optionsAuthPanel:SetPoint("TOPRIGHT", mainFrame.optionsRestockPanel, "
 mainFrame.optionsAuthPanel:SetHeight(560)
 apply_panel_style(mainFrame.optionsAuthPanel, theme.colors.panelAlt)
 
-mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Window Transparency", "GameFontHighlight")
+mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Appearance", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Adjust shell opacity with simple buttons and keep the percentage visible.", "GameFontHighlightSmall")
+mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Theme presets stay local, shell scale also drives table density so shared controls stay aligned, and sidebar icons stay visible when text is collapsed.", "GameFontHighlightSmall")
 mainFrame.optionsHint:SetPoint("TOPLEFT", mainFrame.optionsTitle, "BOTTOMLEFT", 0, -8)
 
-if mainFrame.transparencySlider then
-    mainFrame.transparencySlider:Hide()
+mainFrame.optionsThemePresetLabel = mainFrame.optionsThemePresetLabel or make_label(mainFrame.optionsAppearancePanel, "Theme Preset", "GameFontHighlightSmall")
+mainFrame.optionsThemePresetLabel:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -14)
+
+mainFrame.optionsThemeButtons = mainFrame.optionsThemeButtons or {}
+local themePresetOrder = type(mainFrameShell.GetThemePresetOrder) == "function" and mainFrameShell.GetThemePresetOrder() or { "default", "contrast", "warm" }
+local themePresets = type(mainFrameShell.GetThemePresets) == "function" and mainFrameShell.GetThemePresets() or {}
+local themeButtonLayout = {
+    default = { width = 74, row = 1 },
+    contrast = { width = 82, row = 1 },
+    horde = { width = 68, row = 1 },
+    alliance = { width = 80, row = 1 },
+    void = { width = 64, row = 2 },
+    adventurer = { width = 92, row = 2 },
+    moonglade = { width = 92, row = 2 },
+    warm = { width = 72, row = 2 },
+}
+local themeButtonRowAnchors = {}
+local previousThemeButton
+for _, presetKey in ipairs(themePresetOrder) do
+    local preset = themePresets[presetKey] or {}
+    local buttonLayout = themeButtonLayout[presetKey] or { width = 80, row = 1 }
+    local button = mainFrame.optionsThemeButtons[presetKey] or make_button(mainFrame.optionsAppearancePanel, buttonLayout.width, 24, preset.label or tostring(presetKey))
+    button:SetWidth(buttonLayout.width)
+    button.labelText:SetText(preset.label or tostring(presetKey))
+    button:ClearAllPoints()
+    if buttonLayout.row == 1 then
+        if themeButtonRowAnchors[1] == nil then
+            button:SetPoint("TOPLEFT", mainFrame.optionsThemePresetLabel, "BOTTOMLEFT", 0, -6)
+        else
+            button:SetPoint("LEFT", previousThemeButton, "RIGHT", 8, 0)
+        end
+    else
+        if themeButtonRowAnchors[2] == nil then
+            button:SetPoint("TOPLEFT", themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -8)
+        else
+            button:SetPoint("LEFT", previousThemeButton, "RIGHT", 8, 0)
+        end
+    end
+    mainFrame.optionsThemeButtons[presetKey] = button
+    themeButtonRowAnchors[buttonLayout.row] = themeButtonRowAnchors[buttonLayout.row] or button
+    previousThemeButton = button
 end
-mainFrame.transparencySlider = nil
+mainFrame.optionsThemeDefaultButton = mainFrame.optionsThemeButtons.default
+mainFrame.optionsThemeContrastButton = mainFrame.optionsThemeButtons.contrast
+mainFrame.optionsThemeWarmButton = mainFrame.optionsThemeButtons.adventurer or mainFrame.optionsThemeButtons.warm
 
-mainFrame.transparencyDecreaseButton = mainFrame.transparencyDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 32, 24, "-")
-mainFrame.transparencyDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -16)
+mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Scale", "GameFontHighlightSmall")
+mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
 
-mainFrame.transparencyIncreaseButton = mainFrame.transparencyIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 32, 24, "+")
-mainFrame.transparencyIncreaseButton:SetPoint("LEFT", mainFrame.transparencyDecreaseButton, "RIGHT", 92, 0)
+mainFrame.optionsShellScaleDecreaseButton = mainFrame.optionsShellScaleDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
+mainFrame.optionsShellScaleDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.transparencyValueText = mainFrame.transparencyValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
-mainFrame.transparencyValueText:SetPoint("LEFT", mainFrame.transparencyDecreaseButton, "RIGHT", 14, 0)
+mainFrame.optionsShellScaleSlider = mainFrame.optionsShellScaleSlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.85, 1.2, 1)
+mainFrame.optionsShellScaleSlider:SetPoint("LEFT", mainFrame.optionsShellScaleDecreaseButton, "RIGHT", 8, 0)
+if type(mainFrame.optionsShellScaleSlider.SetValueStep) == "function" then
+    mainFrame.optionsShellScaleSlider:SetValueStep(0.05)
+end
+
+mainFrame.optionsShellScaleIncreaseButton = mainFrame.optionsShellScaleIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
+mainFrame.optionsShellScaleIncreaseButton:SetPoint("LEFT", mainFrame.optionsShellScaleSlider, "RIGHT", 8, 0)
+
+mainFrame.optionsShellScaleValueText = mainFrame.optionsShellScaleValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
+mainFrame.optionsShellScaleValueText:SetPoint("LEFT", mainFrame.optionsShellScaleIncreaseButton, "RIGHT", 8, 0)
+
+mainFrame.optionsTableDensityLabel = mainFrame.optionsTableDensityLabel or make_label(mainFrame.optionsAppearancePanel, "Table Density (Linked)", "GameFontHighlightSmall")
+mainFrame.optionsTableDensityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellScaleDecreaseButton, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsTableDensityDecreaseButton = mainFrame.optionsTableDensityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
+mainFrame.optionsTableDensityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsTableDensityLabel, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsTableDensitySlider = mainFrame.optionsTableDensitySlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.85, 1.2, 1)
+mainFrame.optionsTableDensitySlider:SetPoint("LEFT", mainFrame.optionsTableDensityDecreaseButton, "RIGHT", 8, 0)
+if type(mainFrame.optionsTableDensitySlider.SetValueStep) == "function" then
+    mainFrame.optionsTableDensitySlider:SetValueStep(0.05)
+end
+
+mainFrame.optionsTableDensityIncreaseButton = mainFrame.optionsTableDensityIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
+mainFrame.optionsTableDensityIncreaseButton:SetPoint("LEFT", mainFrame.optionsTableDensitySlider, "RIGHT", 8, 0)
+
+mainFrame.optionsTableDensityValueText = mainFrame.optionsTableDensityValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
+mainFrame.optionsTableDensityValueText:SetPoint("LEFT", mainFrame.optionsTableDensityIncreaseButton, "RIGHT", 8, 0)
+
+mainFrame.optionsShellOpacityLabel = mainFrame.optionsShellOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Opacity", "GameFontHighlightSmall")
+mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 352, -66)
+
+mainFrame.optionsShellOpacityDecreaseButton = mainFrame.optionsShellOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
+mainFrame.optionsShellOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityLabel, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsShellOpacitySlider = mainFrame.optionsShellOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.55, 1.0, 0.96)
+mainFrame.optionsShellOpacitySlider:SetPoint("LEFT", mainFrame.optionsShellOpacityDecreaseButton, "RIGHT", 8, 0)
+if type(mainFrame.optionsShellOpacitySlider.SetValueStep) == "function" then
+    mainFrame.optionsShellOpacitySlider:SetValueStep(0.01)
+end
+
+mainFrame.optionsShellOpacityIncreaseButton = mainFrame.optionsShellOpacityIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
+mainFrame.optionsShellOpacityIncreaseButton:SetPoint("LEFT", mainFrame.optionsShellOpacitySlider, "RIGHT", 8, 0)
+
+mainFrame.optionsShellOpacityValueText = mainFrame.optionsShellOpacityValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
+mainFrame.optionsShellOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityDecreaseButton, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsModalOpacityLabel = mainFrame.optionsModalOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Modal Opacity", "GameFontHighlightSmall")
+mainFrame.optionsModalOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityValueText, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsModalOpacityDecreaseButton = mainFrame.optionsModalOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
+mainFrame.optionsModalOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityLabel, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsModalOpacitySlider = mainFrame.optionsModalOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.70, 1.0, 1)
+mainFrame.optionsModalOpacitySlider:SetPoint("LEFT", mainFrame.optionsModalOpacityDecreaseButton, "RIGHT", 8, 0)
+if type(mainFrame.optionsModalOpacitySlider.SetValueStep) == "function" then
+    mainFrame.optionsModalOpacitySlider:SetValueStep(0.01)
+end
+
+mainFrame.optionsModalOpacityIncreaseButton = mainFrame.optionsModalOpacityIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
+mainFrame.optionsModalOpacityIncreaseButton:SetPoint("LEFT", mainFrame.optionsModalOpacitySlider, "RIGHT", 8, 0)
+
+mainFrame.optionsModalOpacityValueText = mainFrame.optionsModalOpacityValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
+mainFrame.optionsModalOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityDecreaseButton, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsRestockPanel, "Restock Default", "GameFontHighlight")
 mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "TOPLEFT", 16, -16)
@@ -616,7 +859,7 @@ mainFrame.defaultMinimumSaveButton:SetPoint("LEFT", mainFrame.defaultMinimumInpu
 mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
 mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsAuthHint = mainFrame.optionsAuthHint or make_label(mainFrame.optionsAuthPanel, "Configure rank-based access, request submission, and blacklist entries.", "GameFontHighlightSmall")
+mainFrame.optionsAuthHint = mainFrame.optionsAuthHint or make_label(mainFrame.optionsAuthPanel, "Configure rank-based access, request submission, and blacklist entries. Blacklist entries should use Character-Server formatting and save guild-shared membership through appended officer-note tags.", "GameFontHighlightSmall")
 mainFrame.optionsAuthHint:SetPoint("TOPLEFT", mainFrame.optionsAuthTitle, "BOTTOMLEFT", 0, -8)
 
 mainFrame.optionsAuthMetadataText = mainFrame.optionsAuthMetadataText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
@@ -698,7 +941,7 @@ end
 mainFrame.optionsBlacklistTitle = mainFrame.optionsBlacklistTitle or make_label(mainFrame.optionsAuthPanel, "Blacklist", "GameFontHighlight")
 mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionPanel, "BOTTOMLEFT", 0, -18)
 
-mainFrame.optionsBlacklistCharacterLabel = mainFrame.optionsBlacklistCharacterLabel or make_label(mainFrame.optionsAuthPanel, "Character", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistCharacterLabel = mainFrame.optionsBlacklistCharacterLabel or make_label(mainFrame.optionsAuthPanel, "Character-Server", "GameFontHighlightSmall")
 mainFrame.optionsBlacklistCharacterLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsBlacklistNameInput = mainFrame.optionsBlacklistNameInput or make_input(mainFrame.optionsAuthPanel, 220, 22)
@@ -737,18 +980,22 @@ mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsAllowedP
 mainFrame.optionsPolicyStringInput = mainFrame.optionsPolicyStringInput or make_input(mainFrame.optionsAuthPanel, 250, 22)
 mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsPolicyStringHelpText = mainFrame.optionsPolicyStringHelpText or make_label(mainFrame.optionsAuthPanel, "Compact auth policy string stored in Guild Info so addon users can read guild permissions. Save updates it locally. Copy the policy string into Guild Information, paste it with your guild notes, press Accept, then use Refresh Guild Info to confirm the live string.", "GameFontHighlightSmall")
+mainFrame.optionsPolicyStringSelectAllButton = mainFrame.optionsPolicyStringSelectAllButton or make_button(mainFrame.optionsAuthPanel, 78, 22, "Select All")
+mainFrame.optionsPolicyStringSelectAllButton:SetPoint("LEFT", mainFrame.optionsPolicyStringInput, "RIGHT", 8, 0)
+
+mainFrame.optionsPolicyStringHelpText = mainFrame.optionsPolicyStringHelpText or make_label(mainFrame.optionsAuthPanel, "Compact auth policy string stored in Guild Info so addon users can read guild permissions. Blacklist membership now lives in appended officer-note tags, while reasons stay local and sync through the addon. Save updates the local policy and any changed officer-note tags. Copy the policy string into Guild Information, press Accept, then use Refresh Guild Info to confirm the live string.", "GameFontHighlightSmall")
 mainFrame.optionsPolicyStringHelpText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -6)
-mainFrame.optionsPolicyStringHelpText:SetWidth(320)
+mainFrame.optionsPolicyStringHelpText:SetWidth(280)
 if type(mainFrame.optionsPolicyStringHelpText.SetJustifyH) == "function" then
     mainFrame.optionsPolicyStringHelpText:SetJustifyH("LEFT")
 end
 
 mainFrame.optionsAuthStatusText = mainFrame.optionsAuthStatusText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
 mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringHelpText, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsAuthStatusText:SetWidth(280)
 
 mainFrame.optionsAuthSaveButton = mainFrame.optionsAuthSaveButton or make_button(mainFrame.optionsAuthPanel, 88, 24, "Save")
-mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringHelpText, "BOTTOMLEFT", 0, -44)
+mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsAuthStatusText, "BOTTOMLEFT", 0, -12)
 
 mainFrame.optionsAuthReadButton = mainFrame.optionsAuthReadButton or make_button(mainFrame.optionsAuthPanel, 128, 24, "Refresh Guild Info")
 mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthSaveButton, "RIGHT", 8, 0)
@@ -756,26 +1003,259 @@ mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthSaveButton
 mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 24, "Revert")
 mainFrame.optionsAuthResetButton:SetPoint("LEFT", mainFrame.optionsAuthReadButton, "RIGHT", 8, 0)
 
-local function refresh_alpha_text()
-    local percentage = math.floor(mainFrame.currentAlpha * 100 + 0.5)
-    mainFrame.transparencyValueText:SetText(string.format("Opacity %d%%", percentage))
+local function modal_frames(frame)
+    return {
+        frame.requestWizardModal,
+        frame.requestDetailsModal,
+        frame.minimumAddModal,
+        frame.minimumDetailsModal,
+        frame.exportModal,
+        frame.exportStockedElsewhereModal,
+        frame.exportManualShoppingListModal,
+    }
 end
 
-local function adjust_alpha(delta)
-    local currentPercent = math.floor((mainFrame.currentAlpha or 1) * 100 + 0.5)
-    local nextPercent = math.max(55, math.min(100, currentPercent + (delta or 0)))
-    set_alpha(nextPercent / 100)
-    refresh_alpha_text()
+function mainFrame:ApplyModalOpacity(alpha)
+    alpha = clamp_range(alpha, 0.70, 1.0)
+    local shell = ns.modules.mainFrameShell or mainFrameShell
+    local fallbackColor = shell and type(shell.GetTheme) == "function" and shell.GetTheme().colors.panelAlt or { 0.13, 0.17, 0.24, 0.98 }
+
+    for _, frame in ipairs(modal_frames(self)) do
+        if frame and type(frame.SetAlpha) == "function" then
+            frame:SetAlpha(alpha)
+        end
+        if frame and type(frame.SetBackdropColor) == "function" then
+            local color = frame.gbmBackdropBaseColor or fallbackColor
+            frame:SetBackdropColor(color[1] or 0, color[2] or 0, color[3] or 0, math.min(alpha, color[4] or alpha))
+        end
+    end
 end
-refresh_alpha_text()
 
-mainFrame.transparencyDecreaseButton:SetScript("OnClick", function()
-    adjust_alpha(-1)
+function mainFrame:RefreshAppearanceControls()
+    self.isRefreshingAppearanceControls = true
+    if self.optionsShellScaleSlider then
+        self.optionsShellScaleSlider:SetValue(self.appearanceShellScale or 1)
+    end
+    if self.optionsTableDensitySlider then
+        self.optionsTableDensitySlider:SetValue(self.appearanceTableDensity or 1)
+    end
+    if self.optionsShellOpacitySlider then
+        self.optionsShellOpacitySlider:SetValue(self.appearanceShellOpacity or 0.96)
+    end
+    if self.optionsModalOpacitySlider then
+        self.optionsModalOpacitySlider:SetValue(self.appearanceModalOpacity or 1)
+    end
+
+    if self.optionsShellScaleValueText then
+        self.optionsShellScaleValueText:SetText(percent_text(self.appearanceShellScale or 1))
+    end
+    if self.optionsTableDensityValueText then
+        self.optionsTableDensityValueText:SetText(percent_text(self.appearanceTableDensity or 1))
+    end
+    if self.optionsShellOpacityValueText then
+        self.optionsShellOpacityValueText:SetText(percent_text(self.appearanceShellOpacity or 0.96))
+    end
+    if self.optionsModalOpacityValueText then
+        self.optionsModalOpacityValueText:SetText(percent_text(self.appearanceModalOpacity or 1))
+    end
+    self.isRefreshingAppearanceControls = false
+end
+
+function mainFrame:LoadAppearanceSettingsFromDb(db)
+    db = db or current_db()
+    local appearance = current_appearance_settings(db)
+    local presetKey = tostring(appearance.themePreset or "default")
+    local shell = ns.modules.mainFrameShell or mainFrameShell
+
+    self.appearanceThemePreset = presetKey
+    self.appearanceShellScale = clamp_range(appearance.shellScale, 0.85, 1.2)
+    self.appearanceTableDensity = self.appearanceShellScale
+    self.appearanceShellOpacity = clamp_range(appearance.shellOpacity, 0.55, 1.0)
+    self.appearanceModalOpacity = clamp_range(appearance.modalOpacity, 0.70, 1.0)
+
+    appearance.themePreset = self.appearanceThemePreset
+    appearance.shellScale = self.appearanceShellScale
+    appearance.tableDensity = self.appearanceTableDensity
+    appearance.shellOpacity = self.appearanceShellOpacity
+    appearance.modalOpacity = self.appearanceModalOpacity
+
+    if shell and shell.ApplyThemePreset then
+        shell.ApplyThemePreset(self.appearanceThemePreset)
+    end
+    if shell and shell.ApplyShellScale then
+        shell.ApplyShellScale(self.appearanceShellScale)
+    end
+
+    self.tableHeaderHeight = math.max(24, math.floor((self.baseTableHeaderHeight or 34) * self.appearanceTableDensity + 0.5))
+    self.tableFilterHeight = math.max(22, math.floor((self.baseTableFilterHeight or 28) * self.appearanceTableDensity + 0.5))
+    self.tableRowHeight = math.max(20, math.floor((self.baseTableRowHeight or 26) * self.appearanceTableDensity + 0.5))
+    self.tableVisibleCount = math.max(1, math.floor(math.max(0, self.tableViewportHeight or self.defaultTableViewportHeight or 0) / self.tableRowHeight))
+    if self.tableScrollController and self.tableScrollController.options then
+        self.tableScrollController.options.wheelStep = self.tableRowHeight
+    end
+
+    set_alpha(self.appearanceShellOpacity)
+    self:ApplyModalOpacity(self.appearanceModalOpacity)
+    self:RefreshAppearanceControls()
+
+    return appearance
+end
+
+local function refresh_after_appearance_change()
+    mainFrame:ApplyTheme()
+    if mainFrame.activeView then
+        mainFrame:RefreshView()
+    end
+end
+
+function mainFrame:SetThemePreset(presetKey)
+    local db = current_db()
+    local appearance = current_appearance_settings(db)
+    appearance.themePreset = tostring(presetKey or "default")
+    self:LoadAppearanceSettingsFromDb(db)
+    refresh_after_appearance_change()
+end
+
+function mainFrame:SetShellScale(scale)
+    local db = current_db()
+    local appearance = current_appearance_settings(db)
+    local nextScale = clamp_range(scale, 0.85, 1.2)
+    appearance.shellScale = nextScale
+    appearance.tableDensity = nextScale
+    self:LoadAppearanceSettingsFromDb(db)
+    refresh_after_appearance_change()
+end
+
+function mainFrame:SetTableDensity(scale)
+    self:SetShellScale(scale)
+end
+
+function mainFrame:SetShellOpacity(alpha)
+    local db = current_db()
+    local appearance = current_appearance_settings(db)
+    appearance.shellOpacity = clamp_range(alpha, 0.55, 1.0)
+    self:LoadAppearanceSettingsFromDb(db)
+    refresh_after_appearance_change()
+end
+
+function mainFrame:SetModalOpacity(alpha)
+    local db = current_db()
+    local appearance = current_appearance_settings(db)
+    appearance.modalOpacity = clamp_range(alpha, 0.70, 1.0)
+    self:LoadAppearanceSettingsFromDb(db)
+    refresh_after_appearance_change()
+end
+
+local function adjust_appearance_value(getter, setter, delta)
+    local currentValue = getter()
+    setter(currentValue + delta)
+end
+
+for presetKey, button in pairs(mainFrame.optionsThemeButtons or {}) do
+    button:SetScript("OnClick", function()
+        mainFrame:SetThemePreset(presetKey)
+    end)
+end
+
+mainFrame.optionsShellScaleDecreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceShellScale or 1
+    end, function(nextValue)
+        mainFrame:SetShellScale(nextValue)
+    end, -0.05)
 end)
 
-mainFrame.transparencyIncreaseButton:SetScript("OnClick", function()
-    adjust_alpha(1)
+mainFrame.optionsShellScaleIncreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceShellScale or 1
+    end, function(nextValue)
+        mainFrame:SetShellScale(nextValue)
+    end, 0.05)
 end)
+
+mainFrame.optionsTableDensityDecreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceTableDensity or 1
+    end, function(nextValue)
+        mainFrame:SetTableDensity(nextValue)
+    end, -0.05)
+end)
+
+mainFrame.optionsTableDensityIncreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceTableDensity or 1
+    end, function(nextValue)
+        mainFrame:SetTableDensity(nextValue)
+    end, 0.05)
+end)
+
+mainFrame.optionsShellOpacityDecreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceShellOpacity or 0.96
+    end, function(nextValue)
+        mainFrame:SetShellOpacity(nextValue)
+    end, -0.01)
+end)
+
+mainFrame.optionsShellOpacityIncreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceShellOpacity or 0.96
+    end, function(nextValue)
+        mainFrame:SetShellOpacity(nextValue)
+    end, 0.01)
+end)
+
+mainFrame.optionsModalOpacityDecreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceModalOpacity or 1
+    end, function(nextValue)
+        mainFrame:SetModalOpacity(nextValue)
+    end, -0.01)
+end)
+
+mainFrame.optionsModalOpacityIncreaseButton:SetScript("OnClick", function()
+    adjust_appearance_value(function()
+        return mainFrame.appearanceModalOpacity or 1
+    end, function(nextValue)
+        mainFrame:SetModalOpacity(nextValue)
+    end, 0.01)
+end)
+
+mainFrame.optionsShellScaleSlider.onValueChanged = function(_, value)
+    if mainFrame.isRefreshingAppearanceControls then
+        return
+    end
+    if not nearly_equal(mainFrame.appearanceShellScale or 1, value) then
+        mainFrame:SetShellScale(value)
+    end
+end
+
+mainFrame.optionsTableDensitySlider.onValueChanged = function(_, value)
+    if mainFrame.isRefreshingAppearanceControls then
+        return
+    end
+    if not nearly_equal(mainFrame.appearanceShellScale or 1, value) then
+        mainFrame:SetShellScale(value)
+    end
+end
+
+mainFrame.optionsShellOpacitySlider.onValueChanged = function(_, value)
+    if mainFrame.isRefreshingAppearanceControls then
+        return
+    end
+    if not nearly_equal(mainFrame.appearanceShellOpacity or 0.96, value) then
+        mainFrame:SetShellOpacity(value)
+    end
+end
+
+mainFrame.optionsModalOpacitySlider.onValueChanged = function(_, value)
+    if mainFrame.isRefreshingAppearanceControls then
+        return
+    end
+    if not nearly_equal(mainFrame.appearanceModalOpacity or 1, value) then
+        mainFrame:SetModalOpacity(value)
+    end
+end
 
 mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
     mainFrame:SaveDefaultMinimumSetting()
@@ -863,6 +1343,10 @@ end
 
 function mainFrame:LoadAuthOptionsFromDb(db)
     db = db or current_db()
+    local authPolicySource = ns.modules.authPolicySource
+    if authPolicySource and type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
+        authPolicySource.PullPolicyFromGuildInfo(db)
+    end
     self.authDraftPolicy = clone_table((db or {}).auth or {})
     self.authBlacklistSelectedKey = nil
     self.authRankDropdownShown = false
@@ -955,7 +1439,7 @@ function mainFrame:SelectBlacklistEntry(characterKey)
     local policy = self:GetAuthDraftPolicy(current_db())
     self.authBlacklistSelectedKey = characterKey
     local entry = characterKey and (policy.blacklist or {})[characterKey] or nil
-    self.optionsBlacklistNameInput:SetText(characterKey or "")
+    self.optionsBlacklistNameInput:SetText(display_character_key(characterKey or ""))
     self.optionsBlacklistReasonInput:SetText(entry and entry.reason or "")
     self:RefreshAuthOptions()
 end
@@ -968,10 +1452,17 @@ function mainFrame:StageBlacklistEntry()
     local rawName = self.optionsBlacklistNameInput:GetText() or ""
     local reason = self.optionsBlacklistReasonInput:GetText() or ""
     local realmName = context.realmName or (type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
-    local characterKey = permissions and type(permissions.NormalizeCharacterKey) == "function" and permissions.NormalizeCharacterKey(rawName, realmName) or rawName
+    local characterKey
+    if permissions and type(permissions.NormalizeEnteredCharacterKey) == "function" then
+        characterKey = permissions.NormalizeEnteredCharacterKey(rawName, realmName)
+    elseif permissions and type(permissions.NormalizeCharacterKey) == "function" then
+        characterKey = permissions.NormalizeCharacterKey(rawName, realmName)
+    else
+        characterKey = rawName
+    end
 
     if characterKey == "" then
-        self.optionsAuthStatusText:SetText("Enter a character name or Realm-Character key.")
+        self.optionsAuthStatusText:SetText("Enter a Character-Server name or a character on your current realm.")
         return nil
     end
 
@@ -1045,9 +1536,11 @@ end
 function mainFrame:SaveAuthPolicy()
     local db = current_db()
     local permissions = ns.modules.auth or ns.modules.permissions
+    local officerNoteBlacklist = ns.modules.officerNoteBlacklist or {}
     local transport = ns.modules.syncTransport
     local authPolicyCodec = ns.modules.authPolicyCodec
     local context = current_auth_context(db)
+    local previousPolicy = clone_table(current_policy(db))
     local draft = self:GetAuthDraftPolicy(db)
 
     if not can_access(context, "auth_manage", current_policy(db)) then
@@ -1059,6 +1552,24 @@ function mainFrame:SaveAuthPolicy()
         draft = permissions.NormalizePolicy(draft, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
     end
 
+    local minimumSettings = self.GetMinimumSettings and self:GetMinimumSettings(db) or (((db or {}).ui or {}).minimumSettings or {})
+    draft.restockDefault = tonumber(minimumSettings.defaultQuantity or draft.restockDefault or 100) or 100
+
+    if type(officerNoteBlacklist.ApplyDesiredBlacklistChanges) == "function" then
+        local blacklistApplied, blacklistReason, updatedDraft = officerNoteBlacklist.ApplyDesiredBlacklistChanges(previousPolicy, draft)
+        if not blacklistApplied then
+            if blacklistReason == "cannot_edit" then
+                self.optionsAuthStatusText:SetText("Unable to save blacklist changes because you cannot edit officer notes.")
+            elseif blacklistReason == "note_too_long" then
+                self.optionsAuthStatusText:SetText("Unable to append [GBMBL] because the target officer note is already too long.")
+            else
+                self.optionsAuthStatusText:SetText("Unable to save blacklist changes to officer notes.")
+            end
+            return nil
+        end
+        draft = updatedDraft or draft
+    end
+
     if permissions and type(permissions.StampPolicy) == "function" then
         permissions.StampPolicy(draft, context, _G.time and _G.time() or 0)
     end
@@ -1068,11 +1579,14 @@ function mainFrame:SaveAuthPolicy()
     end
 
     db.auth = draft
+    if type(permissions.AppendPolicyAudit) == "function" then
+        permissions.AppendPolicyAudit(db, previousPolicy, draft, "local")
+    end
     self.authDraftPolicy = clone_table(draft)
     if self.optionsPolicyStringInput and type(self.optionsPolicyStringInput.SetText) == "function" then
         self.optionsPolicyStringInput:SetText(draft.guildPolicyString or "")
     end
-    self.optionsAuthStatusText:SetText("Saved guild auth policy locally. Copy the policy string into Guild Information and press Accept.")
+    self.optionsAuthStatusText:SetText("Saved guild auth policy locally, updated any changed officer-note blacklist tags, and refreshed the policy string. Copy the policy string into Guild Information and press Accept.")
 
     if transport and type(transport.Send) == "function" then
         transport.Send("GUILD", "GUILD", {
@@ -1117,6 +1631,9 @@ function mainFrame:RefreshAuthPolicyFromGuildInfo()
         self.optionsAuthStatusText:SetText("Guild Info refresh is unavailable.")
     end
 
+    if self.LoadMinimumSettingsFromDb then
+        self:LoadMinimumSettingsFromDb(db)
+    end
     self.authDraftPolicy = clone_table(db.auth or {})
     self:RefreshAuthOptions()
 end
@@ -1234,7 +1751,8 @@ function mainFrame:RefreshAuthOptions()
     for index, button in ipairs(self.optionsBlacklistButtons or {}) do
         local entry = blacklistEntries[index]
         if entry then
-            button.labelText:SetText(string.format("%s - %s", entry.characterKey, entry.reason ~= "" and entry.reason or "No reason"))
+            local displayKey = type(permissions.DisplayCharacterKey) == "function" and permissions.DisplayCharacterKey(entry.characterKey) or entry.characterKey
+            button.labelText:SetText(string.format("%s - %s", displayKey, entry.reason ~= "" and entry.reason or "No reason"))
             button:SetEnabled(true)
             button:Show()
             button:SetScript("OnClick", function()
@@ -1256,6 +1774,7 @@ function mainFrame:RefreshAuthOptions()
     self.optionsAuthSaveButton:SetEnabled(canManage)
     self.optionsAuthReadButton:SetEnabled(true)
     self.optionsAuthResetButton:SetEnabled(true)
+    self.optionsPolicyStringSelectAllButton:SetEnabled(true)
 end
 
 mainFrame.optionsBlacklistAddButton:SetScript("OnClick", function()
@@ -1286,6 +1805,15 @@ mainFrame.optionsAuthReadButton:SetScript("OnClick", function()
     mainFrame:RefreshAuthPolicyFromGuildInfo()
 end)
 
+mainFrame.optionsPolicyStringSelectAllButton:SetScript("OnClick", function()
+    if mainFrame.optionsPolicyStringInput then
+        mainFrame.optionsPolicyStringInput:SetFocus()
+        mainFrame.optionsPolicyStringInput:SetCursorPosition(0)
+        mainFrame.optionsPolicyStringInput:HighlightText(0, -1)
+    end
+    mainFrame.optionsAuthStatusText:SetText("Selected the policy string. Press Ctrl+C to copy.")
+end)
+
 mainFrame.optionsAuthResetButton:SetScript("OnClick", function()
     mainFrame.optionsAuthStatusText:SetText("")
     mainFrame:LoadAuthOptionsFromDb(current_db())
@@ -1302,8 +1830,20 @@ mainFrame.sidebarButtons = mainFrame.sidebarButtons or {}
 for index, item in ipairs(mainFrame.navItems) do
     local button = mainFrame.sidebarButtons[index] or make_button(mainFrame.sidebar, theme.spacing.sidebarExpanded - 32, 32, item.label)
     button.key = item.key
+    button.navIcon = button.navIcon or button:CreateTexture()
+    if type(button.navIcon.SetSize) == "function" then
+        button.navIcon:SetSize(16, 16)
+    end
+    if type(button.navIcon.SetTexture) == "function" then
+        button.navIcon:SetTexture(nav_icon_texture_for(item.key))
+    end
+    button.navIcon.texture = nav_icon_texture_for(item.key)
     button.labelText:SetText(item.label)
-    button.labelText:SetPoint("CENTER", button, "CENTER", 0, 0)
+    if type(button.navIcon.ClearAllPoints) == "function" then
+        button.navIcon:ClearAllPoints()
+    end
+    button.navIcon:SetPoint("LEFT", button, "LEFT", 10, 0)
+    button.labelText:SetPoint("LEFT", button.navIcon, "RIGHT", 8, 0)
     button:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPLEFT", 16, -40 - ((index - 1) * 44))
     apply_panel_style(button, item.key == mainFrame.activeView and theme.colors.panelAlt or theme.colors.panel)
     button:SetScript("OnClick", function(self)
@@ -1314,8 +1854,23 @@ end
 
 function mainFrame:ApplyTheme()
     local compactRequestMode = request_only_layout(self)
+    local shellScale = self.appearanceShellScale or 1
     local sidebarWidth = self.collapsedSidebar and theme.spacing.sidebarCollapsed or theme.spacing.sidebarExpanded
+    local shellWidth = compactRequestMode and 960 or theme.spacing.frameWidth
+    local shellHeight = compactRequestMode and 580 or theme.spacing.frameHeight
+    local topBarHeight = compactRequestMode and 44 or theme.spacing.topBarHeight
+    local topBarWidth = math.max(320, shellWidth - (compactRequestMode and 0 or sidebarWidth))
+    local contentHeight = math.max(280, shellHeight - topBarHeight)
+    local navButtonHeight = math.max(28, math.floor(32 * shellScale + 0.5))
+    local navButtonSpacing = math.max(40, math.floor(44 * shellScale + 0.5))
+    local titleBlockWidth = math.max(220, math.floor(topBarWidth * 0.30))
+    local statusBlockWidth = math.max(120, math.floor(topBarWidth * 0.18))
+    local availableStatusWidth = math.max(120, topBarWidth - titleBlockWidth - 96 - 120 - 72)
+    statusBlockWidth = math.min(statusBlockWidth, availableStatusWidth)
+
+    self:SetSize(shellWidth, shellHeight)
     self.sidebar:SetWidth(sidebarWidth)
+    self.sidebar:SetHeight(shellHeight)
     if type(self.topBar.ClearAllPoints) == "function" then
         self.topBar:ClearAllPoints()
     end
@@ -1333,7 +1888,8 @@ function mainFrame:ApplyTheme()
         self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
         self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
     end
-    self.topBar:SetHeight(compactRequestMode and 44 or theme.spacing.topBarHeight)
+    self.topBar:SetSize(topBarWidth, topBarHeight)
+    self.content:SetSize(topBarWidth, contentHeight)
     apply_panel_style(self, theme.colors.background)
     apply_panel_style(self.sidebar, theme.colors.panel)
     apply_panel_style(self.topBar, theme.colors.panelAlt)
@@ -1378,9 +1934,11 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.requestWizardModal, theme.colors.panelAlt)
     apply_panel_style(self.requestDetailsModal, theme.colors.panelAlt)
     if type(self.requestWizardModal.SetBackdropColor) == "function" then
+        self.requestWizardModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
         self.requestWizardModal:SetBackdropColor(0, 0, 0, 1)
     end
     if type(self.requestDetailsModal.SetBackdropColor) == "function" then
+        self.requestDetailsModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
         self.requestDetailsModal:SetBackdropColor(0, 0, 0, 1)
     end
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
@@ -1413,11 +1971,44 @@ function mainFrame:ApplyTheme()
         apply_panel_style(card, theme.colors.panel)
     end
 
-    for _, button in ipairs(self.sidebarButtons) do
+    for index, button in ipairs(self.sidebarButtons) do
         local isActive = button.key == self.activeView
-        apply_panel_style(button, isActive and theme.colors.panelAlt or theme.colors.panel)
+        apply_panel_style(button, isActive and theme.colors.accent or theme.colors.panel)
+        if type(button.SetBackdropBorderColor) == "function" then
+            if isActive then
+                button:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
+            else
+                button:SetBackdropBorderColor(unpack(theme.colors.border))
+            end
+        end
         button:SetWidth(self.collapsedSidebar and 40 or (theme.spacing.sidebarExpanded - 32))
+        button:SetHeight(navButtonHeight)
         button.labelText:SetText(self.collapsedSidebar and "" or view_label_for(button.key))
+        if type(button.ClearAllPoints) == "function" then
+            button:ClearAllPoints()
+        end
+        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -40 - ((index - 1) * navButtonSpacing))
+        if button.navIcon then
+            if type(button.navIcon.SetTexture) == "function" then
+                button.navIcon:SetTexture(nav_icon_texture_for(button.key))
+            end
+            button.navIcon.texture = nav_icon_texture_for(button.key)
+            if type(button.navIcon.ClearAllPoints) == "function" then
+                button.navIcon:ClearAllPoints()
+            end
+            if self.collapsedSidebar then
+                button.navIcon:SetPoint("CENTER", button, "CENTER", 0, 0)
+            else
+                button.navIcon:SetPoint("LEFT", button, "LEFT", 10, 0)
+            end
+        end
+        if button.labelText and type(button.labelText.SetTextColor) == "function" then
+            if isActive then
+                button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+            else
+                button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+            end
+        end
         if compactRequestMode then
             button:Hide()
         else
@@ -1427,7 +2018,6 @@ function mainFrame:ApplyTheme()
 
     self.collapseButton.labelText:SetText(self.collapsedSidebar and ">" or "<")
     if compactRequestMode then
-        self:SetSize(960, 580)
         self.sidebar:Hide()
         self.collapseButton:Hide()
         self.scanButton:Hide()
@@ -1436,7 +2026,6 @@ function mainFrame:ApplyTheme()
         self.titleText:SetText("Guild Bank Manager")
         self.titleText:Show()
     else
-        self:SetSize(theme.spacing.frameWidth, theme.spacing.frameHeight)
         self.sidebar:Show()
         self.collapseButton:Show()
         self.scanButton:Show()
@@ -1449,6 +2038,26 @@ function mainFrame:ApplyTheme()
         self.closeButton:ClearAllPoints()
     end
     self.closeButton:SetPoint("TOPRIGHT", self.topBar, "TOPRIGHT", -16, compactRequestMode and -8 or -16)
+    if type(self.scanButton.ClearAllPoints) == "function" then
+        self.scanButton:ClearAllPoints()
+    end
+    self.scanButton:SetPoint("TOPRIGHT", self.closeButton, "TOPLEFT", -16, 0)
+    if type(self.statusText.ClearAllPoints) == "function" then
+        self.statusText:ClearAllPoints()
+    end
+    self.statusText:SetPoint("RIGHT", self.scanButton, "LEFT", -16, 0)
+    if type(self.titleText.SetWidth) == "function" then
+        self.titleText:SetWidth(titleBlockWidth)
+    end
+    if type(self.subtitleText.SetWidth) == "function" then
+        self.subtitleText:SetWidth(titleBlockWidth)
+    end
+    if type(self.statusText.SetWidth) == "function" then
+        self.statusText:SetWidth(statusBlockWidth)
+    end
+    if type(self.statusText.SetJustifyH) == "function" then
+        self.statusText:SetJustifyH("RIGHT")
+    end
     if self.activeView == "OPTIONS" then
         self.optionsPanel:Show()
     else
@@ -1457,8 +2066,44 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.closeButton, theme.colors.panel)
     apply_panel_style(self.scanButton, theme.colors.panelAlt)
     apply_panel_style(self.collapseButton, theme.colors.panel)
-    apply_panel_style(self.transparencyDecreaseButton, theme.colors.panel)
-    apply_panel_style(self.transparencyIncreaseButton, theme.colors.panel)
+    for presetKey, button in pairs(self.optionsThemeButtons or {}) do
+        apply_panel_style(button, self.appearanceThemePreset == presetKey and theme.colors.accent or theme.colors.panel)
+    end
+    apply_panel_style(self.optionsShellScaleDecreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsShellScaleIncreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsTableDensityDecreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsTableDensityIncreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsShellOpacityDecreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsShellOpacityIncreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsModalOpacityDecreaseButton, theme.colors.panel)
+    apply_panel_style(self.optionsModalOpacityIncreaseButton, theme.colors.panel)
+    for _, slider in ipairs({
+        self.optionsShellScaleSlider,
+        self.optionsTableDensitySlider,
+        self.optionsShellOpacitySlider,
+        self.optionsModalOpacitySlider,
+    }) do
+        if slider then
+            apply_panel_style(slider.track, theme.colors.panel)
+            apply_panel_style(slider.fill, theme.colors.accent)
+            apply_panel_style(slider.thumb, theme.colors.accentStrong)
+            if slider.thumbCore then
+                apply_panel_style(slider.thumbCore, theme.colors.background)
+            end
+            if type(slider.track.SetBackdropColor) == "function" then
+                slider.track:SetBackdropColor(0.08, 0.09, 0.11, 0.95)
+            end
+            if type(slider.fill.SetBackdropColor) == "function" then
+                slider.fill:SetBackdropColor(unpack(theme.colors.accent))
+            end
+            if type(slider.thumb.SetBackdropColor) == "function" then
+                slider.thumb:SetBackdropColor(unpack(theme.colors.accentStrong))
+            end
+            if slider.thumbCore and type(slider.thumbCore.SetBackdropColor) == "function" then
+                slider.thumbCore:SetBackdropColor(0.02, 0.03, 0.05, 0.95)
+            end
+        end
+    end
     apply_panel_style(self.requestApproveButton, theme.colors.panelAlt)
     apply_panel_style(self.requestRejectButton, theme.colors.panel)
     apply_panel_style(self.requestFulfillButton, theme.colors.panelAlt)
@@ -1473,12 +2118,18 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.requestDetailsFulfillButton, theme.colors.panelAlt)
     apply_panel_style(self.requestDetailsReopenButton, theme.colors.panel)
     apply_panel_style(self.requestDetailsCancelRequestButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsDeleteButton, theme.colors.panelAlt)
     apply_panel_style(self.requestDetailsCloseButton, theme.colors.panel)
     apply_panel_style(self.requestDetailsBankTabDropdownButton, theme.colors.panel)
     apply_panel_style(self.requestDetailsBankTabDropdownPanel, theme.colors.panelAlt)
+    apply_panel_style(self.requestAdminAddButton, theme.colors.panel)
+    apply_panel_style(self.requestAdminFilterAllButton, theme.colors.panel)
+    apply_panel_style(self.requestAdminFilterPendingApprovalButton, theme.colors.panel)
+    apply_panel_style(self.requestAdminFilterPendingFulfillmentButton, theme.colors.panel)
     apply_panel_style(self.requestCreateResultsPanel, theme.colors.background)
     apply_panel_style(self.minimumRestockToggleButton, theme.colors.panel)
-    apply_panel_style(self.minimumShowAllToggleButton, theme.colors.panel)
+    apply_panel_style(self.minimumEnabledOnlyButton, theme.colors.panel)
+    apply_panel_style(self.minimumShowAllButton, theme.colors.panel)
     apply_panel_style(self.minimumManualOnlyToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumNewButton, theme.colors.panel)
     apply_panel_style(self.minimumSaveButton, theme.colors.panelAlt)
@@ -1505,6 +2156,7 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsAuthSaveButton, theme.colors.panelAlt)
     apply_panel_style(self.optionsAuthReadButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthResetButton, theme.colors.panel)
+    apply_panel_style(self.optionsPolicyStringSelectAllButton, theme.colors.panel)
     for _, button in ipairs(self.requestCreateMatchButtons or {}) do
         if button:IsShown() then
             apply_panel_style(button, theme.colors.panel)
@@ -1592,6 +2244,7 @@ function mainFrame:ApplyTheme()
     if type(self.exportModalOutputInput.SetBackdrop) == "function" then
         self.exportModalOutputInput:SetBackdrop(nil)
     end
+    self:ApplyModalOpacity(self.appearanceModalOpacity or 1)
 end
 
 function mainFrame:GetActiveSortState()
@@ -1757,6 +2410,7 @@ function mainFrame:RefreshView()
     local accessProfile, authContext = current_access_profile(db)
     local compactRequestMode = request_only_layout(self)
 
+    self:LoadAppearanceSettingsFromDb(db)
     self:UpdateSharedTableLayout()
 
     if type(self.SelfHealApprovedRequestMinimums) == "function" then
@@ -1800,9 +2454,6 @@ function mainFrame:RefreshView()
     self.exportModal:Hide()
     if self.exportStockedElsewhereModal then
         self.exportStockedElsewhereModal:Hide()
-    end
-    if self.exportManualShoppingListModal then
-        self.exportManualShoppingListModal:Hide()
     end
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
@@ -1848,7 +2499,9 @@ function mainFrame:RefreshView()
         self:RefreshVisibleTableRows()
         showTable = true
     elseif self.activeView == "MINIMUMS" then
-        self.minimumShowAllToggleButton.labelText:SetText(self.minimumShowAllRows and "Enabled Only" or "Show All")
+        if self.RefreshMinimumFilterButtons then
+            self:RefreshMinimumFilterButtons()
+        end
         self.minimumManualOnlyToggleButton:Hide()
         self.minimumSaveAllButton:Hide()
         self.minimumSaveButton.labelText:SetText("Save All")
@@ -1859,6 +2512,9 @@ function mainFrame:RefreshView()
         local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState(), self.requestAdminFilterMode or "ALL")
         if not self:GetSelectedRequest() then
             self:SelectFirstActionableRequest()
+        end
+        if self.RefreshRequestAdminFilterButtons then
+            self:RefreshRequestAdminFilterButtons()
         end
         self:RefreshRequestActionButtons()
         self.tableScrollOffset = 0
@@ -1880,11 +2536,11 @@ function mainFrame:RefreshView()
         self.tableScrollOffset = 0
         self:ConfigureTable({
             { key = "itemID", label = "Item ID", width = 78, justifyH = "LEFT" },
-            { key = "itemTier", label = "Item Tier", width = 76, justifyH = "CENTER" },
-            { key = "itemName", label = "Item Name", width = 268, justifyH = "LEFT" },
-            { key = "bankTab", label = "Bank Tab", width = 136, justifyH = "LEFT" },
-            { key = "amountToStock", label = "Amount to Stock", width = 108, justifyH = "LEFT" },
-            { key = "excessStockIn", label = "Excess Stock In", width = 106, justifyH = "LEFT" },
+            { key = "itemTier", label = "Tier", width = 56, justifyH = "CENTER" },
+            { key = "itemName", label = "Item Name", width = 236, justifyH = "LEFT" },
+            { key = "bankTab", label = "Bank Tab", width = 140, justifyH = "LEFT" },
+            { key = "amountToStock", label = "Amount to Stock", width = 124, justifyH = "LEFT" },
+            { key = "excessStockIn", label = "Excess Stock", width = 128, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         self:RefreshExportOutput(rows)
@@ -1947,7 +2603,6 @@ function mainFrame:RefreshView()
         end
         self.tableViewportFrame:Show()
         self.tableScrollFrame:Show()
-        self.tableScrollBar:Show()
     else
         self.tableHeaderFrame:Hide()
         self.tableFilterFrame:Hide()
@@ -2039,6 +2694,7 @@ function mainFrame:SelectView(name)
     self:ApplyTheme()
     self:RefreshView()
     self:EnableMouse(true)
+    self:BringToFront()
     self:Show()
     return self.activeView
 end
@@ -2079,7 +2735,7 @@ function mainFrame:SetScanStatus(text)
     self:RefreshView()
 end
 
-refresh_alpha_text()
+mainFrame:LoadAppearanceSettingsFromDb(current_db())
 mainFrame:ApplyTheme()
 mainFrame:Hide()
 

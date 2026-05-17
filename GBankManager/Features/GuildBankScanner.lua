@@ -18,6 +18,8 @@ local scanner = ns.modules.scanner or {
     statusText = "No scan yet",
 }
 
+local AUTO_SCAN_THROTTLE_SECONDS = 600
+
 local function current_context(db)
     local auth = ns.modules.auth or ns.modules.permissions
     if auth and type(auth.GetLivePlayerContext) == "function" then
@@ -126,6 +128,10 @@ end
 function scanner.BeginScan()
     local db = current_db()
     local auth = ns.modules.auth or ns.modules.permissions
+    if scanner.scanInProgress then
+        return scanner:GetStatusText()
+    end
+
     if auth and type(auth.Can) == "function" and not auth.Can(current_context(db), "full_ui", db.auth) then
         scanner.scanInProgress = false
         push_status("Permission denied")
@@ -150,6 +156,27 @@ function scanner.BeginScan()
 
     advance_scan()
     return scanner:GetStatusText()
+end
+
+function scanner.OnGuildBankOpened()
+    local db = current_db()
+    local auth = ns.modules.auth or ns.modules.permissions
+    if scanner.scanInProgress then
+        return false
+    end
+
+    if auth and type(auth.Can) == "function" and not auth.Can(current_context(db), "full_ui", db.auth) then
+        return false
+    end
+
+    local lastScanAt = tonumber((((db or {}).meta or {}).updatedAt) or 0) or 0
+    local now = type(_G.time) == "function" and (_G.time() or 0) or 0
+    if lastScanAt > 0 and (now - lastScanAt) < AUTO_SCAN_THROTTLE_SECONDS then
+        return false
+    end
+
+    scanner.BeginScan()
+    return true
 end
 
 function scanner.QueueAccessibleTabs()

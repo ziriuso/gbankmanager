@@ -40,6 +40,7 @@ local officerRequest = requests.Create({
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             full_ui = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
@@ -158,6 +159,7 @@ local deniedDb = {
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
             minimum_delete = { [1] = true },
@@ -189,6 +191,7 @@ local selfApprovalDb = {
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
             minimum_delete = { [1] = true },
@@ -333,6 +336,77 @@ local deniedApprovedCancel = requests.CancelStored(cancelDb, "approved-request-1
 assert.truthy(deniedApprovedCancel == nil, "request authors should not cancel approved requests")
 assert.equal("APPROVED", cancelDb.requests[2].approval, "denied approved-request cancels should leave status unchanged")
 
+local deleteDb = {
+    auth = {
+        capabilities = {
+            request_delete = { [1] = true },
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "delete-request-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1003,
+            itemName = "Delete Me Flask",
+            quantity = 7,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 130,
+        },
+    },
+    auditLog = {},
+}
+
+local deletedRequest = requests.DeleteStored(deleteDb, "delete-request-1", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 131)
+
+assert.truthy(deletedRequest ~= nil, "request delete should remove the saved request when the actor has request-delete permission")
+assert.equal(0, #deleteDb.requests, "request delete should remove the request row from saved data")
+assert.equal("REQUEST_DELETED", deleteDb.auditLog[1].type, "request delete should append a deletion audit row")
+assert.equal("OfficerOne", deleteDb.auditLog[1].actor, "request delete audit should record the deleting actor")
+
+local deniedDeleteDb = {
+    auth = {
+        capabilities = {
+            request_delete = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "delete-request-2",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 1004,
+            itemName = "Keep Me Oil",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 132,
+        },
+    },
+    auditLog = {},
+}
+
+local deniedDelete = requests.DeleteStored(deniedDeleteDb, "delete-request-2", {
+    characterKey = "Stormrage-MemberOne",
+    name = "MemberOne",
+    guildRankIndex = 2,
+    guildRankName = "Raider",
+    inGuild = true,
+}, 133)
+
+assert.truthy(deniedDelete == nil, "request delete should be denied when the actor lacks request-delete permission")
+assert.equal(1, #deniedDeleteDb.requests, "denied request delete should leave the saved request in place")
+assert.equal(0, #deniedDeleteDb.auditLog, "denied request delete should not append audit rows")
+
 local deniedApproval = requests.ApproveStored(deniedDb, "request-1", {
     characterKey = "Stormrage-MemberOne",
     name = "MemberOne",
@@ -355,6 +429,7 @@ local invalidTransitionDb = {
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
             minimum_delete = { [1] = true },

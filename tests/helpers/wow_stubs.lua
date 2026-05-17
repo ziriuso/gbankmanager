@@ -10,6 +10,10 @@ _G.C_GuildInfo = _G.C_GuildInfo or {
     infoText = "",
     motd = "",
     canEditGuildInfo = true,
+    canEditOfficerNote = true,
+    canViewOfficerNote = true,
+    setNotes = {},
+    guildRosterRequests = 0,
 }
 _G.DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME or {
     messages = {},
@@ -55,6 +59,27 @@ end
 
 function _G.C_GuildInfo.CanEditGuildInfo()
     return _G.C_GuildInfo.canEditGuildInfo == true
+end
+
+function _G.C_GuildInfo.CanEditOfficerNote()
+    return _G.C_GuildInfo.canEditOfficerNote == true
+end
+
+function _G.C_GuildInfo.CanViewOfficerNote()
+    return _G.C_GuildInfo.canViewOfficerNote == true
+end
+
+function _G.C_GuildInfo.SetNote(guid, text, isPublic)
+    table.insert(_G.C_GuildInfo.setNotes, {
+        guid = guid,
+        text = text,
+        isPublic = isPublic,
+    })
+    return true
+end
+
+function _G.C_GuildInfo.GuildRoster()
+    _G.C_GuildInfo.guildRosterRequests = (_G.C_GuildInfo.guildRosterRequests or 0) + 1
 end
 
 function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
@@ -197,6 +222,14 @@ if _G.CreateFrame == nil then
         function frame:ClearAllPoints()
             self.points = {}
         end
+        function frame:GetPoint(index)
+            local point = self.points[(index or 1)]
+            if point then
+                return unpack(point)
+            end
+
+            return nil
+        end
 
         function frame:Hide()
             self.shown = false
@@ -236,6 +269,7 @@ if _G.CreateFrame == nil then
             region.SetColorTexture = function() end
             region.SetAllPoints = function() end
             region.SetAtlas = function(self, atlas) self.atlas = atlas end
+            region.SetTexture = function(self, texture) self.texture = texture end
             table.insert(self.children, region)
             return region
         end
@@ -275,7 +309,15 @@ if _G.CreateFrame == nil then
         function frame:SetFrameStrata(value)
             self.frameStrata = value
         end
-        function frame:SetFrameLevel() end
+        function frame:SetFrameLevel(value)
+            self.frameLevel = value
+        end
+        function frame:SetToplevel(value)
+            self.topLevel = value and true or false
+        end
+        function frame:Raise()
+            self.raiseCount = (self.raiseCount or 0) + 1
+        end
         function frame:SetScrollChild(child)
             self.scrollChild = child
         end
@@ -292,6 +334,22 @@ if _G.CreateFrame == nil then
         function frame:SetHighlightFontObject() end
         function frame:SetAutoFocus(value)
             self.autoFocus = value
+        end
+        function frame:SetFocus()
+            self.hasFocus = true
+        end
+        function frame:ClearFocus()
+            self.hasFocus = false
+        end
+        function frame:HasFocus()
+            return self.hasFocus == true
+        end
+        function frame:SetCursorPosition(value)
+            self.cursorPosition = value
+        end
+        function frame:HighlightText(startIndex, endIndex)
+            self.highlightStart = startIndex
+            self.highlightEnd = endIndex
         end
         function frame:SetTextInsets(left, right, top, bottom)
             self.textInsets = { left, right, top, bottom }

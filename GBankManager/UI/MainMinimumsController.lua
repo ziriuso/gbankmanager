@@ -4,6 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
+local craftedQualityUtil = ns.modules.craftedQuality or {}
+if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
+    craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function minimum_rule_key(rule)
     return table.concat({
@@ -76,8 +80,12 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumEditorStateText:SetPoint("TOPLEFT", mainFrame.minimumsHint, "BOTTOMLEFT", 0, -14)
     mainFrame.minimumEditorStateText:Hide()
 
-    mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or makeButton(mainFrame.minimumsPanel, 110, 28, "Show All")
-    mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, MINIMUM_ACTION_BUTTON_BOTTOM_INSET)
+    mainFrame.minimumEnabledOnlyButton = mainFrame.minimumEnabledOnlyButton or makeButton(mainFrame.minimumsPanel, 110, 28, "Enabled Only")
+    mainFrame.minimumEnabledOnlyButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, MINIMUM_ACTION_BUTTON_BOTTOM_INSET)
+
+    mainFrame.minimumShowAllButton = mainFrame.minimumShowAllButton or makeButton(mainFrame.minimumsPanel, 92, 28, "Show All")
+    mainFrame.minimumShowAllButton:SetPoint("RIGHT", mainFrame.minimumEnabledOnlyButton, "LEFT", -8, 0)
+    mainFrame.minimumShowAllToggleButton = mainFrame.minimumEnabledOnlyButton
 
     mainFrame.minimumSearchLabel = mainFrame.minimumSearchLabel or makeLabel(mainFrame.minimumsPanel, "Search", "GameFontHighlightSmall")
     mainFrame.minimumSearchLabel:SetPoint("TOPLEFT", mainFrame.minimumsPanel, "TOPLEFT", 16, -16)
@@ -162,6 +170,9 @@ function mainMinimumsController.Attach(mainFrame, options)
     end
     applyPanelStyle(mainFrame.minimumAddModal, theme.colors.panelAlt)
     mainFrame.minimumAddModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.minimumAddModal, 20, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.minimumAddModalTitle = mainFrame.minimumAddModalTitle or makeLabel(mainFrame.minimumAddModal, "Add Minimum Item", "GameFontHighlight")
     mainFrame.minimumAddModalTitle:SetPoint("TOPLEFT", mainFrame.minimumAddModal, "TOPLEFT", 16, -16)
@@ -235,6 +246,9 @@ function mainMinimumsController.Attach(mainFrame, options)
     end
     applyPanelStyle(mainFrame.minimumDetailsModal, theme.colors.panelAlt)
     mainFrame.minimumDetailsModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.minimumDetailsModal, 21, "FULLSCREEN_DIALOG")
+    end
 
     mainFrame.minimumDetailsModalTitle = mainFrame.minimumDetailsModalTitle or makeLabel(mainFrame.minimumDetailsModal, "Minimum Details", "GameFontHighlight")
     mainFrame.minimumDetailsModalTitle:SetPoint("TOPLEFT", mainFrame.minimumDetailsModal, "TOPLEFT", 16, -16)
@@ -338,9 +352,15 @@ function mainMinimumsController.Attach(mainFrame, options)
     end
 
     function mainFrame:SaveDefaultMinimumSetting()
-        local settings = self:GetMinimumSettings(currentDb())
+        local db = currentDb()
+        local settings = self:GetMinimumSettings(db)
         settings.defaultQuantity = parseNumber(self.defaultMinimumInput:GetText() or "") or 100
         self.defaultMinimumInput:SetText(tostring(settings.defaultQuantity))
+        db.auth = db.auth or {}
+        db.auth.restockDefault = settings.defaultQuantity
+        if self.authDraftPolicy then
+            self.authDraftPolicy.restockDefault = settings.defaultQuantity
+        end
         return settings.defaultQuantity
     end
 
@@ -815,9 +835,10 @@ function mainMinimumsController.Attach(mainFrame, options)
         self:UpdateMinimumDetailsActionState(row, state)
 
         if craftedQualityIcon ~= "" then
-            self.minimumDetailsItemQualityIcon.atlas = craftedQualityIcon
+            local displayAtlas = type(craftedQualityUtil.NormalizeDisplayAtlas) == "function" and craftedQualityUtil.NormalizeDisplayAtlas(craftedQualityIcon) or craftedQualityIcon
+            self.minimumDetailsItemQualityIcon.atlas = displayAtlas
             if type(self.minimumDetailsItemQualityIcon.SetAtlas) == "function" then
-                self.minimumDetailsItemQualityIcon:SetAtlas(craftedQualityIcon, true)
+                self.minimumDetailsItemQualityIcon:SetAtlas(displayAtlas, true)
             end
             self.minimumDetailsItemQualityIcon:Show()
         else
@@ -1530,9 +1551,33 @@ function mainMinimumsController.Attach(mainFrame, options)
         return true
     end
 
-    function mainFrame:ToggleMinimumShowAllRows()
-        self.minimumShowAllRows = not self.minimumShowAllRows
-        self.minimumShowAllToggleButton.labelText:SetText(self.minimumShowAllRows and "Enabled Only" or "Show All")
+    local function set_filter_button_visual(button, active)
+        if not button then
+            return
+        end
+
+        button.filterActive = active == true
+        applyPanelStyle(button, button.filterActive and theme.colors.accent or theme.colors.panel)
+        if type(button.SetBackdropBorderColor) == "function" then
+            if button.filterActive then
+                button:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
+            else
+                button:SetBackdropBorderColor(unpack(theme.colors.border))
+            end
+        end
+        if button.labelText and type(button.labelText.SetTextColor) == "function" then
+            button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+        end
+    end
+
+    function mainFrame:RefreshMinimumFilterButtons()
+        set_filter_button_visual(self.minimumShowAllButton, self.minimumShowAllRows == true)
+        set_filter_button_visual(self.minimumEnabledOnlyButton, self.minimumShowAllRows ~= true)
+    end
+
+    function mainFrame:SetMinimumShowAllRows(showAll)
+        self.minimumShowAllRows = showAll == true
+        self:RefreshMinimumFilterButtons()
         self:RefreshView()
         return self.minimumShowAllRows
     end
@@ -1577,8 +1622,12 @@ function mainMinimumsController.Attach(mainFrame, options)
         mainFrame:ToggleMinimumRestock()
     end)
 
-    mainFrame.minimumShowAllToggleButton:SetScript("OnClick", function()
-        mainFrame:ToggleMinimumShowAllRows()
+    mainFrame.minimumEnabledOnlyButton:SetScript("OnClick", function()
+        mainFrame:SetMinimumShowAllRows(false)
+    end)
+
+    mainFrame.minimumShowAllButton:SetScript("OnClick", function()
+        mainFrame:SetMinimumShowAllRows(true)
     end)
 
     mainFrame.minimumManualOnlyToggleButton:SetScript("OnClick", function()
@@ -1588,6 +1637,8 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumSaveButton:SetScript("OnClick", function()
         mainFrame:SaveAllMinimumChanges()
     end)
+
+    mainFrame:RefreshMinimumFilterButtons()
 
     mainFrame.minimumSaveAllButton:SetScript("OnClick", function()
         mainFrame:UndoMinimumChanges()

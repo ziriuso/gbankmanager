@@ -4,9 +4,39 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local exports = ns.modules.exports or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function render_field(row, field)
     return tostring(row[field] or "")
+end
+
+local function crafted_quality_markup(atlasName)
+    if type(craftedQuality.ToMarkup) == "function" then
+        return craftedQuality.ToMarkup(atlasName, 22)
+    end
+
+    if atlasName == nil or atlasName == "" then
+        return ""
+    end
+
+    return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_icon_for_value(quality)
+    quality = math.max(0, math.floor(tonumber(quality or 0) or 0))
+    if quality < 1 or quality > 5 then
+        return ""
+    end
+
+    local atlasName = string.format("Professions-ChatIcon-Quality-Tier%d", quality)
+    if type(craftedQuality.NormalizeDisplayAtlas) == "function" then
+        return craftedQuality.NormalizeDisplayAtlas(atlasName)
+    end
+
+    return atlasName
 end
 
 function exports.BuildDelimited(rows, template)
@@ -30,22 +60,24 @@ function exports.BuildDelimited(rows, template)
 end
 
 function exports.BuildAuctionator(rows, shoppingListName)
-    local values = {}
+    local lines = {}
+    local seen = {}
 
     shoppingListName = tostring(shoppingListName or "GBankManager")
     rows = type(rows) == "table" and rows or {}
+    lines[1] = shoppingListName
 
     for _, row in ipairs(rows) do
         local itemName = tostring(row.itemName or "")
         local totalToBuy = tonumber(row.totalToBuy or 0) or 0
-        local quality = math.max(0, math.floor(tonumber(row.quality or row.craftedQuality or 0) or 0))
 
-        if itemName ~= "" and totalToBuy > 0 then
-            table.insert(values, string.format('"%s";0;0;0;0;0;0;0;%d;%d', itemName, quality, totalToBuy))
+        if itemName ~= "" and totalToBuy > 0 and not seen[itemName] then
+            seen[itemName] = true
+            table.insert(lines, itemName)
         end
     end
 
-    return shoppingListName .. "^" .. table.concat(values, "^")
+    return table.concat(lines, "^")
 end
 
 local function current_total(snapshot, itemID)
@@ -147,6 +179,34 @@ local function quality_for_item(db, snapshot, itemID)
     return 0
 end
 
+local function quality_icon_for_item(db, snapshot, itemID)
+    db = db or {}
+    snapshot = snapshot or { items = {} }
+
+    local snapshotItem = snapshot.items and snapshot.items[itemID]
+    local atlasName = tostring((snapshotItem or {}).craftedQualityIcon or "")
+    if atlasName ~= "" then
+        return atlasName
+    end
+
+    for _, source in ipairs({
+        db.minimums,
+        db.oneTimeTargets,
+        db.requests,
+    }) do
+        for _, entry in ipairs(source or {}) do
+            if entry.itemID == itemID then
+                atlasName = tostring(entry.craftedQualityIcon or "")
+                if atlasName ~= "" then
+                    return atlasName
+                end
+            end
+        end
+    end
+
+    return ""
+end
+
 function exports.MaterializePlanRows(plan, snapshot)
     local rows = {}
     snapshot = snapshot or { items = {} }
@@ -166,6 +226,11 @@ function exports.MaterializePlanRows(plan, snapshot)
             local bankTab = primary_bank_tab(row.details or {})
             local elsewhereTabs = stocked_elsewhere(currentItem, bankTab)
             local topElsewhereTab = elsewhereTabs[1]
+            local quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0
+            local craftedQualityIcon = tostring(row.craftedQualityIcon or (currentItem and currentItem.craftedQualityIcon) or "") or ""
+            if craftedQualityIcon == "" then
+                craftedQualityIcon = crafted_quality_icon_for_value(quality)
+            end
             table.insert(rows, {
                 itemID = row.itemID,
                 itemName = row.itemName,
@@ -175,13 +240,15 @@ function exports.MaterializePlanRows(plan, snapshot)
                 requestQuantity = (row.sources and row.sources.REQUEST) or 0,
                 totalToBuy = row.totalToBuy,
                 amountToStock = row.totalToBuy,
-                quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
-                itemTier = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
+                quality = quality,
+                craftedQualityIcon = craftedQualityIcon,
+                itemTier = crafted_quality_markup(craftedQualityIcon),
+                itemTierValue = quality,
                 bankTab = bankTab,
                 scopeSummary = summarize_scopes(row.details or {}),
                 reason = table.concat(reasons, "|"),
-                excessStockIn = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "Not In Guild Bank",
-                stockedElsewhere = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "Not In Guild Bank",
+                excessStockIn = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "None",
+                stockedElsewhere = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "None",
                 stockedElsewhereTabs = elsewhereTabs,
             })
         end
@@ -245,6 +312,14 @@ function exports.BuildRowsFromDatabase(db)
         if (tonumber(row.quality or 0) or 0) <= 0 then
             row.quality = quality_for_item(db, snapshot, row.itemID)
         end
+        if tostring(row.craftedQualityIcon or "") == "" then
+            row.craftedQualityIcon = quality_icon_for_item(db, snapshot, row.itemID)
+        end
+        if tostring(row.craftedQualityIcon or "") == "" then
+            row.craftedQualityIcon = crafted_quality_icon_for_value(row.quality)
+        end
+        row.itemTier = crafted_quality_markup(row.craftedQualityIcon)
+        row.itemTierValue = tonumber(row.quality or 0) or 0
     end
 
     return rows, snapshot
