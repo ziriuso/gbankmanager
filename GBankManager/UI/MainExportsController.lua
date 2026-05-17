@@ -49,12 +49,15 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportPresetTsmButton = mainFrame.exportPresetTsmButton or makeButton(mainFrame.exportsPanel, 78, 28, "TSM")
     mainFrame.exportPresetTsmButton:SetPoint("LEFT", mainFrame.exportPresetAuctionatorButton, "RIGHT", 8, 0)
 
+    mainFrame.exportManualShoppingListButton = mainFrame.exportManualShoppingListButton or makeButton(mainFrame.exportsPanel, 154, 28, "Manual Shopping List")
+    mainFrame.exportManualShoppingListButton:SetPoint("LEFT", mainFrame.exportPresetTsmButton, "RIGHT", 8, 0)
+
     mainFrame.exportPresetCustomButton = mainFrame.exportPresetCustomButton or makeButton(mainFrame.exportsPanel, 68, 28, "Custom")
-    mainFrame.exportPresetCustomButton:SetPoint("LEFT", mainFrame.exportPresetTsmButton, "RIGHT", 8, 0)
+    mainFrame.exportPresetCustomButton:SetPoint("LEFT", mainFrame.exportManualShoppingListButton, "RIGHT", 8, 0)
     mainFrame.exportPresetCustomButton:Hide()
 
     mainFrame.exportsPresetTitle = mainFrame.exportsPresetTitle or makeLabel(mainFrame.exportsPanel, "CSV", "GameFontHighlight")
-    mainFrame.exportsPresetTitle:SetPoint("LEFT", mainFrame.exportPresetTsmButton, "RIGHT", 16, 0)
+    mainFrame.exportsPresetTitle:SetPoint("LEFT", mainFrame.exportManualShoppingListButton, "RIGHT", 16, 0)
     mainFrame.exportsPresetTitle:Hide()
 
     mainFrame.exportsOutputText = mainFrame.exportsOutputText or makeLabel(mainFrame.exportsPanel, "", "GameFontNormal")
@@ -101,37 +104,45 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportModalHint = mainFrame.exportModalHint or makeLabel(mainFrame.exportModal, "Select all or copy the generated output into external tools.", "GameFontHighlightSmall")
     mainFrame.exportModalHint:SetPoint("TOPLEFT", mainFrame.exportModalTitle, "BOTTOMLEFT", 0, -8)
 
-    mainFrame.exportModalScrollFrame = mainFrame.exportModalScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.exportModal, "BackdropTemplate")
-    mainFrame.exportModalScrollFrame:SetPoint("TOPLEFT", mainFrame.exportModalHint, "BOTTOMLEFT", 0, -12)
-    mainFrame.exportModalScrollFrame:SetSize(728, 146)
-    mainFrame.exportModalScrollFrame:EnableMouseWheel(true)
-    mainFrame.exportModalScrollFrame.verticalScroll = mainFrame.exportModalScrollFrame.verticalScroll or 0
-    mainFrame.exportModalScrollFrame.verticalScrollRange = mainFrame.exportModalScrollFrame.verticalScrollRange or 0
-    if type(mainFrame.exportModalScrollFrame.SetVerticalScroll) ~= "function" then
-        function mainFrame.exportModalScrollFrame:SetVerticalScroll(value)
+    mainFrame.exportModalOutputInput = mainFrame.exportModalOutputInput or makeExportOutputInput(mainFrame.exportModal, 728, 146)
+    mainFrame.exportModalOutputInput:SetPoint("TOPLEFT", mainFrame.exportModalHint, "BOTTOMLEFT", 0, -12)
+    mainFrame.exportModalOutputInput:EnableMouseWheel(true)
+    mainFrame.exportModalOutputInput.verticalScroll = mainFrame.exportModalOutputInput.verticalScroll or 0
+    mainFrame.exportModalOutputInput.verticalScrollRange = mainFrame.exportModalOutputInput.verticalScrollRange or 0
+    if type(mainFrame.exportModalOutputInput.SetVerticalScroll) ~= "function" then
+        function mainFrame.exportModalOutputInput:SetVerticalScroll(value)
             local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
             self.verticalScroll = clamped
         end
     end
+    if type(mainFrame.exportModalOutputInput.SetBackdrop) == "function" then
+        mainFrame.exportModalOutputInput:SetBackdrop(nil)
+    end
 
-    mainFrame.exportModalScrollChild = mainFrame.exportModalScrollChild or _G.CreateFrame("Frame", nil, mainFrame.exportModalScrollFrame, "BackdropTemplate")
-    mainFrame.exportModalScrollChild:SetSize(728, 146)
-    mainFrame.exportModalScrollFrame:SetScrollChild(mainFrame.exportModalScrollChild)
-
-    mainFrame.exportModalOutputInput = mainFrame.exportModalOutputInput or makeExportOutputInput(mainFrame.exportModalScrollChild, 712, 130)
-    mainFrame.exportModalOutputInput:SetPoint("TOPLEFT", mainFrame.exportModalScrollChild, "TOPLEFT", 8, -8)
+    mainFrame.exportModalScrollFrame = mainFrame.exportModalOutputInput
+    mainFrame.exportModalScrollChild = mainFrame.exportModalOutputInput.EditBox
+    if type(mainFrame.exportModalScrollChild.SetBackdrop) == "function" then
+        mainFrame.exportModalScrollChild:SetBackdrop(nil)
+    end
 
     mainFrame.exportModalBuyAllButton = mainFrame.exportModalBuyAllButton or makeButton(mainFrame.exportModal, 96, 28, "Buy All")
     mainFrame.exportModalBuyAllButton:SetPoint("TOPLEFT", mainFrame.exportModalHint, "BOTTOMLEFT", 0, -18)
 
-    mainFrame.exportModalMissingOnlyButton = mainFrame.exportModalMissingOnlyButton or makeButton(mainFrame.exportModal, 220, 28, "Not Available Elsewhere")
+    mainFrame.exportModalMissingOnlyButton = mainFrame.exportModalMissingOnlyButton or makeButton(mainFrame.exportModal, 220, 28, "Not In Guild Bank")
     mainFrame.exportModalMissingOnlyButton:SetPoint("LEFT", mainFrame.exportModalBuyAllButton, "RIGHT", 8, 0)
 
     mainFrame.exportModalSelectAllButton = mainFrame.exportModalSelectAllButton or makeButton(mainFrame.exportModal, 84, 28, "Select All")
     mainFrame.exportModalSelectAllButton:SetPoint("BOTTOMLEFT", mainFrame.exportModal, "BOTTOMLEFT", 16, 16)
 
+    mainFrame.exportModalStatusText = mainFrame.exportModalStatusText or makeLabel(mainFrame.exportModal, "", "GameFontHighlightSmall")
+    mainFrame.exportModalStatusText:SetPoint("LEFT", mainFrame.exportModalSelectAllButton, "RIGHT", 12, 0)
+    if type(mainFrame.exportModalStatusText.SetWidth) == "function" then
+        mainFrame.exportModalStatusText:SetWidth(510)
+    end
+
     mainFrame.exportModalCopyButton = mainFrame.exportModalCopyButton or makeButton(mainFrame.exportModal, 64, 28, "Copy")
     mainFrame.exportModalCopyButton:SetPoint("LEFT", mainFrame.exportModalSelectAllButton, "RIGHT", 8, 0)
+    mainFrame.exportModalCopyButton:Hide()
 
     mainFrame.exportModalCloseButton = mainFrame.exportModalCloseButton or makeButton(mainFrame.exportModal, 64, 28, "Close")
     mainFrame.exportModalCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportModal, "BOTTOMRIGHT", -16, 16)
@@ -158,6 +169,118 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportStockedElsewhereText:SetWidth(320)
     mainFrame.exportStockedElsewhereCloseButton = mainFrame.exportStockedElsewhereCloseButton or makeButton(mainFrame.exportStockedElsewhereModal, 64, 28, "Close")
     mainFrame.exportStockedElsewhereCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportStockedElsewhereModal, "BOTTOMRIGHT", -16, 16)
+
+    mainFrame.exportManualShoppingListModal = mainFrame.exportManualShoppingListModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.exportManualShoppingListModal:SetSize(440, 320)
+    mainFrame.exportManualShoppingListModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+    mainFrame.exportManualShoppingListModal.frameStrata = "FULLSCREEN_DIALOG"
+    if type(mainFrame.exportManualShoppingListModal.SetFrameStrata) == "function" then
+        mainFrame.exportManualShoppingListModal:SetFrameStrata(mainFrame.exportManualShoppingListModal.frameStrata)
+    end
+    mainFrame.exportManualShoppingListModal.frameLevel = (mainFrame.frameLevel or 0) + 20
+    if type(mainFrame.exportManualShoppingListModal.SetFrameLevel) == "function" then
+        mainFrame.exportManualShoppingListModal:SetFrameLevel(mainFrame.exportManualShoppingListModal.frameLevel)
+    end
+    mainFrame.exportManualShoppingListModal:SetMovable(true)
+    mainFrame.exportManualShoppingListModal:EnableMouse(true)
+    mainFrame.exportManualShoppingListModal:RegisterForDrag("LeftButton")
+    mainFrame.exportManualShoppingListModal:SetScript("OnDragStart", function(self)
+        self:StartMoving()
+    end)
+    mainFrame.exportManualShoppingListModal:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+    applyPanelStyle(mainFrame.exportManualShoppingListModal, theme.colors.panelAlt)
+    mainFrame.exportManualShoppingListModal:Hide()
+
+    mainFrame.exportManualShoppingListTitle = mainFrame.exportManualShoppingListTitle or makeLabel(mainFrame.exportManualShoppingListModal, "Manual Shopping List", "GameFontHighlight")
+    mainFrame.exportManualShoppingListTitle:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListModal, "TOPLEFT", 16, -16)
+
+    mainFrame.exportManualShoppingListHint = mainFrame.exportManualShoppingListHint or makeLabel(mainFrame.exportManualShoppingListModal, "Check off purchases as you work through the list. Does not sync back to addon.", "GameFontHighlightSmall")
+    mainFrame.exportManualShoppingListHint:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListTitle, "BOTTOMLEFT", 0, -8)
+
+    mainFrame.exportManualShoppingListContent = mainFrame.exportManualShoppingListContent or _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListModal, "BackdropTemplate")
+    mainFrame.exportManualShoppingListContent:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListHint, "BOTTOMLEFT", 0, -12)
+    mainFrame.exportManualShoppingListContent:SetPoint("BOTTOMRIGHT", mainFrame.exportManualShoppingListModal, "BOTTOMRIGHT", -16, 52)
+    if type(mainFrame.exportManualShoppingListContent.SetBackdrop) == "function" then
+        mainFrame.exportManualShoppingListContent:SetBackdrop(nil)
+    end
+
+    mainFrame.exportManualShoppingListEmptyText = mainFrame.exportManualShoppingListEmptyText or makeLabel(mainFrame.exportManualShoppingListContent, "No items currently need to be purchased.", "GameFontHighlightSmall")
+    mainFrame.exportManualShoppingListEmptyText:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, 0)
+
+    mainFrame.exportManualShoppingListCloseButton = mainFrame.exportManualShoppingListCloseButton or makeButton(mainFrame.exportManualShoppingListModal, 64, 28, "Close")
+    mainFrame.exportManualShoppingListCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportManualShoppingListModal, "BOTTOMRIGHT", -16, 16)
+    mainFrame.exportManualShoppingListRows = mainFrame.exportManualShoppingListRows or {}
+
+    local function set_export_modal_status(text)
+        mainFrame.exportModalStatusText:SetText(tostring(text or ""))
+    end
+
+    local function manual_shopping_quality_label(row)
+        local quality = tonumber((row or {}).quality or (row or {}).itemTier or 0) or 0
+        if quality > 0 then
+            return string.format("T%d", quality)
+        end
+
+        return "-"
+    end
+
+    local function build_manual_shopping_rows(rows)
+        rows = rows or {}
+
+        for index, row in ipairs(rows) do
+            local rowFrame = mainFrame.exportManualShoppingListRows[index]
+            if not rowFrame then
+                rowFrame = _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListContent, "BackdropTemplate")
+                rowFrame:SetSize(392, 24)
+                rowFrame.checkButton = makeButton(rowFrame, 24, 22, "")
+                rowFrame.checkButton:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
+                rowFrame.itemText = makeLabel(rowFrame, "", "GameFontNormal")
+                rowFrame.itemText:SetPoint("LEFT", rowFrame.checkButton, "RIGHT", 8, 0)
+                if type(rowFrame.itemText.SetWidth) == "function" then
+                    rowFrame.itemText:SetWidth(356)
+                end
+                rowFrame.strikeLine = rowFrame.strikeLine or rowFrame:CreateTexture()
+                rowFrame.strikeLine:SetPoint("LEFT", rowFrame.itemText, "LEFT", 0, 0)
+                rowFrame.strikeLine:SetPoint("RIGHT", rowFrame.itemText, "RIGHT", 0, 0)
+                rowFrame.strikeLine:SetHeight(1)
+                if type(rowFrame.strikeLine.SetColorTexture) == "function" then
+                    rowFrame.strikeLine:SetColorTexture(1, 0.82, 0, 0.95)
+                end
+                rowFrame.strikeLine:Hide()
+                mainFrame.exportManualShoppingListRows[index] = rowFrame
+            end
+
+            rowFrame:ClearAllPoints()
+            rowFrame:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, -((index - 1) * 26))
+            rowFrame.rowData = row
+            rowFrame.checked = false
+            rowFrame.checkButton.labelText:SetText("")
+            rowFrame.itemText:SetText(string.format("%s  %s  x%s", manual_shopping_quality_label(row), tostring(row.itemName or "Unknown"), tostring(row.amountToStock or row.totalToBuy or 0)))
+            rowFrame.strikeLine:Hide()
+            rowFrame.checkButton:SetScript("OnClick", function()
+                rowFrame.checked = not rowFrame.checked
+                rowFrame.checkButton.labelText:SetText(rowFrame.checked and "x" or "")
+                if rowFrame.checked then
+                    rowFrame.strikeLine:Show()
+                else
+                    rowFrame.strikeLine:Hide()
+                end
+            end)
+            rowFrame:Show()
+        end
+
+        for index = #rows + 1, #(mainFrame.exportManualShoppingListRows or {}) do
+            mainFrame.exportManualShoppingListRows[index]:Hide()
+        end
+
+        if #rows > 0 then
+            mainFrame.exportManualShoppingListEmptyText:Hide()
+        else
+            mainFrame.exportManualShoppingListEmptyText:Show()
+        end
+    end
 
     function mainFrame:GetExportUiState(db)
         db = db or currentDb()
@@ -208,7 +331,9 @@ function mainExportsController.Attach(mainFrame, options)
         local contentHeight = math.max(minimumInputHeight, (lineCount * lineHeight) + 12)
         local childHeight = math.max(scrollFrame:GetHeight(), contentHeight + padding)
 
-        outputInput:SetHeight(contentHeight)
+        if type(scrollChild.SetWidth) == "function" then
+            scrollChild:SetWidth(math.max(0, scrollFrame:GetWidth() - 12))
+        end
         scrollChild:SetHeight(childHeight)
         scrollFrame.verticalScrollRange = math.max(0, childHeight - scrollFrame:GetHeight())
         scrollFrame:SetVerticalScroll(scrollFrame.verticalScroll or 0)
@@ -250,6 +375,7 @@ function mainExportsController.Attach(mainFrame, options)
         self.exportPendingRows = self.tableRowsData or {}
         self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset))
         self.exportModalHint:SetText("Choose whether to include every shortage or skip items stocked in another tab.")
+        set_export_modal_status("")
         self.exportModalOutputInput:SetText("")
         setFrameShown(self.exportModalBuyAllButton, true)
         setFrameShown(self.exportModalMissingOnlyButton, true)
@@ -271,11 +397,12 @@ function mainExportsController.Attach(mainFrame, options)
         self.exportSelectedPreset = normalizeExportPresetName(state.presetName or presetName)
         self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset))
         self.exportModalHint:SetText("Select all or copy the generated output into external tools.")
+        set_export_modal_status("")
         setFrameShown(self.exportModalBuyAllButton, false)
         setFrameShown(self.exportModalMissingOnlyButton, false)
         setFrameShown(self.exportModalScrollFrame, true)
         setFrameShown(self.exportModalSelectAllButton, true)
-        setFrameShown(self.exportModalCopyButton, true)
+        setFrameShown(self.exportModalCopyButton, false)
         self.exportModalOutputInput:SetText(state.text or "")
         self:RefreshExportModalScrollMetrics()
         self.exportModal:Show()
@@ -304,6 +431,12 @@ function mainExportsController.Attach(mainFrame, options)
         self.exportStockedElsewhereText:SetText(#lines > 0 and table.concat(lines, "\n") or "No other bank tabs found.")
         self.exportStockedElsewhereModal:Show()
         return self.exportStockedElsewhereModal
+    end
+
+    function mainFrame:OpenManualShoppingList(rows)
+        build_manual_shopping_rows(rows or self.tableRowsData or {})
+        self.exportManualShoppingListModal:Show()
+        return self.exportManualShoppingListModal
     end
 
     function mainFrame:RefreshExportCustomControls()
@@ -371,7 +504,7 @@ function mainExportsController.Attach(mainFrame, options)
         self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
     end)
 
-    mainFrame.exportModalOutputInput:SetScript("OnTextChanged", function()
+    mainFrame.exportModalOutputInput.EditBox:SetScript("OnTextChanged", function()
         mainFrame:RefreshExportModalScrollMetrics()
     end)
 
@@ -387,6 +520,10 @@ function mainExportsController.Attach(mainFrame, options)
         mainFrame:SelectExportPreset("TSM")
     end)
 
+    mainFrame.exportManualShoppingListButton:SetScript("OnClick", function()
+        mainFrame:OpenManualShoppingList(mainFrame.tableRowsData or {})
+    end)
+
     mainFrame.exportPresetCustomButton:SetScript("OnClick", function()
         mainFrame:SelectExportPreset("Custom")
     end)
@@ -400,18 +537,14 @@ function mainExportsController.Attach(mainFrame, options)
     end)
 
     mainFrame.exportModalSelectAllButton:SetScript("OnClick", function()
-        mainFrame.exportModalOutputInput:HighlightText(0, -1)
         if type(mainFrame.exportModalOutputInput.SetFocus) == "function" then
             mainFrame.exportModalOutputInput:SetFocus()
         end
-    end)
-
-    mainFrame.exportModalCopyButton:SetScript("OnClick", function()
-        mainFrame.exportModalOutputInput.lastCopiedText = mainFrame.exportModalOutputInput:GetText() or ""
-        mainFrame.exportModalOutputInput:HighlightText(0, -1)
-        if type(mainFrame.exportModalOutputInput.SetFocus) == "function" then
-            mainFrame.exportModalOutputInput:SetFocus()
+        if type(mainFrame.exportModalOutputInput.SetCursorPosition) == "function" then
+            mainFrame.exportModalOutputInput:SetCursorPosition(0)
         end
+        mainFrame.exportModalOutputInput:HighlightText(0, -1)
+        set_export_modal_status("Selected all output. Press Ctrl+C to copy.")
     end)
 
     mainFrame.exportModalCloseButton:SetScript("OnClick", function()
@@ -428,6 +561,10 @@ function mainExportsController.Attach(mainFrame, options)
 
     mainFrame.exportStockedElsewhereCloseButton:SetScript("OnClick", function()
         mainFrame.exportStockedElsewhereModal:Hide()
+    end)
+
+    mainFrame.exportManualShoppingListCloseButton:SetScript("OnClick", function()
+        mainFrame.exportManualShoppingListModal:Hide()
     end)
 
     mainFrame.exportAuctionatorListNameInput:SetScript("OnTextChanged", function()

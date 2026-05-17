@@ -666,7 +666,83 @@ function mainRequestsController.Attach(mainFrame, options)
             timestamp = request.decidedAt or (_G.time and _G.time() or 0),
         })
         request.minimumRuleKey = table.concat({ tostring(itemID), "TAB", bankTab }, "|")
+        request.tabName = bankTab
+        request.approvedBankTab = bankTab
         return rule
+    end
+
+    function mainFrame:SelfHealApprovedRequestMinimums(db)
+        db = db or current_db()
+        local healedCount = 0
+        local minimums = (db or {}).minimums or {}
+
+        local function matching_minimum_key(request, bankTab)
+            local itemID = tonumber((request or {}).itemID)
+            bankTab = tostring(bankTab or "")
+            if not itemID or bankTab == "" then
+                return nil
+            end
+
+            for _, rule in ipairs(minimums) do
+                if tonumber((rule or {}).itemID) == itemID and tostring((rule or {}).tabName or "") == bankTab then
+                    return table.concat({ tostring(itemID), "TAB", bankTab }, "|")
+                end
+            end
+
+            return nil
+        end
+
+        local function single_matching_minimum(request)
+            local itemID = tonumber((request or {}).itemID)
+            if not itemID then
+                return nil
+            end
+
+            local matches = {}
+            for _, rule in ipairs(minimums) do
+                if tonumber((rule or {}).itemID) == itemID
+                    and tostring((rule or {}).scope or "") == "TAB"
+                    and tostring((rule or {}).tabName or "") ~= ""
+                    and (rule.enabled ~= false) then
+                    table.insert(matches, rule)
+                end
+            end
+
+            if #matches == 1 then
+                return matches[1]
+            end
+
+            return nil
+        end
+
+        for _, request in ipairs((db or {}).requests or {}) do
+            if request.approval == "APPROVED" and request.fulfillment == "OPEN" and not request.minimumRuleKey then
+                local bankTab = tostring(request.approvedBankTab or request.tabName or "")
+                if bankTab == "" then
+                    local existingRule = single_matching_minimum(request)
+                    if existingRule then
+                        bankTab = tostring(existingRule.tabName or "")
+                    end
+                end
+                if bankTab ~= "" then
+                    local existingRuleKey = matching_minimum_key(request, bankTab)
+                    if existingRuleKey then
+                        request.minimumRuleKey = existingRuleKey
+                        request.tabName = bankTab
+                        request.approvedBankTab = bankTab
+                        healedCount = healedCount + 1
+                    elseif self.SaveMinimumForApprovedRequest then
+                        local rule = self:SaveMinimumForApprovedRequest(request, bankTab, "Request Self-Heal")
+                        if rule then
+                            healedCount = healedCount + 1
+                            minimums = (db or {}).minimums or minimums
+                        end
+                    end
+                end
+            end
+        end
+
+        return healedCount
     end
 
     function mainFrame:OpenRequestDetailsModal(requestId)

@@ -14,14 +14,14 @@ function exportsView.BuildCsvText(rows)
     return exports.BuildDelimited(rows or {}, {
         delimiter = ",",
         includeHeader = true,
-        fields = { "Item ID", "Item Tier", "Item Name", "Bank Tab", "Amount to Stock", "Stocked Elsewhere" },
+        fields = { "Item ID", "Item Tier", "Item Name", "Bank Tab", "Amount to Stock", "Excess Stock In" },
         labels = {
             ["Item ID"] = "itemID",
             ["Item Tier"] = "itemTier",
             ["Item Name"] = "itemName",
             ["Bank Tab"] = "bankTab",
             ["Amount to Stock"] = "amountToStock",
-            ["Stocked Elsewhere"] = "stockedElsewhere",
+            ["Excess Stock In"] = "excessStockIn",
         },
     })
 end

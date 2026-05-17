@@ -403,11 +403,18 @@ assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "lega
 
 _G.GBankManagerDB.minimums = {
     {
+        itemID = 8008,
+        itemName = "Leyline Residue",
+        quantity = 120,
+        scope = "TAB",
+        tabName = "Reagents",
+        enabled = true,
+    },
+    {
         itemID = 7007,
         itemName = "Algari Mana Oil",
         quantity = 250,
-        scope = "TAB",
-        tabName = "Alchemy",
+        scope = "GLOBAL",
         enabled = true,
     },
 }
@@ -417,6 +424,136 @@ mainFrame.minimumPendingDirty = {}
 mainFrame.minimumPendingDeleted = {}
 mainFrame.selectedMinimumKey = nil
 mainFrame:RefreshView()
+local globalMinimumRow = mainFrame.tableRowsData[1]
+assert.equal("7007", globalMinimumRow.itemID, "global minimum rows should sort to the top so missing bank tabs are hard to miss")
+assert.equal("GLOBAL", globalMinimumRow.bankTab, "global minimum rows should keep the unresolved GLOBAL bank-tab marker visible")
+assert.truthy(globalMinimumRow.needsBankTab == true, "global minimum rows should be marked as needing a bank tab before save")
+assert.equal("orange", mainFrame.tableRows[1].minimumDraftTint, "global minimum rows should highlight in orange")
+assert.equal(0.62, ((mainFrame.tableRows[1].minimumDraftBackground or {}).color or {})[1] or 0, "global minimum rows should use the orange warning overlay")
+mainFrame:HandleTableRowClick(globalMinimumRow)
+assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "global minimum rows should still open in the shared details modal")
+assert.truthy(mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "global minimum rows should require picking a bank tab before save")
+assert.truthy(not mainFrame.minimumDetailsBankTabValueText:IsShown(), "global minimum rows should not present the unresolved tab as read-only text")
+assert.equal("Select a Bank Tab to continue.", mainFrame.minimumDetailsStatusText:GetText(), "global minimum rows should explain that a bank tab must be chosen")
+mainFrame:HideMinimumDetailsModal()
+mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
+assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "saving with unresolved global minimum rows should reopen the details modal")
+assert.equal("Bank Tab must be set on Orange Rows.", mainFrame.minimumDetailsStatusText:GetText(), "saving with unresolved global minimum rows should show the required error message")
+
+_G.GBankManagerDB.minimums = {
+    {
+        itemID = 8008,
+        itemName = "Leyline Residue",
+        quantity = 120,
+        scope = "TAB",
+        tabName = "Reagents",
+        enabled = true,
+    },
+    {
+        itemID = 241322,
+        itemName = "Flask of the Magisters",
+        quantity = 10,
+        scope = "TAB",
+        tabName = "Reagents",
+        enabled = true,
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+    },
+}
+_G.GBankManagerDB.requests = {
+    {
+        requestId = "auto-heal-approved-request",
+        requester = "Zirleficent",
+        requesterCharacterKey = "Stormrage-Zirleficent",
+        itemID = 243734,
+        itemName = "Thalassian Phoenix Oil",
+        quantity = 100,
+        approval = "APPROVED",
+        fulfillment = "OPEN",
+        tabName = "Alchemy",
+        approvedBankTab = "Alchemy",
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+    },
+    {
+        requestId = "auto-heal-from-existing-minimum",
+        requester = "Zirleficent",
+        requesterCharacterKey = "Stormrage-Zirleficent",
+        itemID = 241322,
+        itemName = "Flask of the Magisters",
+        quantity = 10,
+        approval = "APPROVED",
+        fulfillment = "OPEN",
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+    },
+    {
+        requestId = "legacy-approved-request",
+        requester = "Zirleficent",
+        requesterCharacterKey = "Stormrage-Zirleficent",
+        itemID = 241324,
+        itemName = "Flask of the Blood Knights",
+        quantity = 100,
+        approval = "APPROVED",
+        fulfillment = "OPEN",
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+    },
+}
+mainFrame.minimumPendingDb = nil
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.minimumPendingDeleted = {}
+mainFrame.selectedMinimumKey = nil
+mainFrame:RefreshView()
+assert.equal("243734|TAB|Alchemy", _G.GBankManagerDB.requests[1].minimumRuleKey, "approved requests with a bank tab should self-heal their missing minimum binding automatically")
+assert.equal("Alchemy", _G.GBankManagerDB.requests[1].tabName, "approved requests that self-heal should preserve their chosen bank tab")
+assert.equal("241322|TAB|Reagents", _G.GBankManagerDB.requests[2].minimumRuleKey, "approved requests with exactly one matching existing minimum should self-heal to that minimum even if the request lost its bank tab")
+assert.equal("Reagents", _G.GBankManagerDB.requests[2].tabName, "approved requests that self-heal from an existing minimum should inherit the existing minimum bank tab")
+local magistersGlobalCount = 0
+for _, row in ipairs(mainFrame.tableRowsData or {}) do
+    if tonumber(row.itemID) == 241322 and tostring(row.bankTab or "") == "GLOBAL" then
+        magistersGlobalCount = magistersGlobalCount + 1
+    end
+end
+assert.equal(0, magistersGlobalCount, "approved requests that can self-heal from an existing minimum should not surface a duplicate GLOBAL repair row")
+local legacyRequestRow = mainFrame.tableRowsData[1]
+assert.equal("241324", legacyRequestRow.itemID, "approved requests without a bound minimum should surface at the top of Minimums for repair")
+assert.equal("GLOBAL", legacyRequestRow.bankTab, "approved requests without a chosen bank tab should surface as GLOBAL in Minimums")
+assert.truthy(legacyRequestRow.needsBankTab == true, "approved requests without a chosen bank tab should require repair before save")
+assert.equal("orange", mainFrame.tableRows[1].minimumDraftTint, "approved requests without a chosen bank tab should highlight orange in Minimums")
+mainFrame:HandleTableRowClick(legacyRequestRow)
+assert.truthy(mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "legacy approved requests should open with an editable Bank Tab picker")
+mainFrame.minimumDetailsBankTabDropdownButton:GetScript("OnClick")(mainFrame.minimumDetailsBankTabDropdownButton)
+mainFrame.minimumDetailsBankTabDropdownOptions[1]:GetScript("OnClick")(mainFrame.minimumDetailsBankTabDropdownOptions[1])
+mainFrame.minimumDetailsConfirmButton:GetScript("OnClick")(mainFrame.minimumDetailsConfirmButton)
+local repairedLegacyDraftCount = 0
+local repairedLegacyGlobalCount = 0
+for _, row in ipairs(mainFrame.tableRowsData or {}) do
+    if tonumber(row.itemID) == 241324 and tostring(row.bankTab or "") == "Alchemy" then
+        repairedLegacyDraftCount = repairedLegacyDraftCount + 1
+    end
+    if tonumber(row.itemID) == 241324 and tostring(row.bankTab or "") == "GLOBAL" then
+        repairedLegacyGlobalCount = repairedLegacyGlobalCount + 1
+    end
+end
+assert.equal(1, repairedLegacyDraftCount, "repairing a legacy approved request should stage exactly one resolved draft row")
+assert.equal(0, repairedLegacyGlobalCount, "repairing a legacy approved request should hide the orphan GLOBAL row while the repair draft is staged")
+mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
+assert.equal("TAB", _G.GBankManagerDB.minimums[4].scope, "saving a repaired legacy approved request should create a tab-scoped minimum")
+assert.equal("Alchemy", _G.GBankManagerDB.minimums[4].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the minimum")
+assert.equal("241324|TAB|Alchemy", _G.GBankManagerDB.requests[3].minimumRuleKey, "saving a repaired legacy approved request should bind the request back to its minimum rule")
+assert.equal("Alchemy", _G.GBankManagerDB.requests[3].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the request")
+
+_G.GBankManagerDB.minimums = {}
+_G.GBankManagerDB.requests = {}
+mainFrame.minimumPendingDb = nil
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.minimumPendingDeleted = {}
+mainFrame.selectedMinimumKey = nil
+mainFrame:RefreshView()
+
 assert.truthy(mainFrame.minimumShowAllRows == true, "minimums should default to Show All rows")
 assert.equal("Enabled Only", mainFrame.minimumShowAllToggleButton.labelText:GetText(), "minimums toggle should start in the Show All state")
 assert.equal("", mainFrame.minimumEditorStateText:GetText() or "", "minimums footer should not show the old centered-modal hint text")

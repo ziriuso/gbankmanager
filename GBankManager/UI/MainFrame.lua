@@ -101,27 +101,131 @@ local function capability_label(capability)
 end
 
 local function make_export_output_input(parent, width, height)
-    local input = make_input(parent, width, height)
+    local input = _G.CreateFrame("ScrollFrame", nil, parent, "BackdropTemplate")
+    input:SetSize(width, height)
     input.lastCopiedText = nil
     input.highlightStart = nil
     input.highlightEnd = nil
+    input.cursorPosition = 0
     input.multiLine = true
+    if type(input.EnableMouse) == "function" then
+        input:EnableMouse(true)
+    end
+    if type(input.SetBackdrop) == "function" then
+        input:SetBackdrop(nil)
+    end
 
-    if type(input.SetMultiLine) == "function" then
-        input:SetMultiLine(true)
+    local editBox = _G.CreateFrame("EditBox", nil, input, "BackdropTemplate")
+    input.EditBox = editBox
+    editBox:SetPoint("TOPLEFT", input, "TOPLEFT", 0, 0)
+    if type(editBox.SetWidth) == "function" then
+        editBox:SetWidth(math.max(0, width - 12))
+    end
+    editBox:SetHeight(math.max(0, height))
+    if type(editBox.SetAutoFocus) == "function" then
+        editBox:SetAutoFocus(false)
+    end
+    if type(editBox.SetFontObject) == "function" then
+        editBox:SetFontObject("GameFontHighlightSmall")
+    end
+    if type(editBox.SetTextColor) == "function" then
+        editBox:SetTextColor(unpack((theme.colors or {}).accentStrong or { 1, 1, 1, 1 }))
+    end
+    if type(editBox.EnableMouse) == "function" then
+        editBox:EnableMouse(true)
+    end
+    if type(editBox.SetTextInsets) == "function" then
+        editBox:SetTextInsets(0, 0, 0, 0)
+    end
+    if type(editBox.SetMultiLine) == "function" then
+        editBox:SetMultiLine(true)
     else
-        function input:SetMultiLine(value)
+        function editBox:SetMultiLine(value)
             self.multiLine = value and true or false
         end
+    end
+    editBox:SetText("")
+    input:SetScrollChild(editBox)
+
+    if type(editBox.SetCursorPosition) ~= "function" then
+        function editBox:SetCursorPosition(position)
+            self.cursorPosition = tonumber(position) or 0
+        end
+    end
+
+    if type(editBox.HighlightText) ~= "function" then
+        function editBox:HighlightText(startIndex, endIndex)
+            self.highlightStart = startIndex
+            self.highlightEnd = endIndex
+        end
+    end
+
+    if type(editBox.SetFocus) ~= "function" then
+        function editBox:SetFocus()
+            self.hasFocus = true
+        end
+    end
+
+    if type(editBox.HasFocus) ~= "function" then
+        function editBox:HasFocus()
+            return self.hasFocus == true
+        end
+    end
+
+    if type(editBox.ClearFocus) ~= "function" then
+        function editBox:ClearFocus()
+            self.hasFocus = false
+        end
+    end
+
+    input:SetScript("OnMouseDown", function()
+        editBox:SetFocus()
+    end)
+    editBox:SetScript("OnMouseDown", function()
+        editBox:SetFocus()
+    end)
+    editBox:SetScript("OnEscapePressed", function()
+        editBox:ClearFocus()
+    end)
+
+    function input:SetText(text)
+        editBox:SetText(text or "")
+    end
+
+    function input:GetText()
+        return editBox:GetText()
+    end
+
+    function input:SetFocus()
+        editBox:SetFocus()
+        self.hasFocus = true
+    end
+
+    function input:HasFocus()
+        return editBox:HasFocus()
+    end
+
+    function input:ClearFocus()
+        editBox:ClearFocus()
+        self.hasFocus = false
+    end
+
+    function input:SetCursorPosition(position)
+        local normalizedPosition = tonumber(position) or 0
+        self.cursorPosition = normalizedPosition
+        editBox:SetCursorPosition(normalizedPosition)
     end
 
     function input:HighlightText(startIndex, endIndex)
         self.highlightStart = startIndex
         self.highlightEnd = endIndex
+        editBox:HighlightText(startIndex, endIndex)
     end
 
-    function input:SetFocus()
-        self.hasFocus = true
+    function input:SetTextInsets(left, right, top, bottom)
+        if type(editBox.SetTextInsets) == "function" then
+            editBox:SetTextInsets(left, right, top, bottom)
+        end
     end
 
     return input
@@ -1294,6 +1398,12 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportStockedElsewhereModal, theme.colors.panelAlt)
     apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
     apply_panel_style(self.exportModalScrollChild, theme.colors.background)
+    if type(self.exportModalScrollFrame.SetBackdrop) == "function" then
+        self.exportModalScrollFrame:SetBackdrop(nil)
+    end
+    if type(self.exportModalScrollChild.SetBackdrop) == "function" then
+        self.exportModalScrollChild:SetBackdrop(nil)
+    end
     apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
     apply_panel_style(self.tableFilterFrame, theme.colors.background)
     apply_panel_style(self.tableViewportFrame, theme.colors.background)
@@ -1479,6 +1589,9 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.exportDelimiterInput, theme.colors.background)
     apply_panel_style(self.exportFieldsInput, theme.colors.background)
     apply_panel_style(self.exportModalOutputInput, theme.colors.background)
+    if type(self.exportModalOutputInput.SetBackdrop) == "function" then
+        self.exportModalOutputInput:SetBackdrop(nil)
+    end
 end
 
 function mainFrame:GetActiveSortState()
@@ -1590,7 +1703,7 @@ function mainFrame:HandleTableRowClick(row)
         return self:OpenMinimumDetailsModal(refreshedRow) or refreshedRow
     end
 
-    if self.activeView == "EXPORTS" and row.stockedElsewhere == "Yes" then
+    if self.activeView == "EXPORTS" and #((row or {}).stockedElsewhereTabs or {}) > 0 then
         return self:OpenExportStockedElsewhereModal(row) or row
     end
 
@@ -1646,6 +1759,10 @@ function mainFrame:RefreshView()
 
     self:UpdateSharedTableLayout()
 
+    if type(self.SelfHealApprovedRequestMinimums) == "function" then
+        self:SelfHealApprovedRequestMinimums(db)
+    end
+
     local demandPlan = {}
     currentSnapshot = self:GetCurrentSnapshot()
     if planning and type(planning.BuildDemandPlanFromDatabase) == "function" then
@@ -1683,6 +1800,9 @@ function mainFrame:RefreshView()
     self.exportModal:Hide()
     if self.exportStockedElsewhereModal then
         self.exportStockedElsewhereModal:Hide()
+    end
+    if self.exportManualShoppingListModal then
+        self.exportManualShoppingListModal:Hide()
     end
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
@@ -1764,7 +1884,7 @@ function mainFrame:RefreshView()
             { key = "itemName", label = "Item Name", width = 268, justifyH = "LEFT" },
             { key = "bankTab", label = "Bank Tab", width = 136, justifyH = "LEFT" },
             { key = "amountToStock", label = "Amount to Stock", width = 108, justifyH = "LEFT" },
-            { key = "stockedElsewhere", label = "Stocked Elsewhere", width = 106, justifyH = "LEFT" },
+            { key = "excessStockIn", label = "Excess Stock In", width = 106, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         self:RefreshExportOutput(rows)

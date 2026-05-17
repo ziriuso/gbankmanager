@@ -106,6 +106,12 @@ local function stocked_elsewhere(snapshotItem, bankTab)
     end
 
     table.sort(out, function(left, right)
+        local leftQuantity = tonumber(left.quantity or 0) or 0
+        local rightQuantity = tonumber(right.quantity or 0) or 0
+        if leftQuantity ~= rightQuantity then
+            return leftQuantity > rightQuantity
+        end
+
         return tostring(left.tabName or "") < tostring(right.tabName or "")
     end)
     return out
@@ -159,6 +165,7 @@ function exports.MaterializePlanRows(plan, snapshot)
             table.sort(reasons)
             local bankTab = primary_bank_tab(row.details or {})
             local elsewhereTabs = stocked_elsewhere(currentItem, bankTab)
+            local topElsewhereTab = elsewhereTabs[1]
             table.insert(rows, {
                 itemID = row.itemID,
                 itemName = row.itemName,
@@ -173,7 +180,8 @@ function exports.MaterializePlanRows(plan, snapshot)
                 bankTab = bankTab,
                 scopeSummary = summarize_scopes(row.details or {}),
                 reason = table.concat(reasons, "|"),
-                stockedElsewhere = #elsewhereTabs > 0 and "Yes" or "No",
+                excessStockIn = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "Not In Guild Bank",
+                stockedElsewhere = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "Not In Guild Bank",
                 stockedElsewhereTabs = elsewhereTabs,
             })
         end
@@ -190,7 +198,7 @@ function exports.FilterRowsUnavailableElsewhere(rows)
     local out = {}
 
     for _, row in ipairs(rows or {}) do
-        if tostring(row.stockedElsewhere or "No") ~= "Yes" then
+        if #((row or {}).stockedElsewhereTabs or {}) == 0 then
             table.insert(out, row)
         end
     end

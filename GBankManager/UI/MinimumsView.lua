@@ -453,7 +453,8 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
 
     for _, row in ipairs(rows or {}) do
         local item = snapshotItems[row.itemID]
-        local configuredTab = tostring(row.tabName or (item and primary_tab(item)) or "-")
+        local unresolvedGlobalTab = tostring(row.scope or "TAB") == "GLOBAL" and tostring(row.tabName or "") == ""
+        local configuredTab = unresolvedGlobalTab and "GLOBAL" or tostring(row.tabName or (item and primary_tab(item)) or "-")
         local currentCount = current_count_for_rule(item, row)
         local minimumCount = tonumber(row.quantity or 0) or 0
         local shouldRestock = row.enabled ~= false and currentCount < minimumCount
@@ -484,11 +485,14 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             restockFromValue = string.lower(restock_from(item, configuredTab, shouldRestock)),
             source = source,
             enabledSort = row.enabled ~= false and 0 or 1,
-            configuredSort = 0,
+            configuredSort = unresolvedGlobalTab and -1 or 0,
             configured = true,
             craftedQuality = qualitySource.craftedQuality,
             craftedQualityIcon = qualitySource.craftedQualityIcon,
             isNewlyAdded = row.isNewlyAdded == true,
+            needsBankTab = unresolvedGlobalTab,
+            sourceRequestId = row.sourceRequestId,
+            sourceRequestBackfill = row.sourceRequestBackfill == true,
         })
         seen[tab_row_key(row.itemID, configuredTab)] = true
     end

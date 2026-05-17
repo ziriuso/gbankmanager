@@ -77,9 +77,10 @@
 
 The next planned validation work should follow product priority, not test-only convenience:
 
-1. Broaden UI polish validation across the now-shared table shells and export/request modals.
-2. After those UI and workflow slices settle, build the dedicated in-game unit-test addon lane so live client verification can move beyond manual smoke.
-3. After the core product workflow slices are stable, validate guild-client sync behavior for history, requests, and minimums as its own end-to-end lane.
+1. Validate the new pre-polish workflow block first: request deletion auth, Exports formatting/icon corrections, Request Admin and Minimums active-filter highlights, Request Admin bottom-bar layout with right-aligned filters plus a far-left `Add` action, Request Admin shared-height table sizing plus the `Date Fulfilled` filter overflow fix, Restock Default in the guild permission string, Options-page preload from Guild Info on addon load, explicit blacklist `Character-Server` guidance, correct last-updated policy metadata from Guild Info, permission-policy history auditing/sync, dashboard export-row mismatch triage plus future critical-shortage card rules, and guild-bank-open auto-scan throttling.
+2. During communication work, compare GBankManager behavior against Guild Roster Manager patterns for addon-to-addon conflict resolution before broadening sync regression coverage, including permission-policy history and auth authority resolution.
+3. After those workflow slices settle, broaden UI polish validation across the shared table shells, nav active-state styling, quality-tier icon rendering, and separate shell/modal opacity slider behavior.
+4. After the UI and workflow slices stabilize, build the dedicated in-game unit-test addon lane so live client verification can move beyond manual smoke.
 
 ### Recent Regression Coverage
 

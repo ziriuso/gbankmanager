@@ -95,7 +95,7 @@ assert.equal(0, enrichedRows[1].targetQuantity, "materialized rows should expose
 assert.equal(1, enrichedRows[1].requestQuantity, "materialized rows should expose approved request contribution")
 assert.equal("GLOBAL", enrichedRows[1].scopeSummary, "materialized rows should summarize involved scopes")
 assert.equal(3, enrichedRows[1].quality, "materialized rows should expose crafted quality for Auctionator exports")
-assert.equal("No", enrichedRows[1].stockedElsewhere, "materialized rows without another tab should mark Stocked Elsewhere as No")
+assert.equal("Not In Guild Bank", enrichedRows[1].excessStockIn, "materialized rows without another tab should show that the item is not stocked elsewhere in the guild bank")
 
 local exportDialog = dofile("GBankManager/UI/ExportDialog.lua")
 local defaultState = exportDialog.BuildPresetState(rows)
@@ -121,7 +121,7 @@ local spreadsheetText = exportsView.BuildSpreadsheetText(enrichedRows)
 local csvText = exportsView.BuildCsvText(enrichedRows)
 local tsmText = exportsView.BuildTsmItemIdText(enrichedRows)
 
-assert.equal("Item ID,Item Tier,Item Name,Bank Tab,Amount to Stock,Stocked Elsewhere\n1001,3,Flask Alpha,GLOBAL,5,No", csvText, "csv preset should mirror visible export columns")
+assert.equal("Item ID,Item Tier,Item Name,Bank Tab,Amount to Stock,Excess Stock In\n1001,3,Flask Alpha,GLOBAL,5,Not In Guild Bank", csvText, "csv preset should mirror the visible export columns")
 assert.equal(csvText, spreadsheetText, "spreadsheet alias should preserve the visible CSV output")
 assert.equal("1001", tsmText, "TSM export should provide the supported comma-delimited item id import list")
 
@@ -145,15 +145,17 @@ local elsewhereRows = exports.MaterializePlanRows({
             tabs = {
                 ["Raid Buffer"] = 1,
                 ["Freebiez"] = 6,
+                Overflow = 9,
             },
         },
     },
 })
 
 assert.equal("Raid Buffer", elsewhereRows[1].bankTab, "exports rows should expose the shortage bank tab")
-assert.equal("Yes", elsewhereRows[1].stockedElsewhere, "exports rows should flag inventory available in another tab")
-assert.equal("Freebiez", elsewhereRows[1].stockedElsewhereTabs[1].tabName, "exports rows should list stocked-elsewhere tab names")
-assert.equal(6, elsewhereRows[1].stockedElsewhereTabs[1].quantity, "exports rows should list stocked-elsewhere quantities")
+assert.equal("Overflow", elsewhereRows[1].excessStockIn, "exports rows should show the other guild-bank tab with the most excess stock")
+assert.equal("Overflow", elsewhereRows[1].stockedElsewhereTabs[1].tabName, "exports rows should sort stocked-elsewhere tabs by quantity descending")
+assert.equal(9, elsewhereRows[1].stockedElsewhereTabs[1].quantity, "exports rows should keep the stocked-elsewhere quantities for the modal")
+assert.equal("Freebiez", elsewhereRows[1].stockedElsewhereTabs[2].tabName, "exports rows should keep the remaining stocked-elsewhere tabs available for drill-in")
 assert.equal(0, #exports.FilterRowsUnavailableElsewhere(elsewhereRows), "missing-only exports should skip rows stocked elsewhere")
 
 local dbRows = exports.BuildRowsFromDatabase({

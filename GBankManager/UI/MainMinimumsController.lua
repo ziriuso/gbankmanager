@@ -35,6 +35,7 @@ local MINIMUM_DRAFT_ROW_COLORS = {
     added = { 0.12, 0.36, 0.16, 0.98 },
     changed = { 0.42, 0.34, 0.10, 0.98 },
     deleted = { 0.44, 0.12, 0.12, 0.98 },
+    attention = { 0.62, 0.32, 0.08, 0.98 },
 }
 
 local MINIMUM_ACTION_BUTTON_BOTTOM_INSET = 32
@@ -359,6 +360,8 @@ function mainMinimumsController.Attach(mainFrame, options)
             originalScope = rule.originalScope,
             originalTabName = rule.originalTabName,
             isNewlyAdded = rule.isNewlyAdded == true,
+            sourceRequestId = rule.sourceRequestId,
+            sourceRequestBackfill = rule.sourceRequestBackfill == true,
         }
     end
 
@@ -386,6 +389,9 @@ function mainMinimumsController.Attach(mainFrame, options)
         local quantity = tonumber(row.quantityValue or row.quantity or 0) or 0
         local scope = row.scope or "TAB"
         local tabName = row.tabKey or row.tabName or row.bankTab
+        if row.needsBankTab == true or tabName == "GLOBAL" then
+            tabName = nil
+        end
         if row.configured ~= true then
             quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100
             scope = "TAB"
@@ -405,6 +411,8 @@ function mainMinimumsController.Attach(mainFrame, options)
             originalItemID = row.originalItemID or tonumber(row.itemID),
             originalScope = row.originalScope or row.scope,
             originalTabName = row.originalTabName,
+            sourceRequestId = row.sourceRequestId,
+            sourceRequestBackfill = row.sourceRequestBackfill == true,
         }
     end
 
@@ -451,6 +459,31 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         for _, rule in ipairs((db or {}).minimums or {}) do
             table.insert(merged, self:CloneMinimumRule(rule))
+        end
+
+        for _, request in ipairs((db or {}).requests or {}) do
+            local bankTab = tostring((request or {}).approvedBankTab or (request or {}).tabName or "")
+            if request.approval == "APPROVED"
+                and request.fulfillment == "OPEN"
+                and not request.minimumRuleKey
+                and bankTab == "" then
+                table.insert(merged, self:CloneMinimumRule({
+                    itemID = request.itemID,
+                    itemName = request.itemName,
+                    quantity = request.quantity,
+                    scope = "GLOBAL",
+                    tabName = nil,
+                    enabled = true,
+                    craftedQuality = request.craftedQuality,
+                    craftedQualityIcon = request.craftedQualityIcon,
+                    draftKey = table.concat({ "request", tostring(request.requestId or request.itemID or ""), "GLOBAL" }, "|"),
+                    originalItemID = request.itemID,
+                    originalScope = "GLOBAL",
+                    originalTabName = nil,
+                    sourceRequestId = request.requestId,
+                    sourceRequestBackfill = true,
+                }))
+            end
         end
 
         for _, pending in pairs(self.minimumPendingRules or {}) do
@@ -699,13 +732,17 @@ function mainMinimumsController.Attach(mainFrame, options)
             return false
         end
 
+        if row.needsBankTab == true then
+            return false
+        end
+
         return self:GetMinimumBaselineRule(row) ~= nil
     end
 
     function mainFrame:ConfigureMinimumDetailsBankTabDropdown(row, state)
         local tabOptions = self:GetKnownMinimumBankTabs(state or row)
         local dropdownWidth = minimum_dropdown_width(tabOptions, 188, 260)
-        local selectedTab = ((state and state.tabName) and state.tabName ~= "") and state.tabName or (row and row.bankTab) or "Select Bank Tab"
+        local selectedTab = ((state and state.tabName) and state.tabName ~= "") and state.tabName or ((row and row.needsBankTab) and "Select Bank Tab") or (row and row.bankTab) or "Select Bank Tab"
         local isLocked = self:IsMinimumDetailsBankTabLocked(row)
 
         self.minimumDetailsBankTabDropdownButton:SetWidth(dropdownWidth)
@@ -765,7 +802,7 @@ function mainMinimumsController.Attach(mainFrame, options)
         state = state or (row and self:GetPendingMinimumDraft(row)) or nil
         local itemName = tostring((row and row.itemName) or (state and state.itemName) or "Unknown")
         local itemID = tonumber((row and row.itemID) or (state and state.itemID) or 0) or 0
-        local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or (row and row.bankTab) or "-"
+        local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or ((row and row.needsBankTab) and "-") or (row and row.bankTab) or "-"
         local craftedQuality = tonumber((row and row.craftedQuality) or (state and state.craftedQuality) or 0) or 0
         local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or "")
 
@@ -823,6 +860,47 @@ function mainMinimumsController.Attach(mainFrame, options)
         return self.minimumDetailsModal
     end
 
+    function mainFrame:FindMinimumBankTabValidationRow()
+        local minimumsView = ns.modules.minimumsView
+        local snapshot = self:GetCurrentSnapshot()
+        local rows = minimumsView.BuildTableRows(self:GetMergedMinimumRules(currentDb()), snapshot, {
+            showAll = true,
+            search = "",
+            manualOnly = false,
+            columnFilters = {},
+        })
+
+        for _, row in ipairs(rows or {}) do
+            if row.needsBankTab == true then
+                self:BackfillMinimumCraftedTier(row, snapshot)
+                return row
+            end
+        end
+
+        return nil
+    end
+
+    function mainFrame:BindMinimumRuleToApprovedRequest(rule)
+        local requestId = tostring((rule or {}).sourceRequestId or "")
+        local bankTab = tostring((rule or {}).tabName or "")
+        local itemID = tonumber((rule or {}).itemID)
+        if requestId == "" or bankTab == "" or not itemID then
+            return nil
+        end
+
+        local db = currentDb()
+        for _, request in ipairs((db or {}).requests or {}) do
+            if tostring((request or {}).requestId or "") == requestId then
+                request.minimumRuleKey = table.concat({ tostring(itemID), "TAB", bankTab }, "|")
+                request.tabName = bankTab
+                request.approvedBankTab = bankTab
+                return request
+            end
+        end
+
+        return nil
+    end
+
     function mainFrame:ApplyMinimumDraftStyle(rowFrame, rowIndex, draftState)
         if not rowFrame then
             return
@@ -839,6 +917,21 @@ function mainMinimumsController.Attach(mainFrame, options)
         rowFrame.minimumDraftBackground = rowFrame.minimumDraftBackground or rowFrame:CreateTexture(nil, "BACKGROUND")
         if type(rowFrame.minimumDraftBackground.SetAllPoints) == "function" then
             rowFrame.minimumDraftBackground:SetAllPoints(rowFrame)
+        end
+
+        if not draftState and rowFrame.rowData and rowFrame.rowData.needsBankTab == true then
+            applyTableRowStyle(rowFrame, rowIndex, self:IsSelectedTableRow(rowFrame.rowData))
+            rowFrame.minimumDraftState = "attention"
+            rowFrame.minimumDraftTint = "orange"
+            if type(rowFrame.minimumDraftBackground.SetColorTexture) == "function" then
+                rowFrame.minimumDraftBackground:SetColorTexture(unpack(MINIMUM_DRAFT_ROW_COLORS.attention))
+            end
+            rowFrame.minimumDraftBackground.color = MINIMUM_DRAFT_ROW_COLORS.attention
+            if type(rowFrame.minimumDraftBackground.Show) == "function" then
+                rowFrame.minimumDraftBackground:Show()
+            end
+            rowFrame.isSelected = self:IsSelectedTableRow(rowFrame.rowData)
+            return
         end
 
         if draftState and MINIMUM_DRAFT_ROW_COLORS[draftState] then
@@ -922,7 +1015,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         local function add_tab(tabName)
             tabName = tostring(tabName or "")
-            if tabName == "" or seen[tabName] then
+            if tabName == "" or tabName == "GLOBAL" or seen[tabName] then
                 return
             end
             seen[tabName] = true
@@ -1367,6 +1460,19 @@ function mainMinimumsController.Attach(mainFrame, options)
         local minimumsView = ns.modules.minimumsView
         local db = currentDb()
         local changed = false
+        local invalidRow = self:FindMinimumBankTabValidationRow()
+
+        if invalidRow then
+            self.selectedMinimumKey = invalidRow.rowKey
+            self:ApplyMinimumFilters()
+            invalidRow = self:GetMinimumRowByKey(invalidRow.rowKey) or invalidRow
+            self:OpenMinimumDetailsModal(invalidRow)
+            self.minimumDetailsStatusText:SetText("Bank Tab must be set on Orange Rows.")
+            if type(self.minimumDetailsStatusText.SetTextColor) == "function" then
+                self.minimumDetailsStatusText:SetTextColor(1, 0.35, 0.35, 1)
+            end
+            return false
+        end
 
         for key in pairs(self.minimumPendingDeleted or {}) do
             local pending = (self.minimumPendingRules or {})[key] or self:GetMinimumBaselineRule(key)
@@ -1393,6 +1499,7 @@ function mainMinimumsController.Attach(mainFrame, options)
                         actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
                         timestamp = _G.time(),
                     })
+                    self:BindMinimumRuleToApprovedRequest(normalized)
                     changed = true
                 end
             end
