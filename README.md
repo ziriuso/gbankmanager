@@ -78,6 +78,7 @@ Current UI ownership is intentionally split across:
 4. If a long refresh is interrupted, rerun the same target with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Refresh-ItemCatalog.ps1 -Target Retail -Resume`. Extraction resumes from the last saved `itemID`, while merge and generated addon rebuild restart from the last safe completed phase boundary.
 5. Optionally launch the local maintainer workflow UI with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Open-ItemCatalogMaintainer.ps1` for target selection, saved status, refresh, and deploy. See [docs/maintainer-catalog-workflow.md](docs/maintainer-catalog-workflow.md).
 6. Optionally run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath <path>` before a PTR or Beta refresh if addon-learned discoveries need to be preserved.
+7. If you are resuming on a MacBook, use [docs/macos-readme.md](docs/macos-readme.md) for clone, worktree, WoW path detection, deploy, and resume guidance.
 7. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
 8. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`, or use `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`.
 9. Use `/gbm ui` to open the officer shell.

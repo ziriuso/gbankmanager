@@ -20,6 +20,7 @@
 5. `git status -sb`
 6. `.\tools\lua\lua.exe .\tests\run_all.lua`
 7. `docs/ui-reference/mockup-reference-manifest.md`
+8. `docs/macos-readme.md` when resuming from a MacBook travel setup
 
 ## Current Repo State
 
@@ -95,6 +96,7 @@
 - The later dashboard-only expansion that added structured row widgets, a dedicated critical-shortages lower panel, richer quick-action cards, and a footer legend strip was rolled back one iteration because the live result still did not match the mockup closely enough.
 - The honest state of the UI pass is that the scaffolding is strong, reusable, and worth keeping, but the addon still does not visually match the supplied Alliance art. The next meaningful UI milestone is an addon-local art pack to support the shell, cards, nav rail, and panel trims directly.
 - The in-repo visual reference source of truth now lives in [docs/ui-reference/mockup-reference-manifest.md](../../ui-reference/mockup-reference-manifest.md), which preserves the screenshots and screen-level targets supplied in the working thread.
+- The repo now also ships a dedicated macOS travel and setup guide in [docs/macos-readme.md](../../macos-readme.md) for clone, worktree, Lua-runner discovery, WoW path detection, and manual AddOns deployment on a default Mac install.
 - Minimums staged rows now group at the top, expose `ADD` / `EDIT` / `DELETE` badges, show a staged-change summary in the footer, and reveal `Revert All` only while pending changes exist.
 - Dashboard `Top 5 Most Used` now ranks repeated shortage cycles from persisted snapshot history plus active Minimums rules before falling back to raw withdrawal totals when there is no stocking history yet.
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering, with persisted results under `GBankManagerDB.testing.inGameUnit`.
