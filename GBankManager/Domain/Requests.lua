@@ -385,6 +385,37 @@ function requests.MarkFulfilledStored(db, requestId, actor, updatedAt)
     return request
 end
 
+local function snapshot_item_total(snapshot, itemID)
+    local items = (snapshot or {}).items or {}
+    local item = items[itemID] or items[tonumber(itemID)]
+    return tonumber((item or {}).totalCount or 0) or 0
+end
+
+function requests.AutoFulfillApprovedFromSnapshot(db, snapshot, actor, updatedAt)
+    db = ensure_tables(db or {})
+    local fulfilled = {}
+
+    for _, request in ipairs(db.requests or {}) do
+        local quantity = tonumber(request.quantity or 0) or 0
+        if request.approval == "APPROVED"
+            and request.fulfillment == "OPEN"
+            and quantity > 0
+            and snapshot_item_total(snapshot, request.itemID) >= quantity then
+            local oldValue = request.fulfillment
+            requests.MarkFulfilled(request, actor or "Bank Scan", updatedAt)
+            append_audit(db, requests.BuildAuditEntry("REQUEST_FULFILLED", request, {
+                actor = actor or "Bank Scan",
+                timestamp = request.fulfillmentUpdatedAt,
+                oldValue = oldValue,
+                newValue = request.fulfillment,
+            }))
+            table.insert(fulfilled, request)
+        end
+    end
+
+    return fulfilled
+end
+
 function requests.ReopenStored(db, requestId, actor, updatedAt)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)

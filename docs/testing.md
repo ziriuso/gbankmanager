@@ -50,6 +50,9 @@
   - Minimums draft rows should clearly show green `added`, yellow `changed`, and red `deleted` state before `Save All`
   - Minimums should backfill crafted tier from the bundled catalog when snapshot or scan data omits `craftedQuality` and `craftedQualityIcon`
   - `/gbm request` should show the compact request window with the addon title, an own-request status table, row-click details, and the three-step `New Request` wizard
+  - `Request Admin` should use details-modal workflow actions only, with the bottom `All` / `Pending Approval` / `Pending Fulfillment` filter strip and no top workflow action box.
+  - Approved open requests should be auto-marked fulfilled by a guild-bank scan once scanned inventory meets the requested quantity, and fulfilled requests should retain Date Fulfilled.
+  - Exports should show a bottom action strip, visible-table CSV output, Auctionator and TSM all-vs-missing modal choices, and a stocked-elsewhere tab/quantity detail modal.
 
 ## Failure Reading
 
@@ -74,7 +77,7 @@
 
 The next planned validation work should follow product priority, not test-only convenience:
 
-1. Validate the Exports UI rework after the request/admin split.
+1. Broaden UI polish validation across the now-shared table shells and export/request modals.
 2. After those UI and workflow slices settle, build the dedicated in-game unit-test addon lane so live client verification can move beyond manual smoke.
 3. After the core product workflow slices are stable, validate guild-client sync behavior for history, requests, and minimums as its own end-to-end lane.
 
@@ -84,15 +87,17 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/store_spec.lua` verifies fresh scans persist tab-scoped item rows in saved variables.
 - `tests/spec/inventory_quality_spec.lua` and `tests/spec/ui_minimums_spec.lua` verify Inventory and Minimums `Show All` render one row per bank tab with per-tab quantities.
 - `tests/spec/ui_table_spec.lua` and `tests/spec/ui_minimums_spec.lua` verify Inventory and Minimums share the same column order, including a wider `Item` column and matching table height.
-- `tests/spec/ui_table_spec.lua` verifies shared table content reserves a scrollbar gutter so columns and rows do not render underneath the inset scrollbar.
+- `tests/spec/ui_table_spec.lua` verifies shared table content stops before the external slim scrollbar so the bar does not overlap the rightmost column.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums uses shared table filters, hides the old bottom search, and keeps only the compact three-button action strip below the table.
 - `tests/spec/ui_minimums_spec.lua` verifies existing saved minimum rows auto-populate Bank Tab as a read-only value, including legacy saved rows that need the tab inferred from the table row.
-- `tests/spec/ui_requests_spec.lua` verifies the full-shell `Request Admin` surface has no inline creation panel, keeps workflow actions visible with extra bottom spacing, uses shared table filters, and includes date requested plus item name in the admin table.
+- `tests/spec/ui_requests_spec.lua` verifies the full-shell `Request Admin` surface has no inline creation panel or top workflow action box, uses shared table filters, includes date requested plus date fulfilled, and exposes the bottom `All` / `Pending Approval` / `Pending Fulfillment` filter strip.
 - `tests/spec/ui_requests_spec.lua` also verifies request-only mode uses the smaller titled request window, own-request status columns, row-click details, and the item -> quantity/reason -> review request wizard.
 - `tests/spec/ui_requests_spec.lua` verifies request details align values to fixed modal columns, labels the Decision Note input, keeps details open after approval, prompts approvers for Bank Tab, and saves approval-created Minimums rules.
 - `tests/spec/ui_requests_spec.lua` also verifies request modals block table click-through, request details use fixed label/value rows, show Requested By above Date Requested, show Updated By and Date Updated near the bottom with Decision Note, hide the decision-note editor after approval or denial, and align workflow buttons with Close.
 - `tests/spec/requests_spec.lua` verifies stored request actions still work when no explicit auth policy is present, while auth-policy-backed denial paths remain covered, no request auto-approves, non-guildmaster self-approval is blocked, Guild Master self-approval remains an explicit workflow action, approval metadata preserves Decision Note and Bank Tab, and authors can cancel pending own requests.
-- `tests/spec/requests_spec.lua` verifies request audit history stores actor names instead of Lua actor tables.
+- `tests/spec/requests_spec.lua` verifies request audit history stores actor names instead of Lua actor tables, and approved open requests can be auto-fulfilled from a bank scan when inventory meets the requested quantity.
+- `tests/spec/store_spec.lua` verifies fresh guild-bank scans auto-fulfill approved open requests and store Date Fulfilled from the scan timestamp.
+- `tests/spec/exports_spec.lua` and `tests/spec/ui_exports_spec.lua` verify the reworked Exports table columns, stocked-elsewhere modal, CSV output modal, Auctionator all-vs-missing choice flow, and TSM item-ID import output.
 - `tests/spec/sync_spec.lua` verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
 - `tests/spec/planning_spec.lua` verifies approved requests converted into Minimums rules do not double-count demand as both request demand and restock demand.
 - `tests/spec/test_runner_spec.lua` verifies the local Lua test runner emits progress before and after each spec.

@@ -6,8 +6,8 @@
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
 - Latest pushed branch commit: `28de907` (`feat: land item search and minimums workflow improvements`)
-- Latest local-only work in this phase: `823a70f` (`fix: polish minimums modal workflow`)
-- Current repo status at handoff time: uncommitted request workflow slice on `codex/gbankmanager-v1` unless this handoff is committed after deployment
+- Latest local-only committed work in this phase: `5544924` (`feat: refine inventory minimums and request workflows`)
+- Current repo status at handoff time: uncommitted request/export workflow slice on `codex/gbankmanager-v1` unless this handoff is committed after deployment
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua` after adding per-lane and per-spec test-runner progress output
 
@@ -49,7 +49,13 @@
 - Request details now label the Decision Note input, align detail/readback values to fixed modal columns, and keep the details modal open after status changes.
 - Approving a request requires an approver-selected Bank Tab, stores the Decision Note and Bank Tab on the request, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested quantity.
 - Request details now block table click-through, keep fixed label/value rows with tighter label/value spacing, show Requested By above Date Requested, show Updated By, Date Updated, and Decision Note at the bottom of the detail list, hide the decision-note editor after approval or denial, and request audit history normalizes actor tables into character names.
-- Shared table scrollbars now stay inset inside the table viewport, and table content reserves a gutter so the bar does not overlap the rightmost column.
+- Request Admin no longer shows the old top workflow actions box. Actions live in the details modal, and the bottom filter strip switches between `All`, `Pending Approval`, and `Pending Fulfillment`.
+- Approved open requests are now auto-marked `FULFILLED` by a guild-bank scan when scanned inventory for the requested item meets the requested quantity. Fulfillment records `fulfilledBy = Bank Scan` and Date Fulfilled.
+- Request dates now display with an abbreviated timezone and no `(Local)` suffix.
+- Shared table scrollbars now sit just outside the table viewport so the table frame ends before the bar and rightmost columns are not overlapped.
+- Exports now uses the shared table plus a bottom action strip. The table shows `Item ID`, `Item Tier`, `Item Name`, `Bank Tab`, `Amount to Stock`, and `Stocked Elsewhere`.
+- Exports can show a stocked-elsewhere detail modal listing other bank tabs and quantities.
+- CSV opens a copy-friendly modal with visible-table comma-delimited output, Auctionator asks whether to buy all rows or only rows unavailable in another tab, and TSM emits the supported comma-delimited item-ID import list through the same all-vs-missing choice flow.
 
 ### Current Navigation
 
@@ -77,24 +83,20 @@
 
 Work these in the exact order below unless a new blocking regression appears:
 
-1. `Exports UI rework`
-   - Exports is intentionally deferred until after the request/admin split.
-   - Current note: the Exports surface still has overflow/layout issues and needs a cleaner redesign.
-
-2. `UI polish`
+1. `UI polish`
    - Theme customization
    - Resize / scale
    - Spacing and gap cleanup
 
-3. `In-game unit test lane`
+2. `In-game unit test lane`
    - Build out unit tests that can be run in-game through the unit test addon.
 
-4. `Guild addon communication and sync hardening`
+3. `Guild addon communication and sync hardening`
    - Strengthen addon communication between guild users.
    - Sync history, requests, and minimums reliably between addon-enabled guild clients.
    - Treat this as a product workflow slice, not just a transport-only change.
 
-5. `Maintainer deployment and sync UI`
+4. `Maintainer deployment and sync UI`
    - Fully document the maintainer deployment and usage workflow.
    - Build a small maintainer-facing UI for the catalog/deployment pipeline.
    - It should allow choosing the WoW target path for `Retail`, `PTR`, or `Beta`.
@@ -113,14 +115,16 @@ Work these in the exact order below unless a new blocking regression appears:
 - Approved requests that create a Minimums rule carry `minimumRuleKey`, and planning skips those request rows as separate request demand to avoid double-counting.
 - Request detail regression coverage now includes modal click-through protection, fixed-row detail alignment, tighter label/value spacing, Requested By placement, Updated By / Date Updated / Decision Note bottom placement, post-decision editor hiding, workflow-button alignment with Close, actor-name history rows, shared table scrollbar bounds, and the reserved scrollbar gutter.
 - Local Lua runners now print `RUN`/`PASS` progress for each lane and spec so long-running tests no longer appear silent.
+- Request scan-fulfillment regression coverage now spans `requests_spec` and `store_spec`.
+- Exports regression coverage now spans `exports_spec` and `ui_exports_spec`, including stocked-elsewhere rows, CSV output, Auctionator scoped output, and TSM item-ID output.
 
 ## Immediate Engineering Focus
 
 When resuming, begin with the next roadmap item unless the user explicitly redirects:
 
-1. Rework the Exports UI.
+1. Proceed to broader UI polish.
 2. Keep the admin `Request Admin` surface focused on officer/guildmaster management.
-3. After Exports, proceed to broader UI polish.
+3. After polish, build the in-game unit-test addon lane.
 
 ## Important Constraints
 
@@ -129,7 +133,7 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 - Keep controls reusable and scalable across the project.
 - Continue to favor focused subsystem tests over growing broad monolithic UI assertions.
 - Do not expose maintainer credentials or local catalog assets in git.
-- Exports remain later-scope work, not the next active slice.
+- TSM export intentionally uses TSM 4.14's supported item-ID import path rather than generating TSM's private serialized export blob.
 
 ## Suggested Next Prompt
 
@@ -147,6 +151,6 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume with roadmap item 5: rework the Exports UI.
+> Resume with roadmap item 6: broader UI polish.
 >
 > After the current product-surface roadmap is complete, finish the guild sync hardening and the maintainer deployment/status UI at the tail end of the sequence.

@@ -63,7 +63,7 @@ local function clone_export_template(template)
 end
 
 local function normalize_export_preset_name(presetName)
-    if presetName == nil or presetName == "" or presetName == "Spreadsheet" then
+    if presetName == nil or presetName == "" or presetName == "Spreadsheet" or presetName == "Custom" then
         return "CSV"
     end
 
@@ -314,7 +314,7 @@ mainFrame.viewTitle = mainFrame.viewTitle or make_label(mainFrame.content, "Dash
 mainFrame.viewTitle:SetPoint("TOPLEFT", mainFrame.content, "TOPLEFT", 24, -24)
 mainFrame.viewSubtitle = mainFrame.viewSubtitle or make_label(mainFrame.content, "Critical shortages, pending requests, and export readiness.", "GameFontHighlightSmall")
 mainFrame.viewSubtitle:SetPoint("TOPLEFT", mainFrame.viewTitle, "BOTTOMLEFT", 0, -8)
-mainFrame.tableViewportWidth = 796
+mainFrame.tableViewportWidth = 772
 mainFrame.tableViewportInnerWidth = 796
 mainFrame.tableHeaderHeight = 34
 mainFrame.tableFilterHeight = 28
@@ -1266,6 +1266,10 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsAvailablePermissionPanel, theme.colors.panel)
     apply_panel_style(self.optionsBlacklistListPanel, theme.colors.panel)
     apply_panel_style(self.requestActionsPanel, theme.colors.panel)
+    apply_panel_style(self.requestAdminFilterPanel, theme.colors.panel)
+    if self.requestAdminFilterPanel and self.requestAdminFilterPanel.transparentActions == true and type(self.requestAdminFilterPanel.SetBackdrop) == "function" then
+        self.requestAdminFilterPanel:SetBackdrop(nil)
+    end
     apply_panel_style(self.requestWorkflowPanel, theme.colors.panel)
     apply_panel_style(self.requestWizardModal, theme.colors.panelAlt)
     apply_panel_style(self.requestDetailsModal, theme.colors.panelAlt)
@@ -1283,7 +1287,11 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
     apply_panel_style(self.minimumDetailsModal, theme.colors.panelAlt)
     apply_panel_style(self.exportsPanel, theme.colors.panel)
+    if self.exportsPanel and self.exportsPanel.transparentActions == true and type(self.exportsPanel.SetBackdrop) == "function" then
+        self.exportsPanel:SetBackdrop(nil)
+    end
     apply_panel_style(self.exportModal, theme.colors.panelAlt)
+    apply_panel_style(self.exportStockedElsewhereModal, theme.colors.panelAlt)
     apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
     apply_panel_style(self.exportModalScrollChild, theme.colors.background)
     apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
@@ -1423,6 +1431,7 @@ function mainFrame:ApplyTheme()
     end
     apply_panel_style(self.exportPresetSpreadsheetButton, theme.colors.panelAlt)
     apply_panel_style(self.exportPresetAuctionatorButton, theme.colors.panel)
+    apply_panel_style(self.exportPresetTsmButton, theme.colors.panel)
     apply_panel_style(self.exportPresetCustomButton, theme.colors.panel)
     apply_panel_style(self.exportHeaderToggleButton, theme.colors.panel)
     apply_panel_style(self.exportApplyCustomButton, theme.colors.panelAlt)
@@ -1581,6 +1590,10 @@ function mainFrame:HandleTableRowClick(row)
         return self:OpenMinimumDetailsModal(refreshedRow) or refreshedRow
     end
 
+    if self.activeView == "EXPORTS" and row.stockedElsewhere == "Yes" then
+        return self:OpenExportStockedElsewhereModal(row) or row
+    end
+
     return nil
 end
 
@@ -1656,6 +1669,9 @@ function mainFrame:RefreshView()
     self.tableScrollBar:Hide()
     self.requestActionsPanel:Hide()
     self.requestWorkflowPanel:Hide()
+    if self.requestAdminFilterPanel then
+        self.requestAdminFilterPanel:Hide()
+    end
     self.requestWizardModal:Hide()
     self.requestDetailsModal:Hide()
     self.requestCreatePanel:Hide()
@@ -1665,6 +1681,9 @@ function mainFrame:RefreshView()
     self.minimumEmptyStateText:Hide()
     self.exportsPanel:Hide()
     self.exportModal:Hide()
+    if self.exportStockedElsewhereModal then
+        self.exportStockedElsewhereModal:Hide()
+    end
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
     self.contentBodyText:Hide()
@@ -1717,7 +1736,7 @@ function mainFrame:RefreshView()
         self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "REQUESTS" then
-        local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState())
+        local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState(), self.requestAdminFilterMode or "ALL")
         if not self:GetSelectedRequest() then
             self:SelectFirstActionableRequest()
         end
@@ -1740,12 +1759,12 @@ function mainFrame:RefreshView()
         self:RefreshExportCustomControls()
         self.tableScrollOffset = 0
         self:ConfigureTable({
-            { key = "itemName", label = "Item", width = 170, justifyH = "LEFT" },
-            { key = "currentQuantity", label = "Current", width = 70, justifyH = "LEFT" },
-            { key = "totalToBuy", label = "Buy", width = 60, justifyH = "LEFT" },
-            { key = "scopeSummary", label = "Scope", width = 90, justifyH = "LEFT" },
-            { key = "reason", label = "Reason", width = 220, justifyH = "LEFT" },
-            { key = "itemID", label = "Item ID", width = 80, justifyH = "LEFT" },
+            { key = "itemID", label = "Item ID", width = 78, justifyH = "LEFT" },
+            { key = "itemTier", label = "Item Tier", width = 76, justifyH = "CENTER" },
+            { key = "itemName", label = "Item Name", width = 268, justifyH = "LEFT" },
+            { key = "bankTab", label = "Bank Tab", width = 136, justifyH = "LEFT" },
+            { key = "amountToStock", label = "Amount to Stock", width = 108, justifyH = "LEFT" },
+            { key = "stockedElsewhere", label = "Stocked Elsewhere", width = 106, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         self:RefreshExportOutput(rows)
@@ -1794,7 +1813,7 @@ function mainFrame:RefreshView()
         self.tableHeaderFrame:ClearAllPoints()
     end
     if self.activeView == "REQUESTS" then
-        self.tableHeaderFrame:SetPoint("TOPLEFT", compactRequestMode and self.requestWorkflowPanel or self.requestActionsPanel, "BOTTOMLEFT", 0, -16)
+        self.tableHeaderFrame:SetPoint("TOPLEFT", compactRequestMode and self.requestWorkflowPanel or self.viewSubtitle, "BOTTOMLEFT", 0, -16)
     else
         self.tableHeaderFrame:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
     end
@@ -1826,9 +1845,15 @@ function mainFrame:RefreshView()
     end
 
     if self.activeView == "REQUESTS" and not compactRequestMode then
-        self.requestActionsPanel:Show()
+        self.requestActionsPanel:Hide()
+        if self.requestAdminFilterPanel then
+            self.requestAdminFilterPanel:Show()
+        end
     else
         self.requestActionsPanel:Hide()
+        if self.requestAdminFilterPanel then
+            self.requestAdminFilterPanel:Hide()
+        end
     end
 
     if self.activeView == "REQUESTS" and compactRequestMode then

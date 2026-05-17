@@ -23,28 +23,39 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.exportsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.exportsPanel:SetHeight(154)
+    mainFrame.exportsPanel:SetHeight(64)
+    mainFrame.exportsPanel.transparentActions = true
+    if type(mainFrame.exportsPanel.SetBackdrop) == "function" then
+        mainFrame.exportsPanel:SetBackdrop(nil)
+    end
     applyPanelStyle(mainFrame.exportsPanel, theme.colors.panel)
     mainFrame.exportsPanel:Hide()
 
     mainFrame.exportsTitle = mainFrame.exportsTitle or makeLabel(mainFrame.exportsPanel, "Export Output", "GameFontHighlight")
     mainFrame.exportsTitle:SetPoint("TOPLEFT", mainFrame.exportsPanel, "TOPLEFT", 16, -16)
+    mainFrame.exportsTitle:Hide()
 
     mainFrame.exportsHint = mainFrame.exportsHint or makeLabel(mainFrame.exportsPanel, "Generate preset text from the active procurement plan.", "GameFontHighlightSmall")
     mainFrame.exportsHint:SetPoint("TOPLEFT", mainFrame.exportsTitle, "BOTTOMLEFT", 0, -8)
+    mainFrame.exportsHint:Hide()
 
     mainFrame.exportPresetSpreadsheetButton = mainFrame.exportPresetSpreadsheetButton or makeButton(mainFrame.exportsPanel, 84, 28, "CSV")
-    mainFrame.exportPresetSpreadsheetButton:SetPoint("TOPLEFT", mainFrame.exportsHint, "BOTTOMLEFT", 0, -14)
+    mainFrame.exportPresetSpreadsheetButton:SetPoint("BOTTOMLEFT", mainFrame.exportsPanel, "BOTTOMLEFT", 16, 30)
     mainFrame.exportPresetSpreadsheetButton.labelText:SetText("CSV")
 
-    mainFrame.exportPresetAuctionatorButton = mainFrame.exportPresetAuctionatorButton or makeButton(mainFrame.exportsPanel, 84, 28, "Auctionator")
+    mainFrame.exportPresetAuctionatorButton = mainFrame.exportPresetAuctionatorButton or makeButton(mainFrame.exportsPanel, 104, 28, "Auctionator")
     mainFrame.exportPresetAuctionatorButton:SetPoint("LEFT", mainFrame.exportPresetSpreadsheetButton, "RIGHT", 8, 0)
 
+    mainFrame.exportPresetTsmButton = mainFrame.exportPresetTsmButton or makeButton(mainFrame.exportsPanel, 78, 28, "TSM")
+    mainFrame.exportPresetTsmButton:SetPoint("LEFT", mainFrame.exportPresetAuctionatorButton, "RIGHT", 8, 0)
+
     mainFrame.exportPresetCustomButton = mainFrame.exportPresetCustomButton or makeButton(mainFrame.exportsPanel, 68, 28, "Custom")
-    mainFrame.exportPresetCustomButton:SetPoint("LEFT", mainFrame.exportPresetAuctionatorButton, "RIGHT", 8, 0)
+    mainFrame.exportPresetCustomButton:SetPoint("LEFT", mainFrame.exportPresetTsmButton, "RIGHT", 8, 0)
+    mainFrame.exportPresetCustomButton:Hide()
 
     mainFrame.exportsPresetTitle = mainFrame.exportsPresetTitle or makeLabel(mainFrame.exportsPanel, "CSV", "GameFontHighlight")
-    mainFrame.exportsPresetTitle:SetPoint("LEFT", mainFrame.exportPresetCustomButton, "RIGHT", 16, 0)
+    mainFrame.exportsPresetTitle:SetPoint("LEFT", mainFrame.exportPresetTsmButton, "RIGHT", 16, 0)
+    mainFrame.exportsPresetTitle:Hide()
 
     mainFrame.exportsOutputText = mainFrame.exportsOutputText or makeLabel(mainFrame.exportsPanel, "", "GameFontNormal")
     mainFrame.exportsOutputText:SetPoint("TOPLEFT", mainFrame.exportPresetSpreadsheetButton, "BOTTOMLEFT", 0, -12)
@@ -110,6 +121,12 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportModalOutputInput = mainFrame.exportModalOutputInput or makeExportOutputInput(mainFrame.exportModalScrollChild, 712, 130)
     mainFrame.exportModalOutputInput:SetPoint("TOPLEFT", mainFrame.exportModalScrollChild, "TOPLEFT", 8, -8)
 
+    mainFrame.exportModalBuyAllButton = mainFrame.exportModalBuyAllButton or makeButton(mainFrame.exportModal, 96, 28, "Buy All")
+    mainFrame.exportModalBuyAllButton:SetPoint("TOPLEFT", mainFrame.exportModalHint, "BOTTOMLEFT", 0, -18)
+
+    mainFrame.exportModalMissingOnlyButton = mainFrame.exportModalMissingOnlyButton or makeButton(mainFrame.exportModal, 220, 28, "Not Available Elsewhere")
+    mainFrame.exportModalMissingOnlyButton:SetPoint("LEFT", mainFrame.exportModalBuyAllButton, "RIGHT", 8, 0)
+
     mainFrame.exportModalSelectAllButton = mainFrame.exportModalSelectAllButton or makeButton(mainFrame.exportModal, 84, 28, "Select All")
     mainFrame.exportModalSelectAllButton:SetPoint("BOTTOMLEFT", mainFrame.exportModal, "BOTTOMLEFT", 16, 16)
 
@@ -118,6 +135,29 @@ function mainExportsController.Attach(mainFrame, options)
 
     mainFrame.exportModalCloseButton = mainFrame.exportModalCloseButton or makeButton(mainFrame.exportModal, 64, 28, "Close")
     mainFrame.exportModalCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportModal, "BOTTOMRIGHT", -16, 16)
+
+    mainFrame.exportStockedElsewhereModal = mainFrame.exportStockedElsewhereModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.exportStockedElsewhereModal:SetSize(360, 220)
+    mainFrame.exportStockedElsewhereModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+    mainFrame.exportStockedElsewhereModal.frameStrata = "FULLSCREEN_DIALOG"
+    if type(mainFrame.exportStockedElsewhereModal.SetFrameStrata) == "function" then
+        mainFrame.exportStockedElsewhereModal:SetFrameStrata(mainFrame.exportStockedElsewhereModal.frameStrata)
+    end
+    mainFrame.exportStockedElsewhereModal.frameLevel = (mainFrame.frameLevel or 0) + 20
+    if type(mainFrame.exportStockedElsewhereModal.SetFrameLevel) == "function" then
+        mainFrame.exportStockedElsewhereModal:SetFrameLevel(mainFrame.exportStockedElsewhereModal.frameLevel)
+    end
+    mainFrame.exportStockedElsewhereModal:EnableMouse(true)
+    applyPanelStyle(mainFrame.exportStockedElsewhereModal, theme.colors.panelAlt)
+    mainFrame.exportStockedElsewhereModal:Hide()
+
+    mainFrame.exportStockedElsewhereTitle = mainFrame.exportStockedElsewhereTitle or makeLabel(mainFrame.exportStockedElsewhereModal, "Stocked Elsewhere", "GameFontHighlight")
+    mainFrame.exportStockedElsewhereTitle:SetPoint("TOPLEFT", mainFrame.exportStockedElsewhereModal, "TOPLEFT", 16, -16)
+    mainFrame.exportStockedElsewhereText = mainFrame.exportStockedElsewhereText or makeLabel(mainFrame.exportStockedElsewhereModal, "", "GameFontNormal")
+    mainFrame.exportStockedElsewhereText:SetPoint("TOPLEFT", mainFrame.exportStockedElsewhereTitle, "BOTTOMLEFT", 0, -14)
+    mainFrame.exportStockedElsewhereText:SetWidth(320)
+    mainFrame.exportStockedElsewhereCloseButton = mainFrame.exportStockedElsewhereCloseButton or makeButton(mainFrame.exportStockedElsewhereModal, 64, 28, "Close")
+    mainFrame.exportStockedElsewhereCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportStockedElsewhereModal, "BOTTOMRIGHT", -16, 16)
 
     function mainFrame:GetExportUiState(db)
         db = db or currentDb()
@@ -146,7 +186,7 @@ function mainExportsController.Attach(mainFrame, options)
     end
 
     function mainFrame:RefreshExportControlVisibility()
-        local showAuctionatorControls = normalizeExportPresetName(self.exportSelectedPreset) == "Auctionator"
+        local showAuctionatorControls = false
         local showCustomControls = normalizeExportPresetName(self.exportSelectedPreset) == "Custom"
 
         setFrameShown(self.exportAuctionatorListNameInput, showAuctionatorControls)
@@ -154,6 +194,7 @@ function mainExportsController.Attach(mainFrame, options)
         setFrameShown(self.exportFieldsInput, showCustomControls)
         setFrameShown(self.exportHeaderToggleButton, showCustomControls)
         setFrameShown(self.exportApplyCustomButton, showCustomControls)
+        setFrameShown(self.exportPresetCustomButton, false)
     end
 
     function mainFrame:RefreshExportModalScrollMetrics()
@@ -204,6 +245,67 @@ function mainExportsController.Attach(mainFrame, options)
         return state
     end
 
+    function mainFrame:ShowExportChoiceModal(presetName)
+        self.exportSelectedPreset = normalizeExportPresetName(presetName)
+        self.exportPendingRows = self.tableRowsData or {}
+        self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset))
+        self.exportModalHint:SetText("Choose whether to include every shortage or skip items stocked in another tab.")
+        self.exportModalOutputInput:SetText("")
+        setFrameShown(self.exportModalBuyAllButton, true)
+        setFrameShown(self.exportModalMissingOnlyButton, true)
+        setFrameShown(self.exportModalScrollFrame, false)
+        setFrameShown(self.exportModalSelectAllButton, false)
+        setFrameShown(self.exportModalCopyButton, false)
+        self.exportModal:Show()
+        return self.exportModal
+    end
+
+    function mainFrame:ShowExportOutput(presetName, rows)
+        local exportDialog = ns.modules.exportDialog
+        local state = exportDialog and type(exportDialog.BuildPresetState) == "function"
+            and exportDialog.BuildPresetState(rows or {}, presetName, {
+                shoppingListName = normalizeShoppingListName(self.exportShoppingListName),
+            })
+            or { presetName = presetName, text = "" }
+
+        self.exportSelectedPreset = normalizeExportPresetName(state.presetName or presetName)
+        self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset))
+        self.exportModalHint:SetText("Select all or copy the generated output into external tools.")
+        setFrameShown(self.exportModalBuyAllButton, false)
+        setFrameShown(self.exportModalMissingOnlyButton, false)
+        setFrameShown(self.exportModalScrollFrame, true)
+        setFrameShown(self.exportModalSelectAllButton, true)
+        setFrameShown(self.exportModalCopyButton, true)
+        self.exportModalOutputInput:SetText(state.text or "")
+        self:RefreshExportModalScrollMetrics()
+        self.exportModal:Show()
+        return state
+    end
+
+    function mainFrame:CompleteScopedExport(includeAll)
+        local rows = self.exportPendingRows or self.tableRowsData or {}
+        if not includeAll then
+            local exportsModule = ns.modules.exports
+            if exportsModule and type(exportsModule.FilterRowsUnavailableElsewhere) == "function" then
+                rows = exportsModule.FilterRowsUnavailableElsewhere(rows)
+            end
+        end
+
+        return self:ShowExportOutput(self.exportSelectedPreset or "Auctionator", rows)
+    end
+
+    function mainFrame:OpenExportStockedElsewhereModal(row)
+        row = row or {}
+        local lines = {}
+        for _, tab in ipairs(row.stockedElsewhereTabs or {}) do
+            table.insert(lines, string.format("%s: %s", tostring(tab.tabName or "Unknown"), tostring(tab.quantity or 0)))
+        end
+        self.exportStockedElsewhereTitle:SetText(tostring(row.itemName or "Stocked Elsewhere"))
+        self.exportStockedElsewhereText:SetText(#lines > 0 and table.concat(lines, "\n") or "No other bank tabs found.")
+        self.exportStockedElsewhereModal:Show()
+        return self.exportStockedElsewhereModal
+    end
+
     function mainFrame:RefreshExportCustomControls()
         self.isRefreshingExportControls = true
         self.exportAuctionatorListNameInput:SetText(self.exportShoppingListName or "GBankManager")
@@ -219,8 +321,11 @@ function mainExportsController.Attach(mainFrame, options)
         self:PersistExportSettings(ns.state.db or {})
         if self.activeView == "EXPORTS" then
             local rows = self.tableRowsData or {}
-            self:RefreshExportOutput(rows)
-            self.exportModal:Show()
+            if self.exportSelectedPreset == "Auctionator" or self.exportSelectedPreset == "TSM" then
+                self:ShowExportChoiceModal(self.exportSelectedPreset)
+            else
+                self:ShowExportOutput(self.exportSelectedPreset, rows)
+            end
         end
         return self.exportSelectedPreset
     end
@@ -278,6 +383,10 @@ function mainExportsController.Attach(mainFrame, options)
         mainFrame:SelectExportPreset("Auctionator")
     end)
 
+    mainFrame.exportPresetTsmButton:SetScript("OnClick", function()
+        mainFrame:SelectExportPreset("TSM")
+    end)
+
     mainFrame.exportPresetCustomButton:SetScript("OnClick", function()
         mainFrame:SelectExportPreset("Custom")
     end)
@@ -307,6 +416,18 @@ function mainExportsController.Attach(mainFrame, options)
 
     mainFrame.exportModalCloseButton:SetScript("OnClick", function()
         mainFrame.exportModal:Hide()
+    end)
+
+    mainFrame.exportModalBuyAllButton:SetScript("OnClick", function()
+        mainFrame:CompleteScopedExport(true)
+    end)
+
+    mainFrame.exportModalMissingOnlyButton:SetScript("OnClick", function()
+        mainFrame:CompleteScopedExport(false)
+    end)
+
+    mainFrame.exportStockedElsewhereCloseButton:SetScript("OnClick", function()
+        mainFrame.exportStockedElsewhereModal:Hide()
     end)
 
     mainFrame.exportAuctionatorListNameInput:SetScript("OnTextChanged", function()

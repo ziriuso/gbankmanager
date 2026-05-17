@@ -26,7 +26,7 @@ function mainTableController.Attach(mainFrame, options)
     mainFrame.tableScrollbarGutterWidth = mainFrame.tableScrollbarGutterWidth or 24
 
     function mainFrame:GetTableContentWidth()
-        return math.max(1, (self.tableViewportWidth or 0) - (self.tableScrollbarGutterWidth or 0))
+        return math.max(1, self.tableViewportWidth or 0)
     end
 
     mainFrame.tableHeaderFrame = mainFrame.tableHeaderFrame or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
@@ -321,17 +321,17 @@ function mainTableController.Attach(mainFrame, options)
         local viewportHeight = self.defaultTableViewportHeight
 
         if self.activeView == "REQUESTS" then
-            anchor = self.requestOnlyMode == true and self.requestWorkflowPanel or self.requestCreatePanel
+            anchor = self.requestOnlyMode == true and self.requestWorkflowPanel or self.viewSubtitle
             offsetY = -16
-            viewportHeight = 220
+            viewportHeight = self.requestOnlyMode == true and 220 or 344
         elseif self.activeView == "MINIMUMS" then
             anchor = self.viewSubtitle
             offsetY = -24
             viewportHeight = self.defaultTableViewportHeight
         elseif self.activeView == "EXPORTS" then
-            anchor = self.exportsPanel
-            offsetY = -16
-            viewportHeight = 224
+            anchor = self.viewSubtitle
+            offsetY = -24
+            viewportHeight = 324
         elseif self.activeView == "OPTIONS" then
             anchor = self.optionsPanel
             offsetY = -16
@@ -357,12 +357,12 @@ function mainTableController.Attach(mainFrame, options)
 
         self.tableScrollFrame:ClearAllPoints()
         self.tableScrollFrame:SetPoint("TOPLEFT", self.tableViewportFrame, "TOPLEFT", 0, 0)
-        self.tableScrollFrame:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", -(self.tableScrollbarGutterWidth or 0), 0)
+        self.tableScrollFrame:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", 0, 0)
         self.tableScrollFrame:SetSize(self:GetTableContentWidth(), self.tableViewportHeight)
 
         self.tableScrollBar:ClearAllPoints()
-        self.tableScrollBar:SetPoint("TOPRIGHT", self.tableViewportFrame, "TOPRIGHT", -4, 0)
-        self.tableScrollBar:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", -4, 0)
+        self.tableScrollBar:SetPoint("TOPRIGHT", self.tableViewportFrame, "TOPRIGHT", 18, 0)
+        self.tableScrollBar:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", 18, 0)
 
         self.minimumEmptyStateText:ClearAllPoints()
         self.minimumEmptyStateText:SetPoint("TOPLEFT", self.tableViewportFrame, "TOPLEFT", 12, -12)
@@ -375,6 +375,24 @@ function mainTableController.Attach(mainFrame, options)
             self.minimumsPanel:ClearAllPoints()
             self.minimumsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
             self.minimumsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        end
+        if self.activeView == "REQUESTS" and self.requestOnlyMode ~= true and self.requestAdminFilterPanel then
+            self.requestAdminFilterPanel:ClearAllPoints()
+            self.requestAdminFilterPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
+            self.requestAdminFilterPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        elseif self.requestAdminFilterPanel then
+            self.requestAdminFilterPanel:ClearAllPoints()
+            self.requestAdminFilterPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+            self.requestAdminFilterPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        end
+        if self.activeView == "EXPORTS" and self.exportsPanel then
+            self.exportsPanel:ClearAllPoints()
+            self.exportsPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
+            self.exportsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        elseif self.exportsPanel then
+            self.exportsPanel:ClearAllPoints()
+            self.exportsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+            self.exportsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
         end
         if self.tableScrollController then
             self.tableSyncingScroll = true

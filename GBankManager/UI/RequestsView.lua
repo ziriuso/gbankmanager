@@ -70,8 +70,15 @@ function requestsView.FormatLocalTimestamp(timestamp)
     if zone == nil or zone == "" then
         zone = "Local"
     end
+    if string.find(zone, " ", 1, true) then
+        local abbreviation = ""
+        for word in string.gmatch(zone, "%S+") do
+            abbreviation = abbreviation .. string.sub(word, 1, 1)
+        end
+        zone = string.upper(abbreviation)
+    end
 
-    return string.format("%s %s (Local)", localTime, zone)
+    return string.format("%s %s", localTime, zone)
 end
 
 local function apply_column_filters(rows, filters)
@@ -111,19 +118,39 @@ function requestsView.FilterOwnRequests(rows, playerName)
     return out
 end
 
-function requestsView.BuildOfficerQueue(rows)
+function requestsView.BuildOfficerQueue(rows, statusFilter)
     local out = {}
+    statusFilter = tostring(statusFilter or "ALL")
 
     for _, row in ipairs(rows or {}) do
-        local actionable = (row.approval == "PENDING") or (row.approval == "APPROVED" and row.fulfillment == "OPEN")
-        if actionable then
+        local include = true
+        if statusFilter == "PENDING_APPROVAL" then
+            include = row.approval == "PENDING"
+        elseif statusFilter == "PENDING_FULFILLMENT" then
+            include = row.approval == "APPROVED" and row.fulfillment == "OPEN"
+        end
+
+        if include then
             table.insert(out, row)
         end
     end
 
     table.sort(out, function(left, right)
-        if left.approval ~= right.approval then
-            return left.approval == "PENDING"
+        local function rank(row)
+            if row.approval == "PENDING" then
+                return 1
+            end
+            if row.approval == "APPROVED" and row.fulfillment == "OPEN" then
+                return 2
+            end
+            if row.approval == "APPROVED" and row.fulfillment == "FULFILLED" then
+                return 3
+            end
+            return 4
+        end
+
+        if rank(left) ~= rank(right) then
+            return rank(left) < rank(right)
         end
 
         return tostring(left.itemName or "") < tostring(right.itemName or "")
@@ -173,16 +200,16 @@ function requestsView.BuildOwnRows(rows, characterKey, requesterName)
     return out
 end
 
-function requestsView.BuildVisibleRows(rows, viewerContext, accessProfile)
+function requestsView.BuildVisibleRows(rows, viewerContext, accessProfile, statusFilter)
     if accessProfile == "request_only" then
         return requestsView.BuildOwnRows(rows or {}, viewerContext and viewerContext.characterKey, viewerContext and viewerContext.name)
     end
 
-    return requestsView.BuildOfficerQueue(rows or {})
+    return requestsView.BuildOfficerQueue(rows or {}, statusFilter)
 end
 
-function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters)
-    local queue = requestsView.BuildVisibleRows(rows or {}, viewerContext or {}, accessProfile)
+function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters, statusFilter)
+    local queue = requestsView.BuildVisibleRows(rows or {}, viewerContext or {}, accessProfile, statusFilter)
     local out = {}
 
     for _, row in ipairs(queue) do
@@ -200,6 +227,8 @@ function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters
             note = tostring(row.note or ""),
             createdAt = format_timestamp(row.createdAt),
             requestedAtLocal = requestsView.FormatLocalTimestamp(row.createdAt),
+            fulfilledAt = format_timestamp(row.fulfillmentUpdatedAt),
+            fulfilledAtLocal = requestsView.FormatLocalTimestamp(row.fulfillmentUpdatedAt),
         })
     end
 

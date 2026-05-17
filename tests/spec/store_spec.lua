@@ -125,6 +125,17 @@ assert.same(persisted.ui.minimumItemCatalog, store.GetMinimumItemCatalog(persist
 assert.same(persisted.ui.exportSettings, store.GetExportSettings(persisted), "store should return the normalized export-settings table")
 assert.same(persisted.snapshots["scan-old"], store.GetCurrentSnapshot(persisted), "store current snapshot accessor should resolve the active snapshot row")
 
+persisted.requests = {
+    {
+        requestId = "scan-fulfill-1",
+        requester = "MemberOne",
+        itemID = 1001,
+        itemName = "Flask Alpha",
+        quantity = 10,
+        approval = "APPROVED",
+        fulfillment = "OPEN",
+    },
+}
 _G.GBankManagerDB = persisted
 ns.state.db = _G.GBankManagerDB
 scanner.rawTabs = {
@@ -171,6 +182,8 @@ assert.equal("Raid", _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[2]
 assert.equal(3, _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[2].quantity, "fresh scans should persist the second tab-scoped quantity")
 assert.equal(1715523300, _G.GBankManagerDB.meta.updatedAt, "fresh scans should persist the captured UTC scan timestamp as last-scan metadata")
 assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")
+assert.equal("FULFILLED", _G.GBankManagerDB.requests[1].fulfillment, "fresh scans should auto-fulfill approved requests once inventory meets the request amount")
+assert.equal(1715523300, _G.GBankManagerDB.requests[1].fulfillmentUpdatedAt, "fresh scans should store date fulfilled from the scan timestamp")
 
 _G.GBankManagerDB = store.Normalize({
     meta = {

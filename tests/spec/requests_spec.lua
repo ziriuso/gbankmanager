@@ -411,3 +411,54 @@ local invalidReopen = requests.ReopenStored(invalidTransitionDb, "request-open",
 assert.truthy(invalidReopen == nil, "open requests should not reopen when they are not fulfilled")
 assert.equal("OPEN", invalidTransitionDb.requests[2].fulfillment, "invalid reopen attempts should not change fulfillment state")
 assert.equal(0, #invalidTransitionDb.auditLog, "invalid reopen attempts should not write audit entries")
+
+local scanFulfillmentDb = {
+    requests = {
+        {
+            requestId = "approved-open",
+            requester = "MemberOne",
+            itemID = 3001,
+            itemName = "Flask Alpha",
+            quantity = 10,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+        },
+        {
+            requestId = "approved-short",
+            requester = "MemberTwo",
+            itemID = 3002,
+            itemName = "Rune Beta",
+            quantity = 10,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+        },
+        {
+            requestId = "already-fulfilled",
+            requester = "MemberThree",
+            itemID = 3003,
+            itemName = "Potion Gamma",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "FULFILLED",
+            fulfillmentUpdatedAt = 700,
+        },
+    },
+    auditLog = {},
+}
+
+local fulfilledByScan = requests.AutoFulfillApprovedFromSnapshot(scanFulfillmentDb, {
+    items = {
+        [3001] = { totalCount = 10 },
+        [3002] = { totalCount = 9 },
+        [3003] = { totalCount = 99 },
+    },
+}, "Bank Scan", 800)
+
+assert.equal(1, #fulfilledByScan, "bank-scan fulfillment should return only newly fulfilled requests")
+assert.equal("approved-open", fulfilledByScan[1].requestId, "bank scans should fulfill approved open requests with enough inventory")
+assert.equal("FULFILLED", scanFulfillmentDb.requests[1].fulfillment, "bank scans should mark stocked approved requests fulfilled")
+assert.equal("Bank Scan", scanFulfillmentDb.requests[1].fulfilledBy, "bank scans should record the automated fulfillment actor")
+assert.equal(800, scanFulfillmentDb.requests[1].fulfillmentUpdatedAt, "bank scans should record date fulfilled")
+assert.equal("OPEN", scanFulfillmentDb.requests[2].fulfillment, "bank scans should leave short approved requests open")
+assert.equal(700, scanFulfillmentDb.requests[3].fulfillmentUpdatedAt, "bank scans should not re-check already fulfilled requests")
+assert.equal("REQUEST_FULFILLED", scanFulfillmentDb.auditLog[1].type, "bank-scan fulfillment should append request audit rows")

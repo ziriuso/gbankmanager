@@ -14,7 +14,15 @@ function exportsView.BuildCsvText(rows)
     return exports.BuildDelimited(rows or {}, {
         delimiter = ",",
         includeHeader = true,
-        fields = { "itemName", "itemID", "currentQuantity", "restockQuantity", "targetQuantity", "requestQuantity", "totalToBuy", "scopeSummary", "reason" },
+        fields = { "Item ID", "Item Tier", "Item Name", "Bank Tab", "Amount to Stock", "Stocked Elsewhere" },
+        labels = {
+            ["Item ID"] = "itemID",
+            ["Item Tier"] = "itemTier",
+            ["Item Name"] = "itemName",
+            ["Bank Tab"] = "bankTab",
+            ["Amount to Stock"] = "amountToStock",
+            ["Stocked Elsewhere"] = "stockedElsewhere",
+        },
     })
 end
 
@@ -24,6 +32,10 @@ end
 
 function exportsView.BuildAuctionatorText(rows, shoppingListName)
     return exports.BuildAuctionator(rows or {}, shoppingListName)
+end
+
+function exportsView.BuildTsmItemIdText(rows)
+    return exports.BuildTsmItemIdList(rows or {})
 end
 
 function exportsView.BuildCustomText(rows, template)

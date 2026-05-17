@@ -20,7 +20,8 @@ function exports.BuildDelimited(rows, template)
     for _, row in ipairs(rows or {}) do
         local values = {}
         for _, field in ipairs(template.fields or {}) do
-            table.insert(values, render_field(row, field))
+            local valueField = (template.labels or {})[field] or field
+            table.insert(values, render_field(row, valueField))
         end
         table.insert(lines, table.concat(values, template.delimiter or ","))
     end
@@ -76,6 +77,40 @@ local function summarize_scopes(details)
     return #scopes > 0 and table.concat(scopes, "|") or "GLOBAL"
 end
 
+local function primary_bank_tab(details)
+    for _, detail in ipairs(details or {}) do
+        if detail.scope == "TAB" and detail.tabName and detail.tabName ~= "" then
+            return detail.tabName
+        end
+    end
+
+    return summarize_scopes(details)
+end
+
+local function stocked_elsewhere(snapshotItem, bankTab)
+    local out = {}
+    bankTab = tostring(bankTab or "")
+
+    if bankTab == "" or bankTab == "GLOBAL" then
+        return out
+    end
+
+    for tabName, quantity in pairs((snapshotItem or {}).tabs or {}) do
+        quantity = tonumber(quantity or 0) or 0
+        if tostring(tabName) ~= bankTab and quantity > 0 then
+            table.insert(out, {
+                tabName = tostring(tabName),
+                quantity = quantity,
+            })
+        end
+    end
+
+    table.sort(out, function(left, right)
+        return tostring(left.tabName or "") < tostring(right.tabName or "")
+    end)
+    return out
+end
+
 local function quality_for_item(db, snapshot, itemID)
     db = db or {}
     snapshot = snapshot or { items = {} }
@@ -122,6 +157,8 @@ function exports.MaterializePlanRows(plan, snapshot)
             end
 
             table.sort(reasons)
+            local bankTab = primary_bank_tab(row.details or {})
+            local elsewhereTabs = stocked_elsewhere(currentItem, bankTab)
             table.insert(rows, {
                 itemID = row.itemID,
                 itemName = row.itemName,
@@ -130,9 +167,14 @@ function exports.MaterializePlanRows(plan, snapshot)
                 targetQuantity = (row.sources and row.sources.ONE_TIME_TARGET) or 0,
                 requestQuantity = (row.sources and row.sources.REQUEST) or 0,
                 totalToBuy = row.totalToBuy,
+                amountToStock = row.totalToBuy,
                 quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
+                itemTier = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
+                bankTab = bankTab,
                 scopeSummary = summarize_scopes(row.details or {}),
                 reason = table.concat(reasons, "|"),
+                stockedElsewhere = #elsewhereTabs > 0 and "Yes" or "No",
+                stockedElsewhereTabs = elsewhereTabs,
             })
         end
     end
@@ -142,6 +184,36 @@ function exports.MaterializePlanRows(plan, snapshot)
     end)
 
     return rows
+end
+
+function exports.FilterRowsUnavailableElsewhere(rows)
+    local out = {}
+
+    for _, row in ipairs(rows or {}) do
+        if tostring(row.stockedElsewhere or "No") ~= "Yes" then
+            table.insert(out, row)
+        end
+    end
+
+    return out
+end
+
+function exports.BuildTsmItemIdList(rows)
+    local values = {}
+    local seen = {}
+
+    for _, row in ipairs(rows or {}) do
+        local itemID = tonumber(row.itemID)
+        if itemID and not seen[itemID] then
+            seen[itemID] = true
+            table.insert(values, tostring(itemID))
+        end
+    end
+
+    table.sort(values, function(left, right)
+        return tonumber(left) < tonumber(right)
+    end)
+    return table.concat(values, ",")
 end
 
 function exports.BuildRowsFromDatabase(db)

@@ -167,6 +167,24 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestActionStatusText = mainFrame.requestActionStatusText or makeLabel(mainFrame.requestActionsPanel, "", "GameFontHighlightSmall")
     mainFrame.requestActionStatusText:SetPoint("TOPLEFT", mainFrame.requestApproveButton, "BOTTOMLEFT", 0, -8)
 
+    mainFrame.requestAdminFilterPanel = mainFrame.requestAdminFilterPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.requestAdminFilterPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
+    mainFrame.requestAdminFilterPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
+    mainFrame.requestAdminFilterPanel:SetHeight(64)
+    mainFrame.requestAdminFilterPanel.transparentActions = true
+    if type(mainFrame.requestAdminFilterPanel.SetBackdrop) == "function" then
+        mainFrame.requestAdminFilterPanel:SetBackdrop(nil)
+    end
+    mainFrame.requestAdminFilterPanel:Hide()
+
+    mainFrame.requestAdminFilterMode = mainFrame.requestAdminFilterMode or "ALL"
+    mainFrame.requestAdminFilterAllButton = mainFrame.requestAdminFilterAllButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "All")
+    mainFrame.requestAdminFilterAllButton:SetPoint("BOTTOMLEFT", mainFrame.requestAdminFilterPanel, "BOTTOMLEFT", 16, 30)
+    mainFrame.requestAdminFilterPendingApprovalButton = mainFrame.requestAdminFilterPendingApprovalButton or makeButton(mainFrame.requestAdminFilterPanel, 134, 28, "Pending Approval")
+    mainFrame.requestAdminFilterPendingApprovalButton:SetPoint("LEFT", mainFrame.requestAdminFilterAllButton, "RIGHT", 8, 0)
+    mainFrame.requestAdminFilterPendingFulfillmentButton = mainFrame.requestAdminFilterPendingFulfillmentButton or makeButton(mainFrame.requestAdminFilterPanel, 152, 28, "Pending Fulfillment")
+    mainFrame.requestAdminFilterPendingFulfillmentButton:SetPoint("LEFT", mainFrame.requestAdminFilterPendingApprovalButton, "RIGHT", 8, 0)
+
     mainFrame.requestWorkflowPanel = mainFrame.requestWorkflowPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.requestWorkflowPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.requestWorkflowPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
@@ -337,12 +355,16 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsApprovedAtText = mainFrame.requestDetailsApprovedAtText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
     placeRequestDetailRow(mainFrame.requestDetailsApprovedAtLabel, mainFrame.requestDetailsApprovedAtText, -250)
 
+    mainFrame.requestDetailsFulfilledAtLabel = mainFrame.requestDetailsFulfilledAtLabel or makeLabel(mainFrame.requestDetailsModal, "Date Fulfilled", "GameFontHighlightSmall")
+    mainFrame.requestDetailsFulfilledAtText = mainFrame.requestDetailsFulfilledAtText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
+    placeRequestDetailRow(mainFrame.requestDetailsFulfilledAtLabel, mainFrame.requestDetailsFulfilledAtText, -274)
+
     mainFrame.requestDetailsDecisionNoteLabel = mainFrame.requestDetailsDecisionNoteLabel or makeLabel(mainFrame.requestDetailsModal, "Decision Note", "GameFontHighlightSmall")
     mainFrame.requestDetailsDecisionNoteText = mainFrame.requestDetailsDecisionNoteText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsDecisionNoteLabel, mainFrame.requestDetailsDecisionNoteText, -274)
+    placeRequestDetailRow(mainFrame.requestDetailsDecisionNoteLabel, mainFrame.requestDetailsDecisionNoteText, -298)
 
     mainFrame.requestDetailsBankTabLabel = mainFrame.requestDetailsBankTabLabel or makeLabel(mainFrame.requestDetailsModal, "Approval Bank Tab", "GameFontHighlightSmall")
-    mainFrame.requestDetailsBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 24, -292)
+    mainFrame.requestDetailsBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 24, -314)
     mainFrame.requestDetailsBankTabDropdownButton = mainFrame.requestDetailsBankTabDropdownButton or makeButton(mainFrame.requestDetailsModal, 180, 22, "Select Bank Tab")
     mainFrame.requestDetailsBankTabDropdownButton:SetPoint("TOPLEFT", mainFrame.requestDetailsBankTabLabel, "BOTTOMLEFT", 0, -4)
     mainFrame.requestDetailsBankTabDropdownPanel = mainFrame.requestDetailsBankTabDropdownPanel or _G.CreateFrame("Frame", nil, mainFrame.requestDetailsModal, "BackdropTemplate")
@@ -352,7 +374,7 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsBankTabDropdownPanel:Hide()
 
     mainFrame.requestDetailsActionNoteLabel = mainFrame.requestDetailsActionNoteLabel or makeLabel(mainFrame.requestDetailsModal, "Decision Note", "GameFontHighlightSmall")
-    mainFrame.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 240, -292)
+    mainFrame.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 240, -314)
     mainFrame.requestDetailsActionNoteInput = mainFrame.requestDetailsActionNoteInput or makeInput(mainFrame.requestDetailsModal, 260, 22)
     mainFrame.requestDetailsActionNoteInput:SetPoint("TOPLEFT", mainFrame.requestDetailsActionNoteLabel, "BOTTOMLEFT", 0, -4)
 
@@ -594,7 +616,7 @@ function mainRequestsController.Attach(mainFrame, options)
         local actionX = canApprove and 240 or 24
 
         self.requestDetailsActionNoteLabel:ClearAllPoints()
-        self.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", actionX, -292)
+        self.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", actionX, -314)
         self.requestDetailsActionNoteInput:ClearAllPoints()
         self.requestDetailsActionNoteInput:SetPoint("TOPLEFT", self.requestDetailsActionNoteLabel, "BOTTOMLEFT", 0, -4)
 
@@ -660,7 +682,6 @@ function mainRequestsController.Attach(mainFrame, options)
         local canActorApply = requestsModule and type(requestsModule.CanActorApplyAction) == "function" and requestsModule.CanActorApplyAction or nil
         local canApprove = can(context, "request_approve", policy) and (not canActorApply or canActorApply(request, "APPROVE", context))
         local canReject = can(context, "request_reject", policy) and (not canActorApply or canActorApply(request, "REJECT", context))
-        local canFulfill = can(context, "request_fulfill", policy) and (not canActorApply or canActorApply(request, "FULFILL", context))
         local canReopen = can(context, "request_reopen", policy) and (not canActorApply or canActorApply(request, "REOPEN", context))
         local canCancel = actor_owns_request(request, context) and (not canActorApply or canActorApply(request, "CANCEL", context))
 
@@ -679,6 +700,7 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self.requestDetailsDecisionNoteText:SetText(tostring(request.decisionNote or ""))
         self.requestDetailsRequestedAtText:SetText(format_request_time(request))
+        self.requestDetailsFulfilledAtText:SetText(format_timestamp(request.fulfillmentUpdatedAt))
 
         self:ConfigureRequestApprovalBankTabDropdown(request, canApprove)
         local visibleActionButtons = {}
@@ -691,7 +713,7 @@ function mainRequestsController.Attach(mainFrame, options)
 
         show_action_button(self.requestDetailsApproveButton, canApprove)
         show_action_button(self.requestDetailsRejectButton, canReject)
-        show_action_button(self.requestDetailsFulfillButton, canFulfill)
+        show_action_button(self.requestDetailsFulfillButton, false)
         show_action_button(self.requestDetailsReopenButton, canReopen)
         show_action_button(self.requestDetailsCancelRequestButton, canCancel)
         local needsDecisionNote = canApprove or canReject or canCancel
@@ -859,7 +881,6 @@ function mainRequestsController.Attach(mainFrame, options)
 
         local request = self:GetSelectedRequest()
         local isPending = request and request.approval == "PENDING"
-        local isApprovedOpen = request and request.approval == "APPROVED" and request.fulfillment == "OPEN"
         local isFulfilled = request and request.fulfillment == "FULFILLED"
         local db = current_db()
         local context = current_context(db)
@@ -869,8 +890,16 @@ function mainRequestsController.Attach(mainFrame, options)
 
         self.requestApproveButton:SetEnabled(isPending and can(context, "request_approve", policy) and (not canActorApply or canActorApply(request, "APPROVE", context)))
         self.requestRejectButton:SetEnabled(isPending and can(context, "request_reject", policy))
-        self.requestFulfillButton:SetEnabled(isApprovedOpen and can(context, "request_fulfill", policy))
+        self.requestFulfillButton:SetEnabled(false)
         self.requestReopenButton:SetEnabled(isFulfilled and can(context, "request_reopen", policy))
+    end
+
+    function mainFrame:SetRequestAdminFilterMode(mode)
+        self.requestAdminFilterMode = tostring(mode or "ALL")
+        if self.activeView == "REQUESTS" and self.requestOnlyMode ~= true then
+            self:RefreshView()
+        end
+        return self.requestAdminFilterMode
     end
 
     function mainFrame:ApplyRequestAction(action)
@@ -1102,6 +1131,18 @@ function mainRequestsController.Attach(mainFrame, options)
 
     mainFrame.requestReopenButton:SetScript("OnClick", function()
         mainFrame:ApplyRequestAction("REOPEN")
+    end)
+
+    mainFrame.requestAdminFilterAllButton:SetScript("OnClick", function()
+        mainFrame:SetRequestAdminFilterMode("ALL")
+    end)
+
+    mainFrame.requestAdminFilterPendingApprovalButton:SetScript("OnClick", function()
+        mainFrame:SetRequestAdminFilterMode("PENDING_APPROVAL")
+    end)
+
+    mainFrame.requestAdminFilterPendingFulfillmentButton:SetScript("OnClick", function()
+        mainFrame:SetRequestAdminFilterMode("PENDING_FULFILLMENT")
     end)
 
     mainFrame.requestCreateButton:SetScript("OnClick", function()

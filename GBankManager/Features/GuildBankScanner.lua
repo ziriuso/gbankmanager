@@ -6,6 +6,7 @@ ns.state = ns.state or {}
 
 local snapshots = ns.modules.snapshots or {}
 local diff = ns.modules.diff or {}
+local requests = ns.modules.requests or {}
 
 local scanner = ns.modules.scanner or {
     scanInProgress = false,
@@ -264,6 +265,10 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
         change.scanId = currentSnapshot.scanId
         change.scannedAt = currentSnapshot.scannedAt
         table.insert(db.changeLog, change)
+    end
+
+    if requests and type(requests.AutoFulfillApprovedFromSnapshot) == "function" then
+        requests.AutoFulfillApprovedFromSnapshot(db, currentSnapshot, "Bank Scan", currentSnapshot.scannedAt)
     end
 
     scanner.scanInProgress = false

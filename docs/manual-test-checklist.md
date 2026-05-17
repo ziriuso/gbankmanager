@@ -5,11 +5,10 @@
 When resuming product QA after this checkpoint, prioritize the next manual checks in this order:
 
 1. End-user `/gbm request` workflow and wizard completion
-2. Exports UI cleanup
-3. General UI polish
-4. In-game unit-test addon coverage
-5. Guild-client sync behavior for history, requests, and minimums
-6. Maintainer deployment/status workflow and target-path UI
+2. General UI polish
+3. In-game unit-test addon coverage
+4. Guild-client sync behavior for history, requests, and minimums
+5. Maintainer deployment/status workflow and target-path UI
 
 1. Copy both `GBankManager` and `GBankManager_ItemData` into `Interface/AddOns`.
 2. Run `/reload`.
@@ -20,7 +19,7 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 7. Confirm the top bar shows scan metadata and action status text.
 8. Confirm inventory filtering returns matching items.
 9. Confirm history filtering can narrow by change type and actor.
-10. Confirm selecting each export preset opens the export modal instead of trapping output inline in the Exports panel.
+10. Confirm selecting each export button opens the export modal instead of trapping output inline in the Exports panel.
 11. Confirm the sidebar includes Minimums, Requests, Exports, About, and Options without changing the shell style.
 12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
 13. Confirm the dashboard purchase summary changes when minimums and approved open requests change.
@@ -35,7 +34,7 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 22. Change bank contents between scans and confirm the dashboard and history reflect the new snapshot.
 22a. Place the same item in two visible guild-bank tabs, run `/gbm scan`, and confirm Inventory shows one row per tab with each row's tab-specific quantity.
 22b. With the same scan, open Minimums in `Show All` and confirm the same shared item appears once per tab with the matching per-tab current quantity.
-23. Generate Auctionator, CSV, and custom export text from the same demand rows and confirm each preset formats correctly in the export modal.
+23. Generate Auctionator, CSV, and TSM export text from the same demand rows and confirm each output formats correctly in the export modal.
 24. In the export modal, use `Select All`, then `Copy`, and confirm the full output is easy to copy/paste into the target tool before closing the modal.
 25. Open the Inventory view with enough rows to overflow and confirm the scroll controls move through the table without blanking the header.
 26. Resize the inventory name column and confirm the wider width is reflected immediately while neighboring columns stay readable.
@@ -48,11 +47,11 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 29. Confirm long item names and long tab lists clip with an ellipsis instead of spilling into adjacent inventory columns.
 30. Run a scan, `/reload`, and confirm both the inventory snapshot and last-scan status still appear before starting a fresh scan.
 31. Open the History tab and confirm request approvals and minimum changes render as audit-style rows with actor, old value, new value, and timestamp columns.
-32. Open the Request Admin tab and confirm pending requests appear ahead of approved-open requests, with date requested, requester, item ID, tier, item name, quantity, approval, fulfillment, and note columns rendered in the shared table shell.
-32a. Confirm the full-shell navigation labels the officer/admin surface as `Request Admin`, shows workflow actions above the table, and does not show inline `Create Request` controls.
+32. Open the Request Admin tab and confirm pending requests appear ahead of approved-open requests, with date requested, requester, item ID, item name, quantity, status, and date fulfilled columns rendered in the shared table shell.
+32a. Confirm the full-shell navigation labels the officer/admin surface as `Request Admin`, does not show inline `Create Request` controls, and no longer shows the old top workflow actions box.
 32b. Confirm the `Request Admin` table uses the shared filter row and can search by `Item Name` and exact `Item ID`.
-32c. Confirm the workflow actions box has extra bottom spacing below the action buttons before the table begins.
-33. Confirm rejected requests and fulfilled requests transition correctly in the Requests flow once those actions are wired into the live controls.
+32c. Confirm the bottom Request Admin filter strip switches between `All`, `Pending Approval`, and `Pending Fulfillment`.
+33. Approve an open request, run a bank scan with enough quantity for that item, and confirm the request becomes `Fulfilled` with Date Fulfilled populated. Run another scan and confirm fulfilled requests are no longer reprocessed.
 34. Follow the README local-development steps on a fresh UI reload and confirm `/gbm ui` and `/gbm scan` still work in sequence.
 35. Open Minimums and confirm there is no old bottom `Search` label or search input, and the `Enabled Only` / `Show All` toggle text fits cleanly without clipping.
 36. Select an existing saved minimum row and confirm changed rows tint yellow, deleted rows tint red, and newly staged rows tint green in the live client.
@@ -82,8 +81,10 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 59. In the request wizard, confirm Step 1 uses the shared item search, Step 2 captures quantity and reason, Step 3 reads back Item Name, Quality, Quantity, and Reason, and Submit creates a pending request.
 59a. In `Request Admin`, confirm clicking a request row opens the details modal with workflow actions, an explicitly labeled `Decision Note` box while pending, fixed aligned label/value rows with tighter label/value spacing, `Requested By` above `Date Requested`, and bottom detail rows for `Updated By`, `Date Updated`, and `Decision Note`. Confirm officers/admins cannot approve their own requests, and Guild Master can approve their own request only by explicitly clicking the approval workflow action.
 59aa. For an approvable request, confirm `Approve` is disabled until the approver chooses an `Approval Bank Tab`. Enter a Decision Note, approve, and confirm the details modal stays open, hides the decision-note editor, shows the updated status plus bottom `Updated By`, `Date Updated`, and saved `Decision Note`, keeps workflow buttons aligned horizontally with `Close`, and Minimums now has an enabled tab-scoped rule for the requested item, requested quantity, and chosen bank tab. Repeat with a rejected request and confirm the saved decision note remains visible but the editor is hidden.
-59b. In `/gbm request`, click a pending own request and confirm the details modal shows Item Name, Quality, Quantity, Submission Note, Status, Decision Note, and Date Requested in local time with timezone listed. Open `New Request` while rows are visible and confirm clicks inside the wizard do not open request details underneath. Confirm the request author can cancel it before approval/fulfillment and that the cancel syncs back to admin clients.
-59c. Open Inventory, History, Minimums, Request Admin, and Exports with enough rows to scroll, and confirm the shared table scrollbar stays inside the table frame with a small gutter so it does not overlap the rightmost column.
+59b. In `/gbm request`, click a pending own request and confirm the details modal shows Item Name, Quality, Quantity, Submission Note, Status, Decision Note, and Date Requested in local time with an abbreviated timezone and no `(Local)` suffix. Open `New Request` while rows are visible and confirm clicks inside the wizard do not open request details underneath. Confirm the request author can cancel it before approval/fulfillment and that the cancel syncs back to admin clients.
+59c. Open Inventory, History, Minimums, Request Admin, and Exports with enough rows to scroll, and confirm the shared table viewport ends before the slim scrollbar, with the scrollbar just outside the table frame and not overlapping the rightmost column.
+59d. Open Exports and confirm the table columns are `Item ID`, `Item Tier`, `Item Name`, `Bank Tab`, `Amount to Stock`, and `Stocked Elsewhere`; click a `Stocked Elsewhere` value and confirm the modal lists other bank tabs and quantities.
+59e. Click `Auctionator` and confirm the modal asks whether to buy all rows or only rows not available in another tab; confirm each choice changes the generated shopping-list output. Click `CSV` and confirm the modal shows comma-delimited text with the visible header row. Click `TSM` and confirm it uses the same all-vs-missing choice flow and emits a comma-delimited item-ID import list.
 60. Blacklist a guild member from the auth panel and confirm both `/gbm ui` and `/gbm request` deny access for that character after `/reload`.
 61. Create a request from a request-only member and confirm an officer/guildmaster client receives it through addon comms and can act on it from the full Requests shell.
 62. Save an auth-policy change on one officer-authorized client and confirm a second addon-enabled guild client receives the updated rank policy and blacklist snapshot.
