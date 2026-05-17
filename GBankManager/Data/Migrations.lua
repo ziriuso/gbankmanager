@@ -8,6 +8,7 @@ ns.data = ns.data or {}
 local migrations = ns.data.migrations or ns.modules.migrations or {}
 local latestSchemaVersion = ns.constants.SCHEMA_VERSION or 1
 local defaults = ns.data.defaults or ns.modules.defaults or {}
+local styleTokens = ns.modules.styleTokens or {}
 
 local function ensure_table(value)
     if type(value) == "table" then
@@ -66,7 +67,11 @@ local function ensure_v1_shape(db)
     db.ui = ensure_table(db.ui)
     db.ui.inventoryColumnWidths = ensure_table(db.ui.inventoryColumnWidths)
     db.ui.appearance = ensure_table(db.ui.appearance)
-    db.ui.appearance.themePreset = db.ui.appearance.themePreset or "default"
+    if type(styleTokens.NormalizePresetKey) == "function" then
+        db.ui.appearance.themePreset = styleTokens.NormalizePresetKey(db.ui.appearance.themePreset or "generic_wow")
+    else
+        db.ui.appearance.themePreset = db.ui.appearance.themePreset or "generic_wow"
+    end
     db.ui.appearance.shellScale = tonumber(db.ui.appearance.shellScale or 1) or 1
     db.ui.appearance.tableDensity = tonumber(db.ui.appearance.tableDensity or 1) or 1
     db.ui.appearance.shellOpacity = tonumber(db.ui.appearance.shellOpacity or 0.96) or 0.96

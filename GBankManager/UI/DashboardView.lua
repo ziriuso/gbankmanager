@@ -4,7 +4,6 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local dashboard = ns.modules.dashboardView or {}
-
 local function normalize_timestamp(timestamp)
     local numeric = tonumber(timestamp)
     if numeric ~= nil then
@@ -88,6 +87,16 @@ local function sorted_snapshots(db)
     end)
 
     return ordered
+end
+
+local function current_snapshot(db)
+    local activeSnapshotId = tostring((db or {}).currentSnapshotId or "")
+    if activeSnapshotId ~= "" and type((db or {}).snapshots) == "table" then
+        return (db.snapshots or {})[activeSnapshotId]
+    end
+
+    local ordered = sorted_snapshots(db)
+    return ordered[#ordered]
 end
 
 local function build_stocking_history_rankings(db)
@@ -226,12 +235,26 @@ function dashboard.BuildSummary(db, planRows)
         end
     end
 
+    local criticalShortageCount = 0
+    local snapshot = current_snapshot(db)
+    for _, rule in ipairs(db.minimums or {}) do
+        local minimumQuantity = tonumber((rule or {}).quantity or 0) or 0
+        if rule.enabled ~= false and minimumQuantity > 0 then
+            local itemID = tonumber((rule or {}).itemID)
+            local snapshotItem = itemID and ((snapshot or {}).items or {})[itemID] or nil
+            if current_count_for_rule(snapshotItem, rule) < minimumQuantity then
+                criticalShortageCount = criticalShortageCount + 1
+            end
+        end
+    end
+
     return {
         lastScanAt = db.meta.updatedAt or 0,
         pendingRequestCount = pending,
         suggestedFulfillmentCount = suggested,
         exportReadyCount = exportReadyCount,
         totalPurchaseQuantity = totalPurchaseQuantity,
+        criticalShortageCount = criticalShortageCount,
     }
 end
 
@@ -249,31 +272,7 @@ end
 
 function dashboard.BuildCards(db, planRows)
     local summary = dashboard.BuildSummary(db, planRows)
-    local topItems = build_stocking_history_rankings(db)
-    local usesStockingHistory = #topItems > 0
-    if not usesStockingHistory then
-        topItems = build_withdrawal_rankings(db)
-    end
-
-    local ranked = {}
-    for index = 1, math.min(5, #topItems) do
-        if usesStockingHistory then
-            local item = topItems[index]
-            local restockLabel = item.restockCount == 1 and "restock" or "restocks"
-            table.insert(ranked, string.format("%d. %s - %d %s", index, item.itemName, item.restockCount, restockLabel))
-        else
-            table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
-        end
-    end
-
-    if #ranked == 0 then
-        table.insert(ranked, "No stocking history yet.")
-    end
-
-    local snapshot = nil
-    if db and db.currentSnapshotId then
-        snapshot = (db.snapshots or {})[db.currentSnapshotId]
-    end
+    local snapshot = current_snapshot(db)
 
     local trackedItems = 0
     for _ in pairs((snapshot or {}).items or {}) do
@@ -297,10 +296,74 @@ function dashboard.BuildCards(db, planRows)
             note = string.format("%d export rows", summary.exportReadyCount),
         },
         {
-            title = "Top 5 Most Used",
-            lines = ranked,
+            title = "Critical Shortages",
+            value = tostring(summary.criticalShortageCount),
+            note = summary.criticalShortageCount == 1 and "1 item below minimum" or string.format("%d items below minimum", summary.criticalShortageCount),
         },
     }
+end
+
+function dashboard.BuildTopItemsLines(db)
+    local topItems = build_stocking_history_rankings(db)
+    local usesStockingHistory = #topItems > 0
+    if not usesStockingHistory then
+        topItems = build_withdrawal_rankings(db)
+    end
+
+    local ranked = {}
+    for index = 1, math.min(5, #topItems) do
+        if usesStockingHistory then
+            local item = topItems[index]
+            local restockLabel = item.restockCount == 1 and "restock" or "restocks"
+            table.insert(ranked, string.format("%d. %s - %d %s", index, item.itemName, item.restockCount, restockLabel))
+        else
+            table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
+        end
+    end
+
+    if #ranked == 0 then
+        table.insert(ranked, "No stocking history yet.")
+    end
+
+    return ranked
+end
+
+function dashboard.BuildRecentActivityLines(db, limit)
+    local activity = {}
+
+    for _, entry in ipairs((db or {}).auditLog or {}) do
+        if type(entry) == "table" then
+            table.insert(activity, entry)
+        end
+    end
+
+    table.sort(activity, function(left, right)
+        local leftAt = normalize_timestamp((left or {}).timestamp)
+        local rightAt = normalize_timestamp((right or {}).timestamp)
+        if leftAt == rightAt then
+            return tostring((left or {}).itemName or "") < tostring((right or {}).itemName or "")
+        end
+        return leftAt > rightAt
+    end)
+
+    local lines = {}
+    for index = 1, math.min(tonumber(limit or 5) or 5, #activity) do
+        local entry = activity[index]
+        local itemName = tostring(entry.itemName or "Unknown Item")
+        local actor = tostring(entry.actor or "Unknown")
+        local category = tostring(entry.category or "ACTIVITY"):gsub("_", " ")
+        local action = tostring(entry.type or "UPDATED"):gsub("_", " ")
+        table.insert(lines, string.format("%s: %s by %s", itemName, string.lower(action), actor))
+        if index == #activity and #lines == 0 then
+            table.insert(lines, string.format("%s: %s", category, action))
+        end
+    end
+
+    if #lines == 0 then
+        table.insert(lines, "No recent activity yet.")
+    end
+
+    return lines
 end
 
 ns.modules.dashboardView = dashboard

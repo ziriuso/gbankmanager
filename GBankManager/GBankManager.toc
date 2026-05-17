@@ -29,6 +29,8 @@ Sync/Codec.lua
 Sync/Coordinator.lua
 Sync/Transport.lua
 Sync/SyncEvents.lua
+UI/StyleTokens.lua
+UI/ThemeManager.lua
 UI/MainFrameShell.lua
 UI/TableLayouts.lua
 UI/MainTableController.lua

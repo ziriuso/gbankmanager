@@ -1,8 +1,17 @@
+package.path = table.concat({
+    "./?.lua",
+    "./tests/?.lua",
+    package.path,
+}, ";")
+
+dofile("tests/helpers/wow_stubs.lua")
+
 local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
 local env = fixture.load()
 local mainFrame = env.mainFrame
+local activeTheme = env.mainFrameShell.GetTheme()
 
 _G.GBankManagerDB = {
     currentSnapshotId = "inventory-scroll",
@@ -46,12 +55,23 @@ assert.truthy(type(mainFrame.tableScrollBar) == "table", "inventory should expos
 assert.same(mainFrame.tableViewportFrame, (mainFrame.tableScrollBar.points[1] or {})[2], "shared table scrollbar should anchor to the viewport")
 assert.equal(18, (mainFrame.tableScrollBar.points[1] or {})[4], "shared table scrollbar should sit just outside the table viewport")
 assert.equal(18, (mainFrame.tableScrollBar.points[2] or {})[4], "shared table scrollbar bottom anchor should sit just outside the table viewport")
-assert.equal(772, mainFrame.tableViewportWidth, "shared table viewport should shrink slightly so the external scrollbar still fits inside the addon window")
+assert.equal(
+    math.max(520, math.floor((mainFrame.content:GetWidth() or 0) - 56)),
+    mainFrame.tableViewportWidth,
+    "shared table viewport should follow the active shell width while still leaving room for the external scrollbar"
+)
 assert.equal(24, mainFrame.tableScrollbarGutterWidth, "shared table layout should reserve a gutter for the inset scrollbar")
 assert.equal(mainFrame.tableViewportWidth, mainFrame.tableViewportInnerWidth, "shared table content should fill the table viewport before the external scrollbar")
 assert.equal(mainFrame.tableViewportInnerWidth, mainFrame.tableHeaderFrame:GetWidth(), "shared table header should stop before the scrollbar gutter")
 assert.equal(mainFrame.tableViewportInnerWidth, mainFrame.tableFilterFrame:GetWidth(), "shared table filters should stop before the scrollbar gutter")
 assert.equal(mainFrame.tableViewportInnerWidth, mainFrame.tableRows[1]:GetWidth(), "shared table rows should stop before the scrollbar gutter")
+assert.equal("table-header", mainFrame.tableHeaderFrame.gbmSurfaceVariant, "inventory should use the dedicated table-header surface")
+assert.equal("table-filter", mainFrame.tableFilterFrame.gbmSurfaceVariant, "inventory should use the dedicated table-filter surface")
+assert.equal("table-viewport", mainFrame.tableViewportFrame.gbmSurfaceVariant, "inventory should use the dedicated table viewport surface")
+assert.truthy(type((mainFrame.tableHeaderFrame.gbmArt or {}).headerBand) == "table", "inventory table header should expose the shared art-band treatment")
+assert.truthy(type((mainFrame.tableRows[1].gbmArt or {}).background) == "table", "inventory rows should expose reusable art backgrounds")
+assert.equal((activeTheme.tokens.row or {})[1], (mainFrame.tableRows[1].gbmBackdropBaseColor or {})[1], "inventory odd rows should use the semantic row token instead of generic panel art")
+assert.equal((activeTheme.tokens.rowAlt or {})[1], (mainFrame.tableRows[2].gbmBackdropBaseColor or {})[1], "inventory even rows should use the semantic alternating row token instead of generic panel art")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "inventory should use the minimums table layout starting with Item ID")
 assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "inventory should use the minimums table layout tier column")
 assert.equal("Item", mainFrame.tableHeaderLabels[3]:GetText(), "inventory should use the minimums table layout item column")

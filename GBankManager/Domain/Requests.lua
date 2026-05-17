@@ -13,6 +13,10 @@ permissions = permissions or {}
 
 local requests = ns.modules.requests or {}
 
+local function now()
+    return type(_G.time) == "function" and _G.time() or 0
+end
+
 local function actor_context(input, db)
     local context = input and input.actorContext
     if type(context) == "table" then
@@ -71,7 +75,7 @@ local function actor_is_guildmaster(actor)
 end
 
 local function build_request_id(input, context)
-    local createdAt = input.createdAt or _G.time()
+    local createdAt = input.createdAt or now()
     return table.concat({
         tostring(createdAt or 0),
         tostring((context or {}).characterKey or input.requester or "Unknown"),
@@ -193,7 +197,7 @@ function requests.Create(input)
     input = input or {}
     local context = actor_context(input, input.db)
     local requesterName = context.name or input.requester
-    local createdAt = input.createdAt or _G.time()
+    local createdAt = input.createdAt or now()
 
     return {
         requestId = input.requestId or build_request_id(input, context),
@@ -207,6 +211,8 @@ function requests.Create(input)
         craftedQuality = input.craftedQuality,
         craftedQualityIcon = input.craftedQualityIcon,
         quantity = input.quantity,
+        tabName = input.tabName,
+        preferredBankTab = input.preferredBankTab or input.tabName,
         note = input.note or "",
         approval = "PENDING",
         fulfillment = "OPEN",
@@ -238,7 +244,7 @@ function requests.Approve(request, approver, noteOrDecidedAt, decidedAtOrBankTab
     request.decisionNote = note or request.decisionNote or ""
     request.approvedBankTab = selectedBankTab or request.approvedBankTab
     request.tabName = selectedBankTab or request.tabName
-    request.decidedAt = decidedAt or _G.time()
+    request.decidedAt = decidedAt or now()
     request.updatedAt = request.decidedAt
     request.updatedBy = actor_character_key(approver) or actor_name(approver)
     request.updatedByRankIndex = type(approver) == "table" and approver.guildRankIndex or request.updatedByRankIndex
@@ -249,7 +255,7 @@ function requests.Reject(request, actor, note, decidedAt)
     request.approval = "REJECTED"
     request.decidedBy = actor_name(actor)
     request.decisionNote = note or ""
-    request.decidedAt = decidedAt or _G.time()
+    request.decidedAt = decidedAt or now()
     request.updatedAt = request.decidedAt
     request.updatedBy = actor_character_key(actor) or actor_name(actor)
     request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
@@ -258,7 +264,7 @@ end
 
 function requests.MarkSuggestedFulfilled(request, updatedAt)
     request.fulfillment = "SUGGESTED_FULFILLED"
-    request.fulfillmentUpdatedAt = updatedAt or _G.time()
+    request.fulfillmentUpdatedAt = updatedAt or now()
     request.updatedAt = request.fulfillmentUpdatedAt
     return request
 end
@@ -266,7 +272,7 @@ end
 function requests.MarkFulfilled(request, actor, updatedAt)
     request.fulfillment = "FULFILLED"
     request.fulfilledBy = actor_name(actor)
-    request.fulfillmentUpdatedAt = updatedAt or _G.time()
+    request.fulfillmentUpdatedAt = updatedAt or now()
     request.updatedAt = request.fulfillmentUpdatedAt
     request.updatedBy = actor_character_key(actor) or actor_name(actor)
     request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
@@ -275,7 +281,7 @@ end
 
 function requests.Reopen(request, updatedAt)
     request.fulfillment = "OPEN"
-    request.fulfillmentUpdatedAt = updatedAt or _G.time()
+    request.fulfillmentUpdatedAt = updatedAt or now()
     request.updatedAt = request.fulfillmentUpdatedAt
     return request
 end
@@ -285,7 +291,7 @@ function requests.Cancel(request, actor, note, canceledAt)
     request.canceledBy = actor_name(actor)
     request.decidedBy = actor_name(actor)
     request.decisionNote = note or ""
-    request.canceledAt = canceledAt or _G.time()
+    request.canceledAt = canceledAt or now()
     request.updatedAt = request.canceledAt
     request.updatedBy = actor_character_key(actor) or actor_name(actor)
     request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
@@ -312,7 +318,7 @@ function requests.BuildAuditEntry(eventType, request, details)
         oldValue = details.oldValue,
         newValue = details.newValue,
         note = details.note or request.note or "",
-        timestamp = details.timestamp or _G.time(),
+        timestamp = details.timestamp or now(),
     }
 end
 
@@ -469,7 +475,7 @@ function requests.DeleteStored(db, requestId, actor, note, deletedAt)
     local deletedRequest = copy_request(request)
     deletedRequest.deletedBy = actor_name(actor)
     deletedRequest.decisionNote = note or deletedRequest.decisionNote or ""
-    deletedRequest.deletedAt = deletedAt or _G.time()
+    deletedRequest.deletedAt = deletedAt or now()
     deletedRequest.updatedAt = deletedRequest.deletedAt
     deletedRequest.updatedBy = actor_character_key(actor) or actor_name(actor)
     deletedRequest.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or deletedRequest.updatedByRankIndex

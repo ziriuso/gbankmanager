@@ -335,8 +335,8 @@ local function run_request_access_modes(mainFrame)
             return mainFrame.activeView == "REQUESTS"
                 and mainFrame.requestOnlyMode == true
                 and mainFrame:IsShown()
-                and mainFrame.requestCreateButton
-                and mainFrame.requestCreateButton.enabled ~= false
+                and mainFrame.requestWorkflowCreateButton
+                and mainFrame.requestWorkflowCreateButton.enabled ~= false
         end)
 
         if not requestOnlyCheck then

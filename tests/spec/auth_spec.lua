@@ -125,7 +125,7 @@ assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only access 
 
 _G.GBankManagerDB.auth.capabilities.request_submit = {}
 mainFrame:RefreshView()
-assert.truthy(mainFrame.requestCreateButton:IsEnabled(), "request-only members should keep the lightweight submit flow when request-submit is allowed")
+assert.truthy(mainFrame.requestWorkflowCreateButton:IsEnabled(), "request-only members should keep the lightweight submit flow entrypoint when request-submit is allowed")
 
 _G.GBankManagerDB.auth.capabilities.request_submit[1] = true
 _G.GBankManagerDB.auth.capabilities.request_submit[2] = nil

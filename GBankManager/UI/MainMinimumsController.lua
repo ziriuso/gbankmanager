@@ -542,12 +542,13 @@ function mainMinimumsController.Attach(mainFrame, options)
         end
 
         rows = minimumsView.SortRows(rows, self.minimumSortState)
+        rows = self:DecorateAndPrioritizeMinimumRows(rows)
         self.tableColumnLayout = layout
         self.tableScrollOffset = 0
         self.cachedMinimumRows = rows
         self:ConfigureTable(layout, rows)
         self:RefreshVisibleTableRows()
-        self:UpdateMinimumEditorState()
+        self:UpdateMinimumEditorState(rows)
 
         local emptyStateText = self:GetMinimumEmptyStateText(rows)
         self.minimumEmptyStateText:SetText(emptyStateText)
@@ -631,6 +632,67 @@ function mainMinimumsController.Attach(mainFrame, options)
         return nil
     end
 
+    function mainFrame:GetMinimumStagedCounts(rows)
+        local counts = {
+            total = 0,
+            added = 0,
+            changed = 0,
+            deleted = 0,
+        }
+
+        for _, row in ipairs(rows or self.tableRowsData or {}) do
+            local draftState = self:GetMinimumDraftState(row)
+            if draftState == "added" or draftState == "changed" or draftState == "deleted" then
+                counts.total = counts.total + 1
+                counts[draftState] = (counts[draftState] or 0) + 1
+            end
+        end
+
+        return counts
+    end
+
+    function mainFrame:DecorateAndPrioritizeMinimumRows(rows)
+        local added = {}
+        local changed = {}
+        local deleted = {}
+        local attention = {}
+        local rest = {}
+        local badgeByState = {
+            added = "ADD",
+            changed = "EDIT",
+            deleted = "DELETE",
+        }
+
+        for _, row in ipairs(rows or {}) do
+            local draftState = self:GetMinimumDraftState(row)
+            row.minimumDraftState = draftState
+            row.draftBadge = badgeByState[draftState]
+
+            if draftState == "added" then
+                table.insert(added, row)
+            elseif draftState == "changed" then
+                table.insert(changed, row)
+            elseif draftState == "deleted" then
+                table.insert(deleted, row)
+            elseif row.needsBankTab == true then
+                row.draftBadge = "FIX"
+                table.insert(attention, row)
+            else
+                row.draftBadge = nil
+                table.insert(rest, row)
+            end
+        end
+
+        local ordered = {}
+        for _, group in ipairs({ added, changed, deleted, attention, rest }) do
+            for _, row in ipairs(group) do
+                table.insert(ordered, row)
+            end
+        end
+
+        return ordered
+    end
+
     function mainFrame:ConfigureMinimumEditorBankTabDropdown(row, state)
         local tabOptions = self:GetKnownMinimumBankTabs(row)
         local dropdownWidth = minimum_dropdown_width(tabOptions, 188, 260)
@@ -682,8 +744,18 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     function mainFrame:UpdateMinimumEditorState()
         self.minimumEditorPanel:Hide()
-        self.minimumEditorStateText:SetText("")
-        self.minimumEditorStateText:Hide()
+        local counts = self:GetMinimumStagedCounts()
+        if counts.total > 0 then
+            local label = counts.total == 1 and "1 staged change" or string.format("%d staged changes", counts.total)
+            self.minimumEditorStateText:SetText(label)
+            self.minimumEditorStateText:Show()
+            self.minimumSaveAllButton.labelText:SetText("Revert All")
+            self.minimumSaveAllButton:Show()
+        else
+            self.minimumEditorStateText:SetText("")
+            self.minimumEditorStateText:Hide()
+            self.minimumSaveAllButton:Hide()
+        end
     end
 
     function mainFrame:UpdateMinimumDetailsActionState(row, state)

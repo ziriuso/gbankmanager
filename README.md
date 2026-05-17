@@ -8,11 +8,13 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 
 - One-button guild bank scan foundation with snapshot, tab-scoped item rows, and change-log storage
 - Officer-first dashboard shell with inventory, history, minimums, requests, exports, about, and options workspaces
+- Dashboard now uses four metric cards plus `Top 5 Most Used`, `Recent Activity`, and `Quick Actions` panels inside the officer shell
+- The shared shell modernization pass now uses explicit surface/button variants plus reusable art layers for the main shell, sidebar, header, metric cards, export action cards, branded About panel, request/minimum workflows, table chrome, and nav items, with matte fills, gold line work, header bands, nav accent rails, a sidebar crest/footer identity card, and a tabbed Options shell
 - Recurring stock minimum helpers with a modal-based add/edit flow and procurement-planning export workflows
 - Member request submission with explicit approval workflow and no auto-approval path
 - Auctionator, CSV, and custom-delimited export builders, including current caret-delimited Auctionator list import output
 - Guild sync foundation with authority-first conflict resolution, chat-visible sync milestones, and login hello messages
-- Local appearance customization with theme presets, linked shell-and-table scaling, shell opacity, modal opacity, collapsed-nav icons, and direct slider interaction plus steppers
+- Local appearance customization with a token-backed theme system (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), linked shell-and-table scaling, shell opacity, modal opacity, collapsed-nav icons, and direct slider interaction plus steppers
 - In-client verification commands for both workflow smoke (`/gbm test smoke`) and deterministic in-game unit checks (`/gbm test unit`)
 
 ## Architecture
@@ -45,6 +47,7 @@ Current UI ownership is intentionally split across:
 - Match rows show the crafting-quality icon or tier when available, followed by the item name and item ID so quality variants stay distinguishable before selection, and duplicate-name crafted variants sort with the higher tier first.
 - Minimums details use the same bundled catalog to backfill `craftedQuality` and `craftedQualityIcon` when scan data does not already include them, so the modal and table can still show the right crafted tier for known items.
 - Minimums and the request wizard require a confirmed catalog selection before submission can advance, and raw-text-only request submission is rejected.
+- The request-only flow now uses a four-step wizard: item selection, quantity, preferred bank tab, and confirm, with a live preview rail and quantity steppers.
 - Bundled item data is shipped in the required sibling addon `GBankManager_ItemData/`, which now loads as a core dependency of `GBankManager` instead of as an optional load-on-demand companion.
 - The bundled companion addon now ships a generated indexed payload instead of one monolithic flat search table:
   - chunked item-record files
@@ -96,12 +99,17 @@ The next planned work after the completed pre-polish workflow block is:
 - Minimums uses the shared table header/filter controls instead of the old bottom search box, and its footer is a compact three-button action strip rather than a boxed editor panel.
 - Requests never auto-approve. Officers/admins cannot approve their own requests; only the Guild Master can manually approve their own request through the same workflow action as any other approval.
 - The officer-facing Requests tab is now `Request Admin`, focused on workflow management with shared table search and a request-list/details-modal flow.
-- `/gbm request` now opens a smaller end-user workflow window with `Guild Bank Manager` in the header, a four-column own-request status table, row-click details, request cancellation for pending own requests, and a three-step `New Request` wizard.
+- `/gbm request` now opens a smaller end-user workflow window with `Guild Bank Manager` in the header, a four-column own-request status table, row-click details, request cancellation for pending own requests, and a four-step `New Request` wizard with a progress rail, preview card, quantity steppers, and explicit bank-tab selection.
 - Request approval now requires the approver to choose a Bank Tab, persists the Decision Note back into request details, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested item and amount.
 - Request details now show Requested By above Date Requested, keep Updated By, Date Updated, and Decision Note at the bottom of the fixed-row detail list, hide the decision-note editor after approval or denial, block click-through while request modals are open, normalize request history actors to character names, and keep shared table scrollbars inside the table viewport.
 - Request deletion is now a distinct permission in the guild auth model, and authorized users can delete a request directly from the request-details workflow popup.
 - Request Admin now highlights the active bottom filter, keeps `Add` on the far left, right-aligns the `All`, `Pending Approval`, and `Pending Fulfillment` filters, uses the shared table height, and keeps the `Date Fulfilled` filter within bounds.
+- Request Admin now also includes a `Completed` filter and a left-side `Refresh` action beside `Add Request`.
 - Exports now shows `Excess Stock`, uses `None` for missing alternate stock, renders crafted-quality icons in the visible `Item Tier` column, and emits the newer Auctionator shopping-list line format while keeping numeric tier values for CSV-style outputs.
+- Exports now presents the supported outputs as four action cards: `Auctionator`, `TSM`, `CSV Spreadsheet`, and `Manual Shopping List`, while keeping the generated formats unchanged.
+- Dashboard metric cards and export action cards now carry dedicated large icons, and the export cards now use `Generate` or `Open List` CTA labels closer to the target mockup.
+- The near-literal mockup fidelity pass now also drives the live shell palette and chrome more aggressively: the `Generic WoW` preset is darker and bluer, nav buttons carry left accent rails, dashboard quick actions use icon-led primary buttons, and shared sliders now render through a more deliberate track/thumb treatment instead of the earlier plain boxed controls.
+- About now renders through a centered branded panel instead of the old plain body-text fallback, and the shared table shell now uses dedicated header/filter/viewport variants plus semantic alternating row tokens rather than generic panel tinting.
 - Minimums now uses separate `Enabled Only` and `Show All` buttons with an obvious active-state highlight instead of a single toggle label.
 - The guild auth policy string now carries the shared Restock Default plus updater metadata, pulls from Guild Info on load and guild updates, refreshes the Options restock input from live Guild Info data, and appends policy-update history rows that now show in the History view.
 - `Options -> Auth` now includes a `Select All` helper beside the compact `Policy String`, so officers can focus, highlight, and copy the full Guild Info snippet without manual drag selection.
@@ -114,11 +122,14 @@ The next planned work after the completed pre-polish workflow block is:
 - Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, automatically append or remove `[GBMBL]` in officer notes when officers save changes, and preserve the rest of the officer note text whenever the tag fits inside Blizzard's 31-character note limit.
 - Crafted-quality rendering now normalizes the low-tier and max-tier atlas variants so Exports, Inventory, Minimums, Requests, and request-details all show the same visible quality symbols whether the source came from live scan data or fallback catalog/search data.
 - Two-rank crafted items now stay on one shared visible chat-icon family across table rows, details, request review, exports, and the manual shopping list instead of switching to a mismatched inventory-atlas family.
-- The shell now supports local-only theme presets (`Current`, `Contrast`, `Horde`, `Alliance`, `Void`, `Adventurer`, `Moonglade`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
+- The shell now supports a token-backed theme manager with local-only presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
+- The request-only workflow panel and shared request wizard are mid-modernization: the member-facing launcher now presents the four-step guided flow, and the wizard exposes a visual progress rail plus a request preview card without changing request persistence or sync behavior.
+- Request Admin filters, request details actions, the request-only launcher, wizard navigation, and Minimums modal actions now all route through dedicated shared button variants (`primary`, `secondary`, `tab`, `icon`, `danger`) instead of the earlier one-style-fits-all bordered buttons.
 - Appearance sliders now use a safer drag-release surface and a more polished thumb or track treatment so releasing the mouse off the bar does not leave the slider latched into drag mode.
 - Shell scaling now clamps shared table height inside the content area so footer action strips stay visible, keeps the top-bar scan and status controls from overlapping at smaller scales, and preserves the floating manual shopping list across tab switches or shell close while remembering its saved position.
 - The addon shell now opts into top-level window ordering so other dragged UI can come above it, and clicking back onto the addon brings the shell and its registered modals forward again.
 - Dashboard `Top 5 Most Used` now ranks repeated shortage or restock cycles from persisted snapshot history and active Minimums rules before falling back to raw withdrawal totals when no stocking history exists.
+- Minimums now groups staged rows at the top of the table, exposes `ADD` / `EDIT` / `DELETE` row badges, shows a staged-change summary in the footer, and reveals `Revert All` only when draft changes exist.
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering so more pure-domain regressions can be caught in-client without relying on workflow smoke alone.
 - `/gbm test smoke` now follows the real Minimums modal add flow during its draft-stage check and hard-resets request selector state before the confirmed-selection gating check, so those two live smoke results match the current product workflow instead of the retired footer-editor path.
 - Maintainers now have repo-local deployment helpers plus a small local PowerShell maintainer launcher for target selection, saved status, refresh, and deploying both addon folders into `Retail`, `PTR`, or `Beta`.

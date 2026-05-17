@@ -123,7 +123,7 @@ assert.truthy(type(persisted.testing.liveSmoke) == "table", "normalize should pr
 assert.truthy(type(persisted.testing.inGameUnit) == "table", "normalize should preserve the in-game-unit persistence container")
 assert.equal(100, persisted.ui.minimumSettings.defaultQuantity, "normalize should seed the default minimum quantity setting")
 assert.equal(100, db.ui.minimumSettings.defaultQuantity, "fresh databases should default minimum quantity to 100")
-assert.equal("default", persisted.ui.appearance.themePreset, "normalize should seed the default appearance theme preset")
+assert.equal("generic_wow", persisted.ui.appearance.themePreset, "normalize should seed the default appearance theme preset")
 assert.equal(1, persisted.ui.appearance.shellScale, "normalize should seed the default shell scale")
 assert.equal(1, persisted.ui.appearance.tableDensity, "normalize should seed the default table density")
 assert.same(persisted.ui, store.GetUiState(persisted), "store ui-state accessor should return the normalized ui container")

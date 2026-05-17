@@ -192,11 +192,11 @@ end
 
 local function run_dashboard_stocking_history()
     local dashboard = ns.modules.dashboardView or {}
-    if type(dashboard.BuildCards) ~= "function" then
+    if type(dashboard.BuildTopItemsLines) ~= "function" then
         return unit_result("dashboard_stocking_history", false, "dashboard card builder missing")
     end
 
-    local cards = dashboard.BuildCards({
+    local lines = dashboard.BuildTopItemsLines({
         minimums = {
             { itemID = 1001, itemName = "Flask Alpha", quantity = 100, scope = "GLOBAL", enabled = true },
             { itemID = 2002, itemName = "Potion Beta", quantity = 50, scope = "GLOBAL", enabled = true },
@@ -246,7 +246,7 @@ local function run_dashboard_stocking_history()
         requests = {},
     }, {})
 
-    local firstLine = (((cards or {})[4] or {}).lines or {})[1] or ""
+    local firstLine = (lines or {})[1] or ""
     if string.find(firstLine, "Flask Alpha", 1, true) == nil or string.find(firstLine, "2 restocks", 1, true) == nil then
         return unit_result("dashboard_stocking_history", false, "dashboard top-five card no longer prioritizes repeated shortage cycles")
     end

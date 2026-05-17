@@ -16,6 +16,7 @@ local specs = {
     "tests/spec/ui_exports_spec.lua",
     "tests/spec/ui_minimums_spec.lua",
     "tests/spec/ui_options_spec.lua",
+    "tests/spec/ui_dashboard_spec.lua",
 }
 
 runner.run_specs(specs)

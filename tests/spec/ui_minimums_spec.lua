@@ -11,6 +11,7 @@ local fixture = require("tests.helpers.ui_fixture")
 
 local env = fixture.load()
 local mainFrame = env.mainFrame
+local activeTheme = env.mainFrameShell.GetTheme()
 
 _G.GBankManagerDB = {
     currentSnapshotId = "minimums-ui",
@@ -99,6 +100,7 @@ env.ns.state.db = _G.GBankManagerDB
 
 mainFrame:SelectView("MINIMUMS")
 assert.truthy(mainFrame.minimumsPanel:IsShown(), "minimums editor panel should show in the minimums view")
+assert.equal("panel", mainFrame.minimumsPanel.gbmSurfaceVariant, "minimums footer strip should still route through the shared panel variant")
 assert.truthy(mainFrame.tableViewportFrame:IsShown(), "minimums view should show the shared table viewport")
 assert.truthy(mainFrame.tableFilterFrame:IsShown(), "minimums should reuse the shared table filter row")
 assert.truthy(not mainFrame.minimumSearchLabel:IsShown(), "minimums should remove the old bottom search label in favor of shared table filters")
@@ -148,6 +150,7 @@ assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "minimums action strip
 
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
 assert.truthy(mainFrame.minimumAddModal:IsShown(), "add should open the minimum modal")
+assert.equal("modal", mainFrame.minimumAddModal.gbmSurfaceVariant, "minimum add should use the shared modal surface variant")
 assert.equal("250", mainFrame.minimumAddQuantityInput:GetText(), "new minimum rows should start from the configured default minimum value")
 assert.truthy(mainFrame.minimumAddButton.enabled == false, "minimum add modal should keep Add disabled until a catalog item is selected")
 assert.equal("Search Item ID", mainFrame.minimumAddItemIDLabel:GetText(), "minimum add modal should clearly label the item-id search box")
@@ -166,6 +169,7 @@ mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
 assert.truthy(mainFrame.minimumDetailsModal ~= nil, "minimums should build a reusable details modal shell")
 assert.truthy(not mainFrame.minimumAddModal:IsShown(), "search modal should close after confirming an item for add")
 assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "minimum add flow should continue directly into details")
+assert.equal("modal", mainFrame.minimumDetailsModal.gbmSurfaceVariant, "minimum details should use the shared modal surface variant")
 assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "minimums should not use the footer editor after add")
 assert.equal("243734", mainFrame.minimumDetailsItemIDText:GetText(), "details modal should inherit the chosen item id from the search modal")
 assert.equal("Thalassian Phoenix Oil", mainFrame.minimumDetailsItemNameText:GetText(), "details modal should inherit the chosen item name from the search modal")
@@ -174,6 +178,10 @@ assert.equal("add", mainFrame.minimumDetailsConfirmButton.iconKind, "details mod
 assert.equal("remove", mainFrame.minimumDetailsRemoveButton.iconKind, "details modal should use the shared remove icon button")
 assert.equal("undo", mainFrame.minimumDetailsUndoButton.iconKind, "details modal should use the shared undo icon button")
 assert.equal("common-icon-plus", (mainFrame.minimumDetailsConfirmButton.iconTexture or {}).atlas, "details modal should wire the shared add icon atlas for the confirm action")
+assert.equal("primary", mainFrame.minimumDetailsConfirmButton.gbmButtonVariant, "details modal confirm should use the shared primary action styling")
+assert.equal("danger", mainFrame.minimumDetailsRemoveButton.gbmButtonVariant, "details modal remove should use the destructive shared action styling")
+assert.equal("icon", mainFrame.minimumDetailsUndoButton.gbmButtonVariant, "details modal undo should use the shared icon button styling")
+assert.equal("secondary", mainFrame.minimumDetailsCancelButton.gbmButtonVariant, "details modal cancel should use the shared secondary action styling")
 assert.equal(0.35, (((mainFrame.minimumDetailsConfirmButton.iconTexture or {}).tint or {})[1] or 0), "details modal should tint the shared add icon green")
 assert.equal("", mainFrame.minimumDetailsConfirmButton.labelText:GetText(), "details modal confirm action should remain icon-only")
 assert.equal("", mainFrame.minimumDetailsRemoveButton.labelText:GetText(), "details modal remove action should remain icon-only")
@@ -559,13 +567,13 @@ mainFrame:RefreshView()
 assert.truthy(mainFrame.minimumShowAllRows == true, "minimums should default to Show All rows")
 assert.truthy(mainFrame.minimumShowAllButton.filterActive == true, "minimums should highlight Show All when Show All rows are active")
 assert.truthy(mainFrame.minimumEnabledOnlyButton.filterActive ~= true, "minimums should leave Enabled Only inactive while Show All rows are active")
-assert.truthy((mainFrame.minimumShowAllButton.backdropBorderColor or {})[1] == 0.85, "minimums should give the active filter a stronger glow")
+assert.equal((activeTheme.colors.accentStrong or {})[1], (mainFrame.minimumShowAllButton.backdropBorderColor or {})[1], "minimums should give the active filter a stronger glow")
 assert.equal("", mainFrame.minimumEditorStateText:GetText() or "", "minimums footer should not show the old centered-modal hint text")
 assert.truthy(not mainFrame.minimumEditorStateText:IsShown(), "minimums footer should hide the old centered-modal hint text")
 mainFrame.minimumEnabledOnlyButton:GetScript("OnClick")(mainFrame.minimumEnabledOnlyButton)
 assert.truthy(mainFrame.minimumShowAllRows == false, "minimums Enabled Only button should switch the table out of Show All mode")
 assert.truthy(mainFrame.minimumEnabledOnlyButton.filterActive == true, "minimums should highlight Enabled Only when selected")
-assert.truthy((mainFrame.minimumEnabledOnlyButton.backdropBorderColor or {})[1] == 0.85, "minimums should move the stronger glow to Enabled Only when selected")
+assert.equal((activeTheme.colors.accentStrong or {})[1], (mainFrame.minimumEnabledOnlyButton.backdropBorderColor or {})[1], "minimums should move the stronger glow to Enabled Only when selected")
 mainFrame.minimumShowAllButton:GetScript("OnClick")(mainFrame.minimumShowAllButton)
 assert.truthy(mainFrame.minimumShowAllRows == true, "minimums Show All button should restore Show All mode")
 assert.truthy(mainFrame.minimumShowAllButton.filterActive == true, "minimums should re-highlight Show All after switching back")
@@ -583,14 +591,17 @@ mainFrame.minimumDetailsConfirmButton:GetScript("OnClick")(mainFrame.minimumDeta
 assert.truthy(not mainFrame.minimumDetailsModal:IsShown(), "confirming a new minimum through the details modal should close the modal")
 local addedDraftRow
 local addedDraftFrame
+local addedDraftIndex
 for rowIndex, row in ipairs(mainFrame.tableRowsData or {}) do
     if tonumber(row.itemID) == 243734 then
         addedDraftRow = row
         addedDraftFrame = mainFrame.tableRows[rowIndex]
+        addedDraftIndex = rowIndex
         break
     end
 end
 assert.truthy(addedDraftRow ~= nil, "confirming a new minimum through the details modal should stage a new row")
+assert.equal(1, addedDraftIndex, "newly staged minimum rows should group to the top of the table until saved")
 assert.equal(100, addedDraftRow.quantityValue, "confirming a new minimum through the details modal should stage the entered quantity")
 assert.equal("Alchemy", addedDraftRow.tabName, "confirming a new minimum through the details modal should stage the selected bank tab")
 assert.equal("added", mainFrame:GetMinimumDraftState(addedDraftRow), "newly staged rows should remain draft adds before save")
@@ -598,6 +609,11 @@ assert.truthy(addedDraftFrame.minimumDraftTint ~= nil, "newly staged minimum row
 assert.equal("added", addedDraftFrame.minimumDraftState, "added minimum rows should expose added state on the row frame")
 assert.equal("green", addedDraftFrame.minimumDraftTint, "added minimum rows should expose green draft tint on the row frame")
 assert.equal(0.12, ((addedDraftFrame.minimumDraftBackground or {}).color or {})[1], "added minimum rows should apply the green draft overlay to the table row")
+assert.equal("ADD", addedDraftRow.draftBadge, "newly staged minimum rows should expose an ADD badge for the table")
+assert.equal("1 staged change", mainFrame.minimumEditorStateText:GetText(), "minimums should summarize staged-change count once a draft exists")
+assert.truthy(mainFrame.minimumEditorStateText:IsShown(), "minimums should show the staged-change summary once a draft exists")
+assert.truthy(mainFrame.minimumSaveAllButton:IsShown(), "minimums should surface the revert action once staged changes exist")
+assert.equal("Revert All", mainFrame.minimumSaveAllButton.labelText:GetText(), "minimums should relabel Undo into Revert All for staged changes")
 assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "footer editor should remain hidden after staging a new minimum through the modal")
 assert.truthy(addedDraftFrame.minimumInlineArtifactsHidden == true, "added minimum rows should keep inline editor remnants neutralized")
 
@@ -651,3 +667,5 @@ for _, row in ipairs(mainFrame.tableRowsData or {}) do
     end
 end
 assert.truthy(undoneAddedDraftRow == nil, "undoing a newly staged minimum through the details modal should discard the staged row entirely")
+assert.truthy(not mainFrame.minimumSaveAllButton:IsShown(), "minimums should hide Revert All again after the staged rows are cleared")
+assert.truthy(not mainFrame.minimumEditorStateText:IsShown(), "minimums should hide the staged-change summary once all drafts are cleared")

@@ -11,7 +11,10 @@ local mainExportsController = ns.modules.mainExportsController or {}
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
 local mainFrame = mainFrameShell.EnsureShell and mainFrameShell.EnsureShell(ns.modules.mainFrame) or ns.modules.mainFrame
 local theme = mainFrameShell.GetTheme and mainFrameShell.GetTheme() or (ns.ui.theme or {})
+local themeManager = ns.modules.themeManager or {}
 local apply_panel_style = mainFrameShell.ApplyPanelStyle
+local apply_surface_variant = mainFrameShell.ApplySurfaceVariant or apply_panel_style
+local apply_button_variant = mainFrameShell.ApplyButtonVariant or apply_panel_style
 local make_label = mainFrameShell.MakeLabel
 local make_button = mainFrameShell.MakeButton
 local set_button_icon = mainFrameShell.SetButtonIcon
@@ -115,6 +118,22 @@ local function chain_frame_script(frame, scriptName, callback)
         end
         callback(...)
     end)
+end
+
+local function set_label_color(label, color)
+    if label and type(label.SetTextColor) == "function" and type(color) == "table" then
+        label:SetTextColor(unpack(color))
+    end
+end
+
+local function color_with_alpha(color, alpha)
+    local resolved = type(color) == "table" and { unpack(color) } or { 1, 1, 1, 1 }
+    if alpha ~= nil then
+        resolved[4] = alpha
+    elseif resolved[4] == nil then
+        resolved[4] = 1
+    end
+    return resolved
 end
 
 local function make_export_output_input(parent, width, height)
@@ -320,9 +339,9 @@ local function apply_table_row_style(rowFrame, rowIndex, isSelected)
     end
 
     if isSelected then
-        apply_panel_style(rowFrame, theme.colors.accent)
+        apply_surface_variant(rowFrame, "row-selected")
     else
-        apply_panel_style(rowFrame, rowIndex % 2 == 1 and theme.colors.panel or theme.colors.panelAlt)
+        apply_surface_variant(rowFrame, rowIndex % 2 == 1 and "row" or "row-alt")
     end
 
     rowFrame.isSelected = isSelected and true or false
@@ -366,7 +385,7 @@ local function current_appearance_settings(db)
 
     local ui = (db or {}).ui or {}
     ui.appearance = ui.appearance or {
-        themePreset = "default",
+        themePreset = "generic_wow",
         shellScale = 1,
         tableDensity = 1,
         shellOpacity = 0.96,
@@ -478,7 +497,7 @@ local function view_label_for(key)
     return normalized:gsub("^%l", string.upper)
 end
 
-mainFrame.viewTitle = mainFrame.viewTitle or make_label(mainFrame.content, "Dashboard", "GameFontNormal")
+mainFrame.viewTitle = mainFrame.viewTitle or make_label(mainFrame.content, "Dashboard", "GameFontHighlightLarge")
 mainFrame.viewTitle:SetPoint("TOPLEFT", mainFrame.content, "TOPLEFT", 24, -24)
 mainFrame.viewSubtitle = mainFrame.viewSubtitle or make_label(mainFrame.content, "Critical shortages, pending requests, and export readiness.", "GameFontHighlightSmall")
 mainFrame.viewSubtitle:SetPoint("TOPLEFT", mainFrame.viewTitle, "BOTTOMLEFT", 0, -8)
@@ -577,27 +596,186 @@ chain_frame_script(mainFrame, "OnMouseDown", function(self)
 end)
 
 mainFrame.dashboardCards = mainFrame.dashboardCards or {}
+local dashboardCardIcons = {
+    "Interface\\ICONS\\INV_Misc_PocketWatch_01",
+    "Interface\\ICONS\\INV_Letter_15",
+    "Interface\\ICONS\\INV_Crate_03",
+    "Interface\\ICONS\\Ability_Creature_Cursed_04",
+}
 for index = 1, 4 do
     local card = mainFrame.dashboardCards[index] or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
-    card:SetSize(index < 4 and 220 or 456, index < 4 and 110 or 170)
+    card:SetSize(192, 104)
     apply_panel_style(card, theme.colors.panel)
 
+    card.iconTexture = card.iconTexture or card:CreateTexture()
+    card.iconTexture:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -14)
+    if type(card.iconTexture.SetSize) == "function" then
+        card.iconTexture:SetSize(26, 26)
+    end
+    if type(card.iconTexture.SetTexture) == "function" then
+        card.iconTexture:SetTexture(dashboardCardIcons[index])
+    end
+    card.iconTexture.texture = dashboardCardIcons[index]
+
     card.titleText = card.titleText or make_label(card, "", "GameFontHighlight")
-    card.titleText:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
+    card.titleText:SetPoint("TOPLEFT", card.iconTexture, "TOPRIGHT", 10, 2)
     card.valueText = card.valueText or make_label(card, "", "GameFontNormal")
-    card.valueText:SetPoint("TOPLEFT", card.titleText, "BOTTOMLEFT", 0, -10)
+    card.valueText:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -46)
     card.noteText = card.noteText or make_label(card, "", "GameFontHighlightSmall")
-    card.noteText:SetPoint("TOPLEFT", card.valueText, "BOTTOMLEFT", 0, -8)
+    card.noteText:SetPoint("TOPLEFT", card.valueText, "BOTTOMLEFT", 0, -6)
     card.linesText = card.linesText or make_label(card, "", "GameFontNormal")
-    card.linesText:SetPoint("TOPLEFT", card.titleText, "BOTTOMLEFT", 0, -10)
+    card.linesText:SetPoint("TOPLEFT", card.titleText, "BOTTOMLEFT", 0, -8)
 
     mainFrame.dashboardCards[index] = card
 end
 
 mainFrame.dashboardCards[1]:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
-mainFrame.dashboardCards[2]:SetPoint("LEFT", mainFrame.dashboardCards[1], "RIGHT", 16, 0)
-mainFrame.dashboardCards[3]:SetPoint("LEFT", mainFrame.dashboardCards[2], "RIGHT", 16, 0)
-mainFrame.dashboardCards[4]:SetPoint("TOPLEFT", mainFrame.dashboardCards[1], "BOTTOMLEFT", 0, -16)
+mainFrame.dashboardCards[2]:SetPoint("LEFT", mainFrame.dashboardCards[1], "RIGHT", 12, 0)
+mainFrame.dashboardCards[3]:SetPoint("LEFT", mainFrame.dashboardCards[2], "RIGHT", 12, 0)
+mainFrame.dashboardCards[4]:SetPoint("LEFT", mainFrame.dashboardCards[3], "RIGHT", 12, 0)
+
+mainFrame.dashboardTopItemsPanel = mainFrame.dashboardTopItemsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.dashboardTopItemsPanel:SetPoint("TOPLEFT", mainFrame.dashboardCards[1], "BOTTOMLEFT", 0, -16)
+mainFrame.dashboardTopItemsPanel:SetSize(352, 188)
+apply_panel_style(mainFrame.dashboardTopItemsPanel, theme.colors.panel)
+
+mainFrame.dashboardTopItemsTitle = mainFrame.dashboardTopItemsTitle or make_label(mainFrame.dashboardTopItemsPanel, "Top 5 Most Used", "GameFontHighlight")
+mainFrame.dashboardTopItemsTitle:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsPanel, "TOPLEFT", 16, -14)
+mainFrame.dashboardTopItemsText = mainFrame.dashboardTopItemsText or make_label(mainFrame.dashboardTopItemsPanel, "", "GameFontNormal")
+mainFrame.dashboardTopItemsText:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsTitle, "BOTTOMLEFT", 0, -10)
+if type(mainFrame.dashboardTopItemsText.SetWidth) == "function" then
+    mainFrame.dashboardTopItemsText:SetWidth(320)
+end
+
+mainFrame.dashboardRecentActivityPanel = mainFrame.dashboardRecentActivityPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.dashboardRecentActivityPanel:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsPanel, "TOPRIGHT", 16, 0)
+mainFrame.dashboardRecentActivityPanel:SetPoint("TOPRIGHT", mainFrame.content, "RIGHT", -24, 0)
+mainFrame.dashboardRecentActivityPanel:SetHeight(188)
+apply_panel_style(mainFrame.dashboardRecentActivityPanel, theme.colors.panel)
+
+mainFrame.dashboardRecentActivityTitle = mainFrame.dashboardRecentActivityTitle or make_label(mainFrame.dashboardRecentActivityPanel, "Recent Activity", "GameFontHighlight")
+mainFrame.dashboardRecentActivityTitle:SetPoint("TOPLEFT", mainFrame.dashboardRecentActivityPanel, "TOPLEFT", 16, -14)
+mainFrame.dashboardRecentActivityText = mainFrame.dashboardRecentActivityText or make_label(mainFrame.dashboardRecentActivityPanel, "", "GameFontNormal")
+mainFrame.dashboardRecentActivityText:SetPoint("TOPLEFT", mainFrame.dashboardRecentActivityTitle, "BOTTOMLEFT", 0, -10)
+if type(mainFrame.dashboardRecentActivityText.SetWidth) == "function" then
+    mainFrame.dashboardRecentActivityText:SetWidth(420)
+end
+
+mainFrame.dashboardQuickActionsPanel = mainFrame.dashboardQuickActionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.dashboardQuickActionsPanel:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsPanel, "BOTTOMLEFT", 0, -16)
+mainFrame.dashboardQuickActionsPanel:SetPoint("TOPRIGHT", mainFrame.dashboardRecentActivityPanel, "BOTTOMRIGHT", 0, -16)
+mainFrame.dashboardQuickActionsPanel:SetHeight(108)
+apply_panel_style(mainFrame.dashboardQuickActionsPanel, theme.colors.panel)
+
+mainFrame.dashboardQuickActionsTitle = mainFrame.dashboardQuickActionsTitle or make_label(mainFrame.dashboardQuickActionsPanel, "Quick Actions", "GameFontHighlight")
+mainFrame.dashboardQuickActionsTitle:SetPoint("TOPLEFT", mainFrame.dashboardQuickActionsPanel, "TOPLEFT", 16, -14)
+
+mainFrame.dashboardQuickActionButtons = mainFrame.dashboardQuickActionButtons or {}
+local dashboardQuickActionLabels = {
+    "Scan Bank",
+    "View Inventory",
+    "Add Minimum",
+    "Request Overview",
+    "Export Data",
+}
+local dashboardQuickActionIcons = {
+    "Interface\\ICONS\\Ability_Spy",
+    "Interface\\ICONS\\INV_Crate_03",
+    "Interface\\ICONS\\INV_Misc_Note_01",
+    "Interface\\ICONS\\INV_Letter_15",
+    "Interface\\ICONS\\INV_Scroll_03",
+}
+for index, label in ipairs(dashboardQuickActionLabels) do
+    local button = mainFrame.dashboardQuickActionButtons[index] or make_button(mainFrame.dashboardQuickActionsPanel, 136, 48, label)
+    if index == 1 then
+        button:SetPoint("TOPLEFT", mainFrame.dashboardQuickActionsTitle, "BOTTOMLEFT", 0, -16)
+    else
+        button:SetPoint("LEFT", mainFrame.dashboardQuickActionButtons[index - 1], "RIGHT", 8, 0)
+    end
+    button.labelText:SetText(label)
+    button.actionIcon = button.actionIcon or button:CreateTexture()
+    if type(button.actionIcon.SetSize) == "function" then
+        button.actionIcon:SetSize(18, 18)
+    end
+    if type(button.actionIcon.SetTexture) == "function" then
+        button.actionIcon:SetTexture(dashboardQuickActionIcons[index])
+    end
+    button.actionIcon.texture = dashboardQuickActionIcons[index]
+    if type(button.actionIcon.ClearAllPoints) == "function" then
+        button.actionIcon:ClearAllPoints()
+    end
+    button.actionIcon:SetPoint("LEFT", button, "LEFT", 14, 0)
+    if button.labelText and type(button.labelText.ClearAllPoints) == "function" then
+        button.labelText:ClearAllPoints()
+    end
+    button.labelText:SetPoint("LEFT", button.actionIcon, "RIGHT", 10, 0)
+    if type(button.labelText.SetJustifyH) == "function" then
+        button.labelText:SetJustifyH("LEFT")
+    end
+    mainFrame.dashboardQuickActionButtons[index] = button
+end
+
+mainFrame.dashboardQuickActionButtons[1]:SetScript("OnClick", function()
+    local handler = mainFrame.scanButton and mainFrame.scanButton.GetScript and mainFrame.scanButton:GetScript("OnClick") or nil
+    if type(handler) == "function" then
+        handler(mainFrame.scanButton)
+    end
+end)
+mainFrame.dashboardQuickActionButtons[2]:SetScript("OnClick", function()
+    mainFrame:SelectView("INVENTORY")
+end)
+mainFrame.dashboardQuickActionButtons[3]:SetScript("OnClick", function()
+    mainFrame:SelectView("MINIMUMS")
+    if type(mainFrame.OpenMinimumAddModal) == "function" then
+        mainFrame:OpenMinimumAddModal()
+    end
+end)
+mainFrame.dashboardQuickActionButtons[4]:SetScript("OnClick", function()
+    mainFrame:SelectView("REQUESTS")
+end)
+mainFrame.dashboardQuickActionButtons[5]:SetScript("OnClick", function()
+    mainFrame:SelectView("EXPORTS")
+end)
+
+mainFrame.aboutPanel = mainFrame.aboutPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.aboutPanel:SetSize(420, 292)
+mainFrame.aboutPanel:SetPoint("CENTER", mainFrame.content, "CENTER", 0, -8)
+apply_surface_variant(mainFrame.aboutPanel, "panel-alt")
+mainFrame.aboutPanel:Hide()
+
+mainFrame.aboutCrestTexture = mainFrame.aboutCrestTexture or mainFrame.aboutPanel:CreateTexture()
+mainFrame.aboutCrestTexture:SetPoint("TOP", mainFrame.aboutPanel, "TOP", 0, -24)
+if type(mainFrame.aboutCrestTexture.SetSize) == "function" then
+    mainFrame.aboutCrestTexture:SetSize(56, 56)
+end
+if type(mainFrame.aboutCrestTexture.SetTexture) == "function" then
+    mainFrame.aboutCrestTexture:SetTexture(nav_icon_texture_for("DASHBOARD"))
+end
+mainFrame.aboutCrestTexture.texture = nav_icon_texture_for("DASHBOARD")
+
+mainFrame.aboutNameText = mainFrame.aboutNameText or make_label(mainFrame.aboutPanel, "Guild Bank Manager", "GameFontHighlightLarge")
+mainFrame.aboutNameText:SetPoint("TOP", mainFrame.aboutCrestTexture, "BOTTOM", 0, -12)
+
+mainFrame.aboutVersionText = mainFrame.aboutVersionText or make_label(mainFrame.aboutPanel, "", "GameFontNormal")
+mainFrame.aboutVersionText:SetPoint("TOP", mainFrame.aboutNameText, "BOTTOM", 0, -8)
+
+mainFrame.aboutAuthorText = mainFrame.aboutAuthorText or make_label(mainFrame.aboutPanel, "", "GameFontNormal")
+mainFrame.aboutAuthorText:SetPoint("TOP", mainFrame.aboutVersionText, "BOTTOM", 0, -8)
+
+mainFrame.aboutGuildText = mainFrame.aboutGuildText or make_label(mainFrame.aboutPanel, "", "GameFontNormal")
+mainFrame.aboutGuildText:SetPoint("TOP", mainFrame.aboutAuthorText, "BOTTOM", 0, -8)
+
+mainFrame.aboutDescriptionText = mainFrame.aboutDescriptionText or make_label(mainFrame.aboutPanel, "Manage your guild's stock, requests, and exports with a polished WoW-native workflow.", "GameFontHighlightSmall")
+mainFrame.aboutDescriptionText:SetPoint("TOP", mainFrame.aboutGuildText, "BOTTOM", 0, -18)
+if type(mainFrame.aboutDescriptionText.SetWidth) == "function" then
+    mainFrame.aboutDescriptionText:SetWidth(340)
+end
+if type(mainFrame.aboutDescriptionText.SetJustifyH) == "function" then
+    mainFrame.aboutDescriptionText:SetJustifyH("CENTER")
+end
+
+mainFrame.aboutSlashHintText = mainFrame.aboutSlashHintText or make_label(mainFrame.aboutPanel, "/gbm for slash commands", "GameFontHighlightSmall")
+mainFrame.aboutSlashHintText:SetPoint("BOTTOM", mainFrame.aboutPanel, "BOTTOM", 0, 24)
 
 mainTableController.Attach(mainFrame, {
     applyPanelStyle = apply_panel_style,
@@ -681,8 +859,14 @@ mainFrame.minimumEmptyStateText:Hide()
 mainFrame.optionsPanel = mainFrame.optionsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.optionsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
 mainFrame.optionsPanel:SetPoint("BOTTOMRIGHT", mainFrame.content, "BOTTOMRIGHT", -24, 0)
-apply_panel_style(mainFrame.optionsPanel, theme.colors.panel)
+apply_surface_variant(mainFrame.optionsPanel, "panel")
 mainFrame.optionsPanel:Hide()
+
+mainFrame.optionsTabBar = mainFrame.optionsTabBar or _G.CreateFrame("Frame", nil, mainFrame.optionsPanel, "BackdropTemplate")
+mainFrame.optionsTabBar:SetPoint("TOPLEFT", mainFrame.optionsPanel, "TOPLEFT", 16, -14)
+mainFrame.optionsTabBar:SetPoint("TOPRIGHT", mainFrame.optionsPanel, "TOPRIGHT", -44, -14)
+mainFrame.optionsTabBar:SetHeight(30)
+apply_surface_variant(mainFrame.optionsTabBar, "panel")
 
 mainFrame.optionsScrollUpButton = nil
 mainFrame.optionsScrollDownButton = nil
@@ -701,24 +885,85 @@ mainFrame.optionsScrollFrame = optionsOverflow and optionsOverflow.scrollFrame o
 mainFrame.optionsScrollChild = optionsOverflow and optionsOverflow.scrollChild or mainFrame.optionsScrollChild
 mainFrame.optionsScrollBar = optionsOverflow and optionsOverflow.scrollBar or (mainFrame.optionsScrollBar or make_slim_scroll_bar(mainFrame.optionsPanel, 14))
 mainFrame.optionsScrollController = optionsOverflow and optionsOverflow.controller or mainFrame.optionsScrollController
+if type(mainFrame.optionsViewportFrame.ClearAllPoints) == "function" then
+    mainFrame.optionsViewportFrame:ClearAllPoints()
+end
+mainFrame.optionsViewportFrame:SetPoint("TOPLEFT", mainFrame.optionsTabBar, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsViewportFrame:SetPoint("BOTTOMRIGHT", mainFrame.optionsPanel, "BOTTOMRIGHT", -24, 16)
+
+mainFrame.optionsTabButtons = mainFrame.optionsTabButtons or {}
+mainFrame.optionsTabOrder = {
+    { key = "APPEARANCE", label = "Appearance" },
+    { key = "PERMISSIONS", label = "Permissions" },
+    { key = "BLACKLIST", label = "Blacklist" },
+    { key = "AUTOMATION", label = "Automation" },
+    { key = "EXPORTS", label = "Exports" },
+    { key = "REQUESTS", label = "Requests" },
+}
+for index, item in ipairs(mainFrame.optionsTabOrder) do
+    local button = mainFrame.optionsTabButtons[index] or make_button(mainFrame.optionsTabBar, 94, 24, item.label)
+    button.key = item.key
+    button.labelText:SetText(item.label)
+    if type(button.ClearAllPoints) == "function" then
+        button:ClearAllPoints()
+    end
+    if index == 1 then
+        button:SetPoint("TOPLEFT", mainFrame.optionsTabBar, "TOPLEFT", 0, 0)
+    else
+        button:SetPoint("LEFT", mainFrame.optionsTabButtons[index - 1], "RIGHT", 8, 0)
+    end
+    mainFrame.optionsTabButtons[index] = button
+end
+
+mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(196)
-apply_panel_style(mainFrame.optionsAppearancePanel, theme.colors.panelAlt)
+mainFrame.optionsAppearancePanel:SetHeight(308)
+apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
-mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAppearancePanel, "BackdropTemplate")
 mainFrame.optionsRestockPanel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "BOTTOMLEFT", 0, -16)
 mainFrame.optionsRestockPanel:SetPoint("TOPRIGHT", mainFrame.optionsAppearancePanel, "BOTTOMRIGHT", 0, -16)
 mainFrame.optionsRestockPanel:SetHeight(96)
-apply_panel_style(mainFrame.optionsRestockPanel, theme.colors.panelAlt)
+apply_surface_variant(mainFrame.optionsRestockPanel, "panel-alt")
 
 mainFrame.optionsAuthPanel = mainFrame.optionsAuthPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
-mainFrame.optionsAuthPanel:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "BOTTOMLEFT", 0, -16)
-mainFrame.optionsAuthPanel:SetPoint("TOPRIGHT", mainFrame.optionsRestockPanel, "BOTTOMRIGHT", 0, -16)
+mainFrame.optionsAuthPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsAuthPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
 mainFrame.optionsAuthPanel:SetHeight(560)
-apply_panel_style(mainFrame.optionsAuthPanel, theme.colors.panelAlt)
+apply_surface_variant(mainFrame.optionsAuthPanel, "panel")
+
+mainFrame.optionsPermissionsPanel = mainFrame.optionsPermissionsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsPermissionsPanel:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 0, 0)
+mainFrame.optionsPermissionsPanel:SetPoint("TOPRIGHT", mainFrame.optionsAuthPanel, "TOPRIGHT", 0, 0)
+mainFrame.optionsPermissionsPanel:SetHeight(392)
+apply_surface_variant(mainFrame.optionsPermissionsPanel, "panel-alt")
+
+mainFrame.optionsBlacklistPanel = mainFrame.optionsBlacklistPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsBlacklistPanel:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 0, 0)
+mainFrame.optionsBlacklistPanel:SetPoint("TOPRIGHT", mainFrame.optionsAuthPanel, "TOPRIGHT", 0, 0)
+mainFrame.optionsBlacklistPanel:SetHeight(268)
+apply_surface_variant(mainFrame.optionsBlacklistPanel, "panel-alt")
+
+mainFrame.optionsAutomationPanel = mainFrame.optionsAutomationPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsAutomationPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsAutomationPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsAutomationPanel:SetHeight(180)
+apply_surface_variant(mainFrame.optionsAutomationPanel, "panel-alt")
+
+mainFrame.optionsExportsPanel = mainFrame.optionsExportsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsExportsPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsExportsPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsExportsPanel:SetHeight(180)
+apply_surface_variant(mainFrame.optionsExportsPanel, "panel-alt")
+
+mainFrame.optionsRequestsPanel = mainFrame.optionsRequestsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsRequestsPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsRequestsPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsRequestsPanel:SetHeight(180)
+apply_surface_variant(mainFrame.optionsRequestsPanel, "panel-alt")
 
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Appearance", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
@@ -730,17 +975,15 @@ mainFrame.optionsThemePresetLabel = mainFrame.optionsThemePresetLabel or make_la
 mainFrame.optionsThemePresetLabel:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsThemeButtons = mainFrame.optionsThemeButtons or {}
-local themePresetOrder = type(mainFrameShell.GetThemePresetOrder) == "function" and mainFrameShell.GetThemePresetOrder() or { "default", "contrast", "warm" }
+local themePresetOrder = type(mainFrameShell.GetThemePresetOrder) == "function" and mainFrameShell.GetThemePresetOrder() or { "generic_wow", "high_contrast", "alliance", "horde", "nature", "void" }
 local themePresets = type(mainFrameShell.GetThemePresets) == "function" and mainFrameShell.GetThemePresets() or {}
 local themeButtonLayout = {
-    default = { width = 74, row = 1 },
-    contrast = { width = 82, row = 1 },
-    horde = { width = 68, row = 1 },
+    generic_wow = { width = 92, row = 1 },
+    high_contrast = { width = 104, row = 1 },
     alliance = { width = 80, row = 1 },
+    horde = { width = 68, row = 2 },
+    nature = { width = 74, row = 2 },
     void = { width = 64, row = 2 },
-    adventurer = { width = 92, row = 2 },
-    moonglade = { width = 92, row = 2 },
-    warm = { width = 72, row = 2 },
 }
 local themeButtonRowAnchors = {}
 local previousThemeButton
@@ -768,9 +1011,9 @@ for _, presetKey in ipairs(themePresetOrder) do
     themeButtonRowAnchors[buttonLayout.row] = themeButtonRowAnchors[buttonLayout.row] or button
     previousThemeButton = button
 end
-mainFrame.optionsThemeDefaultButton = mainFrame.optionsThemeButtons.default
-mainFrame.optionsThemeContrastButton = mainFrame.optionsThemeButtons.contrast
-mainFrame.optionsThemeWarmButton = mainFrame.optionsThemeButtons.adventurer or mainFrame.optionsThemeButtons.warm
+mainFrame.optionsThemeDefaultButton = mainFrame.optionsThemeButtons.generic_wow
+mainFrame.optionsThemeContrastButton = mainFrame.optionsThemeButtons.high_contrast
+mainFrame.optionsThemeWarmButton = mainFrame.optionsThemeButtons.nature
 
 mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Scale", "GameFontHighlightSmall")
 mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
@@ -1003,6 +1246,98 @@ mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthSaveButton
 mainFrame.optionsAuthResetButton = mainFrame.optionsAuthResetButton or make_button(mainFrame.optionsAuthPanel, 70, 24, "Revert")
 mainFrame.optionsAuthResetButton:SetPoint("LEFT", mainFrame.optionsAuthReadButton, "RIGHT", 8, 0)
 
+local function move_to_panel(widget, panel)
+    if type(widget) ~= "table" or type(panel) ~= "table" then
+        return
+    end
+
+    if type(widget.SetParent) == "function" then
+        widget:SetParent(panel)
+    end
+    if type(widget.ClearAllPoints) == "function" then
+        widget:ClearAllPoints()
+    end
+end
+
+move_to_panel(mainFrame.optionsAuthTitle, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsPermissionsPanel, "TOPLEFT", 16, -16)
+move_to_panel(mainFrame.optionsAuthHint, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthHint:SetPoint("TOPLEFT", mainFrame.optionsAuthTitle, "BOTTOMLEFT", 0, -8)
+move_to_panel(mainFrame.optionsAuthMetadataText, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthMetadataText:SetPoint("TOPLEFT", mainFrame.optionsAuthHint, "BOTTOMLEFT", 0, -8)
+move_to_panel(mainFrame.optionsAccessPreviewText, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAccessPreviewText:SetPoint("TOPLEFT", mainFrame.optionsAuthMetadataText, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsRankPickerLabel, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsRankPickerLabel:SetPoint("TOPLEFT", mainFrame.optionsAccessPreviewText, "BOTTOMLEFT", 0, -12)
+move_to_panel(mainFrame.optionsAuthRankButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthRankButton:SetPoint("TOPLEFT", mainFrame.optionsRankPickerLabel, "BOTTOMLEFT", 0, -6)
+move_to_panel(mainFrame.optionsAuthRankDropdown, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthRankDropdown:SetPoint("TOPLEFT", mainFrame.optionsAuthRankButton, "BOTTOMLEFT", 0, -4)
+move_to_panel(mainFrame.optionsAllowedPermissionTitle, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAllowedPermissionTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthRankButton, "BOTTOMLEFT", 0, -18)
+move_to_panel(mainFrame.optionsAllowedPermissionPanel, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAllowedPermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionTitle, "BOTTOMLEFT", 0, -6)
+move_to_panel(mainFrame.optionsAvailablePermissionTitle, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAvailablePermissionTitle:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 126, 6)
+move_to_panel(mainFrame.optionsAvailablePermissionPanel, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAvailablePermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionTitle, "BOTTOMLEFT", 0, -6)
+move_to_panel(mainFrame.optionsAuthRemovePermissionButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthRemovePermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 16, -36)
+move_to_panel(mainFrame.optionsAuthAddPermissionButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthAddPermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAuthRemovePermissionButton, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsPolicyStringLabel, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsPolicyStringLabel:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "BOTTOMLEFT", 0, -18)
+move_to_panel(mainFrame.optionsPolicyStringInput, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringLabel, "BOTTOMLEFT", 0, -4)
+move_to_panel(mainFrame.optionsPolicyStringSelectAllButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsPolicyStringSelectAllButton:SetPoint("LEFT", mainFrame.optionsPolicyStringInput, "RIGHT", 8, 0)
+move_to_panel(mainFrame.optionsPolicyStringHelpText, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsPolicyStringHelpText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -6)
+move_to_panel(mainFrame.optionsAuthStatusText, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthStatusText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringHelpText, "BOTTOMLEFT", 0, -8)
+move_to_panel(mainFrame.optionsAuthSaveButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthSaveButton:SetPoint("TOPLEFT", mainFrame.optionsAuthStatusText, "BOTTOMLEFT", 0, -12)
+move_to_panel(mainFrame.optionsAuthReadButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthReadButton:SetPoint("LEFT", mainFrame.optionsAuthSaveButton, "RIGHT", 8, 0)
+move_to_panel(mainFrame.optionsAuthResetButton, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthResetButton:SetPoint("LEFT", mainFrame.optionsAuthReadButton, "RIGHT", 8, 0)
+
+mainFrame.optionsBlacklistPanelTitle = mainFrame.optionsBlacklistPanelTitle or make_label(mainFrame.optionsBlacklistPanel, "Blacklist", "GameFontHighlight")
+mainFrame.optionsBlacklistPanelTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsBlacklistPanelHint = mainFrame.optionsBlacklistPanelHint or make_label(mainFrame.optionsBlacklistPanel, "Guild-shared blacklist membership is carried by officer-note tags. Reasons stay local and sync through the addon.", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistPanelHint:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelTitle, "BOTTOMLEFT", 0, -8)
+move_to_panel(mainFrame.optionsBlacklistTitle, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelHint, "BOTTOMLEFT", 0, -12)
+move_to_panel(mainFrame.optionsBlacklistCharacterLabel, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistCharacterLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsBlacklistNameInput, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistNameInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistCharacterLabel, "BOTTOMLEFT", 0, -4)
+move_to_panel(mainFrame.optionsBlacklistReasonLabel, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistReasonLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistNameInput, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsBlacklistReasonInput, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistReasonInput:SetPoint("TOPLEFT", mainFrame.optionsBlacklistReasonLabel, "BOTTOMLEFT", 0, -4)
+move_to_panel(mainFrame.optionsBlacklistAddButton, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistAddButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistReasonInput, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsBlacklistRemoveButton, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
+move_to_panel(mainFrame.optionsBlacklistListTitle, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistAddButton, "BOTTOMLEFT", 0, -12)
+move_to_panel(mainFrame.optionsBlacklistListPanel, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
+
+mainFrame.optionsAutomationTitle = mainFrame.optionsAutomationTitle or make_label(mainFrame.optionsAutomationPanel, "Automation", "GameFontHighlight")
+mainFrame.optionsAutomationTitle:SetPoint("TOPLEFT", mainFrame.optionsAutomationPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsAutomationHint = mainFrame.optionsAutomationHint or make_label(mainFrame.optionsAutomationPanel, "Auto-scan and guild sync behavior continue to use the existing runtime settings. This tab is reserved for the polished automation controls pass.", "GameFontHighlightSmall")
+mainFrame.optionsAutomationHint:SetPoint("TOPLEFT", mainFrame.optionsAutomationTitle, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsExportsTitle = mainFrame.optionsExportsTitle or make_label(mainFrame.optionsExportsPanel, "Exports", "GameFontHighlight")
+mainFrame.optionsExportsTitle:SetPoint("TOPLEFT", mainFrame.optionsExportsPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsExportsHint = mainFrame.optionsExportsHint or make_label(mainFrame.optionsExportsPanel, "Auctionator, TSM, CSV, and shopping-list formats stay behavior-compatible. This tab will host export-specific appearance controls as the polish pass continues.", "GameFontHighlightSmall")
+mainFrame.optionsExportsHint:SetPoint("TOPLEFT", mainFrame.optionsExportsTitle, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsRequestsTitle = mainFrame.optionsRequestsTitle or make_label(mainFrame.optionsRequestsPanel, "Requests", "GameFontHighlight")
+mainFrame.optionsRequestsTitle:SetPoint("TOPLEFT", mainFrame.optionsRequestsPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsRequestsHint = mainFrame.optionsRequestsHint or make_label(mainFrame.optionsRequestsPanel, "Member-request defaults, wizard affordances, and request-admin visual options will live here as the screen pass continues.", "GameFontHighlightSmall")
+mainFrame.optionsRequestsHint:SetPoint("TOPLEFT", mainFrame.optionsRequestsTitle, "BOTTOMLEFT", 0, -8)
+
 local function modal_frames(frame)
     return {
         frame.requestWizardModal,
@@ -1064,7 +1399,9 @@ end
 function mainFrame:LoadAppearanceSettingsFromDb(db)
     db = db or current_db()
     local appearance = current_appearance_settings(db)
-    local presetKey = tostring(appearance.themePreset or "default")
+    local presetKey = type(themeManager.NormalizePresetKey) == "function"
+        and themeManager.NormalizePresetKey(appearance.themePreset or "generic_wow")
+        or tostring(appearance.themePreset or "generic_wow")
     local shell = ns.modules.mainFrameShell or mainFrameShell
 
     self.appearanceThemePreset = presetKey
@@ -1111,7 +1448,9 @@ end
 function mainFrame:SetThemePreset(presetKey)
     local db = current_db()
     local appearance = current_appearance_settings(db)
-    appearance.themePreset = tostring(presetKey or "default")
+    appearance.themePreset = type(themeManager.NormalizePresetKey) == "function"
+        and themeManager.NormalizePresetKey(presetKey or "generic_wow")
+        or tostring(presetKey or "generic_wow")
     self:LoadAppearanceSettingsFromDb(db)
     refresh_after_appearance_change()
 end
@@ -1261,6 +1600,59 @@ mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
     mainFrame:SaveDefaultMinimumSetting()
 end)
 
+function mainFrame:GetOptionsCanvasPanel()
+    local activeTab = self.optionsActiveTab or "APPEARANCE"
+    if activeTab == "APPEARANCE" then
+        return self.optionsAppearancePanel
+    end
+    if activeTab == "PERMISSIONS" or activeTab == "BLACKLIST" then
+        return self.optionsAuthPanel
+    end
+    if activeTab == "AUTOMATION" then
+        return self.optionsAutomationPanel
+    end
+    if activeTab == "EXPORTS" then
+        return self.optionsExportsPanel
+    end
+    if activeTab == "REQUESTS" then
+        return self.optionsRequestsPanel
+    end
+
+    return self.optionsAppearancePanel
+end
+
+function mainFrame:SetOptionsTab(tabKey)
+    local nextTab = tostring(tabKey or "APPEARANCE")
+    self.optionsActiveTab = nextTab
+
+    set_frame_shown(self.optionsAppearancePanel, nextTab == "APPEARANCE")
+    set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
+    set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")
+    set_frame_shown(self.optionsAutomationPanel, nextTab == "AUTOMATION")
+    set_frame_shown(self.optionsExportsPanel, nextTab == "EXPORTS")
+    set_frame_shown(self.optionsRequestsPanel, nextTab == "REQUESTS")
+    set_frame_shown(self.optionsAuthPanel, nextTab == "PERMISSIONS" or nextTab == "BLACKLIST" or nextTab == "APPEARANCE")
+
+    for _, button in ipairs(self.optionsTabButtons or {}) do
+        apply_button_variant(button, button.key == nextTab and "primary" or "tab")
+    end
+
+    if self.optionsScrollFrame then
+        self.optionsScrollFrame.verticalScroll = 0
+        self.optionsScrollFrame:SetVerticalScroll(0)
+    end
+
+    self:UpdateOptionsCanvasHeight()
+    self:SyncOptionsScrollVisuals()
+    return self.optionsActiveTab
+end
+
+for _, button in ipairs(mainFrame.optionsTabButtons or {}) do
+    button:SetScript("OnClick", function(selfButton)
+        mainFrame:SetOptionsTab(selfButton.key)
+    end)
+end
+
 function mainFrame:ScrollOptionsBy(delta)
     local controller = self.optionsScrollController
     if not controller then
@@ -1280,14 +1672,8 @@ function mainFrame:SetOptionsScrollProgress(progress)
 end
 
 function mainFrame:UpdateOptionsCanvasHeight()
-    local spacing = 16
-    local contentHeight = 0
-    contentHeight = contentHeight + (self.optionsAppearancePanel and (self.optionsAppearancePanel:GetHeight() or 0) or 0)
-    contentHeight = contentHeight + spacing
-    contentHeight = contentHeight + (self.optionsRestockPanel and (self.optionsRestockPanel:GetHeight() or 0) or 0)
-    contentHeight = contentHeight + spacing
-    contentHeight = contentHeight + (self.optionsAuthPanel and (self.optionsAuthPanel:GetHeight() or 0) or 0)
-    contentHeight = contentHeight + 16
+    local contentPanel = self:GetOptionsCanvasPanel()
+    local contentHeight = (contentPanel and (contentPanel:GetHeight() or 0) or 0) + 16
     if self.optionsScrollChild then
         self.optionsScrollChild:SetWidth(math.max(0, (self.optionsScrollFrame and (self.optionsScrollFrame:GetWidth() or 0) or 0) - 4))
         self.optionsScrollChild:SetHeight(contentHeight)
@@ -1322,7 +1708,8 @@ function mainFrame:UpdateOptionsAuthLayout(allowedCount, availableCount)
 
     self.optionsAllowedPermissionPanel:SetHeight(permissionPanelHeight)
     self.optionsAvailablePermissionPanel:SetHeight(permissionPanelHeight)
-    self.optionsAuthPanel:SetHeight(620 + math.max(0, permissionPanelHeight - 118))
+    self.optionsPermissionsPanel:SetHeight(620 + math.max(0, permissionPanelHeight - 118))
+    self.optionsAuthPanel:SetHeight(math.max(self.optionsPermissionsPanel:GetHeight() or 0, self.optionsBlacklistPanel:GetHeight() or 0))
     self:UpdateOptionsCanvasHeight()
 end
 
@@ -1844,7 +2231,7 @@ for index, item in ipairs(mainFrame.navItems) do
     end
     button.navIcon:SetPoint("LEFT", button, "LEFT", 10, 0)
     button.labelText:SetPoint("LEFT", button.navIcon, "RIGHT", 8, 0)
-    button:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPLEFT", 16, -40 - ((index - 1) * 44))
+    button:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPLEFT", 16, -52 - ((index - 1) * 44))
     apply_panel_style(button, item.key == mainFrame.activeView and theme.colors.panelAlt or theme.colors.panel)
     button:SetScript("OnClick", function(self)
         mainFrame:SelectView(self.key)
@@ -1890,12 +2277,13 @@ function mainFrame:ApplyTheme()
     end
     self.topBar:SetSize(topBarWidth, topBarHeight)
     self.content:SetSize(topBarWidth, contentHeight)
-    apply_panel_style(self, theme.colors.background)
-    apply_panel_style(self.sidebar, theme.colors.panel)
-    apply_panel_style(self.topBar, theme.colors.panelAlt)
-    apply_panel_style(self.content, theme.colors.background)
-    apply_panel_style(self.optionsPanel, theme.colors.panel)
-    apply_panel_style(self.optionsViewportFrame, theme.colors.background)
+    apply_surface_variant(self, "shell", theme.colors.background)
+    apply_surface_variant(self.sidebar, "sidebar", theme.colors.panel)
+    apply_surface_variant(self.topBar, "header", theme.colors.panelAlt)
+    apply_surface_variant(self.content, "panel", theme.colors.background)
+    apply_surface_variant(self.optionsPanel, "panel")
+    apply_surface_variant(self.optionsTabBar, "panel")
+    apply_surface_variant(self.optionsViewportFrame, "panel")
     if type(self.optionsScrollBar.SetBackdrop) == "function" then
         self.optionsScrollBar:SetBackdrop(nil)
     end
@@ -1911,9 +2299,14 @@ function mainFrame:ApplyTheme()
     if type(self.optionsScrollChild.SetBackdrop) == "function" then
         self.optionsScrollChild:SetBackdrop(nil)
     end
-    apply_panel_style(self.optionsAppearancePanel, theme.colors.panelAlt)
-    apply_panel_style(self.optionsRestockPanel, theme.colors.panelAlt)
-    apply_panel_style(self.optionsAuthPanel, theme.colors.panelAlt)
+    apply_surface_variant(self.optionsAppearancePanel, "panel-alt")
+    apply_surface_variant(self.optionsRestockPanel, "panel-alt")
+    apply_surface_variant(self.optionsAuthPanel, "panel")
+    apply_surface_variant(self.optionsPermissionsPanel, "panel-alt")
+    apply_surface_variant(self.optionsBlacklistPanel, "panel-alt")
+    apply_surface_variant(self.optionsAutomationPanel, "panel-alt")
+    apply_surface_variant(self.optionsExportsPanel, "panel-alt")
+    apply_surface_variant(self.optionsRequestsPanel, "panel-alt")
     apply_panel_style(self.optionsAuthRankDropdown, theme.colors.panel)
     apply_panel_style(self.optionsAuthRankDropdownBackdrop, theme.colors.background)
     if type(self.optionsAuthRankDropdown.SetBackdropColor) == "function" then
@@ -1922,17 +2315,17 @@ function mainFrame:ApplyTheme()
     if type(self.optionsAuthRankDropdownBackdrop.SetBackdropColor) == "function" then
         self.optionsAuthRankDropdownBackdrop:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
     end
-    apply_panel_style(self.optionsAllowedPermissionPanel, theme.colors.panel)
-    apply_panel_style(self.optionsAvailablePermissionPanel, theme.colors.panel)
-    apply_panel_style(self.optionsBlacklistListPanel, theme.colors.panel)
-    apply_panel_style(self.requestActionsPanel, theme.colors.panel)
-    apply_panel_style(self.requestAdminFilterPanel, theme.colors.panel)
+    apply_surface_variant(self.optionsAllowedPermissionPanel, "panel")
+    apply_surface_variant(self.optionsAvailablePermissionPanel, "panel")
+    apply_surface_variant(self.optionsBlacklistListPanel, "panel")
+    apply_surface_variant(self.requestActionsPanel, "panel")
+    apply_surface_variant(self.requestAdminFilterPanel, "panel")
     if self.requestAdminFilterPanel and self.requestAdminFilterPanel.transparentActions == true and type(self.requestAdminFilterPanel.SetBackdrop) == "function" then
         self.requestAdminFilterPanel:SetBackdrop(nil)
     end
-    apply_panel_style(self.requestWorkflowPanel, theme.colors.panel)
-    apply_panel_style(self.requestWizardModal, theme.colors.panelAlt)
-    apply_panel_style(self.requestDetailsModal, theme.colors.panelAlt)
+    apply_surface_variant(self.requestWorkflowPanel, "panel-alt")
+    apply_surface_variant(self.requestWizardModal, "modal")
+    apply_surface_variant(self.requestDetailsModal, "modal")
     if type(self.requestWizardModal.SetBackdropColor) == "function" then
         self.requestWizardModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
         self.requestWizardModal:SetBackdropColor(0, 0, 0, 1)
@@ -1941,19 +2334,22 @@ function mainFrame:ApplyTheme()
         self.requestDetailsModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
         self.requestDetailsModal:SetBackdropColor(0, 0, 0, 1)
     end
-    apply_panel_style(self.requestCreatePanel, theme.colors.panel)
-    apply_panel_style(self.minimumsPanel, theme.colors.panel)
+    apply_surface_variant(self.requestCreatePanel, "panel")
+    apply_surface_variant(self.minimumsPanel, "panel")
     if self.minimumsPanel.transparentActions == true and type(self.minimumsPanel.SetBackdrop) == "function" then
         self.minimumsPanel:SetBackdrop(nil)
     end
-    apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
-    apply_panel_style(self.minimumDetailsModal, theme.colors.panelAlt)
-    apply_panel_style(self.exportsPanel, theme.colors.panel)
+    apply_surface_variant(self.minimumAddModal, "modal")
+    apply_surface_variant(self.minimumDetailsModal, "modal")
+    apply_surface_variant(self.exportsPanel, "panel")
     if self.exportsPanel and self.exportsPanel.transparentActions == true and type(self.exportsPanel.SetBackdrop) == "function" then
         self.exportsPanel:SetBackdrop(nil)
     end
-    apply_panel_style(self.exportModal, theme.colors.panelAlt)
-    apply_panel_style(self.exportStockedElsewhereModal, theme.colors.panelAlt)
+    for _, card in ipairs(self.exportActionCards or {}) do
+        apply_surface_variant(card, "action-card")
+    end
+    apply_surface_variant(self.exportModal, "modal")
+    apply_surface_variant(self.exportStockedElsewhereModal, "modal")
     apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
     apply_panel_style(self.exportModalScrollChild, theme.colors.background)
     if type(self.exportModalScrollFrame.SetBackdrop) == "function" then
@@ -1962,18 +2358,76 @@ function mainFrame:ApplyTheme()
     if type(self.exportModalScrollChild.SetBackdrop) == "function" then
         self.exportModalScrollChild:SetBackdrop(nil)
     end
-    apply_panel_style(self.tableHeaderFrame, theme.colors.panel)
-    apply_panel_style(self.tableFilterFrame, theme.colors.background)
-    apply_panel_style(self.tableViewportFrame, theme.colors.background)
-    apply_panel_style(self.tableScrollFrame, theme.colors.background)
+    apply_surface_variant(self.tableHeaderFrame, "table-header")
+    apply_surface_variant(self.tableFilterFrame, "table-filter")
+    apply_surface_variant(self.tableViewportFrame, "table-viewport")
+    apply_surface_variant(self.tableScrollFrame, "table-viewport")
+
+    set_label_color(self.titleText, theme.tokens.header)
+    set_label_color(self.subtitleText, theme.tokens.textMuted)
+    set_label_color(self.statusText, theme.tokens.header)
+    set_label_color(self.viewTitle, theme.tokens.header)
+    set_label_color(self.viewSubtitle, theme.tokens.text)
+    set_label_color(self.contentBodyText, theme.tokens.text)
+    set_label_color(self.minimumEmptyStateText, theme.tokens.textMuted)
+    set_label_color(self.sidebarIdentityNameText, theme.tokens.header)
+    set_label_color(self.sidebarIdentityGuildText, theme.tokens.textMuted)
 
     for _, card in ipairs(self.dashboardCards) do
-        apply_panel_style(card, theme.colors.panel)
+        apply_surface_variant(card, "metric-card")
+        set_label_color(card.titleText, theme.tokens.textStrong)
+        set_label_color(card.valueText, theme.tokens.header)
+        set_label_color(card.noteText, theme.tokens.textMuted)
+        set_label_color(card.linesText, theme.tokens.text)
+        if card.iconTexture and type(card.iconTexture.SetVertexColor) == "function" then
+            card.iconTexture:SetVertexColor(1, 1, 1, 1)
+        end
     end
+    if self.dashboardCards[1] then
+        apply_surface_variant(self.dashboardCards[1], "metric-card", { 0.05, 0.12, 0.20, 0.98 })
+    end
+    if self.dashboardCards[2] then
+        apply_surface_variant(self.dashboardCards[2], "metric-card", { 0.15, 0.08, 0.24, 0.98 })
+    end
+    if self.dashboardCards[3] then
+        apply_surface_variant(self.dashboardCards[3], "metric-card", { 0.08, 0.18, 0.11, 0.98 })
+    end
+    if self.dashboardCards[4] then
+        apply_surface_variant(self.dashboardCards[4], "metric-card", { 0.20, 0.08, 0.07, 0.98 })
+    end
+    apply_surface_variant(self.dashboardTopItemsPanel, "panel")
+    apply_surface_variant(self.dashboardRecentActivityPanel, "panel")
+    apply_surface_variant(self.dashboardQuickActionsPanel, "panel")
+    set_label_color(self.dashboardTopItemsTitle, theme.tokens.header)
+    set_label_color(self.dashboardTopItemsText, theme.tokens.text)
+    set_label_color(self.dashboardRecentActivityTitle, theme.tokens.header)
+    set_label_color(self.dashboardRecentActivityText, theme.tokens.text)
+    set_label_color(self.dashboardQuickActionsTitle, theme.tokens.header)
+    apply_surface_variant(self.aboutPanel, "panel-alt")
+    for _, button in ipairs(self.dashboardQuickActionButtons or {}) do
+        apply_button_variant(button, "primary", theme.colors.button)
+        if button.actionIcon and type(button.actionIcon.SetVertexColor) == "function" then
+            button.actionIcon:SetVertexColor(unpack(theme.tokens.header or { 1, 1, 1, 1 }))
+        end
+        set_label_color(button.labelText, theme.tokens.header)
+    end
+    for _, card in ipairs(self.exportActionCards or {}) do
+        set_label_color(card.titleText, theme.tokens.header)
+        set_label_color(card.descriptionText, theme.tokens.textMuted)
+        if card.iconTexture and type(card.iconTexture.SetVertexColor) == "function" then
+            card.iconTexture:SetVertexColor(1, 1, 1, 1)
+        end
+    end
+    set_label_color(self.aboutNameText, theme.tokens.header)
+    set_label_color(self.aboutVersionText, theme.tokens.textStrong)
+    set_label_color(self.aboutAuthorText, theme.tokens.text)
+    set_label_color(self.aboutGuildText, theme.tokens.text)
+    set_label_color(self.aboutDescriptionText, theme.tokens.textMuted)
+    set_label_color(self.aboutSlashHintText, theme.tokens.header)
 
     for index, button in ipairs(self.sidebarButtons) do
         local isActive = button.key == self.activeView
-        apply_panel_style(button, isActive and theme.colors.accent or theme.colors.panel)
+        apply_button_variant(button, "nav", isActive and theme.colors.panelAlt or theme.colors.panel)
         if type(button.SetBackdropBorderColor) == "function" then
             if isActive then
                 button:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
@@ -1987,7 +2441,7 @@ function mainFrame:ApplyTheme()
         if type(button.ClearAllPoints) == "function" then
             button:ClearAllPoints()
         end
-        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -40 - ((index - 1) * navButtonSpacing))
+        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -52 - ((index - 1) * navButtonSpacing))
         if button.navIcon then
             if type(button.navIcon.SetTexture) == "function" then
                 button.navIcon:SetTexture(nav_icon_texture_for(button.key))
@@ -2004,15 +2458,69 @@ function mainFrame:ApplyTheme()
         end
         if button.labelText and type(button.labelText.SetTextColor) == "function" then
             if isActive then
-                button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+                button.labelText:SetTextColor(unpack(theme.tokens.textStrong or theme.colors.accentStrong))
             else
-                button.labelText:SetTextColor(unpack(theme.colors.accentStrong))
+                button.labelText:SetTextColor(unpack(theme.tokens.text or theme.colors.accentStrong))
             end
+        end
+        if button.navIcon and type(button.navIcon.SetVertexColor) == "function" then
+            if isActive then
+                button.navIcon:SetVertexColor(unpack(theme.tokens.header or { 1, 1, 1, 1 }))
+            else
+                button.navIcon:SetVertexColor(unpack(theme.tokens.textMuted or { 1, 1, 1, 1 }))
+            end
+        end
+        if mainFrameShell.SetAccentBar then
+            mainFrameShell.SetAccentBar(button, color_with_alpha(theme.tokens.header or theme.colors.accentStrong, 0.95), isActive)
+        end
+        if mainFrameShell.SetHeaderBand then
+            mainFrameShell.SetHeaderBand(
+                button,
+                color_with_alpha(isActive and (theme.tokens.accentMuted or theme.colors.accent) or (theme.tokens.accentMuted or theme.colors.border), isActive and 0.16 or 0.08),
+                true
+            )
+        end
+        if mainFrameShell.SetGlow then
+            mainFrameShell.SetGlow(button, color_with_alpha(theme.tokens.accent or theme.colors.accent, isActive and 0.08 or 0.0), isActive)
         end
         if compactRequestMode then
             button:Hide()
         else
             button:Show()
+        end
+    end
+
+    apply_surface_variant(self.sidebarIdentityPanel, "panel-alt")
+    self.sidebarIdentityPanel:SetWidth(math.max(40, sidebarWidth - 32))
+    self.sidebarIdentityPanel:SetPoint("BOTTOMLEFT", self.sidebar, "BOTTOMLEFT", 16, 16)
+    if self.sidebarCrestTexture then
+        if type(self.sidebarCrestTexture.SetVertexColor) == "function" then
+            self.sidebarCrestTexture:SetVertexColor(unpack(theme.tokens.header or { 1, 1, 1, 1 }))
+        end
+        if self.collapsedSidebar then
+            self.sidebarCrestTexture:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 12, -12)
+        else
+            self.sidebarCrestTexture:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -12)
+        end
+    end
+    if self.collapsedSidebar then
+        self.sidebarIdentityPanel:SetHeight(44)
+        self.sidebarIdentityNameText:Hide()
+        self.sidebarIdentityGuildText:Hide()
+    else
+        self.sidebarIdentityPanel:SetHeight(76)
+        self.sidebarIdentityNameText:Show()
+        self.sidebarIdentityGuildText:Show()
+    end
+    if compactRequestMode then
+        self.sidebarIdentityPanel:Hide()
+        if self.sidebarCrestTexture then
+            self.sidebarCrestTexture:Hide()
+        end
+    else
+        self.sidebarIdentityPanel:Show()
+        if self.sidebarCrestTexture then
+            self.sidebarCrestTexture:Show()
         end
     end
 
@@ -2063,20 +2571,29 @@ function mainFrame:ApplyTheme()
     else
         self.optionsPanel:Hide()
     end
-    apply_panel_style(self.closeButton, theme.colors.panel)
-    apply_panel_style(self.scanButton, theme.colors.panelAlt)
-    apply_panel_style(self.collapseButton, theme.colors.panel)
+    apply_button_variant(self.closeButton, "secondary")
+    apply_button_variant(self.scanButton, "primary")
+    apply_button_variant(self.collapseButton, "icon")
     for presetKey, button in pairs(self.optionsThemeButtons or {}) do
-        apply_panel_style(button, self.appearanceThemePreset == presetKey and theme.colors.accent or theme.colors.panel)
+        apply_button_variant(button, self.appearanceThemePreset == presetKey and "primary" or "tab", self.appearanceThemePreset == presetKey and theme.colors.panelAlt or theme.colors.panel)
     end
-    apply_panel_style(self.optionsShellScaleDecreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsShellScaleIncreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsTableDensityDecreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsTableDensityIncreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsShellOpacityDecreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsShellOpacityIncreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsModalOpacityDecreaseButton, theme.colors.panel)
-    apply_panel_style(self.optionsModalOpacityIncreaseButton, theme.colors.panel)
+    apply_button_variant(self.optionsShellScaleDecreaseButton, "icon")
+    apply_button_variant(self.optionsShellScaleIncreaseButton, "icon")
+    apply_button_variant(self.optionsTableDensityDecreaseButton, "icon")
+    apply_button_variant(self.optionsTableDensityIncreaseButton, "icon")
+    apply_button_variant(self.optionsShellOpacityDecreaseButton, "icon")
+    apply_button_variant(self.optionsShellOpacityIncreaseButton, "icon")
+    apply_button_variant(self.optionsModalOpacityDecreaseButton, "icon")
+    apply_button_variant(self.optionsModalOpacityIncreaseButton, "icon")
+    for _, button in ipairs(self.optionsTabButtons or {}) do
+        apply_button_variant(button, button.key == self.optionsActiveTab and "primary" or "tab")
+        if button.labelText then
+            set_label_color(
+                button.labelText,
+                button.key == self.optionsActiveTab and (theme.tokens.buttonText or theme.tokens.textStrong) or (theme.tokens.text or theme.colors.accentStrong)
+            )
+        end
+    end
     for _, slider in ipairs({
         self.optionsShellScaleSlider,
         self.optionsTableDensitySlider,
@@ -2084,79 +2601,99 @@ function mainFrame:ApplyTheme()
         self.optionsModalOpacitySlider,
     }) do
         if slider then
-            apply_panel_style(slider.track, theme.colors.panel)
-            apply_panel_style(slider.fill, theme.colors.accent)
-            apply_panel_style(slider.thumb, theme.colors.accentStrong)
+            apply_surface_variant(slider.track, "input")
+            apply_surface_variant(slider.fill, "panel-alt", theme.tokens.accentMuted or theme.colors.accent)
+            apply_surface_variant(slider.thumb, "panel-alt", theme.tokens.header or theme.colors.accentStrong)
             if slider.thumbCore then
-                apply_panel_style(slider.thumbCore, theme.colors.background)
+                apply_surface_variant(slider.thumbCore, "input", theme.tokens.bg or theme.colors.background)
+            end
+            if slider.trackBase and type(slider.trackBase.SetColorTexture) == "function" then
+                slider.trackBase:SetColorTexture(unpack(theme.tokens.bgAlt or { 0.08, 0.09, 0.11, 0.95 }))
+            end
+            if slider.trackRidge and type(slider.trackRidge.SetColorTexture) == "function" then
+                slider.trackRidge:SetColorTexture(unpack(color_with_alpha(theme.tokens.borderSoft or theme.colors.border, 0.22)))
+            end
+            if slider.fillGlow and type(slider.fillGlow.SetColorTexture) == "function" then
+                slider.fillGlow:SetColorTexture(unpack(color_with_alpha(theme.tokens.accent or theme.colors.accent, 0.34)))
+            end
+            if slider.thumbGlow and type(slider.thumbGlow.SetColorTexture) == "function" then
+                slider.thumbGlow:SetColorTexture(unpack(color_with_alpha(theme.tokens.accent or theme.colors.accent, 0.08)))
             end
             if type(slider.track.SetBackdropColor) == "function" then
-                slider.track:SetBackdropColor(0.08, 0.09, 0.11, 0.95)
+                slider.track:SetBackdropColor(0, 0, 0, 0)
             end
             if type(slider.fill.SetBackdropColor) == "function" then
-                slider.fill:SetBackdropColor(unpack(theme.colors.accent))
+                slider.fill:SetBackdropColor(0, 0, 0, 0)
             end
             if type(slider.thumb.SetBackdropColor) == "function" then
-                slider.thumb:SetBackdropColor(unpack(theme.colors.accentStrong))
+                slider.thumb:SetBackdropColor(0, 0, 0, 0)
             end
             if slider.thumbCore and type(slider.thumbCore.SetBackdropColor) == "function" then
-                slider.thumbCore:SetBackdropColor(0.02, 0.03, 0.05, 0.95)
+                slider.thumbCore:SetBackdropColor(0, 0, 0, 0)
             end
         end
     end
-    apply_panel_style(self.requestApproveButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestRejectButton, theme.colors.panel)
-    apply_panel_style(self.requestFulfillButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestReopenButton, theme.colors.panel)
-    apply_panel_style(self.requestCreateButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestWizardBackButton, theme.colors.panel)
-    apply_panel_style(self.requestWizardNextButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestWizardSubmitButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestWizardCancelButton, theme.colors.panel)
-    apply_panel_style(self.requestDetailsApproveButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestDetailsRejectButton, theme.colors.panel)
-    apply_panel_style(self.requestDetailsFulfillButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestDetailsReopenButton, theme.colors.panel)
-    apply_panel_style(self.requestDetailsCancelRequestButton, theme.colors.panel)
-    apply_panel_style(self.requestDetailsDeleteButton, theme.colors.panelAlt)
-    apply_panel_style(self.requestDetailsCloseButton, theme.colors.panel)
-    apply_panel_style(self.requestDetailsBankTabDropdownButton, theme.colors.panel)
+    apply_button_variant(self.requestApproveButton, "primary")
+    apply_button_variant(self.requestRejectButton, "secondary")
+    apply_button_variant(self.requestFulfillButton, "primary")
+    apply_button_variant(self.requestReopenButton, "secondary")
+    apply_button_variant(self.requestCreateButton, "primary")
+    apply_button_variant(self.requestWorkflowCreateButton, "primary")
+    apply_surface_variant(self.requestWizardProgressPanel, "panel-alt")
+    apply_surface_variant(self.requestWizardPrimaryPanel, "panel")
+    apply_surface_variant(self.requestWizardPreviewPanel, "panel-alt")
+    apply_button_variant(self.requestWizardBackButton, "secondary")
+    apply_button_variant(self.requestWizardNextButton, "primary")
+    apply_button_variant(self.requestWizardSubmitButton, "primary")
+    apply_button_variant(self.requestWizardCancelButton, "secondary")
+    apply_button_variant(self.requestCreateQuantityDecreaseButton, "secondary")
+    apply_button_variant(self.requestCreateQuantityIncreaseButton, "primary")
+    apply_button_variant(self.requestDetailsApproveButton, "primary")
+    apply_button_variant(self.requestDetailsRejectButton, "secondary")
+    apply_button_variant(self.requestDetailsFulfillButton, "primary")
+    apply_button_variant(self.requestDetailsReopenButton, "secondary")
+    apply_button_variant(self.requestDetailsCancelRequestButton, "secondary")
+    apply_button_variant(self.requestDetailsDeleteButton, "danger")
+    apply_button_variant(self.requestDetailsCloseButton, "secondary")
+    apply_button_variant(self.requestDetailsBankTabDropdownButton, "secondary")
     apply_panel_style(self.requestDetailsBankTabDropdownPanel, theme.colors.panelAlt)
-    apply_panel_style(self.requestAdminAddButton, theme.colors.panel)
-    apply_panel_style(self.requestAdminFilterAllButton, theme.colors.panel)
-    apply_panel_style(self.requestAdminFilterPendingApprovalButton, theme.colors.panel)
-    apply_panel_style(self.requestAdminFilterPendingFulfillmentButton, theme.colors.panel)
+    apply_button_variant(self.requestAdminAddButton, "secondary")
+    apply_button_variant(self.requestAdminRefreshButton, "secondary")
+    apply_button_variant(self.requestAdminFilterAllButton, "tab")
+    apply_button_variant(self.requestAdminFilterPendingApprovalButton, "tab")
+    apply_button_variant(self.requestAdminFilterPendingFulfillmentButton, "tab")
+    apply_button_variant(self.requestAdminFilterCompletedButton, "tab")
     apply_panel_style(self.requestCreateResultsPanel, theme.colors.background)
-    apply_panel_style(self.minimumRestockToggleButton, theme.colors.panel)
-    apply_panel_style(self.minimumEnabledOnlyButton, theme.colors.panel)
-    apply_panel_style(self.minimumShowAllButton, theme.colors.panel)
-    apply_panel_style(self.minimumManualOnlyToggleButton, theme.colors.panel)
-    apply_panel_style(self.minimumNewButton, theme.colors.panel)
-    apply_panel_style(self.minimumSaveButton, theme.colors.panelAlt)
-    apply_panel_style(self.minimumSaveAllButton, theme.colors.panel)
+    apply_button_variant(self.minimumRestockToggleButton, "secondary")
+    apply_button_variant(self.minimumEnabledOnlyButton, "tab")
+    apply_button_variant(self.minimumShowAllButton, "tab")
+    apply_button_variant(self.minimumManualOnlyToggleButton, "tab")
+    apply_button_variant(self.minimumNewButton, "secondary")
+    apply_button_variant(self.minimumSaveButton, "primary")
+    apply_button_variant(self.minimumSaveAllButton, "secondary")
     apply_panel_style(self.minimumEditorPanel, theme.colors.background)
-    apply_panel_style(self.minimumEditorBankTabDropdownButton, theme.colors.panel)
+    apply_button_variant(self.minimumEditorBankTabDropdownButton, "secondary")
     apply_panel_style(self.minimumEditorBankTabDropdownPanel, theme.colors.panelAlt)
-    apply_panel_style(self.minimumEditorRestockToggleButton, theme.colors.panel)
-    apply_panel_style(self.minimumEditorRemoveButton, theme.colors.panel)
-    apply_panel_style(self.minimumEditorUndoButton, theme.colors.panelAlt)
-    apply_panel_style(self.minimumAddButton, theme.colors.panelAlt)
-    apply_panel_style(self.minimumAddCancelButton, theme.colors.panel)
-    apply_panel_style(self.minimumDetailsRestockToggleButton, theme.colors.panel)
-    apply_panel_style(self.minimumDetailsConfirmButton, theme.colors.panelAlt)
-    apply_panel_style(self.minimumDetailsRemoveButton, theme.colors.panel)
-    apply_panel_style(self.minimumDetailsUndoButton, theme.colors.panel)
-    apply_panel_style(self.minimumDetailsCancelButton, theme.colors.panel)
-    apply_panel_style(self.defaultMinimumSaveButton, theme.colors.panelAlt)
-    apply_panel_style(self.optionsAuthRankButton, theme.colors.panel)
-    apply_panel_style(self.optionsAuthAddPermissionButton, theme.colors.panelAlt)
-    apply_panel_style(self.optionsAuthRemovePermissionButton, theme.colors.panel)
-    apply_panel_style(self.optionsBlacklistAddButton, theme.colors.panelAlt)
-    apply_panel_style(self.optionsBlacklistRemoveButton, theme.colors.panel)
-    apply_panel_style(self.optionsAuthSaveButton, theme.colors.panelAlt)
-    apply_panel_style(self.optionsAuthReadButton, theme.colors.panel)
-    apply_panel_style(self.optionsAuthResetButton, theme.colors.panel)
-    apply_panel_style(self.optionsPolicyStringSelectAllButton, theme.colors.panel)
+    apply_button_variant(self.minimumEditorRestockToggleButton, "secondary")
+    apply_button_variant(self.minimumEditorRemoveButton, "danger")
+    apply_button_variant(self.minimumEditorUndoButton, "secondary")
+    apply_button_variant(self.minimumAddButton, "primary")
+    apply_button_variant(self.minimumAddCancelButton, "secondary")
+    apply_button_variant(self.minimumDetailsRestockToggleButton, "secondary")
+    apply_button_variant(self.minimumDetailsConfirmButton, "primary")
+    apply_button_variant(self.minimumDetailsRemoveButton, "danger")
+    apply_button_variant(self.minimumDetailsUndoButton, "icon")
+    apply_button_variant(self.minimumDetailsCancelButton, "secondary")
+    apply_button_variant(self.defaultMinimumSaveButton, "primary")
+    apply_button_variant(self.optionsAuthRankButton, "secondary")
+    apply_button_variant(self.optionsAuthAddPermissionButton, "primary")
+    apply_button_variant(self.optionsAuthRemovePermissionButton, "secondary")
+    apply_button_variant(self.optionsBlacklistAddButton, "primary")
+    apply_button_variant(self.optionsBlacklistRemoveButton, "secondary")
+    apply_button_variant(self.optionsAuthSaveButton, "primary")
+    apply_button_variant(self.optionsAuthReadButton, "secondary")
+    apply_button_variant(self.optionsAuthResetButton, "secondary")
+    apply_button_variant(self.optionsPolicyStringSelectAllButton, "secondary")
     for _, button in ipairs(self.requestCreateMatchButtons or {}) do
         if button:IsShown() then
             apply_panel_style(button, theme.colors.panel)
@@ -2191,15 +2728,18 @@ function mainFrame:ApplyTheme()
             apply_panel_style(button, theme.colors.panel)
         end
     end
-    apply_panel_style(self.exportPresetSpreadsheetButton, theme.colors.panelAlt)
-    apply_panel_style(self.exportPresetAuctionatorButton, theme.colors.panel)
-    apply_panel_style(self.exportPresetTsmButton, theme.colors.panel)
-    apply_panel_style(self.exportPresetCustomButton, theme.colors.panel)
-    apply_panel_style(self.exportHeaderToggleButton, theme.colors.panel)
-    apply_panel_style(self.exportApplyCustomButton, theme.colors.panelAlt)
-    apply_panel_style(self.exportModalSelectAllButton, theme.colors.panel)
-    apply_panel_style(self.exportModalCopyButton, theme.colors.panelAlt)
-    apply_panel_style(self.exportModalCloseButton, theme.colors.panel)
+    apply_button_variant(self.exportPresetSpreadsheetButton, "primary")
+    apply_button_variant(self.exportPresetAuctionatorButton, "secondary")
+    apply_button_variant(self.exportPresetTsmButton, "secondary")
+    apply_button_variant(self.exportPresetCustomButton, "secondary")
+    apply_button_variant(self.exportHeaderToggleButton, "secondary")
+    apply_button_variant(self.exportApplyCustomButton, "primary")
+    apply_button_variant(self.exportModalSelectAllButton, "secondary")
+    apply_button_variant(self.exportModalCopyButton, "primary")
+    apply_button_variant(self.exportModalCloseButton, "secondary")
+    if type(self.RefreshRequestWizardProgress) == "function" then
+        self:RefreshRequestWizardProgress()
+    end
     if type(self.tableScrollBar.SetBackdrop) == "function" then
         self.tableScrollBar:SetBackdrop(nil)
     end
@@ -2433,6 +2973,9 @@ function mainFrame:RefreshView()
     for _, card in ipairs(self.dashboardCards) do
         card:Hide()
     end
+    self.dashboardTopItemsPanel:Hide()
+    self.dashboardRecentActivityPanel:Hide()
+    self.dashboardQuickActionsPanel:Hide()
     self.tableHeaderFrame:Hide()
     self.tableFilterFrame:Hide()
     self.tableViewportFrame:Hide()
@@ -2458,13 +3001,17 @@ function mainFrame:RefreshView()
     self.optionsPanel:Hide()
     self.contentBodyText:SetText("")
     self.contentBodyText:Hide()
+    self.aboutPanel:Hide()
 
     local showTable = false
     local showCards = false
+    local showDashboardSections = false
     local bodyText = ""
 
     if self.activeView == "DASHBOARD" then
         local cards = dashboardView.BuildCards(db, demandPlan)
+        local topItemLines = dashboardView.BuildTopItemsLines and dashboardView.BuildTopItemsLines(db, demandPlan) or {}
+        local recentActivityLines = dashboardView.BuildRecentActivityLines and dashboardView.BuildRecentActivityLines(db, 5) or {}
         for index, card in ipairs(self.dashboardCards) do
             local model = cards[index]
             if model then
@@ -2477,7 +3024,10 @@ function mainFrame:RefreshView()
                 card:Hide()
             end
         end
+        self.dashboardTopItemsText:SetText(table.concat(topItemLines, "\n"))
+        self.dashboardRecentActivityText:SetText(table.concat(recentActivityLines, "\n"))
         showCards = true
+        showDashboardSections = true
     elseif self.activeView == "INVENTORY" then
         self.cachedInventoryDb = db
         self.cachedInventorySnapshot = currentSnapshot or { items = {} }
@@ -2503,7 +3053,6 @@ function mainFrame:RefreshView()
             self:RefreshMinimumFilterButtons()
         end
         self.minimumManualOnlyToggleButton:Hide()
-        self.minimumSaveAllButton:Hide()
         self.minimumSaveButton.labelText:SetText("Save All")
         self:LoadMinimumSettingsFromDb(db)
         self:ApplyMinimumFilters()
@@ -2548,15 +3097,25 @@ function mainFrame:RefreshView()
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
         self:LoadAuthOptionsFromDb(db)
+        self:SetOptionsTab(self.optionsActiveTab or "APPEARANCE")
         bodyText = ""
     elseif self.activeView == "ABOUT" then
-        bodyText = table.concat({
-            "Author: Zirleficent",
-            "Server: Stormrage",
-            "Guild: Tyrrish Rebellion",
-            string.format("Build: %s", ABOUT_BUILD_STAMP),
-            "Support: Placeholder text.",
-        }, "\n")
+        local characterName = type(_G.UnitName) == "function" and tostring(_G.UnitName("player") or "Unknown") or "Unknown"
+        local realmName = type(_G.GetRealmName) == "function" and tostring(_G.GetRealmName() or "Unknown") or "Unknown"
+        local guildName = "No Guild"
+        if type(_G.GetGuildInfo) == "function" then
+            local resolvedGuild = _G.GetGuildInfo("player") or _G.GetGuildInfo(characterName)
+            if resolvedGuild and resolvedGuild ~= "" then
+                guildName = tostring(resolvedGuild)
+            end
+        end
+        self.aboutNameText:SetText("Guild Bank Manager")
+        self.aboutVersionText:SetText(string.format("Version %s", ABOUT_BUILD_STAMP))
+        self.aboutAuthorText:SetText("Author: Zirleficent")
+        self.aboutGuildText:SetText(string.format("%s - %s (%s)", characterName, guildName, realmName))
+        self.aboutDescriptionText:SetText("Manage your guild's stock, requests, and exports with a polished WoW-native workflow.")
+        self.aboutSlashHintText:SetText("/gbm for slash commands")
+        bodyText = ""
     else
         bodyText = "Detailed content for this view is coming next."
     end
@@ -2567,6 +3126,15 @@ function mainFrame:RefreshView()
         else
             card:Hide()
         end
+    end
+    if showDashboardSections then
+        self.dashboardTopItemsPanel:Show()
+        self.dashboardRecentActivityPanel:Show()
+        self.dashboardQuickActionsPanel:Show()
+    else
+        self.dashboardTopItemsPanel:Hide()
+        self.dashboardRecentActivityPanel:Hide()
+        self.dashboardQuickActionsPanel:Hide()
     end
 
     if type(self.requestActionsPanel.ClearAllPoints) == "function" then
@@ -2619,6 +3187,12 @@ function mainFrame:RefreshView()
         self.contentBodyText:Hide()
     end
 
+    if self.activeView == "ABOUT" then
+        self.aboutPanel:Show()
+    else
+        self.aboutPanel:Hide()
+    end
+
     if self.activeView == "REQUESTS" and not compactRequestMode then
         self.requestActionsPanel:Hide()
         if self.requestAdminFilterPanel then
@@ -2658,6 +3232,7 @@ function mainFrame:RefreshView()
         self.optionsViewportFrame:Show()
         self.optionsScrollFrame.verticalScroll = 0
         self.optionsScrollFrame:SetVerticalScroll(0)
+        self:SetOptionsTab(self.optionsActiveTab or "APPEARANCE")
         self:UpdateOptionsCanvasHeight()
         self:SyncOptionsScrollVisuals()
     else

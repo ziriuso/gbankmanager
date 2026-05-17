@@ -187,13 +187,18 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestAdminFilterPanel:Hide()
 
     mainFrame.requestAdminFilterMode = mainFrame.requestAdminFilterMode or "ALL"
-    mainFrame.requestAdminAddButton = mainFrame.requestAdminAddButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "Add")
+    mainFrame.requestAdminAddButton = mainFrame.requestAdminAddButton or makeButton(mainFrame.requestAdminFilterPanel, 96, 28, "Add Request")
     mainFrame.requestAdminAddButton:SetPoint("BOTTOMLEFT", mainFrame.requestAdminFilterPanel, "BOTTOMLEFT", 16, 30)
+    mainFrame.requestAdminAddButton.labelText:SetText("Add Request")
+    mainFrame.requestAdminRefreshButton = mainFrame.requestAdminRefreshButton or makeButton(mainFrame.requestAdminFilterPanel, 76, 28, "Refresh")
+    mainFrame.requestAdminRefreshButton:SetPoint("LEFT", mainFrame.requestAdminAddButton, "RIGHT", 8, 0)
 
     mainFrame.requestAdminFilterPendingFulfillmentButton = mainFrame.requestAdminFilterPendingFulfillmentButton or makeButton(mainFrame.requestAdminFilterPanel, 152, 28, "Pending Fulfillment")
     mainFrame.requestAdminFilterPendingFulfillmentButton:SetPoint("BOTTOMRIGHT", mainFrame.requestAdminFilterPanel, "BOTTOMRIGHT", -16, 30)
+    mainFrame.requestAdminFilterCompletedButton = mainFrame.requestAdminFilterCompletedButton or makeButton(mainFrame.requestAdminFilterPanel, 92, 28, "Completed")
+    mainFrame.requestAdminFilterCompletedButton:SetPoint("RIGHT", mainFrame.requestAdminFilterPendingFulfillmentButton, "LEFT", -8, 0)
     mainFrame.requestAdminFilterPendingApprovalButton = mainFrame.requestAdminFilterPendingApprovalButton or makeButton(mainFrame.requestAdminFilterPanel, 134, 28, "Pending Approval")
-    mainFrame.requestAdminFilterPendingApprovalButton:SetPoint("RIGHT", mainFrame.requestAdminFilterPendingFulfillmentButton, "LEFT", -8, 0)
+    mainFrame.requestAdminFilterPendingApprovalButton:SetPoint("RIGHT", mainFrame.requestAdminFilterCompletedButton, "LEFT", -8, 0)
     mainFrame.requestAdminFilterAllButton = mainFrame.requestAdminFilterAllButton or makeButton(mainFrame.requestAdminFilterPanel, 64, 28, "All")
     mainFrame.requestAdminFilterAllButton:SetPoint("RIGHT", mainFrame.requestAdminFilterPendingApprovalButton, "LEFT", -8, 0)
 
@@ -220,12 +225,13 @@ function mainRequestsController.Attach(mainFrame, options)
         set_filter_button_visual(self.requestAdminFilterAllButton, self.requestAdminFilterMode == "ALL")
         set_filter_button_visual(self.requestAdminFilterPendingApprovalButton, self.requestAdminFilterMode == "PENDING_APPROVAL")
         set_filter_button_visual(self.requestAdminFilterPendingFulfillmentButton, self.requestAdminFilterMode == "PENDING_FULFILLMENT")
+        set_filter_button_visual(self.requestAdminFilterCompletedButton, self.requestAdminFilterMode == "COMPLETED")
     end
 
     mainFrame.requestWorkflowPanel = mainFrame.requestWorkflowPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.requestWorkflowPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.requestWorkflowPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.requestWorkflowPanel:SetHeight(72)
+    mainFrame.requestWorkflowPanel:SetHeight(96)
     applyPanelStyle(mainFrame.requestWorkflowPanel, theme.colors.panel)
     mainFrame.requestWorkflowPanel:Hide()
 
@@ -235,11 +241,14 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestWorkflowHint = mainFrame.requestWorkflowHint or makeLabel(mainFrame.requestWorkflowPanel, "Track your request statuses or start a new request.", "GameFontHighlightSmall")
     mainFrame.requestWorkflowHint:SetPoint("TOPLEFT", mainFrame.requestWorkflowTitle, "BOTTOMLEFT", 0, -6)
 
-    mainFrame.requestWorkflowCreateButton = mainFrame.requestWorkflowCreateButton or makeButton(mainFrame.requestWorkflowPanel, 104, 28, "New Request")
+    mainFrame.requestWorkflowSummaryText = mainFrame.requestWorkflowSummaryText or makeLabel(mainFrame.requestWorkflowPanel, "A guided four-step wizard keeps item choice, quantity, bank tab, and review tidy.", "GameFontNormalSmall")
+    mainFrame.requestWorkflowSummaryText:SetPoint("TOPLEFT", mainFrame.requestWorkflowHint, "BOTTOMLEFT", 0, -6)
+
+    mainFrame.requestWorkflowCreateButton = mainFrame.requestWorkflowCreateButton or makeButton(mainFrame.requestWorkflowPanel, 118, 30, "New Request")
     mainFrame.requestWorkflowCreateButton:SetPoint("RIGHT", mainFrame.requestWorkflowPanel, "RIGHT", -16, 0)
 
     mainFrame.requestWizardModal = mainFrame.requestWizardModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
-    mainFrame.requestWizardModal:SetSize(500, 300)
+    mainFrame.requestWizardModal:SetSize(748, 430)
     mainFrame.requestWizardModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
     mainFrame.requestWizardModal.frameStrata = "FULLSCREEN_DIALOG"
     if type(mainFrame.requestWizardModal.SetFrameStrata) == "function" then
@@ -262,13 +271,83 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestWizardTitle = mainFrame.requestWizardTitle or makeLabel(mainFrame.requestWizardModal, "New Request", "GameFontHighlight")
     mainFrame.requestWizardTitle:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 16, -16)
 
-    mainFrame.requestWizardStepText = mainFrame.requestWizardStepText or makeLabel(mainFrame.requestWizardModal, "Step 1 of 3: Choose Item", "GameFontHighlightSmall")
+    mainFrame.requestWizardStepText = mainFrame.requestWizardStepText or makeLabel(mainFrame.requestWizardModal, "Step 1 of 4: Choose Item", "GameFontHighlightSmall")
     mainFrame.requestWizardStepText:SetPoint("TOPLEFT", mainFrame.requestWizardTitle, "BOTTOMLEFT", 0, -8)
 
-    mainFrame.requestWizardStatusText = mainFrame.requestWizardStatusText or makeLabel(mainFrame.requestWizardModal, "Search for an item, then continue to quantity and review.", "GameFontNormal")
+    mainFrame.requestWizardStatusText = mainFrame.requestWizardStatusText or makeLabel(mainFrame.requestWizardModal, "Search for an item, then continue through quantity, bank tab, and review.", "GameFontNormal")
     mainFrame.requestWizardStatusText:SetPoint("TOPLEFT", mainFrame.requestWizardStepText, "BOTTOMLEFT", 0, -12)
     if type(mainFrame.requestWizardStatusText.SetWidth) == "function" then
-        mainFrame.requestWizardStatusText:SetWidth(452)
+        mainFrame.requestWizardStatusText:SetWidth(704)
+    end
+
+    mainFrame.requestWizardProgressPanel = mainFrame.requestWizardProgressPanel or _G.CreateFrame("Frame", nil, mainFrame.requestWizardModal, "BackdropTemplate")
+    mainFrame.requestWizardProgressPanel:SetPoint("TOPLEFT", mainFrame.requestWizardStatusText, "BOTTOMLEFT", 0, -12)
+    mainFrame.requestWizardProgressPanel:SetSize(716, 50)
+    applyPanelStyle(mainFrame.requestWizardProgressPanel, theme.colors.background)
+
+    mainFrame.requestWizardProgressCards = mainFrame.requestWizardProgressCards or {}
+    local wizardSteps = {
+        { title = "Choose Item", detail = "Pick the item" },
+        { title = "Set Quantity", detail = "How much to stock" },
+        { title = "Choose Bank Tab", detail = "Where it belongs" },
+        { title = "Confirm Request", detail = "Review and submit" },
+    }
+    for index, stepInfo in ipairs(wizardSteps) do
+        local card = mainFrame.requestWizardProgressCards[index] or _G.CreateFrame("Frame", nil, mainFrame.requestWizardProgressPanel, "BackdropTemplate")
+        card:SetSize(172, 50)
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT", mainFrame.requestWizardProgressPanel, "TOPLEFT", (index - 1) * 180, 0)
+        applyPanelStyle(card, theme.colors.panel)
+        card.gbmWizardStep = index
+        card.numberText = card.numberText or makeLabel(card, tostring(index), "GameFontHighlight")
+        card.numberText:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -8)
+        card.titleText = card.titleText or makeLabel(card, stepInfo.title, "GameFontHighlightSmall")
+        card.titleText:SetPoint("TOPLEFT", card.numberText, "TOPRIGHT", 8, 0)
+        card.detailText = card.detailText or makeLabel(card, stepInfo.detail, "GameFontNormalSmall")
+        card.detailText:SetPoint("TOPLEFT", card.titleText, "BOTTOMLEFT", 0, -4)
+        card.titleText:SetText(stepInfo.title)
+        card.detailText:SetText(stepInfo.detail)
+        mainFrame.requestWizardProgressCards[index] = card
+    end
+
+    mainFrame.requestWizardPrimaryPanel = mainFrame.requestWizardPrimaryPanel or _G.CreateFrame("Frame", nil, mainFrame.requestWizardModal, "BackdropTemplate")
+    mainFrame.requestWizardPrimaryPanel:SetPoint("TOPLEFT", mainFrame.requestWizardProgressPanel, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPrimaryPanel:SetSize(716, 282)
+    applyPanelStyle(mainFrame.requestWizardPrimaryPanel, theme.colors.panel)
+
+    mainFrame.requestWizardPreviewPanel = mainFrame.requestWizardPreviewPanel or _G.CreateFrame("Frame", nil, mainFrame.requestWizardModal, "BackdropTemplate")
+    mainFrame.requestWizardPreviewPanel:SetPoint("TOPRIGHT", mainFrame.requestWizardPrimaryPanel, "TOPRIGHT", 0, 0)
+    mainFrame.requestWizardPreviewPanel:SetSize(232, 282)
+    applyPanelStyle(mainFrame.requestWizardPreviewPanel, theme.colors.panelAlt)
+    mainFrame.requestWizardPreviewPanel:Hide()
+
+    mainFrame.requestWizardPreviewTitle = mainFrame.requestWizardPreviewTitle or makeLabel(mainFrame.requestWizardPreviewPanel, "Request Preview", "GameFontHighlight")
+    mainFrame.requestWizardPreviewTitle:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewPanel, "TOPLEFT", 16, -16)
+    mainFrame.requestWizardPreviewItemText = mainFrame.requestWizardPreviewItemText or makeLabel(mainFrame.requestWizardPreviewPanel, "No item selected.", "GameFontHighlightSmall")
+    mainFrame.requestWizardPreviewItemText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewTitle, "BOTTOMLEFT", 0, -12)
+    if type(mainFrame.requestWizardPreviewItemText.SetWidth) == "function" then
+        mainFrame.requestWizardPreviewItemText:SetWidth(196)
+    end
+    mainFrame.requestWizardPreviewQualityText = mainFrame.requestWizardPreviewQualityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
+    mainFrame.requestWizardPreviewQualityText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewItemText, "BOTTOMLEFT", 0, -10)
+    mainFrame.requestWizardPreviewSuggestedMinimumLabel = mainFrame.requestWizardPreviewSuggestedMinimumLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Suggested Minimum", "GameFontHighlightSmall")
+    mainFrame.requestWizardPreviewSuggestedMinimumLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewQualityText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPreviewSuggestedMinimumText = mainFrame.requestWizardPreviewSuggestedMinimumText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
+    mainFrame.requestWizardPreviewSuggestedMinimumText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewSuggestedMinimumLabel, "BOTTOMLEFT", 0, -4)
+    mainFrame.requestWizardPreviewRequestedQuantityLabel = mainFrame.requestWizardPreviewRequestedQuantityLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Requested Quantity", "GameFontHighlightSmall")
+    mainFrame.requestWizardPreviewRequestedQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewSuggestedMinimumText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPreviewRequestedQuantityText = mainFrame.requestWizardPreviewRequestedQuantityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
+    mainFrame.requestWizardPreviewRequestedQuantityText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewRequestedQuantityLabel, "BOTTOMLEFT", 0, -4)
+    mainFrame.requestWizardPreviewBankTabLabel = mainFrame.requestWizardPreviewBankTabLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Bank Tab", "GameFontHighlightSmall")
+    mainFrame.requestWizardPreviewBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewRequestedQuantityText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPreviewBankTabText = mainFrame.requestWizardPreviewBankTabText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
+    mainFrame.requestWizardPreviewBankTabText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewBankTabLabel, "BOTTOMLEFT", 0, -4)
+    mainFrame.requestWizardPreviewReasonLabel = mainFrame.requestWizardPreviewReasonLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Reason", "GameFontHighlightSmall")
+    mainFrame.requestWizardPreviewReasonLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewBankTabText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPreviewReasonText = mainFrame.requestWizardPreviewReasonText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormalSmall")
+    mainFrame.requestWizardPreviewReasonText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewReasonLabel, "BOTTOMLEFT", 0, -4)
+    if type(mainFrame.requestWizardPreviewReasonText.SetWidth) == "function" then
+        mainFrame.requestWizardPreviewReasonText:SetWidth(196)
     end
 
     mainFrame.requestWizardCancelButton = mainFrame.requestWizardCancelButton or makeButton(mainFrame.requestWizardModal, 72, 28, "Cancel")
@@ -307,13 +386,21 @@ function mainRequestsController.Attach(mainFrame, options)
     end
     mainFrame.requestWizardReviewQuantityText:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 198, -152)
 
+    mainFrame.requestWizardReviewBankTabLabel = mainFrame.requestWizardReviewBankTabLabel or makeLabel(mainFrame.requestWizardModal, "Bank Tab", "GameFontHighlightSmall")
+    mainFrame.requestWizardReviewBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestWizardReviewQuantityLabel, "BOTTOMLEFT", 0, -12)
+    mainFrame.requestWizardReviewBankTabText = mainFrame.requestWizardReviewBankTabText or makeLabel(mainFrame.requestWizardModal, "", "GameFontNormal")
+    if type(mainFrame.requestWizardReviewBankTabText.ClearAllPoints) == "function" then
+        mainFrame.requestWizardReviewBankTabText:ClearAllPoints()
+    end
+    mainFrame.requestWizardReviewBankTabText:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 198, -176)
+
     mainFrame.requestWizardReviewReasonLabel = mainFrame.requestWizardReviewReasonLabel or makeLabel(mainFrame.requestWizardModal, "Reason", "GameFontHighlightSmall")
-    mainFrame.requestWizardReviewReasonLabel:SetPoint("TOPLEFT", mainFrame.requestWizardReviewQuantityLabel, "BOTTOMLEFT", 0, -12)
+    mainFrame.requestWizardReviewReasonLabel:SetPoint("TOPLEFT", mainFrame.requestWizardReviewBankTabLabel, "BOTTOMLEFT", 0, -12)
     mainFrame.requestWizardReviewReasonText = mainFrame.requestWizardReviewReasonText or makeLabel(mainFrame.requestWizardModal, "", "GameFontNormal")
     if type(mainFrame.requestWizardReviewReasonText.ClearAllPoints) == "function" then
         mainFrame.requestWizardReviewReasonText:ClearAllPoints()
     end
-    mainFrame.requestWizardReviewReasonText:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 198, -176)
+    mainFrame.requestWizardReviewReasonText:SetPoint("TOPLEFT", mainFrame.requestWizardModal, "TOPLEFT", 198, -200)
     if type(mainFrame.requestWizardReviewReasonText.SetWidth) == "function" then
         mainFrame.requestWizardReviewReasonText:SetWidth(300)
     end
@@ -509,12 +596,15 @@ function mainRequestsController.Attach(mainFrame, options)
                     mainFrame:RefreshRequestEditorState()
                 end
             end
+            if type(mainFrame.RefreshRequestWizardPreview) == "function" then
+                mainFrame:RefreshRequestWizardPreview()
+            end
             if type(mainFrame.UpdateRequestCreateButtonState) == "function" then
                 mainFrame:UpdateRequestCreateButtonState()
             end
         end,
     })
-    mainFrame.requestCreateSearchSelector:SetPoint("TOPLEFT", mainFrame.requestWizardStatusText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestCreateSearchSelector:SetPoint("TOPLEFT", mainFrame.requestWizardPrimaryPanel, "TOPLEFT", 18, -18)
 
     mainFrame.requestCreateItemIDLabel = mainFrame.requestCreateSearchSelector.itemIDLabel
     mainFrame.requestCreateItemNameLabel = mainFrame.requestCreateSearchSelector.itemNameLabel
@@ -528,16 +618,40 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestCreateMatchButtons = mainFrame.requestCreateSearchSelector.matchButtons
 
     mainFrame.requestCreateQuantityLabel = mainFrame.requestCreateQuantityLabel or makeLabel(mainFrame.requestWizardModal, "Quantity", "GameFontHighlightSmall")
-    mainFrame.requestCreateQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardStatusText, "BOTTOMLEFT", 0, -22)
+    mainFrame.requestCreateQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPrimaryPanel, "TOPLEFT", 18, -22)
 
     mainFrame.requestCreateNoteLabel = mainFrame.requestCreateNoteLabel or makeLabel(mainFrame.requestWizardModal, "Reason for Request", "GameFontHighlightSmall")
-    mainFrame.requestCreateNoteLabel:SetPoint("LEFT", mainFrame.requestCreateQuantityLabel, "RIGHT", 92, 0)
+    mainFrame.requestCreateNoteLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPrimaryPanel, "TOPLEFT", 18, -98)
 
-    mainFrame.requestCreateQuantityInput = mainFrame.requestCreateQuantityInput or makeInput(mainFrame.requestWizardModal, 72, 22)
+    mainFrame.requestCreateQuantityInput = mainFrame.requestCreateQuantityInput or makeInput(mainFrame.requestWizardModal, 76, 22)
     mainFrame.requestCreateQuantityInput:SetPoint("TOPLEFT", mainFrame.requestCreateQuantityLabel, "BOTTOMLEFT", 0, -6)
 
-    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardModal, 296, 22)
+    mainFrame.requestCreateQuantityDecreaseButton = mainFrame.requestCreateQuantityDecreaseButton or makeButton(mainFrame.requestWizardModal, 24, 22, "-")
+    mainFrame.requestCreateQuantityDecreaseButton:SetPoint("LEFT", mainFrame.requestCreateQuantityInput, "RIGHT", 8, 0)
+    mainFrame.requestCreateQuantityIncreaseButton = mainFrame.requestCreateQuantityIncreaseButton or makeButton(mainFrame.requestWizardModal, 24, 22, "+")
+    mainFrame.requestCreateQuantityIncreaseButton:SetPoint("LEFT", mainFrame.requestCreateQuantityDecreaseButton, "RIGHT", 6, 0)
+
+    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardModal, 420, 22)
     mainFrame.requestCreateNoteInput:SetPoint("TOPLEFT", mainFrame.requestCreateNoteLabel, "BOTTOMLEFT", 0, -6)
+
+    mainFrame.requestWizardBankTabLabel = mainFrame.requestWizardBankTabLabel or makeLabel(mainFrame.requestWizardModal, "Preferred Bank Tab", "GameFontHighlightSmall")
+    mainFrame.requestWizardBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPrimaryPanel, "TOPLEFT", 18, -22)
+
+    mainFrame.requestWizardBankTabDropdownButton = mainFrame.requestWizardBankTabDropdownButton or makeButton(mainFrame.requestWizardModal, 220, 24, "Select Bank Tab")
+    mainFrame.requestWizardBankTabDropdownButton:SetPoint("TOPLEFT", mainFrame.requestWizardBankTabLabel, "BOTTOMLEFT", 0, -8)
+
+    mainFrame.requestWizardBankTabHintText = mainFrame.requestWizardBankTabHintText or makeLabel(mainFrame.requestWizardModal, "Choose the destination tab officers should use when fulfilling this request.", "GameFontNormalSmall")
+    mainFrame.requestWizardBankTabHintText:SetPoint("TOPLEFT", mainFrame.requestWizardBankTabDropdownButton, "BOTTOMLEFT", 0, -12)
+    if type(mainFrame.requestWizardBankTabHintText.SetWidth) == "function" then
+        mainFrame.requestWizardBankTabHintText:SetWidth(430)
+    end
+
+    mainFrame.requestWizardBankTabDropdownPanel = mainFrame.requestWizardBankTabDropdownPanel or _G.CreateFrame("Frame", nil, mainFrame.requestWizardModal, "BackdropTemplate")
+    mainFrame.requestWizardBankTabDropdownPanel:EnableMouse(true)
+    applyPanelStyle(mainFrame.requestWizardBankTabDropdownPanel, theme.colors.panelAlt)
+    mainFrame.requestWizardBankTabDropdownPanel:Hide()
+
+    mainFrame.requestWizardBankTabOptions = mainFrame.requestWizardBankTabOptions or {}
 
     mainFrame.requestCreateButton = mainFrame.requestCreateButton or makeButton(mainFrame.requestCreatePanel, 68, 28, "Create")
     mainFrame.requestCreateButton:SetPoint("LEFT", mainFrame.requestCreateNoteInput, "RIGHT", 12, 0)
@@ -554,40 +668,170 @@ function mainRequestsController.Attach(mainFrame, options)
         return nil
     end
 
+    function mainFrame:ConfigureRequestWizardBankTabOptions()
+        local selectedItem = self:GetConfirmedRequestCreateItem() or {}
+        local tabOptions = type(self.GetKnownMinimumBankTabs) == "function" and self:GetKnownMinimumBankTabs(selectedItem) or {}
+        self.requestRequestedBankTab = tostring(self.requestRequestedBankTab or "")
+
+        self.requestWizardBankTabDropdownButton.labelText:SetText(self.requestRequestedBankTab ~= "" and self.requestRequestedBankTab or "Select Bank Tab")
+        self.requestWizardBankTabDropdownPanel:ClearAllPoints()
+        self.requestWizardBankTabDropdownPanel:SetPoint("TOPLEFT", self.requestWizardBankTabDropdownButton, "BOTTOMLEFT", 0, -2)
+        self.requestWizardBankTabDropdownPanel:SetSize(220, math.max(28, (#tabOptions * 24) + 8))
+
+        for index, tabName in ipairs(tabOptions) do
+            local option = self.requestWizardBankTabOptions[index] or makeButton(self.requestWizardBankTabDropdownPanel, 212, 22, "")
+            option.value = tabName
+            option:ClearAllPoints()
+            option:SetPoint("TOPLEFT", self.requestWizardBankTabDropdownPanel, "TOPLEFT", 4, -4 - ((index - 1) * 24))
+            option:SetSize(212, 22)
+            option.labelText:SetText(tabName)
+            option:SetScript("OnClick", function()
+                self.requestRequestedBankTab = tabName
+                self.requestWizardBankTabDropdownButton.labelText:SetText(tabName)
+                self.requestWizardBankTabDropdownPanel:Hide()
+                if type(self.RefreshRequestWizardPreview) == "function" then
+                    self:RefreshRequestWizardPreview()
+                end
+                self:UpdateRequestCreateButtonState()
+            end)
+            option:Show()
+            self.requestWizardBankTabOptions[index] = option
+        end
+
+        for index = #tabOptions + 1, #(self.requestWizardBankTabOptions or {}) do
+            self.requestWizardBankTabOptions[index]:Hide()
+        end
+
+        self.requestWizardBankTabDropdownButton:SetEnabled(#tabOptions > 0)
+        self.requestWizardBankTabDropdownButton:SetScript("OnClick", function()
+            if self.requestWizardBankTabDropdownPanel:IsShown() then
+                self.requestWizardBankTabDropdownPanel:Hide()
+            else
+                self.requestWizardBankTabDropdownPanel:Show()
+            end
+        end)
+        self.requestWizardBankTabDropdownPanel:Hide()
+    end
+
+    function mainFrame:GetSuggestedRequestQuantity(item)
+        item = item or self:GetConfirmedRequestCreateItem()
+        local itemID = tonumber(type(item) == "table" and item.itemID or nil)
+        if not itemID then
+            return nil
+        end
+
+        local db = current_db()
+        local best = nil
+        for _, rule in ipairs((db or {}).minimums or {}) do
+            if tonumber(rule.itemID) == itemID then
+                local quantity = tonumber(rule.quantity or rule.minimum or 0)
+                if quantity and quantity > 0 then
+                    best = math.max(best or 0, quantity)
+                end
+            end
+        end
+
+        if best and best > 0 then
+            return best
+        end
+
+        local minimumSettings = (((db or {}).ui or {}).minimums or {})
+        local defaultQuantity = tonumber(minimumSettings.defaultQuantity or ((db or {}).auth or {}).restockDefault or 0)
+        if defaultQuantity and defaultQuantity > 0 then
+            return defaultQuantity
+        end
+
+        return nil
+    end
+
+    function mainFrame:RefreshRequestWizardProgress()
+        for index, card in ipairs(self.requestWizardProgressCards or {}) do
+            local isActive = index == (self.requestWizardStep or 1)
+            card.gbmWizardActive = isActive
+            applyPanelStyle(card, isActive and theme.colors.accent or theme.colors.panel)
+            if type(card.SetBackdropBorderColor) == "function" then
+                if isActive then
+                    card:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
+                else
+                    card:SetBackdropBorderColor(unpack(theme.colors.border))
+                end
+            end
+        end
+    end
+
+    function mainFrame:RefreshRequestWizardPreview()
+        local item = self:GetConfirmedRequestCreateItem() or {}
+        local suggestedQuantity = self:GetSuggestedRequestQuantity(item)
+        local requestedQuantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
+        local requestedBankTab = tostring(self.requestRequestedBankTab or "")
+        local note = tostring(self.requestCreateNoteInput:GetText() or "")
+
+        self.requestWizardPreviewItemText:SetText(tostring(item.name or item.itemName or "No item selected."))
+        self.requestWizardPreviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon))
+        self.requestWizardPreviewSuggestedMinimumText:SetText(suggestedQuantity and tostring(suggestedQuantity) or "-")
+        self.requestWizardPreviewRequestedQuantityText:SetText(requestedQuantity and tostring(requestedQuantity) or "-")
+        self.requestWizardPreviewBankTabText:SetText(requestedBankTab ~= "" and requestedBankTab or "-")
+        self.requestWizardPreviewReasonText:SetText(note ~= "" and note or "-")
+    end
+
     function mainFrame:SetRequestWizardStep(step)
         self.requestWizardStep = step or 1
         local isStep1 = self.requestWizardStep == 1
         local isStep2 = self.requestWizardStep == 2
         local isStep3 = self.requestWizardStep == 3
+        local isStep4 = self.requestWizardStep == 4
 
-        self.requestWizardStepText:SetText(isStep1 and "Step 1 of 3: New Request" or (isStep2 and "Step 2 of 3: Quantity and Reason" or "Step 3 of 3: Review Request"))
-        self.requestWizardStatusText:SetText(isStep1 and "Search for an item, then continue to quantity and review." or (isStep2 and "Set the quantity and reason for this request." or "Review the request before submitting."))
+        self.requestWizardStepText:SetText(
+            isStep1 and "Step 1 of 4: Choose Item"
+                or (isStep2 and "Step 2 of 4: Set Quantity"
+                or (isStep3 and "Step 3 of 4: Choose Bank Tab" or "Step 4 of 4: Confirm Request"))
+        )
+        self.requestWizardStatusText:SetText(
+            isStep1 and "Search or select the crafted item you want stocked."
+                or (isStep2 and "Set the quantity and note for this request."
+                or (isStep3 and "Choose where this stock should live." or "Review the request before submitting it."))
+        )
 
         set_shown(self.requestCreateSearchSelector, isStep1)
         set_shown(self.requestCreateQuantityLabel, isStep2)
         set_shown(self.requestCreateNoteLabel, isStep2)
         set_shown(self.requestCreateQuantityInput, isStep2)
+        set_shown(self.requestCreateQuantityDecreaseButton, isStep2)
+        set_shown(self.requestCreateQuantityIncreaseButton, isStep2)
         set_shown(self.requestCreateNoteInput, isStep2)
+        set_shown(self.requestWizardBankTabLabel, isStep3)
+        set_shown(self.requestWizardBankTabDropdownButton, isStep3)
+        set_shown(self.requestWizardBankTabHintText, isStep3)
 
-        set_shown(self.requestWizardReviewItemNameLabel, isStep3)
-        set_shown(self.requestWizardReviewItemNameText, isStep3)
-        set_shown(self.requestWizardReviewQualityLabel, isStep3)
-        set_shown(self.requestWizardReviewQualityText, isStep3)
-        set_shown(self.requestWizardReviewQuantityLabel, isStep3)
-        set_shown(self.requestWizardReviewQuantityText, isStep3)
-        set_shown(self.requestWizardReviewReasonLabel, isStep3)
-        set_shown(self.requestWizardReviewReasonText, isStep3)
+        set_shown(self.requestWizardReviewItemNameLabel, isStep4)
+        set_shown(self.requestWizardReviewItemNameText, isStep4)
+        set_shown(self.requestWizardReviewQualityLabel, isStep4)
+        set_shown(self.requestWizardReviewQualityText, isStep4)
+        set_shown(self.requestWizardReviewQuantityLabel, isStep4)
+        set_shown(self.requestWizardReviewQuantityText, isStep4)
+        set_shown(self.requestWizardReviewBankTabLabel, isStep4)
+        set_shown(self.requestWizardReviewBankTabText, isStep4)
+        set_shown(self.requestWizardReviewReasonLabel, isStep4)
+        set_shown(self.requestWizardReviewReasonText, isStep4)
 
         set_shown(self.requestWizardBackButton, not isStep1)
-        set_shown(self.requestWizardNextButton, not isStep3)
-        set_shown(self.requestWizardSubmitButton, isStep3)
+        set_shown(self.requestWizardNextButton, not isStep4)
+        set_shown(self.requestWizardSubmitButton, isStep4)
+        set_shown(self.requestWizardPreviewPanel, not isStep1)
         self:UpdateRequestCreateButtonState()
+        self:RefreshRequestWizardProgress()
+        self:RefreshRequestWizardPreview()
 
         if isStep3 then
+            self:ConfigureRequestWizardBankTabOptions()
+        end
+
+        if isStep4 then
             local item = self:GetConfirmedRequestCreateItem() or {}
             self.requestWizardReviewItemNameText:SetText(tostring(item.name or item.itemName or ""))
             self.requestWizardReviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon))
             self.requestWizardReviewQuantityText:SetText(tostring(self.requestCreateQuantityInput:GetText() or ""))
+            self.requestWizardReviewBankTabText:SetText(tostring(self.requestRequestedBankTab or "-"))
             self.requestWizardReviewReasonText:SetText(tostring(self.requestCreateNoteInput:GetText() or ""))
         end
     end
@@ -896,13 +1140,14 @@ function mainRequestsController.Attach(mainFrame, options)
         local policy = current_policy(db)
         local canSubmit = can(context, "request_submit", policy)
         local hasConfirmedSelection = self:GetConfirmedRequestCreateItem() ~= nil
-        local profile = access_profile(context, policy)
-        local shouldEnable = canSubmit and (hasConfirmedSelection or profile == "request_only")
+        local shouldEnable = canSubmit and hasConfirmedSelection
         self.requestCreateButton:SetEnabled(shouldEnable)
         if self.requestWizardNextButton then
             if self.requestWizardStep == 2 then
                 local quantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
                 self.requestWizardNextButton:SetEnabled(quantity ~= nil and quantity > 0)
+            elseif self.requestWizardStep == 3 then
+                self.requestWizardNextButton:SetEnabled(tostring(self.requestRequestedBankTab or "") ~= "")
             else
                 self.requestWizardNextButton:SetEnabled(canSubmit and hasConfirmedSelection)
             end
@@ -1096,6 +1341,7 @@ function mainRequestsController.Attach(mainFrame, options)
         local itemName = tostring((selectedItem or {}).name or (selectedItem or {}).itemName or "")
         local quantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
         local note = self.requestCreateNoteInput:GetText() or ""
+        local preferredBankTab = tostring(self.requestRequestedBankTab or "")
 
         if not can(context, "request_submit", policy) then
             self.requestCreateUserMessage = "You do not have permission to submit requests."
@@ -1128,6 +1374,8 @@ function mainRequestsController.Attach(mainFrame, options)
             craftedQuality = selectedItem.craftedQuality,
             craftedQualityIcon = selectedItem.craftedQualityIcon,
             quantity = quantity,
+            tabName = preferredBankTab ~= "" and preferredBankTab or nil,
+            preferredBankTab = preferredBankTab ~= "" and preferredBankTab or nil,
             note = note,
         })
 
@@ -1158,10 +1406,15 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self.requestCreateQuantityInput:SetText("")
         self.requestCreateNoteInput:SetText("")
+        self.requestRequestedBankTab = nil
+        self.requestWizardBankTabDropdownButton.labelText:SetText("Select Bank Tab")
         self:HideRequestVariantButtons()
         self.requestSearchSession = nil
         self.requestCreateUserMessage = request and string.format("Created request for %s x%d.", itemName, quantity) or "Unable to create request."
         self.requestCreateStatusText:SetText(self.requestCreateUserMessage)
+        if type(self.RefreshRequestWizardPreview) == "function" then
+            self:RefreshRequestWizardPreview()
+        end
         self:UpdateRequestCreateButtonState()
         self:RefreshRequestActionButtons()
         self:RefreshView()
@@ -1177,12 +1430,18 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self.requestCreateQuantityInput:SetText("")
         self.requestCreateNoteInput:SetText("")
+        self.requestRequestedBankTab = nil
+        self.requestWizardBankTabDropdownButton.labelText:SetText("Select Bank Tab")
         self:SetRequestWizardStep(1)
+        if type(self.RefreshRequestWizardPreview) == "function" then
+            self:RefreshRequestWizardPreview()
+        end
         self.requestWizardModal:Show()
         return self.requestWizardModal
     end
 
     function mainFrame:HideRequestWizard()
+        self.requestWizardBankTabDropdownPanel:Hide()
         self.requestWizardModal:Hide()
         return self.requestWizardModal
     end
@@ -1206,6 +1465,16 @@ function mainRequestsController.Attach(mainFrame, options)
                 return nil
             end
             self:SetRequestWizardStep(3)
+            return self.requestWizardStep
+        end
+
+        if self.requestWizardStep == 3 then
+            if tostring(self.requestRequestedBankTab or "") == "" then
+                self.requestWizardStatusText:SetText("Choose a bank tab before continuing.")
+                self:UpdateRequestCreateButtonState()
+                return nil
+            end
+            self:SetRequestWizardStep(4)
             return self.requestWizardStep
         end
 
@@ -1255,6 +1524,14 @@ function mainRequestsController.Attach(mainFrame, options)
         mainFrame:SetRequestAdminFilterMode("PENDING_FULFILLMENT")
     end)
 
+    mainFrame.requestAdminFilterCompletedButton:SetScript("OnClick", function()
+        mainFrame:SetRequestAdminFilterMode("COMPLETED")
+    end)
+
+    mainFrame.requestAdminRefreshButton:SetScript("OnClick", function()
+        mainFrame:RefreshView()
+    end)
+
     mainFrame.requestAdminAddButton:SetScript("OnClick", function()
         mainFrame:OpenRequestWizard()
     end)
@@ -1264,6 +1541,29 @@ function mainRequestsController.Attach(mainFrame, options)
     end)
 
     mainFrame.requestCreateQuantityInput:SetScript("OnTextChanged", function()
+        if type(mainFrame.RefreshRequestWizardPreview) == "function" then
+            mainFrame:RefreshRequestWizardPreview()
+        end
+        mainFrame:UpdateRequestCreateButtonState()
+    end)
+
+    mainFrame.requestCreateNoteInput:SetScript("OnTextChanged", function()
+        if type(mainFrame.RefreshRequestWizardPreview) == "function" then
+            mainFrame:RefreshRequestWizardPreview()
+        end
+    end)
+
+    mainFrame.requestCreateQuantityDecreaseButton:SetScript("OnClick", function()
+        local current = parseNumber(mainFrame.requestCreateQuantityInput:GetText() or "") or 0
+        local nextValue = math.max(1, current - 1)
+        mainFrame.requestCreateQuantityInput:SetText(tostring(nextValue))
+        mainFrame:UpdateRequestCreateButtonState()
+    end)
+
+    mainFrame.requestCreateQuantityIncreaseButton:SetScript("OnClick", function()
+        local current = parseNumber(mainFrame.requestCreateQuantityInput:GetText() or "") or 0
+        local nextValue = math.max(1, current + 1)
+        mainFrame.requestCreateQuantityInput:SetText(tostring(nextValue))
         mainFrame:UpdateRequestCreateButtonState()
     end)
 

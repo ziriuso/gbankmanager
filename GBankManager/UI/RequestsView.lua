@@ -136,6 +136,10 @@ function requestsView.BuildOfficerQueue(rows, statusFilter)
             include = row.approval == "PENDING"
         elseif statusFilter == "PENDING_FULFILLMENT" then
             include = row.approval == "APPROVED" and row.fulfillment == "OPEN"
+        elseif statusFilter == "COMPLETED" then
+            include = row.approval == "REJECTED"
+                or row.approval == "CANCELED"
+                or (row.approval == "APPROVED" and row.fulfillment == "FULFILLED")
         end
 
         if include then

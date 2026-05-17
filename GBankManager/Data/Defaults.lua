@@ -67,7 +67,7 @@ function defaults.CreateDatabase(guildName)
         ui = {
             inventoryColumnWidths = {},
             appearance = {
-                themePreset = "default",
+                themePreset = "generic_wow",
                 shellScale = 1,
                 tableDensity = 1,
                 shellOpacity = 0.96,
