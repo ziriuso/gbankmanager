@@ -5,8 +5,10 @@ package.path = table.concat({
 }, ";")
 
 dofile("tests/helpers/wow_stubs.lua")
-dofile("tests/run_unit.lua")
-dofile("tests/run_ui.lua")
-dofile("tests/run_integration.lua")
+local runner = require("tests.helpers.test_runner")
+
+runner.run_lane("tests/run_unit.lua")
+runner.run_lane("tests/run_ui.lua")
+runner.run_lane("tests/run_integration.lua")
 
 print("PASS tests/run_all.lua")

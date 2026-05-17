@@ -65,6 +65,32 @@ assert.equal(3, #scopedPlan[1001].details, "plan should keep drill-down attribut
 assert.equal("TAB", scopedPlan[1001].details[1].scope, "detail rows should preserve scope")
 assert.equal("Raid night", scopedPlan[1001].details[3].note, "request details should preserve notes")
 
+local approvedMinimumBackedPlan = planning.BuildDemandPlan({
+    snapshot = {
+        items = {
+            [243734] = {
+                itemID = 243734,
+                name = "Thalassian Phoenix Oil",
+                totalCount = 0,
+                tabs = {
+                    ["Raid Buffer"] = 0,
+                },
+            },
+        },
+    },
+    minimums = {
+        { itemID = 243734, itemName = "Thalassian Phoenix Oil", quantity = 100, scope = "TAB", tabName = "Raid Buffer", enabled = true },
+    },
+    oneTimeTargets = {},
+    requests = {
+        { itemID = 243734, itemName = "Thalassian Phoenix Oil", quantity = 100, approval = "APPROVED", fulfillment = "OPEN", minimumRuleKey = "243734|TAB|Raid Buffer" },
+    },
+})
+
+assert.equal(100, approvedMinimumBackedPlan[243734].totalToBuy, "requests converted to minimum rules should not double count demand")
+assert.equal(100, approvedMinimumBackedPlan[243734].sources.RESTOCK, "converted requests should be represented by the saved minimum")
+assert.equal(0, approvedMinimumBackedPlan[243734].sources.REQUEST, "converted requests should not remain separate request demand")
+
 local disabledMinimumPlan = planning.BuildDemandPlan({
     snapshot = {
         items = {

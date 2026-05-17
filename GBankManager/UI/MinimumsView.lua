@@ -13,16 +13,6 @@ local QUALITY_RANK_BY_ATLAS = {
     ["Professions-ChatIcon-Quality-Tier5"] = 5,
 }
 
-local DEFAULT_COLUMNS = {
-    { key = "itemID", label = "Item ID", width = 68, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "tier", label = "Tier", width = 56, justifyH = "CENTER", filterMode = "none", sortable = true },
-    { key = "itemName", label = "Item", width = 188, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "bankTab", label = "Bank Tab", width = 110, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "current", label = "Current", width = 60, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "restock", label = "Restock", width = 68, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "quantity", label = "Minimum", width = 66, justifyH = "LEFT", filterMode = "none", sortable = true },
-}
-
 local function copy_columns(columns)
     local out = {}
 
@@ -31,6 +21,8 @@ local function copy_columns(columns)
             key = column.key,
             label = column.label,
             width = column.width,
+            minWidth = column.minWidth,
+            maxWidth = column.maxWidth,
             justifyH = column.justifyH,
             filterMode = column.filterMode,
             sortable = column.sortable,
@@ -168,6 +160,76 @@ local function current_count_for_rule(item, rule)
     return tonumber(item.totalCount or 0) or 0
 end
 
+local function snapshot_bank_rows(snapshot)
+    local rows = {}
+    local snapshotItems = (snapshot or {}).items or {}
+    local persistedRows = (snapshot or {}).itemRows or {}
+
+    if #persistedRows > 0 then
+        for _, itemRow in ipairs(persistedRows) do
+            local item = snapshotItems[itemRow.itemID] or {}
+            table.insert(rows, {
+                rowKey = itemRow.rowKey,
+                itemID = itemRow.itemID,
+                name = itemRow.name or item.name,
+                quality = itemRow.quality or item.quality,
+                craftedQuality = itemRow.craftedQuality or item.craftedQuality,
+                craftedQualityIcon = itemRow.craftedQualityIcon or item.craftedQualityIcon,
+                tabName = itemRow.tabName,
+                quantity = tonumber(itemRow.quantity or 0) or 0,
+                aggregate = item,
+            })
+        end
+
+        return rows
+    end
+
+    for itemID, item in pairs(snapshotItems) do
+        local hadTabs = false
+        for tabName, count in pairs(item.tabs or {}) do
+            hadTabs = true
+            table.insert(rows, {
+                rowKey = table.concat({ tostring(itemID or ""), "TAB", tostring(tabName or "") }, "|"),
+                itemID = itemID,
+                name = item.name,
+                quality = item.quality,
+                craftedQuality = item.craftedQuality,
+                craftedQualityIcon = item.craftedQualityIcon,
+                tabName = tostring(tabName),
+                quantity = tonumber(count or 0) or 0,
+                aggregate = item,
+            })
+        end
+
+        if not hadTabs then
+            table.insert(rows, {
+                rowKey = tostring(itemID or ""),
+                itemID = itemID,
+                name = item.name,
+                quality = item.quality,
+                craftedQuality = item.craftedQuality,
+                craftedQualityIcon = item.craftedQualityIcon,
+                tabName = primary_tab(item),
+                quantity = tonumber(item.totalCount or 0) or 0,
+                aggregate = item,
+            })
+        end
+    end
+
+    table.sort(rows, function(left, right)
+        if tostring(left.name or "") ~= tostring(right.name or "") then
+            return tostring(left.name or "") < tostring(right.name or "")
+        end
+        return tostring(left.tabName or "") < tostring(right.tabName or "")
+    end)
+
+    return rows
+end
+
+local function tab_row_key(itemID, tabName)
+    return table.concat({ tostring(itemID or ""), "TAB", tostring(tabName or "") }, "|")
+end
+
 local function restock_from(item, configuredTab, shouldRestock)
     if not shouldRestock then
         return "-"
@@ -230,7 +292,12 @@ local function apply_column_filters(rows, filters)
 end
 
 function minimumsView.GetDefaultColumns()
-    return copy_columns(DEFAULT_COLUMNS)
+    local tableLayouts = ns.modules.tableLayouts
+    if tableLayouts and type(tableLayouts.GetInventoryMinimumColumns) == "function" then
+        return tableLayouts.GetInventoryMinimumColumns()
+    end
+
+    return {}
 end
 
 function minimumsView.Upsert(list, rule)
@@ -423,19 +490,21 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             craftedQualityIcon = qualitySource.craftedQualityIcon,
             isNewlyAdded = row.isNewlyAdded == true,
         })
-        seen[row.itemID] = true
+        seen[tab_row_key(row.itemID, configuredTab)] = true
     end
 
-    for itemID, item in pairs(snapshotItems) do
-        if showAll and not seen[itemID] then
-            local configuredTab = primary_tab(item)
-            local currentCount = tonumber(((item.tabs or {})[configuredTab]) or item.totalCount or 0) or 0
+    for _, itemRow in ipairs(snapshot_bank_rows(snapshot)) do
+        local configuredTab = itemRow.tabName or "-"
+        local itemID = itemRow.itemID
+        if showAll and not seen[tab_row_key(itemID, configuredTab)] then
+            local item = itemRow.aggregate
+            local currentCount = tonumber(itemRow.quantity or 0) or 0
             table.insert(out, {
-                rowKey = table.concat({ tostring(itemID or ""), "TAB", tostring(configuredTab or "") }, "|"),
+                rowKey = tab_row_key(itemID, configuredTab),
                 itemID = tostring(itemID or ""),
-                itemName = tostring(item.name or "Unknown"),
-                tier = crafted_quality_markup(item.craftedQualityIcon),
-                tierValue = crafted_quality_rank(item),
+                itemName = tostring(itemRow.name or "Unknown"),
+                tier = crafted_quality_markup(itemRow.craftedQualityIcon),
+                tierValue = crafted_quality_rank(itemRow),
                 quantity = "-",
                 quantityValue = 0,
                 scope = "TAB",
@@ -456,8 +525,8 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
                 enabledSort = 1,
                 configuredSort = 1,
                 configured = false,
-                craftedQuality = item.craftedQuality,
-                craftedQualityIcon = item.craftedQualityIcon,
+                craftedQuality = itemRow.craftedQuality,
+                craftedQualityIcon = itemRow.craftedQualityIcon,
             })
         end
     end
@@ -501,7 +570,11 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
         if left.configuredSort ~= right.configuredSort then
             return left.configuredSort < right.configuredSort
         end
-        return tostring(left.itemName or "") < tostring(right.itemName or "")
+        if tostring(left.itemName or "") ~= tostring(right.itemName or "") then
+            return tostring(left.itemName or "") < tostring(right.itemName or "")
+        end
+
+        return tostring(left.bankTab or "") < tostring(right.bankTab or "")
     end)
 
     return out

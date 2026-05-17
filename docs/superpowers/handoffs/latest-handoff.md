@@ -4,167 +4,132 @@
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Latest code commit: `88b38ef` (`docs: complete phase 6 refactor polish`)
-- Latest docs commit: `88b38ef` (`docs: complete phase 6 refactor polish`)
+- Remote tracking: `origin/codex/gbankmanager-v1`
+- Latest pushed branch commit: `28de907` (`feat: land item search and minimums workflow improvements`)
+- Latest local-only work in this phase: `823a70f` (`fix: polish minimums modal workflow`)
+- Current repo status at handoff time: uncommitted request workflow slice on `codex/gbankmanager-v1` unless this handoff is committed after deployment
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
-- Latest verified result: `PASS tests/run_all.lua`
+- Latest verified result: `PASS tests/run_all.lua` after adding per-lane and per-spec test-runner progress output
 
 ## Read First
 
-1. `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
-2. `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
-3. `docs/superpowers/handoffs/latest-handoff.md`
-4. `git status -sb`
-5. `.\tools\lua\lua.exe .\tests\run_all.lua`
+1. `README.md`
+2. `docs/testing.md`
+3. `docs/manual-test-checklist.md`
+4. `docs/superpowers/handoffs/latest-handoff.md`
+5. `git status -sb`
+6. `.\tools\lua\lua.exe .\tests\run_all.lua`
 
 ## Current Repo State
 
-- Worktree is expected to be clean after commit `034d290`
-- If anything is dirty when resuming, inspect before changing behavior because the current handoff assumes a clean baseline
+- Worktree may contain the latest uncommitted item 2/3 correction slice until it is committed/deployed.
+- The branch already contains the indexed item-search redesign, procurement-only catalog reduction, and the Minimums modal workflow cleanup.
+- The generated bundled item payload lives in the shipped addon `GBankManager_ItemData/`.
+- Local maintainer-only catalog assets under `tools/catalog/runtime/` remain intentionally git-ignored.
 
 ## Current Product State
 
-### Architecture
+### Stable Recent Work
 
-- `Core/` is now a thin bootstrap, event-registration, and slash-command layer
-- `Data/` owns defaults, migrations, and store-backed DB access
-- `Domain/` owns snapshots, diffing, planning, exports, requests, and permissions
-- `Features/` owns live scan workflows and feature-owned event adapters
-- `UI/` is split into shell plus focused controllers:
-  - `MainFrameShell.lua`
-  - `MainTableController.lua`
-  - `MainRequestsController.lua`
-  - `MainExportsController.lua`
-  - `MainMinimumsController.lua`
-  - `MainFrame.lua`
+- Shared item search is now responsive in live WoW after cutting the shipped search universe down to current-expansion procurement categories.
+- Minimums now uses a centered modal workflow for add/edit details instead of the older footer editor.
+- Existing saved Minimums rows show Bank Tab as an auto-populated read-only value in the details modal; only new rows choose Bank Tab.
+- Minimums defaults to `Show All`.
+- Existing Minimums rows can be edited through the centered modal with the current tab prefilled.
+- Shared item search is used by both Minimums and Requests and requires a confirmed catalog selection for full-shell actions.
+- Crafted tier can now backfill from the bundled search catalog when scan or snapshot data omits it.
+- Scan snapshots now persist tab-scoped `itemRows` in addition to aggregate `items`, and Inventory plus Minimums `Show All` render one row per bank tab with per-tab quantities.
+- Inventory and Minimums now share the same table layout: `Item ID`, `Tier`, `Item`, `Bank Tab`, `Current`, `Restock`, and `Minimum`, with a wider Item column consuming the old right-side whitespace.
+- Minimums uses the shared header/filter row instead of the old bottom search box, and its footer is now a compact transparent action strip with `Add`, `Save All`, and `Enabled Only` controls.
+- The full-shell request surface is now `Request Admin`: workflow actions remain visible with more bottom spacing, inline request creation is hidden, shared table search is enabled, and the admin table exposes date requested, requestor, item ID, tier, item name, quantity, approval, fulfillment, and note.
+- `/gbm request` now opens a separate end-user request workflow panel with own-request status rows and a `New Request` wizard entrypoint.
+- Requests never auto-approve. Officers/admins cannot approve their own requests; the Guild Master can approve their own request only through an explicit workflow approval action.
+- `/gbm request` now uses a smaller compact window with `Guild Bank Manager` in the header, an own-request table (`Item ID`, `Item Name`, `Quantity`, `Status`), row-click details, pending-request cancellation for authors, and a three-step item -> quantity/reason -> review wizard.
+- `Request Admin` now uses the same request-list/details pattern, with workflow actions available from the details popup.
+- Request details now label the Decision Note input, align detail/readback values to fixed modal columns, and keep the details modal open after status changes.
+- Approving a request requires an approver-selected Bank Tab, stores the Decision Note and Bank Tab on the request, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested quantity.
+- Request details now block table click-through, keep fixed label/value rows with tighter label/value spacing, show Requested By above Date Requested, show Updated By, Date Updated, and Decision Note at the bottom of the detail list, hide the decision-note editor after approval or denial, and request audit history normalizes actor tables into character names.
+- Shared table scrollbars now stay inset inside the table viewport, and table content reserves a gutter so the bar does not overlap the rightmost column.
 
-### Shell And Auth
+### Current Navigation
 
-- `/gbm ui` is now auth-aware:
-  - `full_ui` users open the full shell
-  - non-blacklisted guild members without `full_ui` open a lightweight Requests surface
-  - blacklisted users are denied
-- `/gbm request` opens the lightweight Requests surface for non-blacklisted guild members
-- `/gbm scan` requires `full_ui`
-- Current tabs are `Dashboard`, `Inventory`, `History`, `Minimums`, `Requests`, `Exports`, `About`, and `Options`
-- `Targets` has been removed and should not come back
+- `Dashboard`
+- `Inventory`
+- `History`
+- `Minimums`
+- `Request Admin`
+- `Exports`
+- `About`
+- `Options`
 
-### Auth And Permissions
+### Current Search/Catalog Constraints
 
-- Auth policy now lives in saved state under `db.auth`
-- A compact durable auth-policy carrier now exists for guild-wide sharing via Guild Info text
-- Addon chat sync is now a fast path, not the only source of truth
-- Policy stores:
-  - `version`
-  - `revision`
-  - `updatedAt`
-  - `updatedBy`
-  - `updatedByRankIndex`
-  - `guildPolicyString`
-  - `guildPolicySource`
-  - `rankMetadata`
-  - per-capability allowlists
-  - blacklist entries keyed by `Realm-Character`
-  - blacklist hashes for compact durable distribution
-- `Guildmaster` remains implicitly allowed for all capabilities and cannot be locked out by blacklist
-- Capabilities currently implemented:
-  - `full_ui`
-  - `request_submit`
-  - `request_approve`
-  - `request_reject`
-  - `request_edit`
-  - `request_fulfill`
-  - `request_reopen`
-  - `minimum_add`
-  - `minimum_edit`
-  - `minimum_delete`
-  - `auth_manage`
-- `Options` now includes an auth-management panel with:
-  - rank preview
-  - current-access preview
-  - compact per-capability rank toggles
-  - blacklist add/remove staging
-  - auth save / revert actions
-  - policy string preview
-  - Guild Info write / refresh actions
-- Request creation no longer trusts typed requester/role fields; it derives actor identity from live WoW guild context
-- Officer workflow buttons in Requests now gate on live permissions instead of editable role text
-- Request creation now uses labeled fields and visible validation messages instead of silent failure
-- Request-only mode now uses a compact shell layout without the dead sidebar gutter or last-scan clutter
+- Bundled search data is intentionally scoped to current-expansion procurement items only:
+  - `Consumables`
+  - `Containers`
+  - `Gems`
+  - `Reagents`
+  - `Item Enhancements`
+- Name search waits for two typed characters before activating.
+- Requests and Minimums currently depend on the bundled sibling addon `GBankManager_ItemData`.
 
-### Sync
+## Confirmed Next Work Order
 
-- `ADDON_LOADED` now refreshes auth rank metadata before UI use
-- Guild auth rereads now also react to guild-state events such as roster/rank/motd updates
-- Sync payloads now support nested table payloads for:
-  - `AUTH_POLICY_SNAPSHOT`
-  - `REQUEST_CREATED`
-  - `REQUEST_UPDATED`
-- Incoming auth snapshots merge through `ResolveAuthConflict`
-- Incoming request sync validates capability intent locally before applying
-- Addon comms remain guild-wide and should still be treated as authorization, not secrecy
+Work these in the exact order below unless a new blocking regression appears:
 
-### History
+1. `Exports UI rework`
+   - Exports is intentionally deferred until after the request/admin split.
+   - Current note: the Exports surface still has overflow/layout issues and needs a cleaner redesign.
 
-- `History` is procurement-audit-only
-- Do not restore raw bank diff history into this view
+2. `UI polish`
+   - Theme customization
+   - Resize / scale
+   - Spacing and gap cleanup
 
-### Exports
+3. `In-game unit test lane`
+   - Build out unit tests that can be run in-game through the unit test addon.
 
-- Export generation is grounded in the planning model
-- Officer-facing `Spreadsheet` has been renamed to `CSV`
-- Selecting an export preset opens a modal with:
-  - scrollable output
-  - `Select All`
-  - `Copy`
-  - `Close`
-- Auctionator has an editable shopping-list name field
-- Auctionator output follows the screenshot-driven caret/semicolon format and should stay the source of truth unless the user supplies a newer sample
+4. `Guild addon communication and sync hardening`
+   - Strengthen addon communication between guild users.
+   - Sync history, requests, and minimums reliably between addon-enabled guild clients.
+   - Treat this as a product workflow slice, not just a transport-only change.
 
-### Minimums
+5. `Maintainer deployment and sync UI`
+   - Fully document the maintainer deployment and usage workflow.
+   - Build a small maintainer-facing UI for the catalog/deployment pipeline.
+   - It should allow choosing the WoW target path for `Retail`, `PTR`, or `Beta`.
+   - It should show current status, last sync time, and the WoW patch/build the catalog was synced from.
 
-- Minimums uses direct in-table editing with staged draft rows
-- Saved rows do not allow `Bank Tab` editing
-- New rows use a `Bank Tab` dropdown instead of freeform entry
-- Inline ghosted cell text behind active editors was removed
-- Search field is labeled
-- Search / toggle controls were repositioned to avoid overlap
-- Add modal labels and row alignment were improved
-- `Restock Source` is hidden from the Minimums table for now
-- A stronger draft-indicator overlay was added to improve live-client row highlighting
-- Search resolution now goes beyond the active guild-bank snapshot by using remembered item data and search catalog entries already known to the addon
+## Completed In Current Slice
+
+- Root cause: snapshot aggregates were keyed by `itemID`, while Inventory and Minimums `Show All` consumed only the aggregate row.
+- Canonical row identity: tab-scoped `itemRows` with `itemID|TAB|tabName`.
+- Compatibility: aggregate `snapshot.items[itemID]` remains intact for diff and planning.
+- Regression coverage: `diff_spec`, `store_spec`, `inventory_quality_spec`, `ui_table_spec`, `ui_minimums_spec`, `ui_requests_spec`, and `requests_spec`.
+- Shared table layout is centralized in `GBankManager/UI/TableLayouts.lua` so Inventory and Minimums stay visually aligned.
+- Request action authorization now preserves the legacy no-auth-policy path while continuing to enforce explicit auth policies.
+- Request creation always starts `PENDING`; non-guildmaster self-approval is denied in both stored actions and sync updates; author cancellation is supported and sync-validated.
+- The `/gbm request` wizard is complete enough for item search, quantity/reason, review, submit, own-request status rows, and details popup cancellation.
+- Approved requests that create a Minimums rule carry `minimumRuleKey`, and planning skips those request rows as separate request demand to avoid double-counting.
+- Request detail regression coverage now includes modal click-through protection, fixed-row detail alignment, tighter label/value spacing, Requested By placement, Updated By / Date Updated / Decision Note bottom placement, post-decision editor hiding, workflow-button alignment with Close, actor-name history rows, shared table scrollbar bounds, and the reserved scrollbar gutter.
+- Local Lua runners now print `RUN`/`PASS` progress for each lane and spec so long-running tests no longer appear silent.
+
+## Immediate Engineering Focus
+
+When resuming, begin with the next roadmap item unless the user explicitly redirects:
+
+1. Rework the Exports UI.
+2. Keep the admin `Request Admin` surface focused on officer/guildmaster management.
+3. After Exports, proceed to broader UI polish.
 
 ## Important Constraints
 
-- Keep `History` procurement-audit-only
-- Do not reintroduce `Targets`
-- Keep exports as outputs of planning, not a separate source of truth
-- Keep using TDD for follow-up fixes
-
-## Deferred TODO
-
-- Offline/global item discovery for Minimums add-item search remains intentionally deferred
-- Do not reintroduce Auction House requirements as the primary search path
-- If broader item discovery work resumes later, prefer a self-owned persisted item index or other explicit design rather than fragile reads from other addons
-
-## Best Next Work
-
-1. Run a second live-client auth regression using `docs/auth-manual-test-plan.md` against the new Guild Info-backed policy flow
-2. Verify Guildmaster `Write` and `Refresh` behavior from the auth panel with real guild permissions
-3. Recheck member request creation now that the form has labeled fields and visible validation
-4. Confirm request sync behaves correctly across two logged-in guild clients for create, approve, reject, fulfill, and reopen
-5. Re-verify the newer Minimums live-client behavior from the refactored/auth-enabled baseline
-
-## Docs Updated In The Latest Work
-
-- `README.md`
-  - refreshed feature wording and architecture overview to match the refactored module split
-- `docs/manual-test-checklist.md`
-  - now includes auth-role-system manual QA coverage in addition to the earlier phase-6 QA wording
-- `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
-  - should be treated through its delta sections, not the original target-era task list
-- `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
-  - phase tracker for the completed refactor slices
+- Keep using the local WoW addon development guide as the source of truth for addon/runtime patterns.
+- Keep documentation updated as each roadmap item lands.
+- Keep controls reusable and scalable across the project.
+- Continue to favor focused subsystem tests over growing broad monolithic UI assertions.
+- Do not expose maintainer credentials or local catalog assets in git.
+- Exports remain later-scope work, not the next active slice.
 
 ## Suggested Next Prompt
 
@@ -173,21 +138,15 @@
 > Branch: `codex/gbankmanager-v1`
 >
 > Read first:
-> `docs/superpowers/plans/2026-05-11-wow-guild-bank-addon-implementation.md`
-> `docs/superpowers/plans/2026-05-13-wow-guild-bank-addon-refactor-plan.md`
+> `README.md`
+> `docs/testing.md`
+> `docs/manual-test-checklist.md`
 > `docs/superpowers/handoffs/latest-handoff.md`
 >
 > Then run:
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume from commit `88b38ef`.
+> Resume with roadmap item 5: rework the Exports UI.
 >
-> Priority for this session: live-client auth and request-sync QA from the refactored baseline.
->
-> Required outcomes:
-> 1. Keep `History` procurement-audit-only and do not reintroduce `Targets`.
-> 2. Keep exports grounded in the planning model.
-> 3. Re-verify auth, blacklist, and request-sync behavior across at least two guild clients before broadening scope again.
-> 4. Treat offline/global item discovery as a separate explicit design task.
-> 5. Use TDD for any follow-up fixes and rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before claiming completion.
+> After the current product-surface roadmap is complete, finish the guild sync hardening and the maintainer deployment/status UI at the tail end of the sequence.

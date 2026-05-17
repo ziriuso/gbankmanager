@@ -5,14 +5,13 @@ package.path = table.concat({
 }, ";")
 
 dofile("tests/helpers/wow_stubs.lua")
+local runner = require("tests.helpers.test_runner")
 
 local specs = {
     "tests/spec/toc_spec.lua",
     "tests/spec/live_smoke_spec.lua",
 }
 
-for _, path in ipairs(specs) do
-    dofile(path)
-end
+runner.run_specs(specs)
 
 print("PASS tests/run_integration.lua")

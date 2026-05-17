@@ -20,11 +20,42 @@ _G.GBankManagerDB = {
                 [7007] = {
                     itemID = 7007,
                     name = "Algari Mana Oil",
-                    totalCount = 4,
+                    totalCount = 5,
                     tabs = {
                         Alchemy = 4,
                         ["Gems and Enchants"] = 1,
                     },
+                },
+                [8008] = {
+                    itemID = 8008,
+                    name = "Leyline Residue",
+                    totalCount = 2,
+                    tabs = {
+                        Reagents = 2,
+                    },
+                },
+            },
+            itemRows = {
+                {
+                    itemID = 7007,
+                    name = "Algari Mana Oil",
+                    quantity = 4,
+                    tabName = "Alchemy",
+                    rowKey = "7007|TAB|Alchemy",
+                },
+                {
+                    itemID = 7007,
+                    name = "Algari Mana Oil",
+                    quantity = 1,
+                    tabName = "Gems and Enchants",
+                    rowKey = "7007|TAB|Gems and Enchants",
+                },
+                {
+                    itemID = 8008,
+                    name = "Leyline Residue",
+                    quantity = 2,
+                    tabName = "Reagents",
+                    rowKey = "8008|TAB|Reagents",
                 },
             },
         },
@@ -69,12 +100,49 @@ env.ns.state.db = _G.GBankManagerDB
 mainFrame:SelectView("MINIMUMS")
 assert.truthy(mainFrame.minimumsPanel:IsShown(), "minimums editor panel should show in the minimums view")
 assert.truthy(mainFrame.tableViewportFrame:IsShown(), "minimums view should show the shared table viewport")
+assert.truthy(mainFrame.tableFilterFrame:IsShown(), "minimums should reuse the shared table filter row")
+assert.truthy(not mainFrame.minimumSearchLabel:IsShown(), "minimums should remove the old bottom search label in favor of shared table filters")
+assert.truthy(not mainFrame.minimumSearchInput:IsShown(), "minimums should remove the old bottom search box in favor of shared table filters")
+assert.equal(3, #mainFrame.tableRowsData, "minimums Show All should render one bank row per tab for shared items plus other bank rows")
+assert.equal("Alchemy", mainFrame.tableRowsData[1].bankTab, "minimums Show All should preserve the first tab name")
+assert.equal("4", mainFrame.tableRowsData[1].current, "minimums Show All should preserve the first per-tab quantity")
+assert.equal("Gems and Enchants", mainFrame.tableRowsData[2].bankTab, "minimums Show All should preserve the second tab name")
+assert.equal("1", mainFrame.tableRowsData[2].current, "minimums Show All should preserve the second per-tab quantity")
+mainFrame.tableFilterInputs[4]:SetText("Reagents")
+mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+assert.equal(1, #mainFrame.tableRowsData, "minimums shared table filters should search by Bank Tab")
+assert.equal("Reagents", mainFrame.tableRowsData[1].bankTab, "minimums shared Bank Tab filter should keep the matching row")
+mainFrame.tableFilterInputs[4]:SetText("")
+mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+mainFrame.tableFilterInputs[1]:SetText("8008")
+mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
+assert.equal(1, #mainFrame.tableRowsData, "minimums shared table filters should search by Item ID")
+assert.equal("8008", mainFrame.tableRowsData[1].itemID, "minimums shared Item ID filter should keep the matching row")
+mainFrame.tableFilterInputs[1]:SetText("missing")
+mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
+assert.equal("No minimum rows match the current search and filters.", mainFrame.minimumEmptyStateText:GetText(), "minimums empty state should reflect shared table filters")
+mainFrame.tableFilterInputs[1]:SetText("")
+mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 assert.equal("Save All", mainFrame.minimumSaveButton.labelText:GetText(), "minimums view should keep the top-level save action label")
 assert.equal(7, #mainFrame.tableColumnLayout, "minimums view should fully remove the deprecated restock-source column")
+assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "minimums should share the preferred table layout with inventory")
+assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should share the preferred tier column with inventory")
+assert.equal("Item", mainFrame.tableHeaderLabels[3]:GetText(), "minimums should share the preferred item column with inventory")
+assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should share the preferred bank tab column with inventory")
+assert.equal("Current", mainFrame.tableHeaderLabels[5]:GetText(), "minimums should share the preferred current column with inventory")
+assert.equal("Restock", mainFrame.tableHeaderLabels[6]:GetText(), "minimums should share the preferred restock column with inventory")
 assert.equal("Minimum", mainFrame.tableHeaderLabels[7]:GetText(), "minimums view should end the table at the minimum column")
 assert.truthy(mainFrame.tableHeaderLabels[8] == nil or mainFrame.tableHeaderLabels[8].shown == false, "minimums view should not render a ghost eighth header")
-assert.truthy((mainFrame.minimumsPanel:GetHeight() or 0) >= 108, "minimums footer should be tall enough to keep search clear of the action buttons")
-assert.truthy(((mainFrame.minimumSearchInput.points[1] or {})[5] or 0) < ((mainFrame.minimumNewButton.points[1] or {})[5] or 999), "minimums search should sit above the bottom action row instead of colliding with it")
+assert.equal(mainFrame.defaultTableViewportHeight, mainFrame.tableViewportHeight, "minimums table should match the inventory table height")
+assert.truthy((mainFrame.minimumsPanel:GetHeight() or 0) <= 72, "minimums footer should be a compact action strip instead of a boxed editor panel")
+assert.truthy(mainFrame.minimumsPanel.transparentActions == true, "minimums footer should remove the old boxed panel styling")
+assert.equal(nil, mainFrame.minimumsPanel.backdrop, "minimums action strip should not draw a boxed backdrop")
+assert.truthy(mainFrame.minimumNewButton:IsShown(), "minimums action strip should keep Add visible")
+assert.truthy(mainFrame.minimumSaveButton:IsShown(), "minimums action strip should keep Save All visible")
+assert.truthy(mainFrame.minimumShowAllToggleButton:IsShown(), "minimums action strip should keep Enabled Only visible")
+assert.truthy(((mainFrame.minimumNewButton.points[1] or {})[5] or 0) >= 30, "minimums left action buttons should sit raised from the bottom edge")
+assert.truthy(((mainFrame.minimumShowAllToggleButton.points[1] or {})[5] or 0) >= 30, "minimums right action button should sit raised from the bottom edge")
+assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "minimums action strip should not show the old footer editor box")
 
 mainFrame.minimumNewButton:GetScript("OnClick")(mainFrame.minimumNewButton)
 assert.truthy(mainFrame.minimumAddModal:IsShown(), "add should open the minimum modal")
@@ -234,9 +302,10 @@ assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "existing minimum row cli
 assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "footer editor should not be the active edit surface after existing-row click")
 assert.equal("Algari Mana Oil", mainFrame.minimumDetailsItemNameText:GetText(), "existing minimum row click should populate the details modal item name")
 assert.truthy(mainFrame.tableRows[1].isSelected == true, "existing minimum row click should refresh the selected-row highlight before opening the modal")
-assert.truthy(mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "existing minimum row click should keep the Bank Tab selector available in the details modal")
-assert.truthy(not mainFrame.minimumDetailsBankTabValueText:IsShown(), "existing minimum row click should not duplicate the Bank Tab below the selector")
-assert.equal("Alchemy", mainFrame.minimumDetailsBankTabDropdownButton.labelText:GetText(), "existing minimum row click should prefill the Bank Tab selector with the saved Bank Tab")
+assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "existing minimum row click should lock Bank Tab instead of showing an editable selector")
+assert.truthy(mainFrame.minimumDetailsBankTabValueText:IsShown(), "existing minimum row click should show the read-only Bank Tab value")
+assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "existing minimum row click should auto-populate the saved Bank Tab")
+assert.truthy(not mainFrame.minimumDetailsBankTabDropdownPanel:IsShown(), "existing minimum row click should keep the Bank Tab options closed")
 
 mainFrame.minimumDetailsQuantityInput:SetText("300")
 mainFrame.minimumDetailsConfirmButton:GetScript("OnClick")(mainFrame.minimumDetailsConfirmButton)
@@ -307,7 +376,30 @@ mainFrame:HandleTableRowClick(backfilledTierRow)
 assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "clicking the backfilled minimum row should open the details modal")
 assert.equal("Professions-ChatIcon-Quality-Tier2", mainFrame.minimumDetailsItemQualityIcon.atlas, "minimum details modal should reuse the crafted-tier backfill when row data omits it")
 assert.equal("Tier 2", mainFrame.minimumDetailsItemQualityText:GetText(), "minimum details modal should show crafted-tier text alongside the crafted-tier icon")
-assert.equal("Alchemy", mainFrame.minimumDetailsBankTabDropdownButton.labelText:GetText(), "minimum details modal should prefill the Bank Tab selector from the existing saved row")
+assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "minimum details modal should show the existing saved row Bank Tab as read-only text")
+assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "minimum details modal should not expose an editable Bank Tab selector for existing saved rows")
+
+_G.GBankManagerDB.minimums = {
+    {
+        itemID = 7007,
+        itemName = "Algari Mana Oil",
+        quantity = 250,
+        scope = "TAB",
+        enabled = true,
+    },
+}
+mainFrame.minimumPendingDb = nil
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.minimumPendingDeleted = {}
+mainFrame.selectedMinimumKey = nil
+mainFrame:RefreshView()
+local legacyExistingRow = mainFrame.tableRowsData[1]
+assert.equal("Alchemy", legacyExistingRow.bankTab, "fixture should expose a primary bank tab for legacy saved minimums without tabName")
+mainFrame:HandleTableRowClick(legacyExistingRow)
+assert.truthy(mainFrame.minimumDetailsBankTabValueText:IsShown(), "legacy existing minimum edit should show a read-only Bank Tab value")
+assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "legacy existing minimum edit should auto-populate Bank Tab from the table row")
+assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "legacy existing minimum edit should not allow Bank Tab edits")
 
 _G.GBankManagerDB.minimums = {
     {

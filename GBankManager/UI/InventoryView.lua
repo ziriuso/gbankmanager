@@ -13,15 +13,6 @@ local QUALITY_RANK_BY_ATLAS = {
     ["Professions-ChatIcon-Quality-Tier5"] = 5,
 }
 
-local DEFAULT_COLUMNS = {
-    { key = "quality", label = "Tier", width = 64, minWidth = 64, maxWidth = 76, justifyH = "CENTER", filterMode = "none", sortable = true },
-    { key = "name", label = "Name", width = 238, minWidth = 190, maxWidth = 360, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "tab", label = "Tab", width = 152, minWidth = 120, maxWidth = 280, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "restock", label = "Restock", width = 90, minWidth = 78, maxWidth = 116, justifyH = "LEFT", filterMode = "text", sortable = true },
-    { key = "quantity", label = "Qty", width = 84, minWidth = 72, maxWidth = 112, justifyH = "LEFT", filterMode = "none", sortable = true },
-    { key = "minimum", label = "Min", width = 92, minWidth = 80, maxWidth = 118, justifyH = "LEFT", filterMode = "none", sortable = true },
-}
-
 local function crafted_quality_icon_text(icon)
     if type(icon) == "table" then
         for _, key in ipairs({ "atlas", "iconInventory", "iconMixed", "iconChat", "iconSmall", "icon", "texture", "markup" }) do
@@ -93,7 +84,7 @@ local function crafted_quality_rank(item)
 end
 
 local function normalized_sort_value(key, value, direction)
-    if key == "quality" then
+    if key == "quality" or key == "tier" then
         local rank = tonumber(value or 0) or 0
         if rank <= 0 then
             return direction == "desc" and -1 or 999
@@ -162,7 +153,12 @@ local function clip_text(text, width)
 end
 
 function inventoryView.GetDefaultColumns()
-    return copy_columns(DEFAULT_COLUMNS)
+    local tableLayouts = ns.modules.tableLayouts
+    if tableLayouts and type(tableLayouts.GetInventoryMinimumColumns) == "function" then
+        return tableLayouts.GetInventoryMinimumColumns()
+    end
+
+    return {}
 end
 
 function inventoryView.ResizeColumnLayout(columns, index, delta, totalWidthHint)
@@ -247,7 +243,11 @@ function inventoryView.FilterItems(items, query)
     end
 
     table.sort(out, function(left, right)
-        return tostring(left.name) < tostring(right.name)
+        if tostring(left.name) ~= tostring(right.name) then
+            return tostring(left.name) < tostring(right.name)
+        end
+
+        return tostring(left.tabName or "") < tostring(right.tabName or "")
     end)
 
     return out
@@ -297,12 +297,14 @@ function inventoryView.BuildLines(snapshot, query)
     return rows
 end
 
-local function minimum_for_item(db, item)
+local function minimum_for_item(db, item, tabName)
     local minimum = 0
     local matched = false
 
     for _, rule in ipairs((db or {}).minimums or {}) do
-        if rule.itemID == item.itemID and rule.enabled ~= false then
+        local ruleTab = rule.tabName
+        local isTabMatch = ruleTab == nil or ruleTab == "" or tabName == nil or ruleTab == tabName
+        if rule.itemID == item.itemID and rule.enabled ~= false and isTabMatch then
             minimum = math.max(minimum, tonumber(rule.quantity or 0))
             matched = true
         end
@@ -311,39 +313,110 @@ local function minimum_for_item(db, item)
     return minimum, matched
 end
 
+local function snapshot_item_rows(snapshot)
+    local rows = {}
+    local snapshotItems = (snapshot or {}).items or {}
+    local persistedRows = (snapshot or {}).itemRows or {}
+
+    if #persistedRows > 0 then
+        for _, itemRow in ipairs(persistedRows) do
+            local item = snapshotItems[itemRow.itemID] or {}
+            table.insert(rows, {
+                rowKey = itemRow.rowKey,
+                itemID = itemRow.itemID,
+                name = itemRow.name or item.name,
+                quality = itemRow.quality or item.quality,
+                craftedQuality = itemRow.craftedQuality or item.craftedQuality,
+                craftedQualityIcon = itemRow.craftedQualityIcon or item.craftedQualityIcon,
+                tabName = itemRow.tabName,
+                quantity = tonumber(itemRow.quantity or 0) or 0,
+                aggregate = item,
+            })
+        end
+
+        return rows
+    end
+
+    for _, item in pairs(snapshotItems) do
+        local hadTabs = false
+        for tabName, count in pairs(item.tabs or {}) do
+            hadTabs = true
+            table.insert(rows, {
+                rowKey = table.concat({ tostring(item.itemID or ""), "TAB", tostring(tabName or "") }, "|"),
+                itemID = item.itemID,
+                name = item.name,
+                quality = item.quality,
+                craftedQuality = item.craftedQuality,
+                craftedQualityIcon = item.craftedQualityIcon,
+                tabName = tostring(tabName),
+                quantity = tonumber(count or 0) or 0,
+                aggregate = item,
+            })
+        end
+
+        if not hadTabs then
+            table.insert(rows, {
+                rowKey = tostring(item.itemID or ""),
+                itemID = item.itemID,
+                name = item.name,
+                quality = item.quality,
+                craftedQuality = item.craftedQuality,
+                craftedQualityIcon = item.craftedQualityIcon,
+                tabName = nil,
+                quantity = tonumber(item.totalCount or 0) or 0,
+                aggregate = item,
+            })
+        end
+    end
+
+    table.sort(rows, function(left, right)
+        if tostring(left.name or "") ~= tostring(right.name or "") then
+            return tostring(left.name or "") < tostring(right.name or "")
+        end
+        return tostring(left.tabName or "") < tostring(right.tabName or "")
+    end)
+
+    return rows
+end
+
 function inventoryView.BuildTableRows(snapshot, db, query)
     local rows = {}
-    local items = {}
     local filters = {}
 
     if type(query) == "table" then
         filters = query
     elseif type(query) == "string" and query ~= "" then
-        filters.name = query
+        filters.itemName = query
     end
 
-    for _, item in pairs((snapshot or {}).items or {}) do
-        table.insert(items, item)
-    end
-
-    for _, item in ipairs(inventoryView.FilterItems(items, filters.name or "")) do
-        local tabs = {}
-        for tabName in pairs(item.tabs or {}) do
-            table.insert(tabs, tostring(tabName))
-        end
-        table.sort(tabs)
-
-        local minimum, hasMinimum = minimum_for_item(db, item)
+    for _, item in ipairs(inventoryView.FilterItems(snapshot_item_rows(snapshot), filters.itemName or filters.name or "")) do
+        local minimum, hasMinimum = minimum_for_item(db, item, item.tabName)
+        local current = tonumber(item.quantity or 0) or 0
+        local tier = crafted_quality_markup(item.craftedQualityIcon)
+        local tierValue = crafted_quality_rank(item)
+        local itemName = tostring(item.name or "Unknown")
+        local bankTab = item.tabName or "-"
+        local minimumText = hasMinimum and tostring(minimum) or "-"
+        local restock = hasMinimum and (current < minimum and "Yes" or "No") or "No"
         table.insert(rows, {
-            quality = crafted_quality_markup(item.craftedQualityIcon),
-            qualityValue = crafted_quality_rank(item),
-            name = tostring(item.name or "Unknown"),
-            quantity = tostring(item.totalCount or 0),
-            quantityValue = tonumber(item.totalCount or 0),
-            tab = #tabs > 0 and table.concat(tabs, ", ") or "-",
-            restock = hasMinimum and ((item.totalCount or 0) < minimum and "Yes" or "No") or "No",
-            restockValue = hasMinimum and ((item.totalCount or 0) < minimum and 1 or 0) or 0,
-            minimum = hasMinimum and tostring(minimum) or "-",
+            rowKey = item.rowKey,
+            itemID = tostring(item.itemID or ""),
+            tier = tier,
+            tierValue = tierValue,
+            itemName = itemName,
+            bankTab = bankTab,
+            bankTabValue = string.lower(bankTab),
+            current = tostring(current),
+            currentValue = current,
+            restock = restock,
+            restockValue = restock == "Yes" and 1 or 0,
+            quantity = minimumText,
+            quantityValue = hasMinimum and minimum or 0,
+            quality = tier,
+            qualityValue = tierValue,
+            name = itemName,
+            tab = bankTab,
+            minimum = minimumText,
             minimumValue = hasMinimum and minimum or 0,
         })
     end
@@ -375,8 +448,11 @@ function inventoryView.SortRows(rows, sortState)
     local direction = sortState.direction or "asc"
     local valueKey = ({
         quality = "qualityValue",
+        tier = "tierValue",
+        current = "currentValue",
         quantity = "quantityValue",
         tab = "tab",
+        bankTab = "bankTabValue",
         restock = "restockValue",
         minimum = "minimumValue",
     })[key] or key
@@ -393,7 +469,7 @@ function inventoryView.SortRows(rows, sortState)
             return ordered
         end
 
-        return tostring(left.name or "") < tostring(right.name or "")
+        return tostring(left.itemName or left.name or "") < tostring(right.itemName or right.name or "")
     end)
 
     return rows

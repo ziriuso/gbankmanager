@@ -23,9 +23,15 @@ function mainTableController.Attach(mainFrame, options)
     local syncMinimumInlineRow = options.syncMinimumInlineRow
     local hideMinimumInlineRow = options.hideMinimumInlineRow
 
+    mainFrame.tableScrollbarGutterWidth = mainFrame.tableScrollbarGutterWidth or 24
+
+    function mainFrame:GetTableContentWidth()
+        return math.max(1, (self.tableViewportWidth or 0) - (self.tableScrollbarGutterWidth or 0))
+    end
+
     mainFrame.tableHeaderFrame = mainFrame.tableHeaderFrame or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.tableHeaderFrame:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
-    mainFrame.tableHeaderFrame:SetSize(mainFrame.tableViewportWidth, mainFrame.tableHeaderHeight)
+    mainFrame.tableHeaderFrame:SetSize(mainFrame:GetTableContentWidth(), mainFrame.tableHeaderHeight)
     applyPanelStyle(mainFrame.tableHeaderFrame, theme.colors.panel)
     mainFrame.tableHeaderFrame:Hide()
 
@@ -38,7 +44,7 @@ function mainTableController.Attach(mainFrame, options)
 
     mainFrame.tableFilterFrame = mainFrame.tableFilterFrame or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.tableFilterFrame:SetPoint("TOPLEFT", mainFrame.tableHeaderFrame, "BOTTOMLEFT", 0, -4)
-    mainFrame.tableFilterFrame:SetSize(mainFrame.tableViewportWidth, mainFrame.tableFilterHeight)
+    mainFrame.tableFilterFrame:SetSize(mainFrame:GetTableContentWidth(), mainFrame.tableFilterHeight)
     applyPanelStyle(mainFrame.tableFilterFrame, theme.colors.background)
     mainFrame.tableFilterFrame:Hide()
 
@@ -113,7 +119,7 @@ function mainTableController.Attach(mainFrame, options)
     for rowIndex = 1, mainFrame.tableVisibleCount do
         local row = mainFrame.tableRows[rowIndex] or _G.CreateFrame("Button", nil, mainFrame.tableScrollChild, "BackdropTemplate")
         row:SetPoint("TOPLEFT", mainFrame.tableScrollChild, "TOPLEFT", 0, -((rowIndex - 1) * mainFrame.tableRowHeight))
-        row:SetSize(mainFrame.tableViewportWidth, mainFrame.tableRowHeight - 2)
+        row:SetSize(mainFrame:GetTableContentWidth(), mainFrame.tableRowHeight - 2)
         row:EnableMouse(true)
         applyPanelStyle(row, rowIndex % 2 == 1 and theme.colors.panel or theme.colors.panelAlt)
         row:Hide()
@@ -136,7 +142,12 @@ function mainTableController.Attach(mainFrame, options)
         self.tableColumnLayout = columns or {}
         self.tableColumnKeys = {}
         local offset = 4
+        local contentWidth = self:GetTableContentWidth()
         local activeSortState = getActiveSortState(self)
+
+        self.tableViewportInnerWidth = contentWidth
+        self.tableHeaderFrame:SetSize(contentWidth, self.tableHeaderHeight)
+        self.tableFilterFrame:SetSize(contentWidth, self.tableFilterHeight)
 
         for index = 1, #self.tableHeaderLabels do
             local label = self.tableHeaderLabels[index]
@@ -183,6 +194,7 @@ function mainTableController.Attach(mainFrame, options)
             end
 
             for _, rowFrame in ipairs(self.tableRows) do
+                rowFrame:SetSize(contentWidth, self.tableRowHeight - 2)
                 local column = rowFrame.columns[index]
                 column:ClearAllPoints()
                 column:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", offset + 6, -4)
@@ -217,7 +229,6 @@ function mainTableController.Attach(mainFrame, options)
         end
 
         self.tableRowsData = rows or {}
-        self.tableViewportInnerWidth = self.tableViewportWidth
         self.tableScrollChild:SetSize(self.tableViewportInnerWidth, math.max(self.tableViewportHeight, (#self.tableRowsData * self.tableRowHeight)))
         self.isConfiguringTable = false
         if self.tableScrollController then
@@ -310,13 +321,13 @@ function mainTableController.Attach(mainFrame, options)
         local viewportHeight = self.defaultTableViewportHeight
 
         if self.activeView == "REQUESTS" then
-            anchor = self.requestCreatePanel
+            anchor = self.requestOnlyMode == true and self.requestWorkflowPanel or self.requestCreatePanel
             offsetY = -16
             viewportHeight = 220
         elseif self.activeView == "MINIMUMS" then
             anchor = self.viewSubtitle
             offsetY = -24
-            viewportHeight = 320
+            viewportHeight = self.defaultTableViewportHeight
         elseif self.activeView == "EXPORTS" then
             anchor = self.exportsPanel
             offsetY = -16
@@ -346,19 +357,19 @@ function mainTableController.Attach(mainFrame, options)
 
         self.tableScrollFrame:ClearAllPoints()
         self.tableScrollFrame:SetPoint("TOPLEFT", self.tableViewportFrame, "TOPLEFT", 0, 0)
-        self.tableScrollFrame:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", 0, 0)
-        self.tableScrollFrame:SetSize(self.tableViewportWidth, self.tableViewportHeight)
+        self.tableScrollFrame:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", -(self.tableScrollbarGutterWidth or 0), 0)
+        self.tableScrollFrame:SetSize(self:GetTableContentWidth(), self.tableViewportHeight)
 
         self.tableScrollBar:ClearAllPoints()
-        self.tableScrollBar:SetPoint("TOPRIGHT", self.tableViewportFrame, "TOPRIGHT", 18, 0)
-        self.tableScrollBar:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", 18, 0)
+        self.tableScrollBar:SetPoint("TOPRIGHT", self.tableViewportFrame, "TOPRIGHT", -4, 0)
+        self.tableScrollBar:SetPoint("BOTTOMRIGHT", self.tableViewportFrame, "BOTTOMRIGHT", -4, 0)
 
         self.minimumEmptyStateText:ClearAllPoints()
         self.minimumEmptyStateText:SetPoint("TOPLEFT", self.tableViewportFrame, "TOPLEFT", 12, -12)
 
         if self.activeView == "MINIMUMS" then
             self.minimumsPanel:ClearAllPoints()
-            self.minimumsPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -16)
+            self.minimumsPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
             self.minimumsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
         else
             self.minimumsPanel:ClearAllPoints()

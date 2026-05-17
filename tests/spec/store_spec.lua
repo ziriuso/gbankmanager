@@ -135,6 +135,13 @@ scanner.rawTabs = {
             { itemID = 1001, name = "Flask Alpha", count = 8 },
         },
     },
+    {
+        index = 2,
+        name = "Raid",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 3 },
+        },
+    },
 }
 
 local originalTime = _G.time
@@ -156,7 +163,12 @@ assert.equal("1715523300", newSnapshot.scanId, "fresh scans should derive the sn
 assert.equal(1715523300, newSnapshot.scannedAt, "fresh scans should persist the captured UTC scan timestamp on the snapshot")
 assert.equal(newSnapshot.scanId, _G.GBankManagerDB.currentSnapshotId, "fresh scans should move the current snapshot pointer forward")
 assert.equal(5, _G.GBankManagerDB.snapshots["scan-old"].items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")
-assert.equal(8, _G.GBankManagerDB.snapshots[newSnapshot.scanId].items[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
+assert.equal(11, _G.GBankManagerDB.snapshots[newSnapshot.scanId].items[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
+assert.equal(2, #_G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows, "fresh scans should persist tab-scoped item rows in saved variables")
+assert.equal("Flasks", _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[1].tabName, "fresh scans should persist the first tab-scoped item row")
+assert.equal(8, _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[1].quantity, "fresh scans should persist the first tab-scoped quantity")
+assert.equal("Raid", _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[2].tabName, "fresh scans should persist the second tab-scoped item row")
+assert.equal(3, _G.GBankManagerDB.snapshots[newSnapshot.scanId].itemRows[2].quantity, "fresh scans should persist the second tab-scoped quantity")
 assert.equal(1715523300, _G.GBankManagerDB.meta.updatedAt, "fresh scans should persist the captured UTC scan timestamp as last-scan metadata")
 assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")
 

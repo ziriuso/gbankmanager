@@ -41,6 +41,35 @@ local function actor_name(actor)
     return actor or "Unknown"
 end
 
+local function actor_character_key(actor)
+    if type(actor) == "table" then
+        return actor.characterKey
+    end
+
+    return nil
+end
+
+local function actor_owns_request(request, actor)
+    request = request or {}
+    if type(actor) ~= "table" then
+        return false
+    end
+
+    local actorKey = tostring(actor_character_key(actor) or "")
+    local requesterKey = tostring(request.requesterCharacterKey or "")
+    if actorKey ~= "" and requesterKey ~= "" then
+        return actorKey == requesterKey
+    end
+
+    local name = tostring(actor.name or "")
+    local requester = tostring(request.requester or "")
+    return name ~= "" and requester ~= "" and name == requester
+end
+
+local function actor_is_guildmaster(actor)
+    return type(actor) == "table" and actor.isGuildMaster == true
+end
+
 local function build_request_id(input, context)
     local createdAt = input.createdAt or _G.time()
     return table.concat({
@@ -82,6 +111,10 @@ local function actor_context_for_action(actor, db)
 end
 
 local function can_act(actor, capability, db)
+    if not db or db.auth == nil then
+        return true
+    end
+
     local context = actor_context_for_action(actor, db)
     if type(permissions.Can) == "function" then
         return permissions.Can(context, capability, db.auth)
@@ -121,19 +154,32 @@ function requests.CanApplyAction(request, action)
         return fulfillment ~= "FULFILLED"
     end
 
+    if action == "CANCEL" then
+        return approval == "PENDING" and fulfillment ~= "FULFILLED"
+    end
+
     return false
+end
+
+function requests.CanActorApplyAction(request, action, actor)
+    if not requests.CanApplyAction(request, action) then
+        return false
+    end
+
+    if action == "APPROVE" and actor_owns_request(request, actor) and not actor_is_guildmaster(actor) then
+        return false
+    end
+
+    if action == "CANCEL" then
+        return actor_owns_request(request, actor)
+    end
+
+    return true
 end
 
 function requests.Create(input)
     input = input or {}
     local context = actor_context(input, input.db)
-    local autoApproved = false
-    if type(permissions.Can) == "function" then
-        autoApproved = permissions.Can(context, "request_approve", input.auth or (input.db and input.db.auth))
-    elseif type(permissions.AutoApprovesOwnRequests) == "function" then
-        autoApproved = permissions.AutoApprovesOwnRequests(input.role)
-    end
-
     local requesterName = context.name or input.requester
 
     return {
@@ -145,9 +191,11 @@ function requests.Create(input)
         role = input.role or context.guildRankName,
         itemID = input.itemID,
         itemName = input.itemName,
+        craftedQuality = input.craftedQuality,
+        craftedQualityIcon = input.craftedQualityIcon,
         quantity = input.quantity,
         note = input.note or "",
-        approval = autoApproved and "APPROVED" or "PENDING",
+        approval = "PENDING",
         fulfillment = "OPEN",
         createdAt = input.createdAt or _G.time(),
         createdBy = context.characterKey or requesterName,
@@ -155,10 +203,26 @@ function requests.Create(input)
     }
 end
 
-function requests.Approve(request, approver, decidedAt)
+local function approval_metadata(noteOrDecidedAt, decidedAtOrBankTab, bankTab)
+    if type(noteOrDecidedAt) == "number" and decidedAtOrBankTab == nil and bankTab == nil then
+        return nil, noteOrDecidedAt, nil
+    end
+
+    if type(noteOrDecidedAt) == "number" and type(decidedAtOrBankTab) == "string" and bankTab == nil then
+        return nil, noteOrDecidedAt, decidedAtOrBankTab
+    end
+
+    return noteOrDecidedAt, decidedAtOrBankTab, bankTab
+end
+
+function requests.Approve(request, approver, noteOrDecidedAt, decidedAtOrBankTab, bankTab)
+    local note, decidedAt, selectedBankTab = approval_metadata(noteOrDecidedAt, decidedAtOrBankTab, bankTab)
     request.approval = "APPROVED"
     request.approvedBy = actor_name(approver)
     request.decidedBy = actor_name(approver)
+    request.decisionNote = note or request.decisionNote or ""
+    request.approvedBankTab = selectedBankTab or request.approvedBankTab
+    request.tabName = selectedBankTab or request.tabName
     request.decidedAt = decidedAt or _G.time()
     request.updatedAt = request.decidedAt
     return request
@@ -195,14 +259,28 @@ function requests.Reopen(request, updatedAt)
     return request
 end
 
+function requests.Cancel(request, actor, note, canceledAt)
+    request.approval = "CANCELED"
+    request.canceledBy = actor_name(actor)
+    request.decidedBy = actor_name(actor)
+    request.decisionNote = note or ""
+    request.canceledAt = canceledAt or _G.time()
+    request.updatedAt = request.canceledAt
+    return request
+end
+
 function requests.BuildAuditEntry(eventType, request, details)
     request = request or {}
     details = details or {}
+    local auditActor = details.actor
+    if auditActor == nil or auditActor == "" then
+        auditActor = request.decidedBy or request.approvedBy or request.fulfilledBy or request.canceledBy or request.requester or "Unknown"
+    end
 
     return {
         category = "REQUEST",
         type = eventType,
-        actor = details.actor or request.decidedBy or request.approvedBy or request.fulfilledBy or request.requester or "Unknown",
+        actor = actor_name(auditActor),
         requestId = request.requestId,
         itemID = request.itemID,
         itemName = request.itemName,
@@ -231,20 +309,41 @@ function requests.CreateAndStore(db, input)
     return request
 end
 
-function requests.ApproveStored(db, requestId, actor, decidedAt)
+function requests.ApproveStored(db, requestId, actor, noteOrDecidedAt, decidedAtOrBankTab, bankTab)
     db = ensure_tables(db or {})
     local request = find_request(db, requestId)
-    if not request or not can_act(actor, "request_approve", db) or not requests.CanApplyAction(request, "APPROVE") then
+    if not request or not can_act(actor, "request_approve", db) or not requests.CanActorApplyAction(request, "APPROVE", actor) then
         return nil
     end
 
+    local note, decidedAt, selectedBankTab = approval_metadata(noteOrDecidedAt, decidedAtOrBankTab, bankTab)
     local oldValue = request.approval
-    requests.Approve(request, actor, decidedAt)
+    requests.Approve(request, actor, note, decidedAt, selectedBankTab)
     append_audit(db, requests.BuildAuditEntry("REQUEST_APPROVED", request, {
         actor = actor,
         timestamp = request.decidedAt,
         oldValue = oldValue,
         newValue = request.approval,
+        note = note,
+    }))
+    return request
+end
+
+function requests.CancelStored(db, requestId, actor, note, canceledAt)
+    db = ensure_tables(db or {})
+    local request = find_request(db, requestId)
+    if not request or not requests.CanActorApplyAction(request, "CANCEL", actor) then
+        return nil
+    end
+
+    local oldValue = request.approval
+    requests.Cancel(request, actor, note, canceledAt)
+    append_audit(db, requests.BuildAuditEntry("REQUEST_CANCELED", request, {
+        actor = actor,
+        timestamp = request.canceledAt,
+        oldValue = oldValue,
+        newValue = request.approval,
+        note = note,
     }))
     return request
 end

@@ -37,6 +37,8 @@ local MINIMUM_DRAFT_ROW_COLORS = {
     deleted = { 0.44, 0.12, 0.12, 0.98 },
 }
 
+local MINIMUM_ACTION_BUTTON_BOTTOM_INSET = 32
+
 function mainMinimumsController.Attach(mainFrame, options)
     options = options or {}
     local applyPanelStyle = options.applyPanelStyle
@@ -53,8 +55,12 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.minimumsPanel:SetHeight(124)
+    mainFrame.minimumsPanel:SetHeight(64)
     applyPanelStyle(mainFrame.minimumsPanel, theme.colors.panel)
+    mainFrame.minimumsPanel.transparentActions = true
+    if type(mainFrame.minimumsPanel.SetBackdrop) == "function" then
+        mainFrame.minimumsPanel:SetBackdrop(nil)
+    end
     mainFrame.minimumsPanel:Hide()
 
     mainFrame.minimumsTitle = mainFrame.minimumsTitle or makeLabel(mainFrame.minimumsPanel, "Minimum Draft Actions", "GameFontHighlight")
@@ -70,20 +76,22 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumEditorStateText:Hide()
 
     mainFrame.minimumShowAllToggleButton = mainFrame.minimumShowAllToggleButton or makeButton(mainFrame.minimumsPanel, 110, 28, "Show All")
-    mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, 12)
+    mainFrame.minimumShowAllToggleButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumsPanel, "BOTTOMRIGHT", -16, MINIMUM_ACTION_BUTTON_BOTTOM_INSET)
 
     mainFrame.minimumSearchLabel = mainFrame.minimumSearchLabel or makeLabel(mainFrame.minimumsPanel, "Search", "GameFontHighlightSmall")
     mainFrame.minimumSearchLabel:SetPoint("TOPLEFT", mainFrame.minimumsPanel, "TOPLEFT", 16, -16)
+    mainFrame.minimumSearchLabel:Hide()
 
     mainFrame.minimumSearchInput = mainFrame.minimumSearchInput or makeInput(mainFrame.minimumsPanel, 120, 22)
     mainFrame.minimumSearchInput:SetPoint("TOPLEFT", mainFrame.minimumSearchLabel, "BOTTOMLEFT", 0, -4)
+    mainFrame.minimumSearchInput:Hide()
 
     mainFrame.minimumManualOnlyToggleButton = mainFrame.minimumManualOnlyToggleButton or makeButton(mainFrame.minimumsPanel, 86, 28, "Manual Only")
     mainFrame.minimumManualOnlyToggleButton:SetPoint("RIGHT", mainFrame.minimumSearchInput, "LEFT", -8, 0)
     mainFrame.minimumManualOnlyToggleButton:Hide()
 
     mainFrame.minimumNewButton = mainFrame.minimumNewButton or makeButton(mainFrame.minimumsPanel, 64, 28, "Add")
-    mainFrame.minimumNewButton:SetPoint("BOTTOMLEFT", mainFrame.minimumsPanel, "BOTTOMLEFT", 16, 12)
+    mainFrame.minimumNewButton:SetPoint("BOTTOMLEFT", mainFrame.minimumsPanel, "BOTTOMLEFT", 16, MINIMUM_ACTION_BUTTON_BOTTOM_INSET)
 
     mainFrame.minimumSaveButton = mainFrame.minimumSaveButton or makeButton(mainFrame.minimumsPanel, 88, 28, "Save")
     mainFrame.minimumSaveButton:SetPoint("LEFT", mainFrame.minimumNewButton, "RIGHT", 8, 0)
@@ -377,7 +385,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         local quantity = tonumber(row.quantityValue or row.quantity or 0) or 0
         local scope = row.scope or "TAB"
-        local tabName = row.tabKey
+        local tabName = row.tabKey or row.tabName or row.bankTab
         if row.configured ~= true then
             quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100
             scope = "TAB"
@@ -471,7 +479,7 @@ function mainMinimumsController.Attach(mainFrame, options)
         local layout = minimumsView.GetDefaultColumns()
         local rows = minimumsView.BuildTableRows(self:GetMergedMinimumRules(db), snapshot, {
             showAll = self.minimumShowAllRows,
-            search = self.minimumSearchInput:GetText() or "",
+            search = "",
             manualOnly = false,
             columnFilters = self:GetSharedFilterState(),
         })
@@ -686,10 +694,19 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.minimumDetailsStatusText:SetText("Set the details and confirm to stage this minimum.")
     end
 
+    function mainFrame:IsMinimumDetailsBankTabLocked(row)
+        if not row then
+            return false
+        end
+
+        return self:GetMinimumBaselineRule(row) ~= nil
+    end
+
     function mainFrame:ConfigureMinimumDetailsBankTabDropdown(row, state)
         local tabOptions = self:GetKnownMinimumBankTabs(state or row)
         local dropdownWidth = minimum_dropdown_width(tabOptions, 188, 260)
-        local selectedTab = ((state and state.tabName) and state.tabName ~= "") and state.tabName or "Select Bank Tab"
+        local selectedTab = ((state and state.tabName) and state.tabName ~= "") and state.tabName or (row and row.bankTab) or "Select Bank Tab"
+        local isLocked = self:IsMinimumDetailsBankTabLocked(row)
 
         self.minimumDetailsBankTabDropdownButton:SetWidth(dropdownWidth)
         style_dropdown_button_text(self.minimumDetailsBankTabDropdownButton)
@@ -725,7 +742,15 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         self.minimumDetailsBankTabDropdownPanel:Hide()
         self.minimumDetailsBankTabValueText:SetText(selectedTab == "Select Bank Tab" and "-" or selectedTab)
+        if isLocked then
+            self.minimumDetailsBankTabValueText:Show()
+            self.minimumDetailsBankTabDropdownButton:Hide()
+            self.minimumDetailsBankTabDropdownButton:SetEnabled(false)
+            return
+        end
+
         self.minimumDetailsBankTabValueText:Hide()
+        self.minimumDetailsBankTabDropdownButton:SetEnabled(true)
         self.minimumDetailsBankTabDropdownButton:Show()
         self.minimumDetailsBankTabDropdownButton:SetScript("OnClick", function()
             if self.minimumDetailsBankTabDropdownPanel:IsShown() then
@@ -740,7 +765,7 @@ function mainMinimumsController.Attach(mainFrame, options)
         state = state or (row and self:GetPendingMinimumDraft(row)) or nil
         local itemName = tostring((row and row.itemName) or (state and state.itemName) or "Unknown")
         local itemID = tonumber((row and row.itemID) or (state and state.itemID) or 0) or 0
-        local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or "-"
+        local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or (row and row.bankTab) or "-"
         local craftedQuality = tonumber((row and row.craftedQuality) or (state and state.craftedQuality) or 0) or 0
         local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or "")
 
@@ -1418,8 +1443,10 @@ function mainMinimumsController.Attach(mainFrame, options)
             return ""
         end
 
-        if (self.minimumSearchInput:GetText() or "") ~= "" then
-            return "No minimum rows match the current search and filters."
+        for _, value in pairs(self:GetSharedFilterState() or {}) do
+            if tostring(value or "") ~= "" then
+                return "No minimum rows match the current search and filters."
+            end
         end
 
         if not self.minimumShowAllRows then

@@ -42,6 +42,13 @@ local snapshot = snapshots.FromTabScan({
                 { itemID = 1001, name = "Flask Alpha", count = 6 },
             },
         },
+        {
+            index = 2,
+            name = "Raid",
+            slots = {
+                { itemID = 1001, name = "Flask Alpha", count = 5 },
+            },
+        },
     },
 })
 
@@ -65,9 +72,14 @@ assert.truthy(type(diff) == "table", "diff module should load from the toc")
 assert.truthy(type(scanner) == "table", "scanner module should load")
 assert.truthy(type(dashboard) == "table", "dashboard view should load from the toc")
 assert.truthy(type(historyView) == "table", "history view should load from the toc")
-assert.equal(10, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
+assert.equal(15, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
+assert.equal(2, #snapshot.itemRows, "snapshot should preserve one canonical item row per bank tab")
+assert.equal("Flasks", snapshot.itemRows[1].tabName, "snapshot item rows should keep the source bank tab")
+assert.equal(10, snapshot.itemRows[1].quantity, "snapshot item rows should aggregate same-tab stacks")
+assert.equal("Raid", snapshot.itemRows[2].tabName, "snapshot item rows should keep later bank tabs for the same item")
+assert.equal(5, snapshot.itemRows[2].quantity, "snapshot item rows should keep per-tab quantities")
 assert.equal("QUANTITY_INCREASED", changes[1].type, "diff should report quantity increase")
-assert.equal(7, changes[1].delta, "diff should capture quantity delta")
+assert.equal(12, changes[1].delta, "diff should capture quantity delta")
 
 local originalDate = _G.date
 local dateCalls = {}

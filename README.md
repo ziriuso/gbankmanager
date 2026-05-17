@@ -6,10 +6,10 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 
 ## Features
 
-- One-button guild bank scan foundation with snapshot and change-log storage
+- One-button guild bank scan foundation with snapshot, tab-scoped item rows, and change-log storage
 - Officer-first dashboard shell with inventory, history, minimums, requests, exports, about, and options workspaces
 - Recurring stock minimum helpers with a modal-based add/edit flow and procurement-planning export workflows
-- Member request submission with officer auto-approval behavior for elevated roles
+- Member request submission with explicit approval workflow and no auto-approval path
 - Auctionator, CSV, and custom-delimited export builders
 - Guild sync foundation with authority-first conflict resolution and login hello messages
 
@@ -24,6 +24,7 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 Current UI ownership is intentionally split across:
 
 - `UI/MainFrameShell.lua`
+- `UI/TableLayouts.lua`
 - `UI/MainTableController.lua`
 - `UI/MainRequestsController.lua`
 - `UI/MainExportsController.lua`
@@ -33,7 +34,7 @@ Current UI ownership is intentionally split across:
 ## Item Catalog
 
 - The addon now uses a shared item catalog path for both Minimums and Requests.
-- Minimums add flow now moves from the search modal directly into a centered `Minimum Details` modal, existing Minimums rows reuse that same modal with the current Bank Tab prefilled in the selector, and the Minimums table defaults to `Show All` on open.
+- Minimums add flow now moves from the search modal directly into a centered `Minimum Details` modal, existing Minimums rows reuse that same modal with the current Bank Tab prefilled as a read-only value, and the Minimums table defaults to `Show All` on open.
 - Minimums and Requests both use the same reusable selector with clearly labeled `Search Item ID` and `Search Item Name` inputs plus a selected-item display for the resolved name and any available crafting-quality icon.
 - Name search is token-based, ranked, and shared through a cached session per editor surface, so broad queries like `flask of` return a scrollable multi-match list while exact item IDs still resolve directly.
 - Name search does not activate until two typed characters, which avoids noisy one-character scans and keeps broad bundled queries responsive.
@@ -41,7 +42,7 @@ Current UI ownership is intentionally split across:
 - Match rows render through one reusable virtualized results control instead of an eager button stack.
 - Match rows show the crafting-quality icon or tier when available, followed by the item name and item ID so quality variants stay distinguishable before selection, and duplicate-name crafted variants sort with the higher tier first.
 - Minimums details use the same bundled catalog to backfill `craftedQuality` and `craftedQualityIcon` when scan data does not already include them, so the modal and table can still show the right crafted tier for known items.
-- Full-shell Minimums and Requests require a confirmed catalog selection before the action becomes available; request-only mode intentionally keeps a lightweight `Create` affordance visible while still rejecting raw-text-only submission.
+- Minimums and the request wizard require a confirmed catalog selection before submission can advance, and raw-text-only request submission is rejected.
 - Bundled item data is shipped in the required sibling addon `GBankManager_ItemData/`, which now loads as a core dependency of `GBankManager` instead of as an optional load-on-demand companion.
 - The bundled companion addon now ships a generated indexed payload instead of one monolithic flat search table:
   - chunked item-record files
@@ -75,3 +76,25 @@ Current UI ownership is intentionally split across:
 7. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`.
 8. Use `/gbm ui` to open the officer shell.
 9. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+
+## Next Roadmap
+
+The next planned work after the request workflow slice is:
+
+1. Rework the Exports UI after the request/admin split.
+2. Finish broader UI polish such as theme customization, resize/scale, and spacing cleanup.
+3. Build an in-game unit-test lane through the unit test addon after the product-facing UI slices above are stable.
+4. Strengthen addon communication between guild users so history, requests, and minimums sync reliably across addon-enabled guild clients.
+5. Fully document the maintainer deployment flow and add a small maintainer UI for choosing the WoW target path (`Retail`, `PTR`, `Beta`) plus surfacing current status, last sync time, and the WoW patch/build used for the last sync.
+
+### Recently Completed
+
+- Scan snapshots now persist `itemRows` alongside aggregate `items`, using `itemID|TAB|tabName` row identity for one row per bank tab while preserving aggregate totals for diff and planning.
+- Inventory and Minimums `Show All` now consume tab-scoped scan rows so shared items render with the correct per-tab quantity.
+- Inventory and Minimums now share the same table layout: `Item ID`, `Tier`, `Item`, `Bank Tab`, `Current`, `Restock`, and `Minimum`, with the Item column widened to use the old right-side whitespace.
+- Minimums uses the shared table header/filter controls instead of the old bottom search box, and its footer is a compact three-button action strip rather than a boxed editor panel.
+- Requests never auto-approve. Officers/admins cannot approve their own requests; only the Guild Master can manually approve their own request through the same workflow action as any other approval.
+- The officer-facing Requests tab is now `Request Admin`, focused on workflow management with shared table search and a request-list/details-modal flow.
+- `/gbm request` now opens a smaller end-user workflow window with `Guild Bank Manager` in the header, a four-column own-request status table, row-click details, request cancellation for pending own requests, and a three-step `New Request` wizard.
+- Request approval now requires the approver to choose a Bank Tab, persists the Decision Note back into request details, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested item and amount.
+- Request details now show Requested By above Date Requested, keep Updated By, Date Updated, and Decision Note at the bottom of the fixed-row detail list, hide the decision-note editor after approval or denial, block click-through while request modals are open, normalize request history actors to character names, and keep shared table scrollbars inside the table viewport.

@@ -296,6 +296,10 @@ local function set_alpha(nextAlpha)
 end
 
 local function view_label_for(key)
+    if key == "REQUESTS" and mainFrame.requestOnlyMode == true then
+        return "Requests"
+    end
+
     for _, item in ipairs(mainFrame.navItems or {}) do
         if item.key == key then
             return item.label
@@ -310,8 +314,8 @@ mainFrame.viewTitle = mainFrame.viewTitle or make_label(mainFrame.content, "Dash
 mainFrame.viewTitle:SetPoint("TOPLEFT", mainFrame.content, "TOPLEFT", 24, -24)
 mainFrame.viewSubtitle = mainFrame.viewSubtitle or make_label(mainFrame.content, "Critical shortages, pending requests, and export readiness.", "GameFontHighlightSmall")
 mainFrame.viewSubtitle:SetPoint("TOPLEFT", mainFrame.viewTitle, "BOTTOMLEFT", 0, -8)
-mainFrame.tableViewportWidth = 730
-mainFrame.tableViewportInnerWidth = 730
+mainFrame.tableViewportWidth = 796
+mainFrame.tableViewportInnerWidth = 796
 mainFrame.tableHeaderHeight = 34
 mainFrame.tableFilterHeight = 28
 mainFrame.tableRowHeight = 26
@@ -364,7 +368,10 @@ mainTableController.Attach(mainFrame, {
     labelWithSortMarker = label_with_sort_marker,
     applyTableRowStyle = apply_table_row_style,
     usesInlineFilters = function(frame)
-        return frame.activeView ~= "MINIMUMS"
+        return frame.activeView == "INVENTORY"
+            or frame.activeView == "MINIMUMS"
+            or frame.activeView == "HISTORY"
+            or (frame.activeView == "REQUESTS" and frame.requestOnlyMode ~= true)
     end,
     getActiveSortState = function(frame)
         return frame:GetActiveSortState()
@@ -1259,8 +1266,20 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsAvailablePermissionPanel, theme.colors.panel)
     apply_panel_style(self.optionsBlacklistListPanel, theme.colors.panel)
     apply_panel_style(self.requestActionsPanel, theme.colors.panel)
+    apply_panel_style(self.requestWorkflowPanel, theme.colors.panel)
+    apply_panel_style(self.requestWizardModal, theme.colors.panelAlt)
+    apply_panel_style(self.requestDetailsModal, theme.colors.panelAlt)
+    if type(self.requestWizardModal.SetBackdropColor) == "function" then
+        self.requestWizardModal:SetBackdropColor(0, 0, 0, 1)
+    end
+    if type(self.requestDetailsModal.SetBackdropColor) == "function" then
+        self.requestDetailsModal:SetBackdropColor(0, 0, 0, 1)
+    end
     apply_panel_style(self.requestCreatePanel, theme.colors.panel)
     apply_panel_style(self.minimumsPanel, theme.colors.panel)
+    if self.minimumsPanel.transparentActions == true and type(self.minimumsPanel.SetBackdrop) == "function" then
+        self.minimumsPanel:SetBackdrop(nil)
+    end
     apply_panel_style(self.minimumAddModal, theme.colors.panelAlt)
     apply_panel_style(self.minimumDetailsModal, theme.colors.panelAlt)
     apply_panel_style(self.exportsPanel, theme.colors.panel)
@@ -1280,7 +1299,7 @@ function mainFrame:ApplyTheme()
         local isActive = button.key == self.activeView
         apply_panel_style(button, isActive and theme.colors.panelAlt or theme.colors.panel)
         button:SetWidth(self.collapsedSidebar and 40 or (theme.spacing.sidebarExpanded - 32))
-        button.labelText:SetText(self.collapsedSidebar and "" or button.key:sub(1, 1) .. string.lower(button.key:sub(2)))
+        button.labelText:SetText(self.collapsedSidebar and "" or view_label_for(button.key))
         if compactRequestMode then
             button:Hide()
         else
@@ -1290,13 +1309,16 @@ function mainFrame:ApplyTheme()
 
     self.collapseButton.labelText:SetText(self.collapsedSidebar and ">" or "<")
     if compactRequestMode then
+        self:SetSize(960, 580)
         self.sidebar:Hide()
         self.collapseButton:Hide()
         self.scanButton:Hide()
         self.statusText:Hide()
         self.subtitleText:Hide()
-        self.titleText:Hide()
+        self.titleText:SetText("Guild Bank Manager")
+        self.titleText:Show()
     else
+        self:SetSize(theme.spacing.frameWidth, theme.spacing.frameHeight)
         self.sidebar:Show()
         self.collapseButton:Show()
         self.scanButton:Show()
@@ -1324,6 +1346,18 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.requestFulfillButton, theme.colors.panelAlt)
     apply_panel_style(self.requestReopenButton, theme.colors.panel)
     apply_panel_style(self.requestCreateButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestWizardBackButton, theme.colors.panel)
+    apply_panel_style(self.requestWizardNextButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestWizardSubmitButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestWizardCancelButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsApproveButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestDetailsRejectButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsFulfillButton, theme.colors.panelAlt)
+    apply_panel_style(self.requestDetailsReopenButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsCancelRequestButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsCloseButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsBankTabDropdownButton, theme.colors.panel)
+    apply_panel_style(self.requestDetailsBankTabDropdownPanel, theme.colors.panelAlt)
     apply_panel_style(self.requestCreateResultsPanel, theme.colors.background)
     apply_panel_style(self.minimumRestockToggleButton, theme.colors.panel)
     apply_panel_style(self.minimumShowAllToggleButton, theme.colors.panel)
@@ -1354,6 +1388,11 @@ function mainFrame:ApplyTheme()
     apply_panel_style(self.optionsAuthReadButton, theme.colors.panel)
     apply_panel_style(self.optionsAuthResetButton, theme.colors.panel)
     for _, button in ipairs(self.requestCreateMatchButtons or {}) do
+        if button:IsShown() then
+            apply_panel_style(button, theme.colors.panel)
+        end
+    end
+    for _, button in ipairs(self.requestDetailsBankTabDropdownOptions or {}) do
         if button:IsShown() then
             apply_panel_style(button, theme.colors.panel)
         end
@@ -1447,7 +1486,7 @@ function mainFrame:ResizeInventoryColumn(index, delta)
         return
     end
 
-    self.tableColumnLayout = inventoryView.ResizeColumnLayout(self.tableColumnLayout, index, delta, self.tableViewportWidth)
+    self.tableColumnLayout = inventoryView.ResizeColumnLayout(self.tableColumnLayout, index, delta, self:GetTableContentWidth())
     local db = current_db()
     local store = ns.data.store or ns.modules.store
     local inventoryColumnWidths = store.GetInventoryColumnWidths(db)
@@ -1478,7 +1517,7 @@ function mainFrame:ApplyInventoryFilters()
     local inventoryView = ns.modules.inventoryView
     local db = current_db()
     local snapshot = self.cachedInventorySnapshot or { items = {} }
-    local layout = inventoryView.GetColumnLayout(db, self.tableViewportWidth)
+    local layout = inventoryView.GetColumnLayout(db, self:GetTableContentWidth())
     local rows = inventoryView.BuildTableRows(snapshot, db, self:GetInventoryFilterState())
     rows = inventoryView.SortRows(rows, self.inventorySortState)
     local displayRows = inventoryView.BuildDisplayRows(rows, layout)
@@ -1522,10 +1561,17 @@ function mainFrame:HandleTableRowClick(row)
         return nil
     end
 
+    if (self.requestWizardModal and self.requestWizardModal:IsShown())
+        or (self.requestDetailsModal and self.requestDetailsModal:IsShown())
+        or (self.minimumAddModal and self.minimumAddModal:IsShown())
+        or (self.minimumDetailsModal and self.minimumDetailsModal:IsShown()) then
+        return nil
+    end
+
     if self.activeView == "REQUESTS" and row.requestId then
         self:SelectRequestById(row.requestId)
         self:RefreshRequestActionButtons()
-        return row
+        return self:OpenRequestDetailsModal(row.requestId) or row
     end
 
     if self.activeView == "MINIMUMS" and row.itemID then
@@ -1609,6 +1655,9 @@ function mainFrame:RefreshView()
     self.tableScrollFrame:Hide()
     self.tableScrollBar:Hide()
     self.requestActionsPanel:Hide()
+    self.requestWorkflowPanel:Hide()
+    self.requestWizardModal:Hide()
+    self.requestDetailsModal:Hide()
     self.requestCreatePanel:Hide()
     self.minimumsPanel:Hide()
     self.minimumAddModal:Hide()
@@ -1668,30 +1717,20 @@ function mainFrame:RefreshView()
         self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "REQUESTS" then
-        local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile)
+        local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState())
         if not self:GetSelectedRequest() then
             self:SelectFirstActionableRequest()
         end
         self:RefreshRequestActionButtons()
         self.tableScrollOffset = 0
         if compactRequestMode then
-            self:ConfigureTable({
-                { key = "createdAt", label = "Submitted", width = 130, justifyH = "LEFT" },
-                { key = "itemName", label = "Item", width = 190, justifyH = "LEFT" },
-                { key = "quantity", label = "Qty", width = 60, justifyH = "LEFT" },
-                { key = "approval", label = "Approval", width = 95, justifyH = "LEFT" },
-                { key = "fulfillment", label = "Fulfillment", width = 105, justifyH = "LEFT" },
-                { key = "note", label = "Note", width = 170, justifyH = "LEFT" },
-            }, rows)
+            local tableLayouts = ns.modules.tableLayouts
+            local requestColumns = tableLayouts and tableLayouts.GetRequestStatusColumns and tableLayouts.GetRequestStatusColumns() or {}
+            self:ConfigureTable(requestColumns, rows)
         else
-            self:ConfigureTable({
-                { key = "requester", label = "Requester", width = 110, justifyH = "LEFT" },
-                { key = "itemName", label = "Item", width = 170, justifyH = "LEFT" },
-                { key = "quantity", label = "Qty", width = 50, justifyH = "LEFT" },
-                { key = "approval", label = "Approval", width = 90, justifyH = "LEFT" },
-                { key = "fulfillment", label = "Fulfillment", width = 100, justifyH = "LEFT" },
-                { key = "note", label = "Note", width = 110, justifyH = "LEFT" },
-            }, rows)
+            local tableLayouts = ns.modules.tableLayouts
+            local requestColumns = tableLayouts and tableLayouts.GetRequestAdminColumns and tableLayouts.GetRequestAdminColumns() or {}
+            self:ConfigureTable(requestColumns, rows)
         end
         self:RefreshVisibleTableRows()
         showTable = true
@@ -1744,16 +1783,18 @@ function mainFrame:RefreshView()
         self.requestCreatePanel:ClearAllPoints()
     end
     if compactRequestMode then
-        self.requestCreatePanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+        self.requestWorkflowPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+        self.requestCreatePanel:SetPoint("TOPLEFT", self.requestWorkflowPanel, "BOTTOMLEFT", 0, -12)
     else
         self.requestCreatePanel:SetPoint("TOPLEFT", self.requestActionsPanel, "BOTTOMLEFT", 0, -12)
     end
+    self.requestWorkflowPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
     self.requestCreatePanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
     if type(self.tableHeaderFrame.ClearAllPoints) == "function" then
         self.tableHeaderFrame:ClearAllPoints()
     end
     if self.activeView == "REQUESTS" then
-        self.tableHeaderFrame:SetPoint("TOPLEFT", self.requestCreatePanel, "BOTTOMLEFT", 0, -16)
+        self.tableHeaderFrame:SetPoint("TOPLEFT", compactRequestMode and self.requestWorkflowPanel or self.requestActionsPanel, "BOTTOMLEFT", 0, -16)
     else
         self.tableHeaderFrame:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
     end
@@ -1790,9 +1831,11 @@ function mainFrame:RefreshView()
         self.requestActionsPanel:Hide()
     end
 
-    if self.activeView == "REQUESTS" then
-        self.requestCreatePanel:Show()
+    if self.activeView == "REQUESTS" and compactRequestMode then
+        self.requestWorkflowPanel:Show()
+        self.requestCreatePanel:Hide()
     else
+        self.requestWorkflowPanel:Hide()
         self.requestCreatePanel:Hide()
     end
 
@@ -1833,6 +1876,8 @@ for _, input in ipairs(mainFrame.tableFilterInputs) do
         elseif mainFrame.activeView == "MINIMUMS" then
             mainFrame:ApplyMinimumFilters()
         elseif mainFrame.activeView == "HISTORY" then
+            mainFrame:RefreshView()
+        elseif mainFrame.activeView == "REQUESTS" and mainFrame.requestOnlyMode ~= true then
             mainFrame:RefreshView()
         end
     end)

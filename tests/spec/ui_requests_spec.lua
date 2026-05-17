@@ -12,6 +12,16 @@ local fixture = require("tests.helpers.ui_fixture")
 local env = fixture.load()
 local mainFrame = env.mainFrame
 
+local function point_y(frame)
+    return (frame.points[1] or {})[5]
+end
+
+local function assert_aligned(label, value, message)
+    assert.same(mainFrame.requestDetailsModal, (label.points[1] or {})[2], message .. " label should anchor to the modal")
+    assert.same(mainFrame.requestDetailsModal, (value.points[1] or {})[2], message .. " value should anchor to the modal")
+    assert.equal(point_y(label), point_y(value), message .. " label and value should share one fixed row")
+end
+
 _G.GBankManagerDB = _G.GBankManagerDB or {}
 _G.GBankManagerDB.ui = _G.GBankManagerDB.ui or {}
 _G.GBankManagerDB.ui.minimumItemCatalog = {
@@ -37,28 +47,235 @@ _G.GBankManagerDB.ui.minimumItemCatalog = {
 _G.GBankManagerDB.requests = {
     {
         requestId = "req-1",
-        requester = "OfficerOne-Stormrage",
+        requester = "OfficerOne",
+        requesterCharacterKey = "Stormrage-OfficerOne",
         itemName = "Raid Flask",
+        itemID = 990001,
+        craftedQuality = 5,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier5",
         quantity = 5,
         approval = "PENDING",
         fulfillment = "OPEN",
         note = "Raid night",
         createdAt = 100,
     },
+    {
+        requestId = "req-2",
+        requester = "RaiderTwo-Stormrage",
+        itemName = "Arcane Oil",
+        itemID = 990010,
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+        quantity = 2,
+        approval = "APPROVED",
+        fulfillment = "OPEN",
+        note = "Alt raid",
+        createdAt = 200,
+    },
+    {
+        requestId = "req-approve-bank-tab",
+        requester = "RaiderThree",
+        requesterCharacterKey = "Stormrage-RaiderThree",
+        itemName = "Thalassian Phoenix Oil",
+        itemID = 243734,
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+        quantity = 100,
+        approval = "PENDING",
+        fulfillment = "OPEN",
+        note = "We should have better oil",
+        createdAt = 300,
+    },
+    {
+        requestId = "req-denied-note-hidden",
+        requester = "RaiderFour",
+        requesterCharacterKey = "Stormrage-RaiderFour",
+        itemName = "Denied Flask",
+        itemID = 990011,
+        craftedQuality = 5,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier5",
+        quantity = 1,
+        approval = "REJECTED",
+        fulfillment = "OPEN",
+        note = "Maybe later",
+        decisionNote = "Not needed",
+        decidedBy = "OfficerOne",
+        decidedAt = 400,
+        createdAt = 350,
+    },
+}
+_G.GBankManagerDB.minimums = {}
+_G.GBankManagerDB.currentSnapshotId = "request-approval-snapshot"
+_G.GBankManagerDB.snapshots = {
+    ["request-approval-snapshot"] = {
+        scanId = "request-approval-snapshot",
+        scannedAt = 300,
+        items = {
+            [243734] = {
+                itemID = 243734,
+                itemName = "Thalassian Phoenix Oil",
+                totalCount = 0,
+                tabs = {
+                    ["Raid Buffer"] = 0,
+                    ["Gems and Chants"] = 0,
+                },
+            },
+        },
+    },
 }
 env.ns.state.db = _G.GBankManagerDB
 
 mainFrame:SelectView("REQUESTS")
 assert.equal("REQUESTS", mainFrame.activeView, "requests tab should be selectable")
-assert.truthy(mainFrame.requestCreatePanel:IsShown(), "request create controls should show in the requests view")
-assert.truthy(mainFrame.requestActionsPanel:IsShown(), "officer request actions should show in the full requests view")
-assert.same(mainFrame.requestCreatePanel, (mainFrame.tableHeaderFrame.points[1] or {})[2], "requests view should anchor the shared table directly beneath the create panel")
+assert.equal("Request Admin", mainFrame.viewTitle:GetText(), "full-shell requests tab should be renamed Request Admin")
+assert.equal("Request Admin", mainFrame.sidebarButtons[5].labelText:GetText(), "sidebar should rename Requests to Request Admin")
+assert.truthy(not mainFrame.requestCreatePanel:IsShown(), "request admin should not expose inline request creation")
+assert.truthy(mainFrame.requestActionsPanel:IsShown(), "request admin should keep officer workflow actions")
+assert.truthy((mainFrame.requestActionsPanel:GetHeight() or 0) >= 116, "request admin workflow actions should leave more breathing room below the action buttons")
+assert.same(mainFrame.requestActionsPanel, (mainFrame.tableHeaderFrame.points[1] or {})[2], "request admin table should anchor directly beneath workflow actions")
 assert.truthy(mainFrame.tableViewportFrame:IsShown(), "requests view should show the shared table viewport")
-assert.truthy((mainFrame.requestCreatePanel:GetHeight() or 0) >= 190, "requests view should leave room for bundled item search matches")
+assert.truthy(mainFrame.tableFilterFrame:IsShown(), "request admin table should use shared search controls like inventory")
+assert.equal("Date Requested", mainFrame.tableHeaderLabels[1]:GetText(), "request admin table should expose the request date")
+assert.equal("Requestor", mainFrame.tableHeaderLabels[2]:GetText(), "request admin table should expose Requestor")
+assert.equal("Item ID", mainFrame.tableHeaderLabels[3]:GetText(), "request admin table should expose Item ID")
+assert.equal("Item Name", mainFrame.tableHeaderLabels[4]:GetText(), "request admin table should expose item name")
+assert.equal("Quantity", mainFrame.tableHeaderLabels[5]:GetText(), "request admin table should expose quantity")
+assert.equal("Status", mainFrame.tableHeaderLabels[6]:GetText(), "request admin table should expose combined status")
+assert.truthy(string.match(mainFrame.tableRowsData[1].createdAt or "", "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d$") ~= nil, "request admin rows should include formatted date requested")
+assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request admin rows should include item id")
+assert.equal("Raid Flask", mainFrame.tableRowsData[1].itemName, "request admin rows should include item name")
+assert.equal("Pending", mainFrame.tableRowsData[1].status, "request admin rows should expose a readable combined status")
+mainFrame.tableFilterInputs[4]:SetText("Arcane")
+mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+assert.equal(1, #mainFrame.tableRowsData, "request admin shared filters should search by item name")
+assert.equal("Arcane Oil", mainFrame.tableRowsData[1].itemName, "request admin item-name filter should keep the matching row")
+mainFrame.tableFilterInputs[4]:SetText("")
+mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+mainFrame.tableFilterInputs[3]:SetText("990001")
+mainFrame.tableFilterInputs[3]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[3])
+assert.equal(1, #mainFrame.tableRowsData, "request admin shared filters should search by item id")
+assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request admin item-id filter should keep the matching row")
+mainFrame.tableFilterInputs[3]:SetText("")
+mainFrame.tableFilterInputs[3]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[3])
+
+mainFrame:ShowRequestOnly()
+assert.equal("REQUESTS", mainFrame.activeView, "request-only mode should stay on the requests view")
+assert.truthy(mainFrame.requestOnlyMode == true, "request-only mode should be tracked on the shell")
+assert.truthy(mainFrame.requestWorkflowPanel:IsShown(), "request-only mode should show the separate end-user request workflow")
+assert.truthy(not mainFrame.requestCreatePanel:IsShown(), "request-only workflow should not use the old inline create panel")
+assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only mode should hide officer action controls")
+assert.truthy(not mainFrame.sidebar:IsShown(), "request-only mode should hide the sidebar")
+assert.same(mainFrame.viewSubtitle, (mainFrame.requestWorkflowPanel.points[1] or {})[2], "request-only mode should place the request workflow directly below the request subtitle")
+assert.equal("Guild Bank Manager", mainFrame.titleText:GetText(), "request-only header should keep the addon title visible")
+assert.truthy(mainFrame.titleText:IsShown(), "request-only header should show the addon title")
+assert.truthy((mainFrame:GetWidth() or 0) < 1040, "request-only window should be slightly smaller than the full officer shell")
+assert.truthy((mainFrame:GetHeight() or 0) < 640, "request-only window should be slightly shorter than the full officer shell")
+assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "request-only workflow should start with item id")
+assert.equal("Item Name", mainFrame.tableHeaderLabels[2]:GetText(), "request-only workflow should include the requested item name")
+assert.equal("Quantity", mainFrame.tableHeaderLabels[3]:GetText(), "request-only workflow should include quantity")
+assert.equal("Status", mainFrame.tableHeaderLabels[4]:GetText(), "request-only workflow should expose combined status")
+assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request-only rows should include item id")
+assert.equal("Raid Flask", mainFrame.tableRowsData[1].itemName, "request-only rows should include item name")
+assert.equal("5", mainFrame.tableRowsData[1].quantity, "request-only rows should include quantity")
+assert.equal("Pending", mainFrame.tableRowsData[1].status, "request-only rows should include status")
+mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
+assert.truthy(mainFrame.requestDetailsModal:IsShown(), "clicking a request row should open the shared request details modal")
+assert.truthy(mainFrame.requestDetailsModal.mouseEnabled == true, "request details modal should block clicks from reaching the request table behind it")
+assert.truthy((mainFrame.requestDetailsModal.frameLevel or 0) > (mainFrame.frameLevel or 0), "request details modal should render above table rows")
+assert.equal("Raid Flask", mainFrame.requestDetailsItemNameText:GetText(), "request details should show item name")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier5:22:22|a", mainFrame.requestDetailsQualityText:GetText(), "request details should show crafted quality")
+assert.equal("5", mainFrame.requestDetailsQuantityText:GetText(), "request details should show quantity")
+assert.equal("Raid night", mainFrame.requestDetailsSubmissionNoteText:GetText(), "request details should show submission note")
+assert.equal("Pending", mainFrame.requestDetailsStatusText:GetText(), "request details should show readable status")
+assert.truthy(type(mainFrame.requestDetailsApprovedByText) == "table", "request details should expose Approved By")
+assert.equal("-", mainFrame.requestDetailsApprovedByText:GetText(), "pending request details should show no approver")
+assert.truthy(type(mainFrame.requestDetailsApprovedAtText) == "table", "request details should expose Date Approved")
+assert.equal("-", mainFrame.requestDetailsApprovedAtText:GetText(), "pending request details should show no approval date")
+assert.truthy(string.find(mainFrame.requestDetailsRequestedAtText:GetText() or "", "Local", 1, true) ~= nil, "request details should display local time with timezone label")
+assert.equal("Requested By", mainFrame.requestDetailsRequesterLabel:GetText(), "request details should show who requested the item")
+assert.equal("OfficerOne", mainFrame.requestDetailsRequesterText:GetText(), "request details should show the requester above Date Requested")
+assert.equal("Updated By", mainFrame.requestDetailsApprovedByLabel:GetText(), "request details should use Updated By instead of Approved By")
+assert.equal("Date Updated", mainFrame.requestDetailsApprovedAtLabel:GetText(), "request details should use Date Updated instead of Date Approved")
+assert.equal(160, (mainFrame.requestDetailsItemNameText.points[1] or {})[4], "request details values should sit closer to labels")
+assert_aligned(mainFrame.requestDetailsItemNameLabel, mainFrame.requestDetailsItemNameText, "item name")
+assert_aligned(mainFrame.requestDetailsQualityLabel, mainFrame.requestDetailsQualityText, "quality")
+assert_aligned(mainFrame.requestDetailsQuantityLabel, mainFrame.requestDetailsQuantityText, "quantity")
+assert_aligned(mainFrame.requestDetailsSubmissionNoteLabel, mainFrame.requestDetailsSubmissionNoteText, "submission note")
+assert_aligned(mainFrame.requestDetailsStatusLabel, mainFrame.requestDetailsStatusText, "status")
+assert_aligned(mainFrame.requestDetailsRequesterLabel, mainFrame.requestDetailsRequesterText, "requested by")
+assert_aligned(mainFrame.requestDetailsRequestedAtLabel, mainFrame.requestDetailsRequestedAtText, "date requested")
+assert_aligned(mainFrame.requestDetailsApprovedByLabel, mainFrame.requestDetailsApprovedByText, "updated by")
+assert_aligned(mainFrame.requestDetailsApprovedAtLabel, mainFrame.requestDetailsApprovedAtText, "date updated")
+assert_aligned(mainFrame.requestDetailsDecisionNoteLabel, mainFrame.requestDetailsDecisionNoteText, "decision note")
+assert.truthy(point_y(mainFrame.requestDetailsStatusLabel) > point_y(mainFrame.requestDetailsRequesterLabel), "requested by should be below status")
+assert.truthy(point_y(mainFrame.requestDetailsRequesterLabel) > point_y(mainFrame.requestDetailsRequestedAtLabel), "date requested should be below requested by")
+assert.truthy(point_y(mainFrame.requestDetailsRequestedAtLabel) > point_y(mainFrame.requestDetailsApprovedByLabel), "updated by should be below date requested")
+assert.truthy(point_y(mainFrame.requestDetailsApprovedByLabel) > point_y(mainFrame.requestDetailsApprovedAtLabel), "date updated should be below updated by")
+assert.truthy(point_y(mainFrame.requestDetailsApprovedAtLabel) > point_y(mainFrame.requestDetailsDecisionNoteLabel), "decision note should be at the bottom of the detail list")
+assert.equal("Decision Note", mainFrame.requestDetailsActionNoteLabel:GetText(), "request details action note should be explicitly labeled")
+assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsItemNameText.points[1] or {})[2], "request details values should align to a fixed modal column")
+assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsSubmissionNoteText.points[1] or {})[2], "long request details values should use the same fixed modal column")
+assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsActionNoteLabel.points[1] or {})[2], "request detail action controls should align to fixed modal positions")
+assert.truthy(mainFrame.requestDetailsCancelRequestButton:IsShown(), "request authors should see cancel in details for pending requests")
+mainFrame.requestDetailsCloseButton:GetScript("OnClick")(mainFrame.requestDetailsCloseButton)
+
+mainFrame:ShowDashboard()
+mainFrame:SelectView("REQUESTS")
+mainFrame:OpenRequestDetailsModal("req-approve-bank-tab")
+assert.truthy(mainFrame.requestDetailsModal:IsShown(), "admin approval should use the shared details modal")
+assert.truthy(mainFrame.requestDetailsBankTabLabel:IsShown(), "approving a request should prompt for a bank tab")
+assert.equal("Approval Bank Tab", mainFrame.requestDetailsBankTabLabel:GetText(), "approval bank tab prompt should be labeled")
+assert.truthy(mainFrame.requestDetailsApproveButton.enabled == false, "approve should stay disabled until the approver chooses a bank tab")
+mainFrame.requestDetailsBankTabDropdownButton:GetScript("OnClick")(mainFrame.requestDetailsBankTabDropdownButton)
+assert.truthy(mainFrame.requestDetailsBankTabDropdownPanel:IsShown(), "approval bank tab button should open tab choices")
+assert.equal("Raid Buffer", mainFrame.requestDetailsBankTabDropdownOptions[2].value, "approval bank tab prompt should include known bank tabs")
+mainFrame.requestDetailsBankTabDropdownOptions[2]:GetScript("OnClick")(mainFrame.requestDetailsBankTabDropdownOptions[2])
+assert.equal("Raid Buffer", mainFrame.requestDetailsBankTabDropdownButton.labelText:GetText(), "selected approval bank tab should show on the button")
+assert.truthy(mainFrame.requestDetailsApproveButton.enabled ~= false, "approve should enable after choosing a bank tab")
+mainFrame.requestDetailsActionNoteInput:SetText("Approved for raid supplies")
+local originalTime = _G.time
+_G.time = function()
+    return 301
+end
+mainFrame.requestDetailsApproveButton:GetScript("OnClick")(mainFrame.requestDetailsApproveButton)
+_G.time = originalTime
+local approvedRequest = mainFrame:GetSelectedRequest()
+assert.equal("APPROVED", approvedRequest.approval, "details approve should approve the request")
+assert.equal("Approved for raid supplies", approvedRequest.decisionNote, "details approve should store the decision note")
+assert.equal("Raid Buffer", approvedRequest.approvedBankTab, "details approve should store the chosen bank tab")
+assert.truthy(mainFrame.requestDetailsModal:IsShown(), "request details should stay open after status updates")
+assert.equal("Approved", mainFrame.requestDetailsStatusText:GetText(), "request details should refresh status after approval")
+assert.equal("Approved for raid supplies", mainFrame.requestDetailsDecisionNoteText:GetText(), "request details should refresh the decision note after approval")
+assert.equal(approvedRequest.approvedBy, mainFrame.requestDetailsApprovedByText:GetText(), "request details should refresh Approved By after approval")
+assert.truthy(string.find(mainFrame.requestDetailsApprovedAtText:GetText() or "", "Local", 1, true) ~= nil, "request details should refresh Date Approved after approval")
+assert.truthy(not mainFrame.requestDetailsActionNoteLabel:IsShown(), "approved requests should not show a decision note editor")
+assert.truthy(not mainFrame.requestDetailsActionNoteInput:IsShown(), "approved requests should not accept another decision note")
+assert.equal(point_y(mainFrame.requestDetailsFulfillButton), point_y(mainFrame.requestDetailsCloseButton), "request details workflow buttons and Close should share a horizontal row")
+assert.equal(1, #_G.GBankManagerDB.minimums, "approving a request should immediately save a minimum rule")
+assert.equal(243734, _G.GBankManagerDB.minimums[1].itemID, "approval-created minimum should use the request item id")
+assert.equal("Thalassian Phoenix Oil", _G.GBankManagerDB.minimums[1].itemName, "approval-created minimum should use the request item name")
+assert.equal(100, _G.GBankManagerDB.minimums[1].quantity, "approval-created minimum should use the requested quantity")
+assert.equal("Raid Buffer", _G.GBankManagerDB.minimums[1].tabName, "approval-created minimum should use the selected bank tab")
+assert.truthy(_G.GBankManagerDB.minimums[1].enabled == true, "approval-created minimum should be enabled")
+
+mainFrame:OpenRequestDetailsModal("req-denied-note-hidden")
+assert.equal("Rejected", mainFrame.requestDetailsStatusText:GetText(), "denied request details should show rejected status")
+assert.equal("Not needed", mainFrame.requestDetailsDecisionNoteText:GetText(), "denied request details should still show the saved decision note")
+assert.truthy(not mainFrame.requestDetailsActionNoteLabel:IsShown(), "denied requests should not show a decision note editor")
+assert.truthy(not mainFrame.requestDetailsActionNoteInput:IsShown(), "denied requests should not accept another decision note")
+
+assert.equal("New Request", mainFrame.requestWorkflowCreateButton.labelText:GetText(), "request-only workflow should expose a wizard launch button")
+mainFrame.requestWorkflowCreateButton:GetScript("OnClick")(mainFrame.requestWorkflowCreateButton)
+assert.truthy(mainFrame.requestWizardModal:IsShown(), "request-only workflow create button should open the request wizard")
+assert.truthy(mainFrame.requestWizardModal.mouseEnabled == true, "request wizard modal should block clicks from reaching the request table behind it")
+assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "opening a new request wizard should close any request details modal")
+mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
+assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "request table row clicks should be ignored while the new request wizard is open")
+assert.equal("Step 1 of 3: New Request", mainFrame.requestWizardStepText:GetText(), "request wizard should start on the item selection step")
 assert.equal("Search Item ID", mainFrame.requestCreateItemIDLabel:GetText(), "requests view should clearly label the item-id search box")
 assert.equal("Search Item Name", mainFrame.requestCreateItemNameLabel:GetText(), "requests view should clearly label the item-name search box")
 assert.equal("Selected Item", mainFrame.requestCreateSelectedItemLabel:GetText(), "requests view should clearly label the selected item display")
-assert.truthy(mainFrame.requestCreateButton.enabled == false, "requests view should keep Create disabled until a catalog item is selected")
+assert.truthy(mainFrame.requestWizardNextButton.enabled == false, "request wizard should keep Next disabled until a catalog item is selected")
 
 local originalGetRequestSearchSnapshot = mainFrame.GetRequestSearchSnapshot
 local requestSearchSnapshotCalls = 0
@@ -104,7 +321,7 @@ assert.equal("990001", mainFrame.requestCreateItemIDInput:GetText(), "requests v
 assert.equal("Test Crafted Widget", mainFrame.requestCreateItemNameInput:GetText(), "requests view should populate catalog item names after resolution")
 assert.equal("Test Crafted Widget", mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should show the selected item name after resolution")
 assert.equal("Professions-ChatIcon-Quality-Tier5", mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should show the selected item crafting quality icon when available")
-assert.truthy(mainFrame.requestCreateButton.enabled ~= false, "requests view should enable Create after a catalog item is selected")
+assert.truthy(mainFrame.requestWizardNextButton.enabled ~= false, "request wizard should enable Next after a catalog item is selected")
 
 mainFrame.requestCreateItemNameInput:SetText("flask of")
 mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemNameInput)
@@ -113,7 +330,7 @@ assert.equal("No item selected.", mainFrame.requestCreateSelectedItemNameText:Ge
 assert.truthy(mainFrame.requestCreateResultsPanel:IsShown(), "requests view should reopen the matches panel when a broader name search invalidates the prior selection")
 assert.truthy(mainFrame.requestCreateSearchSelector.resultsScrollController ~= nil, "requests view should use the shared shell scroll controller for result rows")
 assert.truthy(mainFrame.requestCreateSearchSelector.resultsScrollBar ~= nil, "requests view should expose the shared shell scrollbar for result rows")
-assert.truthy(mainFrame.requestCreateButton.enabled == false, "requests view should disable Create again when a broader search clears the confirmed selection")
+assert.truthy(mainFrame.requestWizardNextButton.enabled == false, "request wizard should disable Next again when a broader search clears the confirmed selection")
 
 mainFrame.requestCreateSearchSelector:ClearSelection()
 mainFrame.requestCreateItemNameInput:SetText("test variant flask")
@@ -131,7 +348,28 @@ assert.equal(tostring((selectedRequestVariantItem or {}).itemID or ""), mainFram
 assert.equal(tostring((selectedRequestVariantItem or {}).name or (selectedRequestVariantItem or {}).itemName or ""), mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should keep the selected item display after delayed input callbacks")
 assert.equal((selectedRequestVariantItem or {}).craftedQualityIcon, mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should keep the selected duplicate-name tier after delayed input callbacks")
 assert.truthy(not mainFrame.requestCreateResultsPanel:IsShown(), "requests view should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
-assert.truthy(mainFrame.requestCreateButton.enabled ~= false, "requests view should keep Create enabled after delayed callbacks on a valid selection")
+assert.truthy(mainFrame.requestWizardNextButton.enabled ~= false, "request wizard should keep Next enabled after delayed callbacks on a valid selection")
+
+mainFrame.requestWizardNextButton:GetScript("OnClick")(mainFrame.requestWizardNextButton)
+assert.equal("Step 2 of 3: Quantity and Reason", mainFrame.requestWizardStepText:GetText(), "request wizard should advance to quantity and reason")
+assert.truthy(mainFrame.requestCreateQuantityInput:IsShown(), "request wizard step 2 should show quantity input")
+assert.truthy(mainFrame.requestCreateNoteInput:IsShown(), "request wizard step 2 should show reason input")
+mainFrame.requestCreateQuantityInput:SetText("4")
+mainFrame.requestCreateNoteInput:SetText("Need four")
+mainFrame.requestWizardNextButton:GetScript("OnClick")(mainFrame.requestWizardNextButton)
+assert.equal("Step 3 of 3: Review Request", mainFrame.requestWizardStepText:GetText(), "request wizard should advance to review")
+assert.equal("Test Variant Flask", mainFrame.requestWizardReviewItemNameText:GetText(), "request wizard review should read back item name")
+assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.requestWizardReviewQualityText:GetText(), "request wizard review should read back quality")
+assert.equal("4", mainFrame.requestWizardReviewQuantityText:GetText(), "request wizard review should read back quantity")
+assert.equal("Need four", mainFrame.requestWizardReviewReasonText:GetText(), "request wizard review should read back reason")
+assert.same(mainFrame.requestWizardModal, (mainFrame.requestWizardReviewItemNameText.points[1] or {})[2], "request wizard review values should align to a fixed modal column")
+assert.same(mainFrame.requestWizardModal, (mainFrame.requestWizardReviewReasonText.points[1] or {})[2], "long request wizard review values should use the same fixed modal column")
+_G.C_ChatInfo.sentMessages = {}
+mainFrame.requestWizardSubmitButton:GetScript("OnClick")(mainFrame.requestWizardSubmitButton)
+assert.truthy(not mainFrame.requestWizardModal:IsShown(), "request wizard should close after submit")
+assert.equal("PENDING", _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].approval, "wizard-created requests should remain pending")
+assert.equal(1, #_G.C_ChatInfo.sentMessages, "wizard submit should sync the created request to guild clients")
+assert.truthy(string.find(_G.C_ChatInfo.sentMessages[1].payload or "", "REQUEST_CREATED", 1, true) ~= nil, "wizard submit should send a request-created sync payload")
 
 mainFrame.requestCreateItemIDInput:SetText("990001")
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
@@ -145,12 +383,3 @@ mainFrame.requestCreateItemIDInput:SetText("990001")
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
 assert.truthy(mainFrame.requestCreateButton.enabled ~= false, "requests view should re-enable Create after a valid catalog item is reselected")
 assert.truthy(mainFrame.requestCreateStatusText:GetText() ~= "Select an item from the catalog first.", "requests view should clear the stale selection error after a valid catalog item is reselected")
-
-mainFrame:ShowRequestOnly()
-assert.equal("REQUESTS", mainFrame.activeView, "request-only mode should stay on the requests view")
-assert.truthy(mainFrame.requestOnlyMode == true, "request-only mode should be tracked on the shell")
-assert.truthy(mainFrame.requestCreatePanel:IsShown(), "request-only mode should still show the request entry panel")
-assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only mode should hide officer action controls")
-assert.truthy(not mainFrame.sidebar:IsShown(), "request-only mode should hide the sidebar")
-assert.same(mainFrame.viewSubtitle, (mainFrame.requestCreatePanel.points[1] or {})[2], "request-only mode should place request entry directly below the request subtitle")
-assert.truthy(mainFrame.requestCreateButton.enabled ~= false, "request-only mode should keep the lightweight create affordance enabled when request submit is allowed")

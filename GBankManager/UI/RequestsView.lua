@@ -18,6 +18,87 @@ local function format_timestamp(timestamp)
     return tostring(timestamp)
 end
 
+local function crafted_quality_markup(atlasName)
+    if atlasName == nil or atlasName == "" then
+        return ""
+    end
+
+    return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function title_status(value)
+    value = tostring(value or "UNKNOWN")
+    return string.sub(value, 1, 1) .. string.lower(string.sub(value, 2):gsub("_", " "))
+end
+
+function requestsView.FormatStatus(row)
+    row = row or {}
+    local approval = tostring(row.approval or "UNKNOWN")
+    local fulfillment = tostring(row.fulfillment or "UNKNOWN")
+
+    if approval == "APPROVED" and fulfillment == "FULFILLED" then
+        return "Fulfilled"
+    end
+
+    if approval == "APPROVED" then
+        return "Approved"
+    end
+
+    if approval == "PENDING" then
+        return "Pending"
+    end
+
+    if approval == "CANCELED" then
+        return "Canceled"
+    end
+
+    if approval == "REJECTED" then
+        return "Rejected"
+    end
+
+    return title_status(approval)
+end
+
+function requestsView.FormatLocalTimestamp(timestamp)
+    if not timestamp or timestamp == 0 then
+        return "-"
+    end
+
+    local formatter = _G.date or os.date
+    local localTime = type(formatter) == "function" and formatter("%Y-%m-%d %H:%M", timestamp) or tostring(timestamp)
+    local zone = type(formatter) == "function" and formatter("%Z", timestamp) or "Local"
+    if zone == nil or zone == "" then
+        zone = "Local"
+    end
+
+    return string.format("%s %s (Local)", localTime, zone)
+end
+
+local function apply_column_filters(rows, filters)
+    local out = {}
+    filters = filters or {}
+
+    for _, row in ipairs(rows or {}) do
+        local include = true
+
+        for key, value in pairs(filters) do
+            local needle = string.lower(tostring(value or ""))
+            local haystack = string.lower(tostring(row[key] or ""))
+
+            if needle ~= "" and string.find(haystack, needle, 1, true) == nil then
+                include = false
+                break
+            end
+        end
+
+        if include then
+            table.insert(out, row)
+        end
+    end
+
+    return out
+end
+
 function requestsView.FilterOwnRequests(rows, playerName)
     local out = {}
 
@@ -59,12 +140,17 @@ function requestsView.BuildTableRows(rows)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
+            itemID = tostring(row.itemID or ""),
+            tier = crafted_quality_markup(row.craftedQualityIcon),
+            tierValue = tonumber(row.craftedQuality or 0) or 0,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),
             fulfillment = tostring(row.fulfillment or "UNKNOWN"),
+            status = requestsView.FormatStatus(row),
             note = tostring(row.note or ""),
             createdAt = format_timestamp(row.createdAt),
+            requestedAtLocal = requestsView.FormatLocalTimestamp(row.createdAt),
         })
     end
 
@@ -95,7 +181,7 @@ function requestsView.BuildVisibleRows(rows, viewerContext, accessProfile)
     return requestsView.BuildOfficerQueue(rows or {})
 end
 
-function requestsView.BuildTableRows(rows, viewerContext, accessProfile)
+function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters)
     local queue = requestsView.BuildVisibleRows(rows or {}, viewerContext or {}, accessProfile)
     local out = {}
 
@@ -103,16 +189,21 @@ function requestsView.BuildTableRows(rows, viewerContext, accessProfile)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
+            itemID = tostring(row.itemID or ""),
+            tier = crafted_quality_markup(row.craftedQualityIcon),
+            tierValue = tonumber(row.craftedQuality or 0) or 0,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),
             fulfillment = tostring(row.fulfillment or "UNKNOWN"),
+            status = requestsView.FormatStatus(row),
             note = tostring(row.note or ""),
             createdAt = format_timestamp(row.createdAt),
+            requestedAtLocal = requestsView.FormatLocalTimestamp(row.createdAt),
         })
     end
 
-    return out
+    return apply_column_filters(out, filters)
 end
 
 ns.modules.requestsView = requestsView

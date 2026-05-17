@@ -238,7 +238,11 @@ local function handle_request_updated(db, payload, sender)
         return false
     end
 
-    if type(requestsModule.CanApplyAction) == "function" and not requestsModule.CanApplyAction(existing, action) then
+    if type(requestsModule.CanActorApplyAction) == "function" and not requestsModule.CanActorApplyAction(existing, action, actorContext) then
+        return false
+    end
+
+    if type(requestsModule.CanActorApplyAction) ~= "function" and type(requestsModule.CanApplyAction) == "function" and not requestsModule.CanApplyAction(existing, action) then
         return false
     end
 

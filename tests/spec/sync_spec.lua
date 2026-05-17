@@ -376,6 +376,112 @@ assert.equal("MemberOne", db.requests[1].requester, "invalid sync updates should
 assert.equal("Stormrage-MemberOne", db.requests[1].requesterCharacterKey, "invalid sync updates should not rewrite requester character keys")
 assert.equal(2002, db.requests[1].itemID, "invalid sync updates should not rewrite item identity")
 
+db.requests[2] = {
+    requestId = "req-officer-own",
+    requester = "OfficerOne",
+    requesterCharacterKey = "Stormrage-OfficerOne",
+    itemID = 2011,
+    itemName = "Officer Request",
+    quantity = 1,
+    approval = "PENDING",
+    fulfillment = "OPEN",
+    updatedAt = 150,
+}
+
+local selfApprovalUpdatePayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 160,
+    payload = {
+        action = "APPROVE",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-officer-own",
+            requester = "OfficerOne",
+            requesterCharacterKey = "Stormrage-OfficerOne",
+            itemID = 2011,
+            itemName = "Officer Request",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 160,
+        },
+    },
+})
+local selfApprovalUpdateAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", selfApprovalUpdatePayload, "GUILD", "OfficerOne")
+assert.truthy(not selfApprovalUpdateAccepted, "sync events should reject self-approval request updates from non-guildmasters")
+assert.equal("PENDING", db.requests[2].approval, "rejected self-approval sync updates should leave approval pending")
+
+local forgedCancelPayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 161,
+    payload = {
+        action = "CANCEL",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2002,
+            itemName = "Potion Beta Canceled By Officer",
+            quantity = 4,
+            approval = "CANCELED",
+            fulfillment = "OPEN",
+            updatedAt = 161,
+        },
+    },
+})
+local forgedCancelAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", forgedCancelPayload, "GUILD", "OfficerOne")
+assert.truthy(not forgedCancelAccepted, "sync events should reject request cancel updates from non-authors")
+assert.equal("PENDING", db.requests[1].approval, "forged cancel sync updates should leave approval pending")
+
+local authorCancelPayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 162,
+    payload = {
+        action = "CANCEL",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-remote-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2002,
+            itemName = "Potion Beta Canceled",
+            quantity = 4,
+            note = "For raid",
+            approval = "CANCELED",
+            fulfillment = "OPEN",
+            decisionNote = "No longer needed",
+            updatedAt = 162,
+        },
+    },
+})
+local authorCancelAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", authorCancelPayload, "GUILD", "MemberOne")
+assert.truthy(authorCancelAccepted, "sync events should accept request cancel updates from the request author")
+assert.equal("CANCELED", db.requests[1].approval, "accepted author cancel sync updates should persist the canceled status")
+assert.equal("No longer needed", db.requests[1].decisionNote, "accepted author cancel sync updates should preserve the decision note")
+
+local requestCountBeforeForgedSender = #db.requests
 local forgedSenderPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 150,
@@ -403,7 +509,7 @@ local forgedSenderPayload = codec.EncodeTable({
 })
 local forgedSenderAccepted = onEvent(events, "CHAT_MSG_ADDON", "GBankManager", forgedSenderPayload, "GUILD", "DifferentSender")
 assert.truthy(not forgedSenderAccepted, "sync events should reject payloads whose actor context does not match the addon-message sender")
-assert.equal(1, #db.requests, "forged sender payloads should not append requests")
+assert.equal(requestCountBeforeForgedSender, #db.requests, "forged sender payloads should not append requests")
 
 local remoteAuthPayload = codec.EncodeTable({
     type = "AUTH_POLICY_SNAPSHOT",
