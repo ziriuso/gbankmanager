@@ -5,9 +5,9 @@
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
-- Latest pushed branch commit: `28de907` (`feat: land item search and minimums workflow improvements`)
-- Latest local-only committed work in this phase: `e3e97ea` (`feat: rework request and export workflows`)
-- Current repo status at handoff time: uncommitted mockup-fidelity shell rewrite on top of the earlier theme-manager foundation, including reusable art-layer shell surfaces (matte fills, gold line work, card header bands, nav accent rails), sidebar crest/footer identity treatment, branded About panel, table-header/filter/viewport variants plus semantic row tokens, tabbed Options shell, dashboard metric-card icons plus icon-led quick actions, export-card icons plus `Generate` / `Open List` CTAs, request-only wizard modernization, request/minimum button-variant routing, auth compaction, linked-scale and floating-shopping-list fixes, sync chat feedback, staged Minimums summary or badges, broadened in-game unit coverage, maintainer catalog status and deploy tooling, policy-string select-all, smoke-harness modal/gating refresh, two-rank crafted-icon normalization, slider drag-release polish plus upgraded slider chrome, docs, and shell-focus slice on `codex/gbankmanager-v1`
+- Latest pushed branch commit: `b391ad5` (`feat: land UI modernization checkpoint`)
+- Latest local-only committed work in this phase: none
+- Current repo status at handoff time: clean after the UI modernization checkpoint and a one-iteration rollback of the too-ambitious dashboard follow-up. The reusable shell and theme scaffolding are committed, but the live addon still needs substantial mockup-fidelity polish and an art pack to close the gap.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
@@ -19,10 +19,11 @@
 4. `docs/superpowers/handoffs/latest-handoff.md`
 5. `git status -sb`
 6. `.\tools\lua\lua.exe .\tests\run_all.lua`
+7. `docs/ui-reference/mockup-reference-manifest.md`
 
 ## Current Repo State
 
-- Worktree may contain the latest uncommitted item 2/3 correction slice until it is committed/deployed.
+- Worktree is committed and pushed through `b391ad5`.
 - The branch already contains the indexed item-search redesign, procurement-only catalog reduction, and the Minimums modal workflow cleanup.
 - The generated bundled item payload lives in the shipped addon `GBankManager_ItemData/`.
 - Local maintainer-only catalog assets under `tools/catalog/runtime/` remain intentionally git-ignored.
@@ -91,6 +92,9 @@
 - The floating manual shopping list now lives independently from the main shell, survives tab switches and shell close, remembers its moved position locally, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot.
 - Dashboard now uses four metric cards (`Last Scan`, `Pending Requests`, `Ready to Buy`, `Critical Shortages`) plus dedicated `Top 5 Most Used`, `Recent Activity`, and `Quick Actions` panels.
 - Dashboard metric cards now also expose dedicated icon slots, and Exports action cards now expose dedicated icons plus shorter CTA labels closer to the target mockup.
+- The later dashboard-only expansion that added structured row widgets, a dedicated critical-shortages lower panel, richer quick-action cards, and a footer legend strip was rolled back one iteration because the live result still did not match the mockup closely enough.
+- The honest state of the UI pass is that the scaffolding is strong, reusable, and worth keeping, but the addon still does not visually match the supplied Alliance art. The next meaningful UI milestone is an addon-local art pack to support the shell, cards, nav rail, and panel trims directly.
+- The in-repo visual reference source of truth now lives in [docs/ui-reference/mockup-reference-manifest.md](../../ui-reference/mockup-reference-manifest.md), which preserves the screenshots and screen-level targets supplied in the working thread.
 - Minimums staged rows now group at the top, expose `ADD` / `EDIT` / `DELETE` badges, show a staged-change summary in the footer, and reveal `Revert All` only while pending changes exist.
 - Dashboard `Top 5 Most Used` now ranks repeated shortage cycles from persisted snapshot history plus active Minimums rules before falling back to raw withdrawal totals when there is no stocking history yet.
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering, with persisted results under `GBankManagerDB.testing.inGameUnit`.
@@ -125,11 +129,12 @@
 Work these in the exact order below unless a new blocking regression appears:
 
 1. `UI polish`
-   - Continue the refinement pass on top of the landed appearance foundation.
-   - Expand icons carefully from collapsed-nav only into expanded nav and then selective action-strip buttons.
-   - Do the less-blocky pass: lighter panel treatment, tighter gaps, slimmer grouped controls, and calmer corners.
+   - Continue from the landed appearance foundation, but treat the next pass as art-pack-assisted mockup-fidelity work rather than more pure-frame approximation.
+   - Build or import a reusable addon-local art pack first: sidebar crest treatment, panel trims, header banding, nav active rails, card plates, and subtle inset divider assets.
+   - Re-apply the dashboard composition pass only after those shell assets exist, so the Alliance mockup can be matched more literally.
+   - Then continue the less-blocky pass: lighter panel treatment, tighter gaps, slimmer grouped controls, calmer corners, and selective icon expansion.
    - Live-QA the new shell focus ordering against other draggable UI.
-   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the implementation shelf for tomorrow.
+   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the refinement shelf, but treat the art pack as the next actual build step.
 
 2. `In-game unit test lane`
    - Live-verify the broadened `/gbm test unit` lane in retail after the automated lanes are green.
@@ -185,7 +190,7 @@ Work these in the exact order below unless a new blocking regression appears:
 
 When resuming, begin with the next roadmap item unless the user explicitly redirects:
 
-1. Start with the shelved UI polish pass in [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md), but keep it as a deliberate implementation pass rather than ad hoc visual edits.
+1. Start with the shelved UI polish pass in [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md), but begin by building the art pack needed to make the Alliance mockup achievable.
 2. Keep the dashboard `Ready to Buy` mismatch as a live-repro-only follow-up unless real current data proves it is a product bug.
 3. If more sync work is still needed after live guild testing, extend catch-up and direct minimum delta sync without abandoning the current authority-first approach.
 
@@ -215,7 +220,7 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
 > Resume with the post-workflow roadmap:
-> 1. Implement the shelved UI polish pass using `docs/ui-polish-suggestions.md`
+> 1. Implement the shelved UI polish pass using `docs/ui-polish-suggestions.md`, starting with an addon-local art pack for Alliance/mockup fidelity
 > 2. Live-verify the broadened `/gbm test unit` lane in retail
 > 3. Only revisit the dashboard `Ready to Buy` mismatch if a live SavedVariables repro exists
 > 4. Only broaden sync catch-up beyond the current request/history/auth slice if live guild testing still shows gaps

@@ -8,6 +8,8 @@
 
 **Visual Target:** The supplied style-guide mockup is the near-literal look-and-feel target. Favor shared-primitive rewrites over incremental restyling when the current helper layer cannot reproduce the mockup's composition, hierarchy, and surface treatment.
 
+**Current Status Note:** The foundation and several screen rewrites are already committed, but the live addon still falls short of the mockup visually. The next continuation of this plan should include building or importing a small reusable art pack so the shell and panels can match the target more literally instead of relying only on generic frame primitives.
+
 **Tech Stack:** WoW Lua addon modules, Blizzard atlas-backed UI textures, current shared shell and table controllers, Lua unit and UI specs, in-client manual validation.
 
 ---
@@ -136,6 +138,7 @@
 - Modify: `docs/superpowers/handoffs/latest-handoff.md`
 
 - [ ] Update product and QA docs to describe the new theme system, density setting, quality-icon renderer, staged Minimums visuals, and the visual expectations for each main screen.
+- [ ] Update the docs again after the art-pack-assisted pass so the written state stops overstating current mockup fidelity.
 - [ ] Run `.\tools\lua\lua.exe .\tests\run_all.lua`.
 - [ ] If the automated lanes are green, deploy with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail` for live visual validation.
 - [ ] After deployment, compare the live addon directly against the supplied mockup and log remaining fidelity gaps before calling the pass complete.
