@@ -25,6 +25,7 @@ local function ensure_v1_shape(db)
     db.meta.guildName = db.meta.guildName or "Unknown"
     db.meta.createdAt = db.meta.createdAt or 0
     db.meta.updatedAt = db.meta.updatedAt or 0
+    db.meta.lastScanSequence = tonumber(db.meta.lastScanSequence or 0) or 0
     db.snapshots = ensure_table(db.snapshots)
     db.currentSnapshotId = db.currentSnapshotId
     db.changeLog = ensure_table(db.changeLog)

@@ -88,6 +88,27 @@ function Write-ContentAtomic {
     Move-Item -LiteralPath $tempPath -Destination $Path -Force
 }
 
+function ConvertTo-StableTimestampString {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ($Value -is [DateTimeOffset]) {
+        return $Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
+    }
+
+    if ($Value -is [DateTime]) {
+        return ([DateTimeOffset]$Value).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
+    }
+
+    return [string]$Value
+}
+
 function ConvertTo-OrderedItemRecord {
     param(
         [Parameter(Mandatory = $true)]
@@ -118,7 +139,7 @@ function ConvertTo-OrderedItemRecord {
         craftedQuality = Get-FastPropertyValue -Object $Item -Name "craftedQuality"
         craftedQualityIcon = Get-FastPropertyValue -Object $Item -Name "craftedQualityIcon"
         status = $status
-        lastVerifiedAt = Get-FastPropertyValue -Object $Item -Name "lastVerifiedAt"
+        lastVerifiedAt = ConvertTo-StableTimestampString (Get-FastPropertyValue -Object $Item -Name "lastVerifiedAt")
         unresolved = $unresolved
         source = [string](Get-FastPropertyValue -Object $Item -Name "source")
         target = Get-FastPropertyValue -Object $Item -Name "target"

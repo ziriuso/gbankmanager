@@ -41,6 +41,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$resolvedOutputPath = $null
+$resolvedProgressPath = $null
+$resolvedPartialRowsPath = $null
+
 function Get-AbsolutePath {
     param(
         [Parameter(Mandatory = $true)]
@@ -101,9 +105,13 @@ function Write-ExtractionResult {
 }
 
 function Get-NodeExecutablePath {
-    $fallbackCandidates = @(
-        (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe")
-    )
+    $fallbackCandidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $fallbackCandidates += (Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe")
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:HOME)) {
+        $fallbackCandidates += (Join-Path $env:HOME ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node")
+    }
     foreach ($candidate in $fallbackCandidates) {
         if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate)) {
             return $candidate

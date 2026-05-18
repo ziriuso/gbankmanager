@@ -4,6 +4,7 @@
 ## Category: Guild
 ## Author: ziriuso
 ## SavedVariables: GBankManagerDB
+## LoadSavedVariablesFirst: 1
 ## Dependencies: GBankManager_ItemData
 
 Core/Namespace.lua

@@ -30,7 +30,7 @@ function scannerEvents.HandleEvent(event, ...)
     end
 
     if event == "GUILDBANKBAGSLOTS_CHANGED" then
-        if not scanner.scanInProgress or type(scanner.OnGuildBankSlotsChanged) ~= "function" then
+        if type(scanner.OnGuildBankSlotsChanged) ~= "function" then
             return false
         end
 

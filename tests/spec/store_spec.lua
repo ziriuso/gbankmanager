@@ -49,6 +49,15 @@ assert.truthy(type(store) == "table", "store module should be loaded for specs")
 assert.truthy(type(permissions) == "table", "permissions module should be loaded for specs")
 assert.truthy(type(migrations) == "table", "migrations module should be loaded for specs")
 assert.truthy(type(scanner) == "table", "scanner module should be loaded for specs")
+assert.equal(1, (function()
+    local count = 0
+    for line in io.lines("GBankManager/GBankManager.toc") do
+        if line == "## LoadSavedVariablesFirst: 1" then
+            count = count + 1
+        end
+    end
+    return count
+end)(), "toc should load saved variables before addon lua files")
 assert.truthy(type(store.GetDatabase) == "function", "store should expose a shared database accessor")
 assert.truthy(type(store.GetCurrentSnapshot) == "function", "store should expose a current snapshot accessor")
 assert.truthy(type(store.GetUiState) == "function", "store should expose a shared ui-state accessor")
@@ -74,6 +83,7 @@ events:GetScript("OnEvent")(events, "ADDON_LOADED", "GBankManager")
 assert.same(_G.GBankManagerDB, ns.state.db, "addon loaded should keep normalized db in addon state")
 assert.equal(1, _G.GBankManagerDB.meta.schemaVersion, "addon loaded should normalize schema version at runtime")
 assert.truthy(_G.GBankManagerDB.requests ~= nil, "addon loaded should normalize missing tables at runtime")
+assert.equal(0, _G.GBankManagerDB.meta.lastScanSequence, "addon loaded should normalize the scan sequence counter at runtime")
 assert.truthy(type(normalizedMalformed.meta) == "table", "migrations should repair malformed meta containers")
 assert.truthy(type(normalizedMalformed.syncState) == "table", "migrations should repair malformed sync state containers")
 assert.equal(1, normalizedMalformed.meta.schemaVersion, "migrations should apply v1 schema to malformed data")
@@ -179,7 +189,7 @@ local newSnapshot, changes = scanner.FinishScan("OfficerOne", "Persisted Guild")
 _G.time = originalTime
 
 assert.truthy(newSnapshot.scanId ~= "scan-old", "a fresh scan should create a new snapshot id")
-assert.equal("1715523300", newSnapshot.scanId, "fresh scans should derive the snapshot id from the captured UTC scan timestamp")
+assert.truthy(string.find(newSnapshot.scanId, "^1715523300%-"), "fresh scans should derive collision-safe snapshot ids from the captured UTC scan timestamp")
 assert.equal(1715523300, newSnapshot.scannedAt, "fresh scans should persist the captured UTC scan timestamp on the snapshot")
 assert.equal(newSnapshot.scanId, _G.GBankManagerDB.currentSnapshotId, "fresh scans should move the current snapshot pointer forward")
 assert.equal(5, _G.GBankManagerDB.snapshots["scan-old"].items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")

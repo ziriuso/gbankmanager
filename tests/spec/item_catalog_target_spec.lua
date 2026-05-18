@@ -1,19 +1,21 @@
 local assert = require("tests.helpers.assert")
+local powershell = require("tests.helpers.powershell")
+local PATH_SEPARATOR = powershell.path_separator()
 
 local function join_path(...)
-    return table.concat({ ... }, "\\")
+    return table.concat({ ... }, PATH_SEPARATOR)
 end
 
 local function normalize_path(value)
-    return value:gsub("/", "\\")
+    return powershell.normalize_host_path(value)
 end
 
 local function shell_quote(value)
-    return tostring(value):gsub("'", "''")
+    return powershell.shell_quote(value)
 end
 
 local function absolute_path(path)
-    local handle = io.popen(string.format("powershell -NoProfile -Command \"[System.IO.Path]::GetFullPath('%s')\"", shell_quote(path)))
+    local handle = powershell.absolute_path(path)
     assert.truthy(handle ~= nil, "absolute path helper should start a powershell process")
 
     local value = handle:read("*a")
@@ -22,11 +24,11 @@ local function absolute_path(path)
 end
 
 local function powershell_argument(value)
-    return string.format('"%s"', tostring(value):gsub('"', '\\"'))
+    return powershell.argument(absolute_path(value))
 end
 
 local function ensure_directory(path)
-    os.execute(string.format("powershell -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force -Path '%s' | Out-Null\"", shell_quote(path)))
+    powershell.ensure_directory(path)
 end
 
 local function write_text_file(path, content)
@@ -37,11 +39,11 @@ local function write_text_file(path, content)
 end
 
 local function remove_path_if_exists(path)
-    os.execute(string.format("powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path -LiteralPath '%s') { Remove-Item -LiteralPath '%s' -Force }\"", shell_quote(path), shell_quote(path)))
+    powershell.remove_path_if_exists(path)
 end
 
 local function powershell_command_argument(value)
-    return string.format('"%s"', tostring(value):gsub('"', '\\"'))
+    return powershell.command_argument(value)
 end
 
 local function run_process(command)
@@ -56,9 +58,8 @@ end
 
 local function read_json_query(path, expression)
     local command = string.format(
-        "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$data = Get-Content -LiteralPath '%s' -Raw | ConvertFrom-Json; [Console]::Out.Write(%s)\"",
-        shell_quote(path),
-        expression
+        "%s",
+        powershell.json_query_command(path, expression)
     )
 
     local handle = io.popen(command)
@@ -71,7 +72,7 @@ end
 
 local function run_target_resolution(args, env)
     local commandParts = {
-        "powershell",
+        powershell.executable(),
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
@@ -104,8 +105,8 @@ local function run_target_resolution(args, env)
 
     return {
         target = target,
-        wowRoot = root and root:gsub("\\\\", "\\") or nil,
-        clientDirectory = client and client:gsub("\\\\", "\\") or nil,
+        wowRoot = root and normalize_path(root:gsub("\\\\", "\\")) or nil,
+        clientDirectory = client and normalize_path(client:gsub("\\\\", "\\")) or nil,
         locale = locale,
         product = product,
     }
@@ -113,7 +114,7 @@ end
 
 local function run_target_resolution_failure(args, env)
     local commandParts = {
-        "powershell",
+        powershell.executable(),
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
@@ -153,6 +154,7 @@ local function parse_json_fields(content, fields)
         local value = content:match('"' .. field .. '"%s*:%s*"([^"]*)"')
         if value ~= nil then
             result[field] = value:gsub("\\\\", "\\")
+            result[field] = normalize_path(result[field])
         end
     end
 
@@ -165,7 +167,8 @@ local function json_array_contains(content, field, expectedValue)
         return false
     end
 
-    return arrayContent:find(string.format('"%s"', expectedValue:gsub("\\", "\\\\")), 1, true) ~= nil
+    local normalizedArray = normalize_path(arrayContent:gsub("\\\\", "\\"))
+    return normalizedArray:find(string.format('"%s"', normalize_path(expectedValue)), 1, true) ~= nil
 end
 
 local function json_field_uses_array_shape(content, field)
@@ -174,7 +177,7 @@ end
 
 local function run_refresh(args, env)
     local commandParts = {
-        "powershell",
+        powershell.executable(),
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
@@ -214,7 +217,7 @@ local function run_refresh(args, env)
     }
 end
 
-local baseDir = ".\\tests\\tmp\\item-catalog-target"
+local baseDir = join_path(".", "tests", "tmp", "item-catalog-target")
 local fixtureRoot = join_path(baseDir, "wow-fixture")
 local fixtureRootAbsolute = absolute_path(fixtureRoot)
 local targetManifestPath = join_path(baseDir, "refresh-manifest.json")
@@ -223,6 +226,7 @@ local targetProgressPath = join_path(baseDir, "refresh-progress.json")
 local targetPartialRowsPath = join_path(baseDir, "refresh-progress.partial.jsonl")
 local missingResumeProgressPath = join_path(baseDir, "missing-resume-progress.json")
 local missingResumePartialRowsPath = join_path(baseDir, "missing-resume-progress.partial.jsonl")
+ensure_directory(baseDir)
 write_text_file(targetManifestPath, [[
 {
   "source": "target_spec_fixture",

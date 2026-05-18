@@ -226,3 +226,11 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 > 2. Live-verify the broadened `/gbm test unit` lane in retail
 > 3. Only revisit the dashboard `Ready to Buy` mismatch if a live SavedVariables repro exists
 > 4. Only broaden sync catch-up beyond the current request/history/auth slice if live guild testing still shows gaps
+## 2026-05-18 Runtime follow-up
+
+- SavedVariables now need to be treated as load-order sensitive on Retail/macOS as well as Windows; `GBankManager.toc` should keep `## LoadSavedVariablesFirst: 1` in place unless init is fully deferred behind `ADDON_LOADED`.
+- Scanner follow-up is now focused on reliability rather than visuals:
+  - auto-scan should tolerate guild-bank data arriving a beat after `GUILDBANKFRAME_OPENED`
+  - scan start/finish status should be chat-visible again
+  - per-tab waits need a timeout fallback so one missed event does not wedge future scans
+  - snapshot ids should stay unique even for same-second scans

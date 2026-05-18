@@ -123,9 +123,22 @@ function Get-LastSyncTimestamp {
     )
 
     foreach ($field in @("completedAt", "phaseCompletedAt", "updatedAt", "startedAt")) {
-        $value = [string](Get-ObjectPropertyValue -Object $ProgressState -Name $field)
-        if (-not [string]::IsNullOrWhiteSpace($value)) {
-            return $value
+        $value = Get-ObjectPropertyValue -Object $ProgressState -Name $field
+        if ($null -eq $value) {
+            continue
+        }
+
+        if ($value -is [DateTimeOffset]) {
+            return $value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
+        }
+
+        if ($value -is [DateTime]) {
+            return ([DateTimeOffset]$Value).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
+        }
+
+        $stringValue = [string]$value
+        if (-not [string]::IsNullOrWhiteSpace($stringValue)) {
+            return $stringValue
         }
     }
 

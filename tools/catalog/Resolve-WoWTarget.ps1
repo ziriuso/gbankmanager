@@ -86,6 +86,7 @@ function Get-DefaultWoWRoots {
 function Resolve-InstallRoot {
     param(
         [string]$RequestedRoot,
+        [string]$RequestedClientDirectory,
         [string]$ClientFolder
     )
 
@@ -96,12 +97,28 @@ function Resolve-InstallRoot {
         }
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($RequestedClientDirectory)) {
+        return [pscustomobject]@{
+            WoWRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $RequestedClientDirectory))
+            Source = "client-override"
+        }
+    }
+
     foreach ($candidate in Get-DefaultWoWRoots) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath (Join-Path $candidate $ClientFolder))) {
-            return [pscustomobject]@{
-                WoWRoot = [System.IO.Path]::GetFullPath($candidate)
-                Source = "detected"
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
+            continue
+        }
+
+        try {
+            $candidateClientDirectory = Join-Path $candidate $ClientFolder
+            if (Test-Path -LiteralPath $candidateClientDirectory) {
+                return [pscustomobject]@{
+                    WoWRoot = [System.IO.Path]::GetFullPath($candidate)
+                    Source = "detected"
+                }
             }
+        } catch {
+            continue
         }
     }
 
@@ -135,7 +152,7 @@ if ($null -eq $targetDefinition) {
     throw "Unsupported target: $Target"
 }
 
-$installRoot = Resolve-InstallRoot -RequestedRoot $WoWRoot -ClientFolder $targetDefinition.ClientFolder
+$installRoot = Resolve-InstallRoot -RequestedRoot $WoWRoot -RequestedClientDirectory $ClientDirectory -ClientFolder $targetDefinition.ClientFolder
 $clientResolution = Resolve-ClientDirectory -RequestedClientDirectory $ClientDirectory -InstallRoot $installRoot -TargetDefinition $targetDefinition
 
 $result = [pscustomobject]@{

@@ -552,6 +552,21 @@ function Write-RefreshResult {
     exit $ExitCode
 }
 
+function Get-PowerShellExecutable {
+    $candidates = @("powershell", "pwsh")
+    foreach ($commandName in $candidates) {
+        try {
+            $command = Get-Command $commandName -ErrorAction Stop | Select-Object -First 1
+            if ($command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source)) {
+                return $command.Source
+            }
+        } catch {
+        }
+    }
+
+    throw "Unable to locate a usable PowerShell executable for nested catalog commands."
+}
+
 function Invoke-JsonScript {
     param(
         [Parameter(Mandatory = $true)]
@@ -578,7 +593,8 @@ function Invoke-JsonScript {
 
     $command += "-Json"
 
-    $output = & powershell @command 2>&1
+    $powerShellExecutable = Get-PowerShellExecutable
+    $output = & $powerShellExecutable @command 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw (($output | Out-String).Trim())
     }

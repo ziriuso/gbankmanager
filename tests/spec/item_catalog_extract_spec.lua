@@ -1,32 +1,38 @@
 local assert = require("tests.helpers.assert")
-local baseDir = ".\\tests\\tmp\\item-catalog-extract"
+local powershell = require("tests.helpers.powershell")
+local PATH_SEPARATOR = powershell.path_separator()
+local baseDir = table.concat({ ".", "tests", "tmp", "item-catalog-extract" }, PATH_SEPARATOR)
 
 local function join_path(...)
-    return table.concat({ ... }, "\\")
+    return table.concat({ ... }, PATH_SEPARATOR)
 end
 
 local function normalize_path(value)
-    return value:gsub("/", "\\")
+    return powershell.normalize_host_path(value)
 end
 
 local function shell_quote(value)
-    return tostring(value):gsub("'", "''")
+    return powershell.shell_quote(value)
 end
 
 local function powershell_argument(value)
-    return string.format('"%s"', tostring(value):gsub('"', '\\"'))
+    local handle = powershell.absolute_path(value)
+    assert.truthy(handle ~= nil, "absolute path helper should start a powershell process")
+    local resolvedValue = handle:read("*a")
+    handle:close()
+    return normalize_path((resolvedValue or ""):gsub("%s+$", ""))
 end
 
 local function powershell_command_argument(value)
-    return string.format('"%s"', tostring(value):gsub('"', '\\"'))
+    return powershell.command_argument(value)
 end
 
 local function powershell_single_quote(value)
-    return "'" .. tostring(value):gsub("'", "''") .. "'"
+    return powershell.single_quote(value)
 end
 
 local function absolute_path(path)
-    local handle = io.popen(string.format("powershell -NoProfile -Command \"[System.IO.Path]::GetFullPath('%s')\"", shell_quote(path)))
+    local handle = powershell.absolute_path(path)
     assert.truthy(handle ~= nil, "absolute path helper should start a powershell process")
 
     local value = handle:read("*a")
@@ -35,7 +41,7 @@ local function absolute_path(path)
 end
 
 local function ensure_directory(path)
-    os.execute(string.format("powershell -NoProfile -ExecutionPolicy Bypass -Command \"New-Item -ItemType Directory -Force -Path '%s' | Out-Null\"", shell_quote(path)))
+    powershell.ensure_directory(path)
 end
 
 local function write_text_file(path, content)
@@ -59,7 +65,9 @@ local invocationCounter = 0
 local function run_powershell_file(scriptPath, args, wrapperDirectory)
     invocationCounter = invocationCounter + 1
     local wrapperPath = join_path(wrapperDirectory, string.format("invoke-%03d.ps1", invocationCounter))
+    local repoRoot = absolute_path(".")
     local wrapperLines = {
+        "$repoRoot = " .. powershell_single_quote(repoRoot),
         "$scriptPath = " .. powershell_single_quote(absolute_path(scriptPath)),
         "$argumentList = @(",
     }
@@ -73,17 +81,18 @@ local function run_powershell_file(scriptPath, args, wrapperDirectory)
     end
 
     table.insert(wrapperLines, ")")
-    table.insert(wrapperLines, "& powershell -NoProfile -ExecutionPolicy Bypass -File $scriptPath @argumentList")
+    table.insert(wrapperLines, "Set-Location -LiteralPath $repoRoot")
+    table.insert(wrapperLines, "& " .. powershell_single_quote(powershell.executable()) .. " -NoProfile -ExecutionPolicy Bypass -File $scriptPath @argumentList")
     table.insert(wrapperLines, "$exitCode = $LASTEXITCODE")
     table.insert(wrapperLines, "Write-Output ('__EXIT__:' + $exitCode)")
     write_text_file(wrapperPath, table.concat(wrapperLines, "\r\n"))
 
     return run_process(table.concat({
-        "powershell",
+        powershell.executable(),
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File",
-        powershell_command_argument(wrapperPath),
+        powershell_command_argument(absolute_path(wrapperPath)),
     }, " "))
 end
 
@@ -131,7 +140,12 @@ local function json_string_field(content, field)
         return nil
     end
 
-    return value:gsub("\\\\", "\\")
+    local normalized = value:gsub("\\\\", "\\")
+    if normalized:find("[/\\]") then
+        return normalize_path(normalized)
+    end
+
+    return normalized
 end
 
 local function json_number_field(content, field)
@@ -157,9 +171,8 @@ end
 
 local function read_json_query(path, expression)
     local command = string.format(
-        "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$data = Get-Content -LiteralPath '%s' -Raw | ConvertFrom-Json; [Console]::Out.Write(%s)\"",
-        shell_quote(path),
-        expression
+        "%s",
+        powershell.json_query_command(path, expression)
     )
 
     local handle = io.popen(command)

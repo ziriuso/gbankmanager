@@ -6,6 +6,9 @@ _G.C_ChatInfo = _G.C_ChatInfo or {
     sentMessages = {},
     registeredPrefixes = {},
 }
+_G.C_Timer = _G.C_Timer or {
+    pending = {},
+}
 _G.C_GuildInfo = _G.C_GuildInfo or {
     infoText = "",
     motd = "",
@@ -84,6 +87,28 @@ end
 
 function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
     table.insert(self.messages, tostring(message or ""))
+end
+
+function _G.C_Timer.After(delaySeconds, callback)
+    table.insert(_G.C_Timer.pending, {
+        delaySeconds = delaySeconds,
+        callback = callback,
+    })
+    return #_G.C_Timer.pending
+end
+
+function _G.C_Timer.RunPending()
+    local pending = _G.C_Timer.pending or {}
+    _G.C_Timer.pending = {}
+    for _, entry in ipairs(pending) do
+        if type(entry.callback) == "function" then
+            entry.callback()
+        end
+    end
+end
+
+function _G.C_Timer.ClearPending()
+    _G.C_Timer.pending = {}
 end
 
 _G.CreateDataProvider = _G.CreateDataProvider or function(initial)

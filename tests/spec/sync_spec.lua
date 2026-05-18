@@ -695,6 +695,7 @@ scanner.OnGuildBankOpened = function(...)
     end
 end
 scanner.scanInProgress = true
+scanner.pendingAutoScan = true
 onEvent(events, "GUILDBANKFRAME_OPENED")
 onEvent(events, "GUILDBANKBAGSLOTS_CHANGED", 2)
 scanner.OnGuildBankSlotsChanged = originalOnGuildBankSlotsChanged
