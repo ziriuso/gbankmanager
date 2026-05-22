@@ -49,6 +49,25 @@ local function current_db()
     return runtime
 end
 
+local function auto_scan_allowed(db)
+    local auth = ns.modules.auth or ns.modules.permissions
+    if scanner.scanInProgress then
+        return false
+    end
+
+    if auth and type(auth.Can) == "function" and not auth.Can(current_context(db), "full_ui", db.auth) then
+        return false
+    end
+
+    local lastScanAt = tonumber((((db or {}).meta or {}).updatedAt) or 0) or 0
+    local now = type(_G.time) == "function" and (_G.time() or 0) or 0
+    if lastScanAt > 0 and (now - lastScanAt) < AUTO_SCAN_THROTTLE_SECONDS then
+        return false
+    end
+
+    return true
+end
+
 local function report_status(message)
     local syncTransport = ns.modules.syncTransport or {}
     if type(syncTransport.ReportStatus) == "function" then
@@ -258,18 +277,7 @@ end
 
 function scanner.OnGuildBankOpened()
     local db = current_db()
-    local auth = ns.modules.auth or ns.modules.permissions
-    if scanner.scanInProgress then
-        return false
-    end
-
-    if auth and type(auth.Can) == "function" and not auth.Can(current_context(db), "full_ui", db.auth) then
-        return false
-    end
-
-    local lastScanAt = tonumber((((db or {}).meta or {}).updatedAt) or 0) or 0
-    local now = type(_G.time) == "function" and (_G.time() or 0) or 0
-    if lastScanAt > 0 and (now - lastScanAt) < AUTO_SCAN_THROTTLE_SECONDS then
+    if not auto_scan_allowed(db) then
         return false
     end
 
@@ -286,6 +294,21 @@ function scanner.RetryPendingAutoScan()
 
     scanner.BeginScan({ auto = true, manual = false })
     return scanner.scanInProgress
+end
+
+function scanner.OnGuildBankTabsUpdated()
+    local db = current_db()
+    if (not scanner.scanInProgress or scanner.waitingForTab == nil) and scanner.pendingAutoScan then
+        return scanner.RetryPendingAutoScan()
+    end
+
+    if auto_scan_allowed(db) then
+        scanner.pendingAutoScan = true
+        scanner.autoScanRetryCount = 0
+        return scanner.RetryPendingAutoScan()
+    end
+
+    return false
 end
 
 function scanner.QueueAccessibleTabs()

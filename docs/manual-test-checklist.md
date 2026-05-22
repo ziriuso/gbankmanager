@@ -7,6 +7,7 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 1. Recheck the dashboard `Ready to Buy` mismatch against real live SavedVariables before any code fix, plus future validation for a dedicated `Critical Shortages` dashboard card
 2. Validate the completed Guild Info auth slice end to end: Restock Default propagation, preload on load or refresh, explicit `Character-Server` blacklist guidance, correct last-updated actor metadata, and policy-history visibility or sync behavior
 3. Validate guild-bank-open auto-scan with the 10-minute throttle and manual-scan coexistence
+3a. If the guild bank opens before tab metadata is fully ready, confirm the auto-scan still wakes and begins once `GUILDBANK_UPDATE_TABS` fires.
 4. Validate guild-client sync behavior for chat milestones, history, requests, approval-created minimum side effects, and permission-policy updates
 5. Validate the landed UI polish foundation, including active-nav highlighting, collapsed-nav icons, scalable theme or sizing controls, separate shell-vs-modal opacity slider behavior, and the shell yielding behind other dragged UI until clicked again
 6. Validate the broadened in-game unit-test lane

@@ -7,6 +7,7 @@ local scannerEvents = ns.modules.guildBankScannerEvents or {}
 
 local REGISTERED_EVENTS = {
     "GUILDBANKFRAME_OPENED",
+    "GUILDBANK_UPDATE_TABS",
     "GUILDBANKBAGSLOTS_CHANGED",
 }
 
@@ -26,6 +27,15 @@ function scannerEvents.HandleEvent(event, ...)
         end
 
         scanner.OnGuildBankOpened(...)
+        return true
+    end
+
+    if event == "GUILDBANK_UPDATE_TABS" then
+        if type(scanner.OnGuildBankTabsUpdated) ~= "function" then
+            return false
+        end
+
+        scanner.OnGuildBankTabsUpdated(...)
         return true
     end
 

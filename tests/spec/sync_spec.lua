@@ -132,7 +132,8 @@ assert.truthy(type(scannerEvents.HandleEvent) == "function", "scanner events mod
 
 local scannerRegisteredEvents = scannerEvents.GetRegisteredEvents()
 assert.equal("GUILDBANKFRAME_OPENED", scannerRegisteredEvents[1], "scanner event adapter should own the guild bank opened event")
-assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[2], "scanner event adapter should own the guild bank slot event")
+assert.equal("GUILDBANK_UPDATE_TABS", scannerRegisteredEvents[2], "scanner event adapter should own the guild bank tab update event")
+assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[3], "scanner event adapter should own the guild bank slot event")
 
 local syncRegisteredEvents = syncEvents.GetRegisteredEvents()
 assert.equal("ADDON_LOADED", syncRegisteredEvents[1], "sync event adapter should own addon initialization")
@@ -142,6 +143,7 @@ assert.equal("CHAT_MSG_ADDON", syncRegisteredEvents[3], "sync event adapter shou
 local hasPlayerLogin = false
 local hasChatMsgAddon = false
 local hasAddonLoaded = false
+local hasGuildBankTabUpdate = false
 for _, eventName in ipairs(events.events or {}) do
     if eventName == "ADDON_LOADED" then
         hasAddonLoaded = true
@@ -149,12 +151,15 @@ for _, eventName in ipairs(events.events or {}) do
         hasPlayerLogin = true
     elseif eventName == "CHAT_MSG_ADDON" then
         hasChatMsgAddon = true
+    elseif eventName == "GUILDBANK_UPDATE_TABS" then
+        hasGuildBankTabUpdate = true
     end
 end
 
 assert.truthy(hasAddonLoaded, "task 7 events should listen for addon loaded initialization")
 assert.truthy(hasPlayerLogin, "task 7 events should listen for player login")
 assert.truthy(hasChatMsgAddon, "task 7 events should listen for addon messages")
+assert.truthy(hasGuildBankTabUpdate, "scanner events should listen for guild bank tab updates")
 
 _G.C_ChatInfo.sentMessages = {}
 _G.C_ChatInfo.registeredPrefixes = {}

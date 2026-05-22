@@ -228,23 +228,29 @@ scanner.OnGuildBankOpened()
 assert.equal(1, autoScanCalls, "opening the guild bank should auto-scan when there is no prior scan timestamp")
 
 scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 0
+scanner.pendingAutoScan = false
+scanner.OnGuildBankTabsUpdated()
+assert.equal(2, autoScanCalls, "guild bank tab updates should also be able to start the first auto-scan if the open event was missed or premature")
+
+scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 500
 scanner.OnGuildBankOpened()
-assert.equal(1, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
+assert.equal(2, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
 
 scanner.scanInProgress = false
 _G.time = function()
     return 1100
 end
 scanner.OnGuildBankOpened()
-assert.equal(2, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
+assert.equal(3, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
 
 scanner.scanInProgress = true
 _G.time = function()
     return 1800
 end
 scanner.OnGuildBankOpened()
-assert.equal(2, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
+assert.equal(3, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
 
 scanner.BeginScan = originalBeginScan
 scanner.scanInProgress = false
@@ -282,6 +288,8 @@ scanner.RetryPendingAutoScan = function()
 end
 scanner.OnGuildBankSlotsChanged()
 assert.equal(1, retryCalls, "guild bank slot updates should wake a pending auto-scan retry when the bank data arrives")
+scanner.OnGuildBankTabsUpdated()
+assert.equal(2, retryCalls, "guild bank tab updates should also wake a pending auto-scan retry when tab data arrives")
 
 scanner.scanInProgress = false
 scanner.pendingAutoScan = false
