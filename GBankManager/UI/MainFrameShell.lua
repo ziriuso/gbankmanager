@@ -208,12 +208,15 @@ local function tint_color(color, multiplier, alphaOverride)
     return resolved
 end
 
-local function set_texture_color(texture, color)
+local function set_texture_color(texture, color, preserveBaseColor)
     if not texture then
         return
     end
 
     color = copy_color(color)
+    if preserveBaseColor ~= true then
+        texture.gbmBaseColor = copy_color(color)
+    end
     texture.color = color
     texture.texture = SOLID_TEXTURE
     if type(texture.SetTexture) == "function" then
@@ -223,6 +226,37 @@ local function set_texture_color(texture, color)
         texture:SetColorTexture(unpack(color))
     elseif type(texture.SetVertexColor) == "function" then
         texture:SetVertexColor(unpack(color))
+    end
+end
+
+local function apply_surface_alpha(frame, alpha)
+    if not frame then
+        return
+    end
+
+    alpha = math.max(0.0, math.min(1.0, tonumber(alpha or 1) or 1))
+    frame.gbmSurfaceAlpha = alpha
+
+    if frame.gbmBackdropBaseColor and type(frame.SetBackdropColor) == "function" then
+        local color = copy_color(frame.gbmBackdropBaseColor, (frame.gbmBackdropBaseColor[4] or 1) * alpha)
+        frame:SetBackdropColor(unpack(color))
+    end
+
+    if frame.gbmBorderColor and type(frame.SetBackdropBorderColor) == "function" then
+        local color = copy_color(frame.gbmBorderColor, (frame.gbmBorderColor[4] or 1) * alpha)
+        frame:SetBackdropBorderColor(unpack(color))
+    end
+
+    local art = frame.gbmArt
+    if not art then
+        return
+    end
+
+    for _, region in pairs(art) do
+        if type(region) == "table" and region.gbmBaseColor then
+            local color = copy_color(region.gbmBaseColor, (region.gbmBaseColor[4] or 1) * alpha)
+            set_texture_color(region, color, true)
+        end
     end
 end
 
@@ -526,6 +560,13 @@ function mainFrameShell.ApplySurfaceVariant(frame, variant, colorOverride)
     end
 
     apply_surface_art(frame, resolvedVariant, baseColor, borderColor)
+    if frame.gbmSurfaceAlpha ~= nil then
+        apply_surface_alpha(frame, frame.gbmSurfaceAlpha)
+    end
+end
+
+function mainFrameShell.SetSurfaceAlpha(frame, alpha)
+    apply_surface_alpha(frame, alpha)
 end
 
 function mainFrameShell.SetAccentBar(frame, color, isVisible)
@@ -1285,202 +1326,37 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
 end
 
 function mainFrameShell.MakeSlider(parent, width, height, minValue, maxValue, initialValue)
-    local slider = _G.CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local slider = _G.CreateFrame("Slider", nil, parent, "UISliderTemplate")
     slider:SetSize(width, height)
-    slider.minValue = minValue or 0
-    slider.maxValue = maxValue or 1
-    slider.value = initialValue or slider.minValue
-    slider.valueStep = nil
-    mainFrameShell.ApplyPanelStyle(slider, theme().colors.background)
-    if type(slider.SetBackdropColor) == "function" then
-        slider:SetBackdropColor(0, 0, 0, 0)
+    if type(slider.SetOrientation) == "function" then
+        slider:SetOrientation("HORIZONTAL")
     end
-    if type(slider.SetBackdropBorderColor) == "function" then
-        slider:SetBackdropBorderColor(0, 0, 0, 0)
+    if type(slider.EnableMouse) == "function" then
+        slider:EnableMouse(true)
     end
-    slider.track = slider.track or _G.CreateFrame("Frame", nil, slider, "BackdropTemplate")
-    slider.track:SetPoint("LEFT", slider, "LEFT", 0, 0)
-    slider.track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
-    slider.track:SetWidth(width)
-    slider.track:SetHeight(math.max(8, math.floor((height or 18) / 3)))
-    mainFrameShell.ApplySurfaceVariant(slider.track, "input")
-    if type(slider.track.SetBackdropBorderColor) == "function" then
-        slider.track:SetBackdropBorderColor(0, 0, 0, 0)
+    if type(slider.SetMinMaxValues) == "function" then
+        slider:SetMinMaxValues(minValue or 0, maxValue or 1)
     end
-    slider.trackBase = slider.trackBase or slider.track:CreateTexture()
-    slider.trackBase:SetPoint("TOPLEFT", slider.track, "TOPLEFT", 1, -1)
-    slider.trackBase:SetPoint("BOTTOMRIGHT", slider.track, "BOTTOMRIGHT", -1, 1)
-    set_texture_color(slider.trackBase, tint_color(theme_token_color("bgAlt", theme().colors.background), 1.0, 0.94))
-    slider.trackRidge = slider.trackRidge or slider.track:CreateTexture()
-    slider.trackRidge:SetPoint("TOPLEFT", slider.track, "TOPLEFT", 2, -2)
-    slider.trackRidge:SetPoint("BOTTOMRIGHT", slider.track, "BOTTOMRIGHT", -2, 2)
-    set_texture_color(slider.trackRidge, copy_color(theme_token_color("borderSoft", theme().colors.border), 0.22))
-
-    slider.fill = slider.fill or _G.CreateFrame("Frame", nil, slider.track, "BackdropTemplate")
-    slider.fill:SetPoint("TOPLEFT", slider.track, "TOPLEFT", 0, 0)
-    slider.fill:SetPoint("BOTTOMLEFT", slider.track, "BOTTOMLEFT", 0, 0)
-    slider.fill:SetWidth(0)
-    mainFrameShell.ApplySurfaceVariant(slider.fill, "panel-alt", theme_token_color("accentMuted", theme().colors.accent))
-    if type(slider.fill.SetBackdropBorderColor) == "function" then
-        slider.fill:SetBackdropBorderColor(0, 0, 0, 0)
+    if type(slider.SetObeyStepOnDrag) == "function" then
+        slider:SetObeyStepOnDrag(true)
     end
-    slider.fillGlow = slider.fillGlow or slider.fill:CreateTexture()
-    slider.fillGlow:SetPoint("TOPLEFT", slider.fill, "TOPLEFT", 1, -1)
-    slider.fillGlow:SetPoint("BOTTOMRIGHT", slider.fill, "BOTTOMRIGHT", -1, 1)
-    set_texture_color(slider.fillGlow, copy_color(theme_token_color("accent", theme().colors.accent), 0.34))
-
-    slider.thumb = slider.thumb or _G.CreateFrame("Frame", nil, slider, "BackdropTemplate")
-    slider.thumb:SetSize(18, math.max(20, height or 18))
-    slider.thumb:SetPoint("CENTER", slider.track, "LEFT", 0, 0)
-    mainFrameShell.ApplySurfaceVariant(slider.thumb, "panel-alt", theme_token_color("header", theme().colors.accentStrong))
-    if type(slider.thumb.SetBackdropBorderColor) == "function" then
-        slider.thumb:SetBackdropBorderColor(0, 0, 0, 0)
+    if slider.Low and type(slider.Low.SetText) == "function" then
+        slider.Low:SetText("")
     end
-    slider.thumbGlow = slider.thumbGlow or slider.thumb:CreateTexture()
-    slider.thumbGlow:SetPoint("TOPLEFT", slider.thumb, "TOPLEFT", 1, -1)
-    slider.thumbGlow:SetPoint("BOTTOMRIGHT", slider.thumb, "BOTTOMRIGHT", -1, 1)
-    set_texture_color(slider.thumbGlow, copy_color(theme_token_color("accent", theme().colors.accent), 0.08))
-    slider.thumbCore = slider.thumbCore or _G.CreateFrame("Frame", nil, slider.thumb, "BackdropTemplate")
-    slider.thumbCore:SetSize(10, 10)
-    slider.thumbCore:SetPoint("CENTER", slider.thumb, "CENTER", 0, 0)
-    mainFrameShell.ApplySurfaceVariant(slider.thumbCore, "input", theme_token_color("bg", theme().colors.background))
-    if type(slider.thumbCore.SetBackdropBorderColor) == "function" then
-        slider.thumbCore:SetBackdropBorderColor(0, 0, 0, 0)
+    if slider.High and type(slider.High.SetText) == "function" then
+        slider.High:SetText("")
     end
-    slider.dragReleaseTarget = slider.dragReleaseTarget or _G.CreateFrame("Frame", nil, _G.UIParent, "BackdropTemplate")
-    slider.dragReleaseTarget:SetPoint("TOPLEFT", _G.UIParent, "TOPLEFT", 0, 0)
-    slider.dragReleaseTarget:SetPoint("BOTTOMRIGHT", _G.UIParent, "BOTTOMRIGHT", 0, 0)
-    if type(slider.dragReleaseTarget.EnableMouse) == "function" then
-        slider.dragReleaseTarget:EnableMouse(true)
-    end
-    slider.dragReleaseTarget:Hide()
-
-    local function clamp_value(self, value)
-        value = math.max(self.minValue, math.min(self.maxValue, value or self.minValue))
-        local step = tonumber(self.valueStep or 0) or 0
-        if step > 0 then
-            value = self.minValue + (math.floor(((value - self.minValue) / step) + 0.5) * step)
-            value = math.max(self.minValue, math.min(self.maxValue, value))
-        end
-        return value
-    end
-
-    local function sync_visuals(self, value)
-        local range = math.max(1, (self.maxValue or 1) - (self.minValue or 0))
-        local ratio = (value - (self.minValue or 0)) / range
-        local usableWidth = math.max(0, (self.track:GetWidth() or self:GetWidth() or width or 0))
-        if self.fill and type(self.fill.SetWidth) == "function" then
-            self.fill:SetWidth(math.max(0, math.floor(usableWidth * ratio)))
-        end
-        if self.thumb then
-            if type(self.thumb.ClearAllPoints) == "function" then
-                self.thumb:ClearAllPoints()
-            end
-            self.thumb:SetPoint("CENTER", self.track, "LEFT", math.floor(usableWidth * ratio), 0)
-        end
-    end
-
-    function slider:SetValue(value)
-        value = clamp_value(self, value)
-        self.value = value
-        sync_visuals(self, value)
-        if type(self.onValueChanged) == "function" then
-            self.onValueChanged(self, value)
-        end
-    end
-
-    function slider:SetValueFromRatio(ratio)
-        ratio = math.max(0, math.min(1, tonumber(ratio or 0) or 0))
-        local span = (self.maxValue or 1) - (self.minValue or 0)
-        self:SetValue((self.minValue or 0) + (span * ratio))
-    end
-
-    function slider:SetValueStep(step)
-        self.valueStep = tonumber(step or 0) or 0
-    end
-
-    local function cursor_ratio(frame)
-        local track = frame and frame.track or slider.track
-        if type(_G.GetCursorPosition) == "function"
-            and track
-            and type(track.GetLeft) == "function"
-            and type(track.GetRight) == "function"
-        then
-            local left = track:GetLeft()
-            local right = track:GetRight()
-            if left ~= nil and right ~= nil and right > left then
-                local cursorX = _G.GetCursorPosition()
-                local scale = (_G.UIParent and type(_G.UIParent.GetEffectiveScale) == "function" and _G.UIParent:GetEffectiveScale()) or 1
-                cursorX = (tonumber(cursorX or 0) or 0) / math.max(0.001, scale)
-                return (cursorX - left) / (right - left)
-            end
-        end
-
-        return nil
-    end
-
-    local function update_from_cursor(frame, ratio)
-        ratio = tonumber(ratio)
-        if ratio == nil then
-            ratio = cursor_ratio(frame)
-        end
-        if ratio ~= nil then
-            slider:SetValueFromRatio(ratio)
-        end
-
-        return slider.value
-    end
-
-    local function begin_drag(frame, _, ratio)
-        slider.dragging = true
-        return update_from_cursor(frame, ratio)
-    end
-
-    local function end_drag()
-        slider.dragging = false
-        if slider.dragReleaseTarget then
-            slider.dragReleaseTarget:Hide()
-        end
-    end
-
-    for _, target in ipairs({ slider, slider.track, slider.thumb }) do
-        if type(target.EnableMouse) == "function" then
-            target:EnableMouse(true)
-        end
-        if type(target.SetScript) == "function" then
-            target:SetScript("OnMouseDown", begin_drag)
-            target:SetScript("OnMouseUp", end_drag)
-        end
+    if slider.Text and type(slider.Text.SetText) == "function" then
+        slider.Text:SetText("")
     end
     if type(slider.SetScript) == "function" then
-        slider:SetScript("OnUpdate", function()
-            if slider.dragging then
-                update_from_cursor(slider)
+        slider:SetScript("OnValueChanged", function(self, value)
+            if type(self.onValueChanged) == "function" then
+                self.onValueChanged(self, value)
             end
         end)
-        slider:SetScript("OnHide", end_drag)
     end
-    if slider.dragReleaseTarget and type(slider.dragReleaseTarget.SetScript) == "function" then
-        slider.dragReleaseTarget:SetScript("OnMouseUp", end_drag)
-    end
-
-    local original_begin_drag = begin_drag
-    begin_drag = function(frame, button, ratio)
-        slider.dragging = true
-        if slider.dragReleaseTarget then
-            slider.dragReleaseTarget:Show()
-        end
-        return update_from_cursor(frame, ratio)
-    end
-    for _, target in ipairs({ slider, slider.track, slider.thumb }) do
-        if type(target.SetScript) == "function" then
-            target:SetScript("OnMouseDown", begin_drag)
-            target:SetScript("OnMouseUp", end_drag)
-        end
-    end
-
-    slider:SetValue(slider.value)
-
+    slider:SetValue(initialValue or minValue or 0)
     return slider
 end
 
@@ -1886,7 +1762,7 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame:SetResizeBounds(920, 560, 1280, 760)
     mainFrameShell.ApplyFrameLayer(mainFrame, "MEDIUM", tonumber(mainFrame.frameLevel or 40) or 40)
     mainFrame.currentAlpha = mainFrame.currentAlpha or 0.96
-    mainFrame:SetAlpha(mainFrame.currentAlpha)
+    mainFrame:SetAlpha(1)
     mainFrameShell.ApplySurfaceVariant(mainFrame, "shell", currentTheme.colors.background)
     mainFrame:SetScript("OnDragStart", function(self)
         self:StartMoving()

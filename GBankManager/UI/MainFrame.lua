@@ -25,6 +25,7 @@ local create_page_overflow_viewport = mainFrameShell.CreatePageOverflowViewport
 local set_frame_shown = mainFrameShell.SetFrameShown
 local apply_frame_layer = mainFrameShell.ApplyFrameLayer
 local bring_frame_to_front = mainFrameShell.BringFrameToFront
+local set_surface_alpha = mainFrameShell.SetSurfaceAlpha
 
 local function parse_number(value)
     local parsed = tonumber(value)
@@ -511,8 +512,13 @@ end
 mainFrame.collapsedSidebar = mainFrame.collapsedSidebar and true or false
 
 local function set_alpha(nextAlpha)
-    mainFrame.currentAlpha = math.max(0.55, math.min(1.0, nextAlpha))
-    mainFrame:SetAlpha(mainFrame.currentAlpha)
+    mainFrame.currentAlpha = math.max(0.0, math.min(1.0, nextAlpha))
+    if type(mainFrame.SetAlpha) == "function" then
+        mainFrame:SetAlpha(1)
+    end
+    if type(mainFrame.ApplyShellOpacity) == "function" then
+        mainFrame:ApplyShellOpacity(mainFrame.currentAlpha)
+    end
 end
 
 local function view_label_for(key)
@@ -1001,7 +1007,7 @@ apply_surface_variant(mainFrame.optionsRequestsPanel, "panel-alt")
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Appearance", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Theme presets stay local, shell scale also drives table density so shared controls stay aligned, and sidebar icons stay visible when text is collapsed.", "GameFontHighlightSmall")
+mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Theme presets stay local, UI scale keeps the shell and shared table density aligned, and sidebar icons stay visible when text is collapsed.", "GameFontHighlightSmall")
 mainFrame.optionsHint:SetPoint("TOPLEFT", mainFrame.optionsTitle, "BOTTOMLEFT", 0, -8)
 
 mainFrame.optionsThemePresetLabel = mainFrame.optionsThemePresetLabel or make_label(mainFrame.optionsAppearancePanel, "Theme Preset", "GameFontHighlightSmall")
@@ -1048,16 +1054,19 @@ mainFrame.optionsThemeDefaultButton = mainFrame.optionsThemeButtons.generic_wow
 mainFrame.optionsThemeContrastButton = mainFrame.optionsThemeButtons.high_contrast
 mainFrame.optionsThemeWarmButton = mainFrame.optionsThemeButtons.nature
 
-mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Scale", "GameFontHighlightSmall")
+mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "UI Scale", "GameFontHighlightSmall")
 mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsShellScaleDecreaseButton = mainFrame.optionsShellScaleDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellScaleDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsShellScaleSlider = mainFrame.optionsShellScaleSlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.85, 1.2, 1)
+mainFrame.optionsShellScaleSlider = mainFrame.optionsShellScaleSlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.9, 1.2, 1)
 mainFrame.optionsShellScaleSlider:SetPoint("LEFT", mainFrame.optionsShellScaleDecreaseButton, "RIGHT", 8, 0)
 if type(mainFrame.optionsShellScaleSlider.SetValueStep) == "function" then
     mainFrame.optionsShellScaleSlider:SetValueStep(0.05)
+end
+if type(mainFrame.optionsShellScaleSlider.SetObeyStepOnDrag) == "function" then
+    mainFrame.optionsShellScaleSlider:SetObeyStepOnDrag(true)
 end
 
 mainFrame.optionsShellScaleIncreaseButton = mainFrame.optionsShellScaleIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
@@ -1072,7 +1081,7 @@ mainFrame.optionsTableDensityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellSca
 mainFrame.optionsTableDensityDecreaseButton = mainFrame.optionsTableDensityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsTableDensityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsTableDensityLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsTableDensitySlider = mainFrame.optionsTableDensitySlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.85, 1.2, 1)
+mainFrame.optionsTableDensitySlider = mainFrame.optionsTableDensitySlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.9, 1.2, 1)
 mainFrame.optionsTableDensitySlider:SetPoint("LEFT", mainFrame.optionsTableDensityDecreaseButton, "RIGHT", 8, 0)
 if type(mainFrame.optionsTableDensitySlider.SetValueStep) == "function" then
     mainFrame.optionsTableDensitySlider:SetValueStep(0.05)
@@ -1083,6 +1092,11 @@ mainFrame.optionsTableDensityIncreaseButton:SetPoint("LEFT", mainFrame.optionsTa
 
 mainFrame.optionsTableDensityValueText = mainFrame.optionsTableDensityValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
 mainFrame.optionsTableDensityValueText:SetPoint("LEFT", mainFrame.optionsTableDensityIncreaseButton, "RIGHT", 8, 0)
+set_frame_shown(mainFrame.optionsTableDensityLabel, false)
+set_frame_shown(mainFrame.optionsTableDensityDecreaseButton, false)
+set_frame_shown(mainFrame.optionsTableDensitySlider, false)
+set_frame_shown(mainFrame.optionsTableDensityIncreaseButton, false)
+set_frame_shown(mainFrame.optionsTableDensityValueText, false)
 
 mainFrame.optionsShellOpacityLabel = mainFrame.optionsShellOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Opacity", "GameFontHighlightSmall")
 mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 352, -66)
@@ -1090,10 +1104,13 @@ mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearan
 mainFrame.optionsShellOpacityDecreaseButton = mainFrame.optionsShellOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsShellOpacitySlider = mainFrame.optionsShellOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.55, 1.0, 0.96)
+mainFrame.optionsShellOpacitySlider = mainFrame.optionsShellOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.0, 1.0, 0.96)
 mainFrame.optionsShellOpacitySlider:SetPoint("LEFT", mainFrame.optionsShellOpacityDecreaseButton, "RIGHT", 8, 0)
 if type(mainFrame.optionsShellOpacitySlider.SetValueStep) == "function" then
     mainFrame.optionsShellOpacitySlider:SetValueStep(0.01)
+end
+if type(mainFrame.optionsShellOpacitySlider.SetObeyStepOnDrag) == "function" then
+    mainFrame.optionsShellOpacitySlider:SetObeyStepOnDrag(true)
 end
 
 mainFrame.optionsShellOpacityIncreaseButton = mainFrame.optionsShellOpacityIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
@@ -1108,10 +1125,13 @@ mainFrame.optionsModalOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellOpa
 mainFrame.optionsModalOpacityDecreaseButton = mainFrame.optionsModalOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsModalOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsModalOpacitySlider = mainFrame.optionsModalOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.70, 1.0, 1)
+mainFrame.optionsModalOpacitySlider = mainFrame.optionsModalOpacitySlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.0, 1.0, 1)
 mainFrame.optionsModalOpacitySlider:SetPoint("LEFT", mainFrame.optionsModalOpacityDecreaseButton, "RIGHT", 8, 0)
 if type(mainFrame.optionsModalOpacitySlider.SetValueStep) == "function" then
     mainFrame.optionsModalOpacitySlider:SetValueStep(0.01)
+end
+if type(mainFrame.optionsModalOpacitySlider.SetObeyStepOnDrag) == "function" then
+    mainFrame.optionsModalOpacitySlider:SetObeyStepOnDrag(true)
 end
 
 mainFrame.optionsModalOpacityIncreaseButton = mainFrame.optionsModalOpacityIncreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "+")
@@ -1405,16 +1425,71 @@ local function modal_frames(frame)
     }
 end
 
+local function child_frames(frame)
+    if type(frame) ~= "table" then
+        return {}
+    end
+
+    if type(frame.GetChildren) == "function" then
+        return { frame:GetChildren() }
+    end
+
+    if type(frame.children) == "table" then
+        return frame.children
+    end
+
+    return {}
+end
+
+local function visit_frame_tree(frame, visitor, seen, excluded)
+    if type(frame) ~= "table" or seen[frame] or (excluded and excluded[frame]) then
+        return
+    end
+
+    seen[frame] = true
+    visitor(frame)
+
+    for _, child in ipairs(child_frames(frame)) do
+        visit_frame_tree(child, visitor, seen, excluded)
+    end
+end
+
+function mainFrame:ApplyShellOpacity(alpha)
+    alpha = clamp_range(alpha, 0.0, 1.0)
+    if type(set_surface_alpha) ~= "function" then
+        return
+    end
+
+    local excluded = {}
+    for _, frame in ipairs(modal_frames(self)) do
+        if frame then
+            excluded[frame] = true
+        end
+    end
+
+    visit_frame_tree(self, function(frame)
+        if frame == self or (frame.gbmSurfaceVariant and frame.gbmButtonVariant == nil) then
+            set_surface_alpha(frame, alpha)
+        end
+    end, {}, excluded)
+end
+
 function mainFrame:ApplyModalOpacity(alpha)
-    alpha = clamp_range(alpha, 0.70, 1.0)
+    alpha = clamp_range(alpha, 0.0, 1.0)
     local shell = ns.modules.mainFrameShell or mainFrameShell
     local fallbackColor = shell and type(shell.GetTheme) == "function" and shell.GetTheme().colors.panelAlt or { 0.13, 0.17, 0.24, 0.98 }
 
     for _, frame in ipairs(modal_frames(self)) do
         if frame and type(frame.SetAlpha) == "function" then
-            frame:SetAlpha(alpha)
+            frame:SetAlpha(1)
         end
-        if frame and type(frame.SetBackdropColor) == "function" then
+        if frame and type(set_surface_alpha) == "function" then
+            visit_frame_tree(frame, function(child)
+                if child == frame or (child.gbmSurfaceVariant and child.gbmButtonVariant == nil) then
+                    set_surface_alpha(child, alpha)
+                end
+            end, {})
+        elseif frame and type(frame.SetBackdropColor) == "function" then
             local color = frame.gbmBackdropBaseColor or fallbackColor
             frame:SetBackdropColor(color[1] or 0, color[2] or 0, color[3] or 0, math.min(alpha, color[4] or alpha))
         end
@@ -1426,9 +1501,6 @@ function mainFrame:RefreshAppearanceControls()
     if self.optionsShellScaleSlider then
         self.optionsShellScaleSlider:SetValue(self.appearanceShellScale or 1)
     end
-    if self.optionsTableDensitySlider then
-        self.optionsTableDensitySlider:SetValue(self.appearanceTableDensity or 1)
-    end
     if self.optionsShellOpacitySlider then
         self.optionsShellOpacitySlider:SetValue(self.appearanceShellOpacity or 0.96)
     end
@@ -1438,9 +1510,6 @@ function mainFrame:RefreshAppearanceControls()
 
     if self.optionsShellScaleValueText then
         self.optionsShellScaleValueText:SetText(percent_text(self.appearanceShellScale or 1))
-    end
-    if self.optionsTableDensityValueText then
-        self.optionsTableDensityValueText:SetText(percent_text(self.appearanceTableDensity or 1))
     end
     if self.optionsShellOpacityValueText then
         self.optionsShellOpacityValueText:SetText(percent_text(self.appearanceShellOpacity or 0.96))
@@ -1460,10 +1529,10 @@ function mainFrame:LoadAppearanceSettingsFromDb(db)
     local shell = ns.modules.mainFrameShell or mainFrameShell
 
     self.appearanceThemePreset = presetKey
-    self.appearanceShellScale = clamp_range(appearance.shellScale, 0.85, 1.2)
+    self.appearanceShellScale = clamp_range(appearance.shellScale, 0.9, 1.2)
     self.appearanceTableDensity = self.appearanceShellScale
-    self.appearanceShellOpacity = clamp_range(appearance.shellOpacity, 0.55, 1.0)
-    self.appearanceModalOpacity = clamp_range(appearance.modalOpacity, 0.70, 1.0)
+    self.appearanceShellOpacity = clamp_range(appearance.shellOpacity, 0.0, 1.0)
+    self.appearanceModalOpacity = clamp_range(appearance.modalOpacity, 0.0, 1.0)
 
     appearance.themePreset = self.appearanceThemePreset
     appearance.shellScale = self.appearanceShellScale
@@ -1513,7 +1582,7 @@ end
 function mainFrame:SetShellScale(scale)
     local db = current_db()
     local appearance = current_appearance_settings(db)
-    local nextScale = clamp_range(scale, 0.85, 1.2)
+    local nextScale = clamp_range(scale, 0.9, 1.2)
     appearance.shellScale = nextScale
     appearance.tableDensity = nextScale
     self:LoadAppearanceSettingsFromDb(db)
@@ -1527,7 +1596,7 @@ end
 function mainFrame:SetShellOpacity(alpha)
     local db = current_db()
     local appearance = current_appearance_settings(db)
-    appearance.shellOpacity = clamp_range(alpha, 0.55, 1.0)
+    appearance.shellOpacity = clamp_range(alpha, 0.0, 1.0)
     self:LoadAppearanceSettingsFromDb(db)
     refresh_after_appearance_change()
 end
@@ -1535,7 +1604,7 @@ end
 function mainFrame:SetModalOpacity(alpha)
     local db = current_db()
     local appearance = current_appearance_settings(db)
-    appearance.modalOpacity = clamp_range(alpha, 0.70, 1.0)
+    appearance.modalOpacity = clamp_range(alpha, 0.0, 1.0)
     self:LoadAppearanceSettingsFromDb(db)
     refresh_after_appearance_change()
 end
@@ -1564,22 +1633,6 @@ mainFrame.optionsShellScaleIncreaseButton:SetScript("OnClick", function()
         return mainFrame.appearanceShellScale or 1
     end, function(nextValue)
         mainFrame:SetShellScale(nextValue)
-    end, 0.05)
-end)
-
-mainFrame.optionsTableDensityDecreaseButton:SetScript("OnClick", function()
-    adjust_appearance_value(function()
-        return mainFrame.appearanceTableDensity or 1
-    end, function(nextValue)
-        mainFrame:SetTableDensity(nextValue)
-    end, -0.05)
-end)
-
-mainFrame.optionsTableDensityIncreaseButton:SetScript("OnClick", function()
-    adjust_appearance_value(function()
-        return mainFrame.appearanceTableDensity or 1
-    end, function(nextValue)
-        mainFrame:SetTableDensity(nextValue)
     end, 0.05)
 end)
 
@@ -1616,15 +1669,6 @@ mainFrame.optionsModalOpacityIncreaseButton:SetScript("OnClick", function()
 end)
 
 mainFrame.optionsShellScaleSlider.onValueChanged = function(_, value)
-    if mainFrame.isRefreshingAppearanceControls then
-        return
-    end
-    if not nearly_equal(mainFrame.appearanceShellScale or 1, value) then
-        mainFrame:SetShellScale(value)
-    end
-end
-
-mainFrame.optionsTableDensitySlider.onValueChanged = function(_, value)
     if mainFrame.isRefreshingAppearanceControls then
         return
     end
@@ -2713,8 +2757,6 @@ function mainFrame:ApplyTheme()
     end
     apply_button_variant(self.optionsShellScaleDecreaseButton, "icon")
     apply_button_variant(self.optionsShellScaleIncreaseButton, "icon")
-    apply_button_variant(self.optionsTableDensityDecreaseButton, "icon")
-    apply_button_variant(self.optionsTableDensityIncreaseButton, "icon")
     apply_button_variant(self.optionsShellOpacityDecreaseButton, "icon")
     apply_button_variant(self.optionsShellOpacityIncreaseButton, "icon")
     apply_button_variant(self.optionsModalOpacityDecreaseButton, "icon")
@@ -2730,40 +2772,18 @@ function mainFrame:ApplyTheme()
     end
     for _, slider in ipairs({
         self.optionsShellScaleSlider,
-        self.optionsTableDensitySlider,
         self.optionsShellOpacitySlider,
         self.optionsModalOpacitySlider,
     }) do
         if slider then
-            apply_surface_variant(slider.track, "input")
-            apply_surface_variant(slider.fill, "panel-alt", theme.tokens.accentMuted or theme.colors.accent)
-            apply_surface_variant(slider.thumb, "panel-alt", theme.tokens.header or theme.colors.accentStrong)
-            if slider.thumbCore then
-                apply_surface_variant(slider.thumbCore, "input", theme.tokens.bg or theme.colors.background)
+            if slider.Low and type(slider.Low.SetTextColor) == "function" then
+                slider.Low:SetTextColor(unpack(theme.colors.textMuted or theme.colors.accentStrong))
             end
-            if slider.trackBase and type(slider.trackBase.SetColorTexture) == "function" then
-                slider.trackBase:SetColorTexture(unpack(theme.tokens.bgAlt or { 0.08, 0.09, 0.11, 0.95 }))
+            if slider.High and type(slider.High.SetTextColor) == "function" then
+                slider.High:SetTextColor(unpack(theme.colors.textMuted or theme.colors.accentStrong))
             end
-            if slider.trackRidge and type(slider.trackRidge.SetColorTexture) == "function" then
-                slider.trackRidge:SetColorTexture(unpack(color_with_alpha(theme.tokens.borderSoft or theme.colors.border, 0.22)))
-            end
-            if slider.fillGlow and type(slider.fillGlow.SetColorTexture) == "function" then
-                slider.fillGlow:SetColorTexture(unpack(color_with_alpha(theme.tokens.accent or theme.colors.accent, 0.34)))
-            end
-            if slider.thumbGlow and type(slider.thumbGlow.SetColorTexture) == "function" then
-                slider.thumbGlow:SetColorTexture(unpack(color_with_alpha(theme.tokens.accent or theme.colors.accent, 0.08)))
-            end
-            if type(slider.track.SetBackdropColor) == "function" then
-                slider.track:SetBackdropColor(0, 0, 0, 0)
-            end
-            if type(slider.fill.SetBackdropColor) == "function" then
-                slider.fill:SetBackdropColor(0, 0, 0, 0)
-            end
-            if type(slider.thumb.SetBackdropColor) == "function" then
-                slider.thumb:SetBackdropColor(0, 0, 0, 0)
-            end
-            if slider.thumbCore and type(slider.thumbCore.SetBackdropColor) == "function" then
-                slider.thumbCore:SetBackdropColor(0, 0, 0, 0)
+            if slider.Text and type(slider.Text.SetTextColor) == "function" then
+                slider.Text:SetTextColor(unpack(theme.colors.text or theme.colors.accentStrong))
             end
         end
     end
@@ -2919,6 +2939,7 @@ function mainFrame:ApplyTheme()
     if type(self.exportModalOutputInput.SetBackdrop) == "function" then
         self.exportModalOutputInput:SetBackdrop(nil)
     end
+    self:ApplyShellOpacity(self.appearanceShellOpacity or self.currentAlpha or 0.96)
     self:ApplyModalOpacity(self.appearanceModalOpacity or 1)
 end
 

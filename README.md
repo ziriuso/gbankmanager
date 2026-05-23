@@ -14,7 +14,7 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 - Member request submission with explicit approval workflow and no auto-approval path
 - Auctionator, CSV, and custom-delimited export builders, including current caret-delimited Auctionator list import output
 - Guild sync foundation with authority-first conflict resolution, chat-visible sync milestones, and login hello messages
-- Local appearance customization with a token-backed theme system (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), linked shell-and-table scaling, shell opacity, modal opacity, collapsed-nav icons, and direct slider interaction plus steppers
+- Local appearance customization with a token-backed theme system (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), built-in WoW `UISliderTemplate` controls for `UI Scale` (90%-120%), shell opacity, and modal opacity, collapsed-nav icons, and direct slider interaction plus steppers
 - In-client verification commands for both workflow smoke (`/gbm test smoke`) and deterministic in-game unit checks (`/gbm test unit`)
 
 ## Architecture
@@ -89,7 +89,7 @@ Current UI ownership is intentionally split across:
 
 The next planned work after the completed pre-polish workflow block is:
 
-1. Continue the shelved UI polish refinement pass from [docs/ui-polish-suggestions.md](docs/ui-polish-suggestions.md), focusing on action-strip icon expansion, softer less-blocky surfaces, spacing cleanup, and theme tuning on top of the already-landed linked scale, opacity, preset, and nav-icon foundation.
+1. Continue the shelved UI polish refinement pass from [docs/ui-polish-suggestions.md](docs/ui-polish-suggestions.md), focusing on action-strip icon expansion, softer less-blocky surfaces, spacing cleanup, and theme tuning on top of the already-landed `UI Scale`, opacity, preset, and nav-icon foundation.
 2. Revisit deeper sync catch-up only if live guild testing shows the current request, history, auth, and approval-side minimum syncing still leaves workflow gaps.
 
 ### Recently Completed
@@ -127,7 +127,7 @@ The next planned work after the completed pre-polish workflow block is:
 - The sidebar footer identity card now refreshes on addon load plus live guild events, so the current guild name can recover from early `GetGuildInfo("player")` timing and no longer sticks on `No Guild` until `/reload`.
 - Crafted-quality rendering now normalizes the low-tier and max-tier atlas variants so Exports, Inventory, Minimums, Requests, and request-details all show the same visible quality symbols whether the source came from live scan data or fallback catalog/search data.
 - Two-rank crafted items now stay on one shared visible chat-icon family across table rows, details, request review, exports, and the manual shopping list instead of switching to a mismatched inventory-atlas family.
-- The shell now supports a token-backed theme manager with local-only presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
+- The shell now supports a token-backed theme manager with local-only presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), a single `UI Scale` control that drives both shell scale and shared table density across a 90%-120% range, built-in WoW `UISliderTemplate` sliders for shell and modal opacity, collapsed-nav icons, stronger active-state glow for nav plus workflow filter buttons, and surface-only opacity so text plus controls stay crisp while the shell or modal art fades.
 - The UI modernization pass is now in a committed checkpoint state: reusable shell, theme, table, request-wizard, export-card, and Options-tab scaffolding are in place, but the live addon still needs substantial art-pack-driven polish before it matches the Alliance mockup or broader visual guide literally.
 - The request-only workflow panel and shared request wizard are mid-modernization: the member-facing launcher now presents the four-step guided flow, and the wizard exposes a visual progress rail plus a request preview card without changing request persistence or sync behavior.
 - Request Admin filters, request details actions, the request-only launcher, wizard navigation, and Minimums modal actions now all route through dedicated shared button variants (`primary`, `secondary`, `tab`, `icon`, `danger`) instead of the earlier one-style-fits-all bordered buttons.

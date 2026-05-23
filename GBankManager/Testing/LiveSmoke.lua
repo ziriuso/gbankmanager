@@ -278,18 +278,18 @@ local function run_opacity_controls(mainFrame)
         return smoke_result("opacity_controls", false, "shell or modal opacity controls were not fully wired")
     end
 
-    local baselineShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
-    local baselineModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+    local baselineShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
+    local baselineModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
 
     shellDecrease(mainFrame.optionsShellOpacityDecreaseButton)
-    local loweredShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+    local loweredShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
     shellIncrease(mainFrame.optionsShellOpacityIncreaseButton)
-    local restoredShellAlpha = mainFrame.currentAlpha or mainFrame:GetAlpha() or 1
+    local restoredShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
 
     modalDecrease(mainFrame.optionsModalOpacityDecreaseButton)
-    local loweredModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+    local loweredModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
     modalIncrease(mainFrame.optionsModalOpacityIncreaseButton)
-    local restoredModalAlpha = mainFrame.requestDetailsModal and (mainFrame.requestDetailsModal:GetAlpha() or mainFrame.requestDetailsModal.alpha) or 1
+    local restoredModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
 
     if loweredShellAlpha >= baselineShellAlpha then
         return smoke_result("opacity_controls", false, "shell opacity decrement did not lower shell alpha")
@@ -307,7 +307,7 @@ local function run_opacity_controls(mainFrame)
         return smoke_result("opacity_controls", false, "modal opacity increment did not raise modal alpha")
     end
 
-    return smoke_result("opacity_controls", true, "shell and modal opacity controls changed alpha in both directions")
+    return smoke_result("opacity_controls", true, "shell and modal opacity controls changed backdrop alpha in both directions")
 end
 
 local function run_request_access_modes(mainFrame)

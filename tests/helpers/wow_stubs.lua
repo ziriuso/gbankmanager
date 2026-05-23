@@ -341,6 +341,31 @@ if _G.CreateFrame == nil then
             return self.scripts[scriptName]
         end
 
+        function frame:SetMinMaxValues(minValue, maxValue)
+            self.minValue = minValue
+            self.maxValue = maxValue
+        end
+
+        function frame:GetMinMaxValues()
+            return self.minValue, self.maxValue
+        end
+
+        function frame:SetValueStep(step)
+            self.valueStep = step
+        end
+
+        function frame:SetObeyStepOnDrag(value)
+            self.obeyStepOnDrag = value and true or false
+        end
+
+        function frame:SetOrientation(value)
+            self.orientation = value
+        end
+
+        function frame:SetThumbTexture(texture)
+            self.thumbTexture = texture
+        end
+
         function frame:CreateFontString(name, layer, inherits)
             local region = make_region()
             region.name = name
@@ -452,6 +477,9 @@ if _G.CreateFrame == nil then
         function frame:GetAlpha()
             return self.alpha
         end
+        function frame:GetChildren()
+            return unpack(self.children)
+        end
         function frame:SetText(text)
             self.text = text
             local handler = self.scripts and self.scripts.OnTextChanged
@@ -461,13 +489,31 @@ if _G.CreateFrame == nil then
         end
         function frame:GetText() return self.text end
         function frame:SetStatusBarColor() end
-        function frame:SetValue(value) self.value = value end
+        function frame:SetValue(value)
+            self.value = value
+            if type(self.scripts.OnValueChanged) == "function" then
+                self.scripts.OnValueChanged(self, value)
+            elseif type(self.onValueChanged) == "function" then
+                self.onValueChanged(self, value)
+            end
+        end
         function frame:GetValue() return self.value end
         function frame:SetEnabled(enabled)
             self.enabled = enabled and true or false
         end
         function frame:IsEnabled()
             return self.enabled ~= false
+        end
+
+        if type(template) == "string" and string.find(template, "UISliderTemplate", 1, true) then
+            frame.Low = make_region()
+            frame.High = make_region()
+            frame.Text = make_region()
+            frame.Thumb = make_region()
+            table.insert(frame.children, frame.Low)
+            table.insert(frame.children, frame.High)
+            table.insert(frame.children, frame.Text)
+            table.insert(frame.children, frame.Thumb)
         end
 
         table.insert((parent or _G.UIParent).children, frame)
