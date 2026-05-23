@@ -5,9 +5,9 @@
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
-- Latest pushed branch commit: `b391ad5` (`feat: land UI modernization checkpoint`)
-- Latest local-only committed work in this phase: none
-- Current repo status at handoff time: clean after the UI modernization checkpoint and a one-iteration rollback of the too-ambitious dashboard follow-up. The reusable shell and theme scaffolding are committed, but the live addon still needs substantial mockup-fidelity polish and an art pack to close the gap.
+- Latest pushed branch commit: `3b856bd` (`fix: harden guild bank auto scan startup`)
+- Latest local-only work in this phase: Blacklist has been simplified into a read-only officer-note parser view with an explicit `Refresh` button, auto-scan reopen retries were hardened again, History now sorts newest-first, and request creation now reparses guild-backed blacklist state before submit. These changes are not committed yet.
+- Current repo status at handoff time: dirty with the blacklist simplification plus auto-scan and history follow-up. Tests are green, and the next likely live validation is the read-only Blacklist tab plus guild-bank reopen-after-10-minutes scan path.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
@@ -64,9 +64,9 @@
 - Request deletion is now a distinct permission capability, and authorized users can delete requests from the request-details workflow popup.
 - Request Admin now highlights the active bottom filter, right-aligns `All`, `Pending Approval`, and `Pending Fulfillment`, keeps a far-left `Add` launcher, and uses the shared table height without the `Date Fulfilled` filter overflowing.
 - The guild auth policy string now carries the shared Restock Default plus updater metadata. Guild Info pull now refreshes those values into the local Options state, auth-policy updates now write History rows, and those auth-policy rows are now visible in the History view.
-- Blacklist entry UI now explicitly asks for `Character-Server` input, and guild-shared blacklist membership now comes from appended `[GBMBL]` officer-note tags instead of the Guild Info policy string.
+- Guild-shared blacklist membership now comes from appended `[GBMBL]` officer-note tags instead of the Guild Info policy string, and `Options -> Blacklist` is now a read-only instructions-plus-list surface with a `Refresh` action that reparses tagged guild members from officer notes on demand and on guild-roster refresh.
 - Dashboard `Ready to Buy` mismatch investigation did not land a code fix in this slice. Obvious local machine paths did not reveal a live SavedVariables file, and the dashboard card count plus Exports row count both currently derive from the same demand-plan shape in code, so this should be reproed live before changing code.
-- Opening the guild bank now auto-starts a scan only when at least 10 minutes have elapsed since the last successful scan. Manual scan button or slash behavior is unchanged.
+- Opening the guild bank now auto-starts a scan only when at least 10 minutes have elapsed since the last successful scan, and the reopen path now keeps retrying long enough for delayed tab metadata instead of giving up after the first short burst. Manual scan button or slash behavior is unchanged.
 - Synced request create and update messages now append local History rows on receiving clients, approved request sync recreates the tab-scoped Minimums side effect on receivers, and request conflict resolution now prefers higher-authority updaters before timestamp tie-breaks.
 - CSV, Auctionator, and TSM export modals now remove the nested inner text box, and the output area now uses a dedicated scrollable edit-box surface so `Select All` and manual mouse selection both target a real copyable field. The old `Copy` button has been removed.
 - Auctionator and TSM now use the choice label `Not In Guild Bank` for the missing-only path.
@@ -76,7 +76,7 @@
 - Approved open requests that lost both `minimumRuleKey` and request-side bank-tab data now attempt one more self-heal: if there is exactly one enabled tab-scoped Minimums rule for that item, the request binds to that existing rule automatically instead of surfacing a duplicate orange orphan row.
 - The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still rehydrating a real updater name locally when the addon can infer it from live or previously known policy state.
 - Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned reasons stay local and continue to sync through addon auth snapshots.
-- Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, automatically append or remove `[GBMBL]` when officers save changes, and preserve the rest of the officer note text whenever the tag fits within Blizzard's 31-character note limit.
+- Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, and render in a read-only Blacklist tab that explains the `[GBMBL]` workflow instead of trying to write officer notes from inside the addon.
 - Crafted-quality rendering now normalizes the two-rank and max-rank atlas variants so Exports, Inventory, Minimums, Requests, and request details show the same visible tier symbols whether the source came from live scan data or fallback catalog/search data.
 - The appearance foundation is now live through a token-backed theme manager with local-only presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), linked shell scale and table density behavior, separate shell and modal opacity sliders, collapsed-nav icons, and stronger active-state glow for nav plus workflow filter buttons.
 - The shell fidelity rewrite is now underway on top of that foundation: the main shell, sidebar, header, nav buttons, metric cards, export cards, and modal-capable panels now expose explicit surface/button variants plus reusable art layers instead of relying on one generic boxed treatment.
@@ -102,6 +102,8 @@
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering, with persisted results under `GBankManagerDB.testing.inGameUnit`.
 - `/gbm test smoke` now seeds deterministic request-access auth and clears stale request/minimum selector state before its gating checks, so live guild policy or leftover UI selections do not create false negatives. `/gbm test unit` also reloads the crafted-quality helper if the module registry lost it, matching the UI modules' existing fallback behavior.
 - `Options -> Auth` now includes a `Select All` helper for the compact policy string, and the smoke lane now exercises the live Minimums modal handoff plus a hard reset of request confirmed-selection state before its gating assertions.
+- History table rows now sort newest-first by timestamp, so approvals, minimum edits, and auth changes surface in descending order in the live History view.
+- Request creation now reparses guild-backed blacklist state before submit, so newly tagged blacklisted members are denied request creation as soon as the refreshed officer-note parse is available on that client.
 - Maintainers now have repo-local catalog status and deployment helpers plus `tools/catalog/Open-ItemCatalogMaintainer.ps1` for target selection, saved sync status, refresh, and deploying both addon folders into `Retail`, `PTR`, or `Beta`.
 
 ### Current Navigation
@@ -173,6 +175,7 @@ Work these in the exact order below unless a new blocking regression appears:
 - Auth policy regression coverage now spans auth-source, auth, options UI, sync, history, and officer-note blacklist specs for Restock Default propagation, Guild Info updater metadata, Guild Info blacklist removal, officer-note tag writes, blacklist input normalization, and visible auth-policy history rows.
 - Scanner regression coverage now spans unit and sync specs for guild-bank-open auto-scan throttling plus the `GUILDBANKFRAME_OPENED` and `GUILDBANK_UPDATE_TABS` wake-up path in the scanner event adapter.
 - Guild-bank auto-scan now also wakes from `GUILDBANK_UPDATE_TABS`, not just the initial open event, timer retry, or bag-slot updates, so opening the bank before tab metadata is ready still starts a scan once the tab list finishes loading.
+- Blacklist regression coverage now spans guild-roster officer-note parsing plus the read-only Blacklist tab guidance and parsed-member rendering.
 - Sync-hardening regression coverage now spans request history parity on receiving clients, authority-first request conflict resolution, and approved-request minimum recreation on receiving clients.
 - Appearance regression coverage now spans `ui_shell_spec`, `ui_options_spec`, and `live_smoke_spec` for the token-backed theme presets, shell scale, table density, split shell-vs-modal opacity controls, active-state glow, collapsed-nav icons, and shell-top-level focus behavior.
 - Appearance regression coverage now also verifies explicit shell/sidebar/header/card/button variant contracts, reusable art-layer presence, sidebar identity/footer collapse behavior, and the six-tab Options shell in `ui_shell_spec` and `ui_options_spec`.

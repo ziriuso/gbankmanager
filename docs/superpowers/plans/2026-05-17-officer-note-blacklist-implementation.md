@@ -1,10 +1,14 @@
 # Officer Note Blacklist Implementation Plan
 
+## Current Product Note
+
+This plan reflects the original implementation attempt to write officer-note changes from the addon. The live product direction has changed: `Options -> Blacklist` is now read-only, and blacklist membership is managed manually through `[GBMBL]` tags in Guild & Communities officer notes.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace Guild Info blacklist membership storage with appended `[GBMBL]` officer-note tags while keeping blacklist reasons local to GBankManager and synchronized through addon messages.
 
-**Architecture:** Add one focused guild-roster blacklist source module that owns officer-note tag parsing, roster reads, and note writes. Keep the existing auth policy container, but rebuild active blacklist membership from guild roster when officer notes are visible and stop serializing blacklist membership into the Guild Info policy string.
+**Architecture:** Add one focused guild-roster blacklist source module that owns officer-note tag parsing and roster reads. Keep the existing auth policy container, rebuild active blacklist membership from guild roster when officer notes are visible, and stop serializing blacklist membership into the Guild Info policy string.
 
 **Tech Stack:** WoW Lua addon modules, `C_GuildInfo` guild APIs, existing SavedVariables auth store, Lua unit and UI specs.
 
@@ -48,17 +52,18 @@
 - [ ] Implement minimal codec and apply-path changes
 - [ ] Run the auth-source spec and watch it pass
 
-### Task 4: Wire options save to automatic officer-note writes
+### Task 4: Present read-only blacklist membership from officer-note tags
 
 **Files:**
 - Modify: `GBankManager/UI/MainFrame.lua`
 - Modify: `tests/helpers/wow_stubs.lua`
 - Test: `tests/spec/ui_options_spec.lua`
 
-- [ ] Write the failing options test for automatic officer-note writes and status handling
-- [ ] Run the UI options spec and watch it fail
-- [ ] Implement the write-on-save flow and visible status messaging
-- [ ] Run the UI options spec and watch it pass
+- [x] Write the failing options test for read-only blacklist guidance and parsed-member rendering
+- [x] Run the UI options spec and watch it fail
+- [x] Simplify the Blacklist tab into a read-only instructions-plus-list surface
+- [x] Keep the general auth-policy save path independent from Blacklist membership edits
+- [x] Run the UI options spec and watch it pass
 
 ### Task 5: Preserve reason sync and live event behavior
 
@@ -79,6 +84,6 @@
 - Modify: `docs/manual-test-checklist.md`
 - Modify: `docs/superpowers/handoffs/latest-handoff.md`
 
-- [ ] Update user-facing docs to describe officer-note blacklist sourcing
-- [ ] Run `.\tools\lua\lua.exe .\tests\run_all.lua`
+- [x] Update user-facing docs to describe officer-note blacklist sourcing plus the read-only Blacklist tab workflow
+- [x] Run `.\tools\lua\lua.exe .\tests\run_all.lua`
 - [ ] Deploy with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`

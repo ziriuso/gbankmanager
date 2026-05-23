@@ -1334,6 +1334,12 @@ function mainRequestsController.Attach(mainFrame, options)
         local requestsModule = ns.modules.requests
         local transport = ns.modules.syncTransport
         local db = current_db()
+        local permissions = ns.modules.auth or ns.modules.permissions
+
+        if permissions and type(permissions.RefreshPolicyFromGuild) == "function" then
+            permissions.RefreshPolicyFromGuild(db)
+        end
+
         local context = current_context(db)
         local policy = current_policy(db)
         local selectedItem = self:GetConfirmedRequestCreateItem()

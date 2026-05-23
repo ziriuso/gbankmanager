@@ -18,6 +18,7 @@ end
 local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
+local syncEvents = env.ns.modules.syncEvents
 
 _G.GBankManagerDB.auth.capabilities.auth_manage[0] = true
 _G.GBankManagerDB.auth.capabilities.auth_manage[1] = true
@@ -81,7 +82,6 @@ assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "",
 assert.truthy(string.find(mainFrame.optionsPolicyStringHelpText:GetText() or "", "Accept", 1, true) ~= nil, "options auth should explain that the Guild Information dialog must be accepted after pasting")
 assert.equal("Select All", mainFrame.optionsPolicyStringSelectAllButton.labelText:GetText(), "options auth should expose a select-all button for the compact policy string")
 assert.truthy(string.find(mainFrame.optionsAuthHint:GetText() or "", "Character-Server", 1, true) ~= nil, "options auth should explicitly document Character-Server blacklist formatting")
-assert.equal("Character-Server", mainFrame.optionsBlacklistCharacterLabel:GetText(), "options auth should label blacklist input with the canonical Character-Server format")
 assert.truthy((mainFrame.optionsPolicyStringHelpText:GetWidth() or 0) <= 280, "options auth help copy should stay narrow enough to avoid bleeding into the blacklist column")
 assert.truthy((mainFrame.optionsAuthStatusText:GetWidth() or 0) <= 280, "options auth status copy should stay narrow enough to avoid bleeding into the blacklist column")
 assert.same(mainFrame.optionsAuthStatusText, (mainFrame.optionsAuthSaveButton.points[1] or {})[2], "options auth save row should anchor below the status line so wrapped policy copy stays readable")
@@ -99,31 +99,30 @@ _G.GBankManagerDB.auth.blacklist = {
 mainFrame.authDraftPolicy = nil
 mainFrame:RefreshAuthOptions()
 assert.equal(
-    "Ziriously-Stormrage - Abused System",
+    "Ziriously-Stormrage",
     ((mainFrame.optionsBlacklistButtons or {})[1] or {}).labelText:GetText(),
-    "options auth should render blacklist rows in Character-Server display order"
+    "options blacklist should render parsed guild blacklists in Character-Server display order"
 )
+assert.truthy(type((mainFrame.optionsBlacklistButtons or {})[1]) == "table", "options blacklist should render rows for parsed blacklist members")
+assert.truthy(((mainFrame.optionsBlacklistButtons or {})[1] or {}).isShown == true or ((mainFrame.optionsBlacklistButtons or {})[1] or {}):IsShown(), "options blacklist should show parsed blacklist rows")
+mainFrame:SetOptionsTab("BLACKLIST")
+assert.truthy(mainFrame.optionsBlacklistPanel:IsShown(), "options should show the Blacklist panel after tab switch")
+assert.truthy(string.find(mainFrame.optionsBlacklistPanelHint:GetText() or "", "read-only", 1, true) ~= nil, "options blacklist should explain that the view is read-only")
+assert.truthy(string.find(mainFrame.optionsBlacklistInstructionText:GetText() or "", "[GBMBL]", 1, true) ~= nil, "options blacklist should explain the shared officer-note tag")
+assert.truthy(not mainFrame.optionsBlacklistNameInput:IsShown(), "options blacklist should hide the old editable character input")
+assert.truthy(not mainFrame.optionsBlacklistReasonInput:IsShown(), "options blacklist should hide the old reason input")
+assert.truthy(not mainFrame.optionsBlacklistAddButton:IsShown(), "options blacklist should not expose add or update actions")
+assert.truthy(not mainFrame.optionsBlacklistRemoveButton:IsShown(), "options blacklist should not expose remove actions")
+assert.truthy(not mainFrame.optionsBlacklistSaveButton:IsShown(), "options blacklist should not expose a save action")
+assert.truthy(not mainFrame.optionsBlacklistResetButton:IsShown(), "options blacklist should not expose a revert action")
+assert.truthy(mainFrame.optionsBlacklistRefreshButton:IsShown(), "options blacklist should expose a refresh action for reparsing officer-note tags")
+assert.equal("Refresh", mainFrame.optionsBlacklistRefreshButton.labelText:GetText(), "options blacklist should label the read-only reparse action clearly")
+assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Parsed", 1, true) ~= nil, "options blacklist should summarize how many tagged guild members were parsed")
 
-_G.C_GuildInfo.setNotes = {}
-_G.GBankManagerDB.auth.blacklist = {}
-_G.GBankManagerDB.auth.blacklistHashes = {}
-_G.GBankManagerDB.auth.blacklistDirectory = {}
-_G.GBankManagerDB.auth.blacklistRosterDirectory = {
-    ["Ziriously-Stormrage"] = {
-        guid = "guid-ziriously",
-        officerNote = "Raid bench",
-        isBlacklisted = false,
-        updatedAt = 77,
-    },
-}
-mainFrame.authDraftPolicy = nil
-mainFrame.optionsBlacklistNameInput:SetText("Ziriously-Stormrage")
-mainFrame.optionsBlacklistReasonInput:SetText("Abused System")
-mainFrame:StageBlacklistEntry()
-mainFrame:SaveAuthPolicy()
-assert.equal(1, #(_G.C_GuildInfo.setNotes or {}), "options auth save should automatically write guild-shared blacklist membership into the target officer note")
-assert.equal("guid-ziriously", ((_G.C_GuildInfo.setNotes or {})[1] or {}).guid, "options auth save should target the roster member guid when updating the officer note")
-assert.equal("Raid bench [GBMBL]", ((_G.C_GuildInfo.setNotes or {})[1] or {}).text, "options auth save should append the shared blacklist tag while preserving the existing officer note text")
+local rosterRequestsBefore = _G.C_GuildInfo.guildRosterRequests or 0
+mainFrame.optionsBlacklistRefreshButton:GetScript("OnClick")(mainFrame.optionsBlacklistRefreshButton)
+assert.truthy((_G.C_GuildInfo.guildRosterRequests or 0) > rosterRequestsBefore, "options blacklist refresh should request fresh guild roster data before reparsing officer notes")
+assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Refreshing", 1, true) ~= nil, "options blacklist refresh should report that officer-note parsing is refreshing")
 
 mainFrame:SelectAuthRank(0)
 mainFrame:SelectAuthCapability("available", "request_submit")

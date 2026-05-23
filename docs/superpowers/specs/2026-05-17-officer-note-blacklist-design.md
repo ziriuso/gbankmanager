@@ -1,5 +1,9 @@
 # Officer Note Blacklist Design
 
+## Current Product Note
+
+This design file records the original officer-note-backed blacklist direction. The live product has since simplified `Options -> Blacklist` into a read-only instructions-plus-list surface: guild-shared membership is still parsed from `[GBMBL]` officer-note tags, but the addon no longer attempts to save officer-note changes from inside the addon UI.
+
 ## Goal
 
 Move guild-shared blacklist membership out of the compact Guild Info auth policy string and into appended officer-note tags, while keeping blacklist reasons local to GBankManager and synchronized through addon messages.
@@ -36,16 +40,12 @@ Move guild-shared blacklist membership out of the compact Guild Info auth policy
 
 ## Write Behavior
 
-- `Options -> Auth` remains the editing surface
-- Saving staged blacklist changes attempts automatic officer-note writes through `C_GuildInfo.SetNote(guid, text, false)` when the client can edit officer notes
-- Save compares previous active blacklist membership to the staged desired membership and writes only changed members
-- After successful writes:
+- `Options -> Blacklist` no longer writes officer notes.
+- Officers manage guild-shared membership by editing officer notes in `Guild & Communities` and adding or removing `[GBMBL]`.
+- After a manual note change:
   - refresh the roster-derived blacklist state
-  - keep staged local reasons in the learned blacklist directory
-  - continue sending `AUTH_POLICY_SNAPSHOT` so other addon clients receive the reason text and local metadata
-- If any officer-note write fails:
-  - report the failure in options status text
-  - do not silently claim success for the guild-shared blacklist change
+  - keep learned local reasons in the blacklist directory
+  - continue sending `AUTH_POLICY_SNAPSHOT` so other addon clients receive local reason text and metadata
 
 ## Data Shape
 
@@ -61,11 +61,12 @@ Reuse the existing auth container and add roster-note metadata:
 
 ## UI Behavior
 
-- `Options -> Auth` blacklist rows continue to render as `Character-Server - Reason`
+- `Options -> Blacklist` rows render as `Character-Server`
 - Status/help text should explain:
   - blacklist membership is guild-shared through officer notes
   - reasons stay in addon data and sync through addon communication
-  - Save may fail if the officer note does not have enough free space for the appended tag
+  - the Blacklist tab is read-only
+  - officers should add or remove `[GBMBL]` in `Guild & Communities`, then refresh guild data
 
 ## Testing
 
@@ -74,5 +75,5 @@ Add coverage for:
 - officer-note tag parse, append, remove, and length-limit behavior
 - roster refresh rebuilding blacklist membership from tagged officer notes
 - auth policy string export no longer serializing blacklist membership
-- options save automatically writing officer notes when permitted
+- options blacklist guidance and parsed-member rendering
 - sync snapshots continuing to carry learned blacklist reason metadata even though Guild Info no longer does

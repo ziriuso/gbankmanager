@@ -23,7 +23,7 @@ local scanner = ns.modules.scanner or {
 
 local AUTO_SCAN_THROTTLE_SECONDS = 600
 local AUTO_SCAN_RETRY_DELAY_SECONDS = 0.25
-local MAX_AUTO_SCAN_RETRIES = 3
+local MAX_AUTO_SCAN_RETRIES = 20
 local TAB_SCAN_TIMEOUT_SECONDS = 1.5
 
 local function current_context(db)
@@ -378,6 +378,15 @@ end
 
 function scanner.OnGuildBankSlotsChanged(tabIndex)
     if not scanner.scanInProgress or scanner.waitingForTab == nil then
+        if not scanner.scanInProgress and not scanner.pendingAutoScan then
+            local db = current_db()
+            if auto_scan_allowed(db) then
+                scanner.pendingAutoScan = true
+                scanner.autoScanRetryCount = 0
+                scanner.RetryPendingAutoScan()
+                return tabIndex
+            end
+        end
         if scanner.pendingAutoScan then
             scanner.RetryPendingAutoScan()
         end

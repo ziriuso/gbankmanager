@@ -234,28 +234,60 @@ scanner.OnGuildBankTabsUpdated()
 assert.equal(2, autoScanCalls, "guild bank tab updates should also be able to start the first auto-scan if the open event was missed or premature")
 
 scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 0
+scanner.pendingAutoScan = false
+scanner.OnGuildBankSlotsChanged()
+assert.equal(3, autoScanCalls, "guild bank slot updates should also be able to start the first auto-scan if both the open event and tab-update wakeup were missed")
+
+scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 500
 scanner.OnGuildBankOpened()
-assert.equal(2, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
+assert.equal(3, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
 
 scanner.scanInProgress = false
 _G.time = function()
     return 1100
 end
 scanner.OnGuildBankOpened()
-assert.equal(3, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
+assert.equal(4, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
 
 scanner.scanInProgress = true
 _G.time = function()
     return 1800
 end
 scanner.OnGuildBankOpened()
-assert.equal(3, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
+assert.equal(4, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
 
 scanner.BeginScan = originalBeginScan
+scanner.pendingAutoScan = false
+scanner.autoScanRetryCount = 0
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1000
+_G.time = function()
+    return 2000
+end
+_G.C_Timer.ClearPending()
+queriedTabs = {}
+local delayedTabCountCalls = 0
+local originalGetNumGuildBankTabs = _G.GetNumGuildBankTabs
+_G.GetNumGuildBankTabs = function()
+    delayedTabCountCalls = delayedTabCountCalls + 1
+    if delayedTabCountCalls < 5 then
+        return 0
+    end
+    return 3
+end
+scanner.OnGuildBankOpened()
+for _ = 1, 4 do
+    _G.C_Timer.RunPending()
+end
+assert.equal(1, queriedTabs[1], "auto-scan should keep retrying long enough for delayed guild-bank tab data to become available after the throttle window")
+_G.GetNumGuildBankTabs = originalGetNumGuildBankTabs
+
 scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 1750
 queriedTabs = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
 scanner.BeginScan()
 assert.equal(1, queriedTabs[1], "manual scan should still run even inside the auto-scan throttle window")
 assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status")

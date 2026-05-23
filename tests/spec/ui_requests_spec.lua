@@ -493,3 +493,22 @@ mainFrame.requestCreateItemIDInput:SetText("990001")
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
 assert.truthy(mainFrame.requestCreateButton.enabled ~= false, "requests view should re-enable Create after a valid catalog item is reselected")
 assert.truthy(mainFrame.requestCreateStatusText:GetText() ~= "Select an item from the catalog first.", "requests view should clear the stale selection error after a valid catalog item is reselected")
+
+local permissions = env.ns.modules.permissions
+local originalRefreshPolicyFromGuild = permissions.RefreshPolicyFromGuild
+permissions.RefreshPolicyFromGuild = function(db)
+    db.auth.blacklist = db.auth.blacklist or {}
+    db.auth.blacklist["OfficerOne-Stormrage"] = {
+        name = "OfficerOne",
+        updatedAt = 999,
+    }
+    return db.auth
+end
+mainFrame.requestCreateItemIDInput:SetText("990001")
+mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
+mainFrame.requestCreateQuantityInput:SetText("4")
+mainFrame.requestCreateNoteInput:SetText("Need four")
+local blacklistedRequest = mainFrame:CreateRequestFromEditor()
+assert.truthy(blacklistedRequest == nil, "requests view should reparse guild blacklist state before creating a request")
+assert.equal("You do not have permission to submit requests.", mainFrame.requestCreateStatusText:GetText(), "requests view should deny request creation when the refreshed guild policy marks the actor as blacklisted")
+permissions.RefreshPolicyFromGuild = originalRefreshPolicyFromGuild

@@ -73,3 +73,51 @@ assert.truthy(
     ((db.auth.blacklist or {})["Stormrage-Memberone"] or nil) == nil,
     "guild policy refresh should ignore roster members whose officer note does not contain the shared blacklist tag"
 )
+assert.equal(
+    1,
+    (((db.auth.blacklistRosterDirectory or {})["Ziriously-Stormrage"] or {}).rosterIndex or 0),
+    "guild policy refresh should remember the roster index for later officer-note updates"
+)
+
+_G.GuildRosterSetOfficerNoteCalls = {}
+_G.C_GuildInfo.setNotes = {}
+_G.GetGuildRosterInfo = function(index)
+    if index == 1 then
+        return "Ziriously-Stormrage", "Officer", 1, 70, "Mage", "Orgrimmar", "", "Raid bench", true, 0, nil, 0, 0, false, false, nil, "guid-ziriously"
+    end
+
+    return "Memberone-Stormrage", "Raider", 2, 70, "Warrior", "Orgrimmar", "", "Bench", true, 0, nil, 0, 0, false, false, nil, "guid-memberone"
+end
+local previousPolicy = {
+    blacklist = {},
+    blacklistHashes = {},
+    blacklistDirectory = {},
+    blacklistRosterDirectory = {
+        ["Ziriously-Stormrage"] = {
+            guid = "guid-ziriously",
+            rosterIndex = 1,
+            officerNote = "Raid bench",
+            isBlacklisted = false,
+            updatedAt = 77,
+        },
+    },
+}
+local desiredPolicy = {
+    blacklist = {
+        ["Ziriously-Stormrage"] = {
+            name = "Ziriously",
+            reason = "Abused System",
+            updatedAt = 88,
+        },
+    },
+    blacklistHashes = {},
+    blacklistDirectory = {},
+    blacklistRosterDirectory = previousPolicy.blacklistRosterDirectory,
+}
+local applied, reason = officerNotes.ApplyDesiredBlacklistChanges(previousPolicy, desiredPolicy)
+assert.truthy(applied == true, "officer-note blacklist save should succeed when a roster-index note writer is available")
+assert.equal("written", reason, "officer-note blacklist save should report a completed roster-note write")
+assert.equal(0, #(_G.C_GuildInfo.setNotes or {}), "officer-note blacklist save should stop using the restricted guid-based note writer")
+assert.equal(1, #(_G.GuildRosterSetOfficerNoteCalls or {}), "officer-note blacklist save should write through GuildRosterSetOfficerNote")
+assert.equal(1, ((_G.GuildRosterSetOfficerNoteCalls or {})[1] or {}).index, "officer-note blacklist save should target the roster index of the member being tagged")
+assert.equal("Raid bench [GBMBL]", ((_G.GuildRosterSetOfficerNoteCalls or {})[1] or {}).text, "officer-note blacklist save should preserve the existing officer note while appending the shared tag")

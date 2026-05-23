@@ -51,7 +51,7 @@
   - confirms the shell yields behind other dragged UI until clicked back to the front again
   - confirms the manual shopping list can stay open across tab switches or shell close, remembers its moved position, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot
   - auth policy publishing is manual in Retail: use `Save`, use `Select All` or mouse selection on the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
-  - blacklist membership is no longer stored in Guild Info: save blacklist changes from `Options -> Auth` and verify the target officer note gains or loses `[GBMBL]`
+  - blacklist membership is no longer stored in Guild Info: edit a guild member's officer note manually, add or remove `[GBMBL]`, then confirm `Options -> Blacklist` can refresh the read-only parsed roster view
   - item search should use the required bundled `GBankManager_ItemData` payload; if that payload is unavailable, the search UI should report the unavailable state clearly instead of showing misleading sparse local-only name results
   - Minimums should open a centered details modal after a confirmed add-search selection instead of dropping the user into the old footer editor flow
   - Inventory and Minimums should share the same table layout, and Minimums should use a compact transparent action strip instead of the old boxed footer search/editor panel
@@ -96,7 +96,7 @@
 
 The next planned validation work should follow product priority, not test-only convenience:
 
-1. Live-verify the completed auth, auto-scan, and request-sync slices together: Guild Info preload, Restock Default propagation, auth-policy history visibility, guild-bank-open auto-scan throttling, and synced request approval creating the matching Minimums rule on receiving clients.
+1. Live-verify the completed auth, auto-scan, and request-sync slices together: Guild Info preload, Restock Default propagation, auth-policy history visibility, guild-bank-open auto-scan throttling on both first open and reopen after 10 minutes, and synced request approval creating the matching Minimums rule on receiving clients.
 2. Recheck the dashboard `Ready to Buy` mismatch against real live SavedVariables before making any code change. No local repro-backed code fix landed in this slice.
 3. Broaden UI polish validation across the shared table shells, nav active-state styling, quality-tier icon rendering, scalable theme or sizing controls, collapsed-nav icons, separate shell or modal opacity slider behavior, and the newer window ordering behavior around other draggable UI.
 4. Live-verify the broadened in-game unit lane in retail after the automated lanes are green.
@@ -127,10 +127,11 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/ui_dashboard_spec.lua` now also verifies metric-card icon slots so the dashboard fidelity pass keeps visual anchors on each card.
 - `tests/spec/ui_minimums_spec.lua` verifies staged Minimums rows group at the top, expose `ADD` / `EDIT` / `DELETE` badges, and reveal staged-summary plus `Revert All` footer affordances only while drafts exist.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums now uses separate `Enabled Only` and `Show All` buttons with active-state highlighting.
-- `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History, and blacklist entry input accepts `Character-Server`.
+- `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History newest-first, and the Blacklist tab explains the shared `[GBMBL]` officer-note contract.
 - `tests/spec/auth_source_spec.lua` and `tests/spec/auth_spec.lua` also verify the compact updater-hash policy-string encoding, the removal of Guild Info blacklist membership export, and legacy blacklist-key normalization behavior.
-- `tests/spec/officer_note_blacklist_spec.lua` and `tests/spec/ui_options_spec.lua` verify appended `[GBMBL]` officer-note tags, guild-roster-driven blacklist refresh, and automatic officer-note writes from the Options save flow.
-- `tests/spec/diff_spec.lua` and `tests/spec/sync_spec.lua` verify opening the guild bank auto-scans only after the 10-minute throttle window while manual scan remains unaffected and the scanner event adapter now owns `GUILDBANKFRAME_OPENED`.
+- `tests/spec/officer_note_blacklist_spec.lua` and `tests/spec/ui_options_spec.lua` verify appended `[GBMBL]` officer-note tags, guild-roster-driven blacklist refresh, the read-only Blacklist tab guidance, the explicit `Refresh` action, and the parsed-member list.
+- `tests/spec/ui_requests_spec.lua` verifies request creation reparses guild-backed blacklist state before submit and denies newly blacklisted actors.
+- `tests/spec/diff_spec.lua` and `tests/spec/sync_spec.lua` verify opening the guild bank auto-scans only after the 10-minute throttle window, retries long enough for delayed tab metadata on reopen, while manual scan remains unaffected and the scanner event adapter now owns `GUILDBANKFRAME_OPENED`.
 - `tests/spec/sync_spec.lua` verifies synced request creation writes local history, higher-authority request updates win conflict resolution, synced approvals recreate the matching Minimums rule plus history rows on receiving clients, and sync milestone chat feedback is emitted for hello, accepted sync, and ignored forged payloads.
 - `tests/spec/sync_spec.lua` also verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
 - `tests/spec/planning_spec.lua` verifies approved requests converted into Minimums rules do not double-count demand as both request demand and restock demand.

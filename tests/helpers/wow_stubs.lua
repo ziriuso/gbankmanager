@@ -18,9 +18,21 @@ _G.C_GuildInfo = _G.C_GuildInfo or {
     setNotes = {},
     guildRosterRequests = 0,
 }
+_G.C_Secrets = _G.C_Secrets or {
+    hasSecretRestrictions = false,
+}
+_G.StaticPopupDialogs = _G.StaticPopupDialogs or {
+    ["SET_GUILDOFFICERNOTE"] = {
+        maxLetters = 31,
+    },
+}
+_G.StaticPopupCalls = _G.StaticPopupCalls or {}
 _G.DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME or {
     messages = {},
 }
+_G.GuildRosterSetOfficerNoteCalls = _G.GuildRosterSetOfficerNoteCalls or {}
+_G.guildRosterSelection = _G.guildRosterSelection or 0
+_G.SetGuildRosterSelectionCalls = _G.SetGuildRosterSelectionCalls or {}
 
 if _G.time == nil then
     _G.time = function()
@@ -85,6 +97,27 @@ function _G.C_GuildInfo.GuildRoster()
     _G.C_GuildInfo.guildRosterRequests = (_G.C_GuildInfo.guildRosterRequests or 0) + 1
 end
 
+function _G.C_Secrets.HasSecretRestrictions()
+    return _G.C_Secrets.hasSecretRestrictions == true
+end
+
+function _G.GuildRosterSetOfficerNote(index, text)
+    table.insert(_G.GuildRosterSetOfficerNoteCalls, {
+        index = index,
+        text = text,
+    })
+    return true
+end
+
+function _G.SetGuildRosterSelection(index)
+    _G.guildRosterSelection = tonumber(index) or 0
+    table.insert(_G.SetGuildRosterSelectionCalls, _G.guildRosterSelection)
+end
+
+function _G.GetGuildRosterSelection()
+    return tonumber(_G.guildRosterSelection) or 0
+end
+
 function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
     table.insert(self.messages, tostring(message or ""))
 end
@@ -109,6 +142,34 @@ end
 
 function _G.C_Timer.ClearPending()
     _G.C_Timer.pending = {}
+end
+
+function _G.StaticPopup_Show(which, text_arg1, text_arg2, data)
+    local popup = {
+        which = which,
+        data = data,
+        editBox = {
+            text = "",
+        },
+    }
+
+    function popup.editBox:SetText(text)
+        self.text = tostring(text or "")
+    end
+
+    function popup.editBox:GetText()
+        return tostring(self.text or "")
+    end
+
+    table.insert(_G.StaticPopupCalls, {
+        which = which,
+        text_arg1 = text_arg1,
+        text_arg2 = text_arg2,
+        data = data,
+        popup = popup,
+    })
+    _G.LastStaticPopup = popup
+    return popup
 end
 
 _G.CreateDataProvider = _G.CreateDataProvider or function(initial)

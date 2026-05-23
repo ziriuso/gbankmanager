@@ -19,3 +19,13 @@ local optionRows = historyView.BuildTableRows({
 
 assert.equal("Options", optionRows[1].category, "history rows should humanize auth-policy option categories")
 assert.equal("Updated", optionRows[1].action, "history rows should humanize auth-policy update actions")
+
+local sortedRows = historyView.BuildTableRows({
+    { type = "MINIMUM_UPDATED", category = "MINIMUM", itemName = "Old Item", actor = "A", oldValue = "1", newValue = "2", timestamp = 100 },
+    { type = "REQUEST_APPROVED", category = "REQUEST", itemName = "Newest Item", actor = "B", oldValue = "PENDING", newValue = "APPROVED", timestamp = 300 },
+    { type = "REQUEST_CREATED", category = "REQUEST", itemName = "Middle Item", actor = "C", oldValue = "-", newValue = "-", timestamp = 200 },
+}, {})
+
+assert.equal("Newest Item", sortedRows[1].itemName, "history rows should sort newest-first by timestamp")
+assert.equal("Middle Item", sortedRows[2].itemName, "history rows should keep the second-newest entry in the middle")
+assert.equal("Old Item", sortedRows[3].itemName, "history rows should place the oldest entry last")

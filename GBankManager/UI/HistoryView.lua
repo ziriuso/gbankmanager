@@ -160,8 +160,18 @@ end
 
 function historyView.BuildTableRows(entries, filters)
     local rows = {}
+    local filteredEntries = historyView.Filter(entries, filters)
 
-    for _, entry in ipairs(historyView.Filter(entries, filters)) do
+    table.sort(filteredEntries, function(left, right)
+        local leftTimestamp = normalize_timestamp(left.timestamp or left.scannedAt)
+        local rightTimestamp = normalize_timestamp(right.timestamp or right.scannedAt)
+        if leftTimestamp == rightTimestamp then
+            return tostring(left.itemName or left.name or "") < tostring(right.itemName or right.name or "")
+        end
+        return leftTimestamp > rightTimestamp
+    end)
+
+    for _, entry in ipairs(filteredEntries) do
         table.insert(rows, {
             category = category_labels[entry.category] or tostring(entry.category or "Unknown"),
             itemName = tostring(entry.itemName or entry.name or "Unknown"),

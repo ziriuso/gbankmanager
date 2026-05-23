@@ -488,6 +488,15 @@ function syncEvents.HandleEvent(event, ...)
         if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
             authPolicySource.PullPolicyFromGuildInfo(db)
         end
+        if event == "GUILD_ROSTER_UPDATE" then
+            local mainFrame = ns.modules.mainFrame or {}
+            if type(mainFrame.ResumePendingAuthPolicySave) == "function" then
+                mainFrame:ResumePendingAuthPolicySave()
+            end
+            if type(mainFrame.ResumePendingBlacklistPopupWorkflow) == "function" then
+                mainFrame:ResumePendingBlacklistPopupWorkflow()
+            end
+        end
         return true
     end
 

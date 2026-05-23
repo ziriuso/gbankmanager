@@ -35,6 +35,10 @@ local function parse_number(value)
     return math.floor(parsed)
 end
 
+local function trim(value)
+    return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 local function copy_list(list)
     local output = {}
 
@@ -56,6 +60,35 @@ local function clone_table(value)
     end
 
     return cloned
+end
+
+local function stable_key_list(value)
+    local keys = {}
+    for key in pairs(value or {}) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys, function(left, right)
+        return tostring(left) < tostring(right)
+    end)
+    return keys
+end
+
+local function stable_serialize(value)
+    local valueType = type(value)
+    if valueType ~= "table" then
+        return string.format("%s:%s", valueType, tostring(value))
+    end
+
+    local parts = { "{" }
+    for _, key in ipairs(stable_key_list(value)) do
+        parts[#parts + 1] = string.format("[%s]=%s;", tostring(key), stable_serialize(value[key]))
+    end
+    parts[#parts + 1] = "}"
+    return table.concat(parts)
+end
+
+local function tables_deep_equal(left, right)
+    return stable_serialize(left) == stable_serialize(right)
 end
 
 local function clone_export_template(template)
@@ -944,7 +977,7 @@ apply_surface_variant(mainFrame.optionsPermissionsPanel, "panel-alt")
 mainFrame.optionsBlacklistPanel = mainFrame.optionsBlacklistPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
 mainFrame.optionsBlacklistPanel:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 0, 0)
 mainFrame.optionsBlacklistPanel:SetPoint("TOPRIGHT", mainFrame.optionsAuthPanel, "TOPRIGHT", 0, 0)
-mainFrame.optionsBlacklistPanel:SetHeight(268)
+mainFrame.optionsBlacklistPanel:SetHeight(390)
 apply_surface_variant(mainFrame.optionsBlacklistPanel, "panel-alt")
 
 mainFrame.optionsAutomationPanel = mainFrame.optionsAutomationPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1202,16 +1235,24 @@ mainFrame.optionsBlacklistAddButton:SetPoint("TOPLEFT", mainFrame.optionsBlackli
 mainFrame.optionsBlacklistRemoveButton = mainFrame.optionsBlacklistRemoveButton or make_button(mainFrame.optionsAuthPanel, 74, 24, "Remove")
 mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
 
-mainFrame.optionsBlacklistListTitle = mainFrame.optionsBlacklistListTitle or make_label(mainFrame.optionsAuthPanel, "Blacklisted Entries", "GameFontHighlightSmall")
-mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistAddButton, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsBlacklistListTitle = mainFrame.optionsBlacklistListTitle or make_label(mainFrame.optionsAuthPanel, "Blacklisted Members", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -12)
 
 mainFrame.optionsBlacklistListPanel = mainFrame.optionsBlacklistListPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
 mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
-mainFrame.optionsBlacklistListPanel:SetSize(324, 74)
+mainFrame.optionsBlacklistListPanel:SetSize(324, 220)
 apply_panel_style(mainFrame.optionsBlacklistListPanel, theme.colors.panel)
 
+mainFrame.optionsBlacklistStatusText = mainFrame.optionsBlacklistStatusText or make_label(mainFrame.optionsBlacklistPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistStatusText:SetWidth(324)
+
+mainFrame.optionsBlacklistRefreshButton = mainFrame.optionsBlacklistRefreshButton or make_button(mainFrame.optionsBlacklistPanel, 74, 24, "Refresh")
+
+mainFrame.optionsBlacklistSaveButton = mainFrame.optionsBlacklistSaveButton or make_button(mainFrame.optionsBlacklistPanel, 88, 24, "Save")
+mainFrame.optionsBlacklistResetButton = mainFrame.optionsBlacklistResetButton or make_button(mainFrame.optionsBlacklistPanel, 70, 24, "Revert")
+
 mainFrame.optionsBlacklistButtons = mainFrame.optionsBlacklistButtons or {}
-for index = 1, 3 do
+for index = 1, 12 do
     local button = mainFrame.optionsBlacklistButtons[index] or make_button(mainFrame.optionsBlacklistListPanel, 308, 18, "")
     button:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "TOPLEFT", 8, -8 - ((index - 1) * 22))
     mainFrame.optionsBlacklistButtons[index] = button
@@ -1304,10 +1345,16 @@ mainFrame.optionsAuthResetButton:SetPoint("LEFT", mainFrame.optionsAuthReadButto
 
 mainFrame.optionsBlacklistPanelTitle = mainFrame.optionsBlacklistPanelTitle or make_label(mainFrame.optionsBlacklistPanel, "Blacklist", "GameFontHighlight")
 mainFrame.optionsBlacklistPanelTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanel, "TOPLEFT", 16, -16)
-mainFrame.optionsBlacklistPanelHint = mainFrame.optionsBlacklistPanelHint or make_label(mainFrame.optionsBlacklistPanel, "Guild-shared blacklist membership is carried by officer-note tags. Reasons stay local and sync through the addon.", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistPanelHint = mainFrame.optionsBlacklistPanelHint or make_label(mainFrame.optionsBlacklistPanel, "Guild-shared blacklist membership is read from officer notes. This tab is read-only.", "GameFontHighlightSmall")
 mainFrame.optionsBlacklistPanelHint:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelTitle, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsBlacklistInstructionText = mainFrame.optionsBlacklistInstructionText or make_label(mainFrame.optionsBlacklistPanel, "To blacklist a guild member, open Guild & Communities and append [GBMBL] to that member's officer note. The addon parses officer notes on load and guild-roster refresh, then lists all tagged members below.", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistInstructionText:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelHint, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsBlacklistInstructionText:SetWidth(500)
+if type(mainFrame.optionsBlacklistInstructionText.SetJustifyH) == "function" then
+    mainFrame.optionsBlacklistInstructionText:SetJustifyH("LEFT")
+end
 move_to_panel(mainFrame.optionsBlacklistTitle, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelHint, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistInstructionText, "BOTTOMLEFT", 0, -12)
 move_to_panel(mainFrame.optionsBlacklistCharacterLabel, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistCharacterLabel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -10)
 move_to_panel(mainFrame.optionsBlacklistNameInput, mainFrame.optionsBlacklistPanel)
@@ -1321,9 +1368,17 @@ mainFrame.optionsBlacklistAddButton:SetPoint("TOPLEFT", mainFrame.optionsBlackli
 move_to_panel(mainFrame.optionsBlacklistRemoveButton, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
 move_to_panel(mainFrame.optionsBlacklistListTitle, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistAddButton, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -12)
+move_to_panel(mainFrame.optionsBlacklistRefreshButton, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistRefreshButton:SetPoint("RIGHT", mainFrame.optionsBlacklistListPanel, "RIGHT", 0, 28)
 move_to_panel(mainFrame.optionsBlacklistListPanel, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
+move_to_panel(mainFrame.optionsBlacklistStatusText, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistStatusText:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "BOTTOMLEFT", 0, -8)
+move_to_panel(mainFrame.optionsBlacklistSaveButton, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistSaveButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistStatusText, "BOTTOMLEFT", 0, -10)
+move_to_panel(mainFrame.optionsBlacklistResetButton, mainFrame.optionsBlacklistPanel)
+mainFrame.optionsBlacklistResetButton:SetPoint("LEFT", mainFrame.optionsBlacklistSaveButton, "RIGHT", 8, 0)
 
 mainFrame.optionsAutomationTitle = mainFrame.optionsAutomationTitle or make_label(mainFrame.optionsAutomationPanel, "Automation", "GameFontHighlight")
 mainFrame.optionsAutomationTitle:SetPoint("TOPLEFT", mainFrame.optionsAutomationPanel, "TOPLEFT", 16, -16)
@@ -1823,80 +1878,92 @@ function mainFrame:MoveSelectedAuthCapability(listKind)
 end
 
 function mainFrame:SelectBlacklistEntry(characterKey)
-    local policy = self:GetAuthDraftPolicy(current_db())
     self.authBlacklistSelectedKey = characterKey
-    local entry = characterKey and (policy.blacklist or {})[characterKey] or nil
-    self.optionsBlacklistNameInput:SetText(display_character_key(characterKey or ""))
-    self.optionsBlacklistReasonInput:SetText(entry and entry.reason or "")
     self:RefreshAuthOptions()
 end
 
 function mainFrame:StageBlacklistEntry()
-    local db = current_db()
-    local permissions = ns.modules.auth or ns.modules.permissions
-    local policy = self:GetAuthDraftPolicy(db)
-    local context = current_auth_context(db)
-    local rawName = self.optionsBlacklistNameInput:GetText() or ""
-    local reason = self.optionsBlacklistReasonInput:GetText() or ""
-    local realmName = context.realmName or (type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
-    local characterKey
-    if permissions and type(permissions.NormalizeEnteredCharacterKey) == "function" then
-        characterKey = permissions.NormalizeEnteredCharacterKey(rawName, realmName)
-    elseif permissions and type(permissions.NormalizeCharacterKey) == "function" then
-        characterKey = permissions.NormalizeCharacterKey(rawName, realmName)
-    else
-        characterKey = rawName
+    self.optionsAuthStatusText:SetText("Blacklist membership is read-only here. Add or remove [GBMBL] in Guild & Communities officer notes.")
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Read-only view. Update [GBMBL] in the guild roster officer note.")
     end
-
-    if characterKey == "" then
-        self.optionsAuthStatusText:SetText("Enter a Character-Server name or a character on your current realm.")
-        return nil
-    end
-
-    if context.isGuildMaster and characterKey == context.characterKey then
-        self.optionsAuthStatusText:SetText("Guildmaster access cannot be blacklisted.")
-        return nil
-    end
-
-    if permissions and type(permissions.UpsertBlacklist) == "function" then
-        permissions.UpsertBlacklist(policy, characterKey, rawName, reason, _G.time and _G.time() or 0)
-    else
-        policy.blacklist[characterKey] = {
-            name = rawName,
-            reason = reason,
-            updatedAt = _G.time and _G.time() or 0,
-        }
-    end
-
-    self.authBlacklistSelectedKey = characterKey
-    self.optionsAuthStatusText:SetText(string.format("Staged blacklist entry for %s.", characterKey))
-    self:RefreshAuthOptions()
-    return characterKey
+    return nil
 end
 
 function mainFrame:RemoveSelectedBlacklistEntry()
+    self.optionsAuthStatusText:SetText("Blacklist membership is read-only here. Remove [GBMBL] in Guild & Communities officer notes.")
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Read-only view. Remove [GBMBL] from the guild roster officer note.")
+    end
+    return nil
+end
+
+function mainFrame:BuildBlacklistOnlyDraft(db)
+    return clone_table(current_policy(db or current_db()))
+end
+
+function mainFrame:ResetBlacklistDraft()
+    self.authBlacklistSelectedKey = nil
+    self.optionsAuthStatusText:SetText("Blacklist view refreshed from parsed officer notes.")
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Blacklist view refreshed from parsed officer notes.")
+    end
+    self:RefreshAuthOptions()
+end
+
+function mainFrame:FinalizeBlacklistSave(previousPolicy, draft, source)
+    self.pendingBlacklistPopupWorkflow = nil
+    self.pendingAuthPolicySave = nil
+    self.optionsAuthStatusText:SetText("Blacklist membership is read-only here. Refresh guild roster data after editing officer notes.")
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Read-only view. Refresh after editing officer notes in Guild & Communities.")
+    end
+    self:RefreshAuthOptions()
+    return nil
+end
+
+function mainFrame:ShowNextBlacklistPopupWorkflow()
+    return nil
+end
+
+function mainFrame:ResumePendingBlacklistPopupWorkflow()
+    self.pendingBlacklistPopupWorkflow = nil
+    return false
+end
+
+function mainFrame:SaveBlacklistChanges(options)
+    self.pendingBlacklistPopupWorkflow = nil
+    self.pendingAuthPolicySave = nil
+    self.optionsAuthStatusText:SetText("Blacklist membership is read-only here. Add or remove [GBMBL] in Guild & Communities officer notes, then refresh the roster.")
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Read-only view. The addon lists members whose officer note includes [GBMBL].")
+    end
+    return nil
+end
+
+function mainFrame:RefreshBlacklistFromGuild()
     local db = current_db()
     local permissions = ns.modules.auth or ns.modules.permissions
-    local policy = self:GetAuthDraftPolicy(db)
-    local characterKey = self.authBlacklistSelectedKey or (self.optionsBlacklistNameInput:GetText() or "")
-
-    if characterKey == "" then
-        self.optionsAuthStatusText:SetText("Select a blacklist entry first.")
-        return nil
+    if _G.C_GuildInfo and type(_G.C_GuildInfo.GuildRoster) == "function" then
+        _G.C_GuildInfo.GuildRoster()
+    end
+    if permissions and type(permissions.RefreshPolicyFromGuild) == "function" then
+        permissions.RefreshPolicyFromGuild(db)
     end
 
-    if permissions and type(permissions.RemoveBlacklist) == "function" then
-        permissions.RemoveBlacklist(policy, characterKey)
-    else
-        policy.blacklist[characterKey] = nil
-    end
-
+    local draft = self:GetAuthDraftPolicy(db)
+    draft.blacklist = clone_table((db.auth or {}).blacklist or {})
+    draft.blacklistHashes = clone_table((db.auth or {}).blacklistHashes or {})
+    draft.blacklistDirectory = clone_table((db.auth or {}).blacklistDirectory or {})
+    draft.blacklistRosterDirectory = clone_table((db.auth or {}).blacklistRosterDirectory or {})
     self.authBlacklistSelectedKey = nil
-    self.optionsBlacklistNameInput:SetText("")
-    self.optionsBlacklistReasonInput:SetText("")
-    self.optionsAuthStatusText:SetText(string.format("Removed blacklist entry for %s.", characterKey))
+
+    self.optionsAuthStatusText:SetText("Refreshing blacklist roster data from guild officer notes...")
     self:RefreshAuthOptions()
-    return characterKey
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText("Refreshing parsed officer-note tags from the guild roster...")
+    end
+    return true
 end
 
 function mainFrame:ToggleAuthCapabilityRank(capability, rankIndex)
@@ -1920,7 +1987,8 @@ function mainFrame:ToggleAuthCapabilityRank(capability, rankIndex)
     return allowed
 end
 
-function mainFrame:SaveAuthPolicy()
+function mainFrame:SaveAuthPolicy(options)
+    options = options or {}
     local db = current_db()
     local permissions = ns.modules.auth or ns.modules.permissions
     local officerNoteBlacklist = ns.modules.officerNoteBlacklist or {}
@@ -1939,23 +2007,16 @@ function mainFrame:SaveAuthPolicy()
         draft = permissions.NormalizePolicy(draft, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
     end
 
+    -- Blacklist membership now saves through the dedicated Blacklist tab workflow.
+    draft.blacklist = clone_table((previousPolicy or {}).blacklist or {})
+    draft.blacklistHashes = clone_table((previousPolicy or {}).blacklistHashes or {})
+    draft.blacklistDirectory = clone_table((previousPolicy or {}).blacklistDirectory or {})
+    draft.blacklistRosterDirectory = clone_table((previousPolicy or {}).blacklistRosterDirectory or {})
+
     local minimumSettings = self.GetMinimumSettings and self:GetMinimumSettings(db) or (((db or {}).ui or {}).minimumSettings or {})
     draft.restockDefault = tonumber(minimumSettings.defaultQuantity or draft.restockDefault or 100) or 100
 
-    if type(officerNoteBlacklist.ApplyDesiredBlacklistChanges) == "function" then
-        local blacklistApplied, blacklistReason, updatedDraft = officerNoteBlacklist.ApplyDesiredBlacklistChanges(previousPolicy, draft)
-        if not blacklistApplied then
-            if blacklistReason == "cannot_edit" then
-                self.optionsAuthStatusText:SetText("Unable to save blacklist changes because you cannot edit officer notes.")
-            elseif blacklistReason == "note_too_long" then
-                self.optionsAuthStatusText:SetText("Unable to append [GBMBL] because the target officer note is already too long.")
-            else
-                self.optionsAuthStatusText:SetText("Unable to save blacklist changes to officer notes.")
-            end
-            return nil
-        end
-        draft = updatedDraft or draft
-    end
+    self.pendingAuthPolicySave = nil
 
     if permissions and type(permissions.StampPolicy) == "function" then
         permissions.StampPolicy(draft, context, _G.time and _G.time() or 0)
@@ -1973,7 +2034,7 @@ function mainFrame:SaveAuthPolicy()
     if self.optionsPolicyStringInput and type(self.optionsPolicyStringInput.SetText) == "function" then
         self.optionsPolicyStringInput:SetText(draft.guildPolicyString or "")
     end
-    self.optionsAuthStatusText:SetText("Saved guild auth policy locally, updated any changed officer-note blacklist tags, and refreshed the policy string. Copy the policy string into Guild Information and press Accept.")
+    self.optionsAuthStatusText:SetText("Saved guild auth policy locally and refreshed the policy string. Copy the policy string into Guild Information and press Accept.")
 
     if transport and type(transport.Send) == "function" then
         transport.Send("GUILD", "GUILD", {
@@ -1988,6 +2049,18 @@ function mainFrame:SaveAuthPolicy()
 
     self:RefreshAuthOptions()
     return draft
+end
+
+function mainFrame:ResumePendingAuthPolicySave()
+    if type(self.pendingAuthPolicySave) ~= "table" then
+        return false
+    end
+
+    local pending = self.pendingAuthPolicySave
+    self.pendingAuthPolicySave = nil
+    return self:SaveAuthPolicy({
+        retryAfterRoster = true,
+    }) ~= nil
 end
 
 function mainFrame:RefreshAuthPolicyFromGuildInfo()
@@ -2139,33 +2212,68 @@ function mainFrame:RefreshAuthOptions()
         local entry = blacklistEntries[index]
         if entry then
             local displayKey = type(permissions.DisplayCharacterKey) == "function" and permissions.DisplayCharacterKey(entry.characterKey) or entry.characterKey
-            button.labelText:SetText(string.format("%s - %s", displayKey, entry.reason ~= "" and entry.reason or "No reason"))
-            button:SetEnabled(true)
+            button.labelText:SetText(displayKey)
+            button:SetEnabled(false)
             button:Show()
-            button:SetScript("OnClick", function()
-                self:SelectBlacklistEntry(entry.characterKey)
-            end)
+            button:SetScript("OnClick", nil)
         else
             button.labelText:SetText("")
             button:Hide()
         end
     end
 
+    local blacklistPanelHeight = math.max(220, (#blacklistEntries * 22) + 16)
+    self.optionsBlacklistListPanel:SetHeight(blacklistPanelHeight)
+    self.optionsBlacklistPanel:SetHeight(math.max(390, 170 + blacklistPanelHeight))
+
     self.optionsPolicyStringInput:SetText(policy.guildPolicyString or "")
+
+    local persistedPolicy = current_policy(current_db())
+    local blacklistDraftDirty = not tables_deep_equal((policy or {}).blacklist or {}, (persistedPolicy or {}).blacklist or {})
+        or not tables_deep_equal((policy or {}).blacklistDirectory or {}, (persistedPolicy or {}).blacklistDirectory or {})
+        or not tables_deep_equal((policy or {}).blacklistHashes or {}, (persistedPolicy or {}).blacklistHashes or {})
 
     self.optionsAuthAddPermissionButton:SetEnabled(canManage and self.selectedAvailableCapability ~= nil and selectedRankIndex ~= nil)
     self.optionsAuthRemovePermissionButton:SetEnabled(canManage and self.selectedAllowedCapability ~= nil and selectedRankIndex ~= nil)
     self.optionsAuthRankButton:SetEnabled(#ranks > 0)
-    self.optionsBlacklistAddButton:SetEnabled(canManage)
-    self.optionsBlacklistRemoveButton:SetEnabled(canManage and (self.authBlacklistSelectedKey ~= nil))
+    self.optionsBlacklistAddButton:SetEnabled(false)
+    self.optionsBlacklistRemoveButton:SetEnabled(false)
+    self.optionsBlacklistSaveButton:SetEnabled(false)
+    self.optionsBlacklistResetButton:SetEnabled(false)
+    self.optionsBlacklistRefreshButton:SetEnabled(true)
     self.optionsAuthSaveButton:SetEnabled(canManage)
     self.optionsAuthReadButton:SetEnabled(true)
     self.optionsAuthResetButton:SetEnabled(true)
     self.optionsPolicyStringSelectAllButton:SetEnabled(true)
+    if self.optionsBlacklistStatusText then
+        self.optionsBlacklistStatusText:SetText(string.format("Parsed %d tagged guild member%s from officer notes.", #blacklistEntries, #blacklistEntries == 1 and "" or "s"))
+    end
+
+    set_frame_shown(self.optionsBlacklistCharacterLabel, false)
+    set_frame_shown(self.optionsBlacklistNameInput, false)
+    set_frame_shown(self.optionsBlacklistReasonLabel, false)
+    set_frame_shown(self.optionsBlacklistReasonInput, false)
+    set_frame_shown(self.optionsBlacklistAddButton, false)
+    set_frame_shown(self.optionsBlacklistRemoveButton, false)
+    set_frame_shown(self.optionsBlacklistSaveButton, false)
+    set_frame_shown(self.optionsBlacklistResetButton, false)
+    set_frame_shown(self.optionsBlacklistRefreshButton, true)
 end
 
 mainFrame.optionsBlacklistAddButton:SetScript("OnClick", function()
     mainFrame:StageBlacklistEntry()
+end)
+
+mainFrame.optionsBlacklistSaveButton:SetScript("OnClick", function()
+    mainFrame:SaveBlacklistChanges()
+end)
+
+mainFrame.optionsBlacklistResetButton:SetScript("OnClick", function()
+    mainFrame:ResetBlacklistDraft()
+end)
+
+mainFrame.optionsBlacklistRefreshButton:SetScript("OnClick", function()
+    mainFrame:RefreshBlacklistFromGuild()
 end)
 
 mainFrame.optionsAuthRankButton:SetScript("OnClick", function()
