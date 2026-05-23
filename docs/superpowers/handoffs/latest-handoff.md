@@ -6,8 +6,8 @@
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
 - Latest pushed branch commit: `3b856bd` (`fix: harden guild bank auto scan startup`)
-- Latest local-only work in this phase: Blacklist has been simplified into a read-only officer-note parser view with an explicit `Refresh` button, auto-scan reopen retries were hardened again, History now sorts newest-first, and request creation now reparses guild-backed blacklist state before submit. These changes are not committed yet.
-- Current repo status at handoff time: dirty with the blacklist simplification plus auto-scan and history follow-up. Tests are green, and the next likely live validation is the read-only Blacklist tab plus guild-bank reopen-after-10-minutes scan path.
+- Latest local-only work in this phase: Blacklist has been simplified into a read-only officer-note parser view with an explicit themed `Refresh` button above the parsed-member list, the duplicate legacy blacklist header has been hidden, the refresh status now returns from `Refreshing...` to the parsed summary after `GUILD_ROSTER_UPDATE`, auto-scan reopen retries were hardened again, History now sorts newest-first, request creation now reparses guild-backed blacklist state before submit, and the sidebar footer identity now refreshes on load plus guild events so late guild data does not stick on `No Guild`. These changes are not committed yet.
+- Current repo status at handoff time: dirty with the blacklist simplification and polish cleanup, auto-scan and history follow-up, plus the sidebar guild refresh fix. Tests are green, and the next likely live validation is the sidebar guild footer recovering without `/reload` alongside the cleaned-up read-only Blacklist tab and guild-bank reopen-after-10-minutes scan path.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
@@ -83,6 +83,7 @@
 - That shell rewrite now also covers the centered branded About panel, dedicated table header/filter/viewport surfaces, semantic alternating row tokens, and shared button variants across request and Minimums workflows.
 - The default `Generic WoW` preset is now darker and closer to the mockup baseline, dashboard quick actions now use icon-led primary buttons, the sidebar now carries a crest treatment above the nav stack, and sliders now render through a more deliberate track/thumb style while preserving the existing direct-drag and stepper behavior.
 - The sidebar now includes a footer identity card that shows the current character and guild in expanded mode and hides that text cleanly when collapsed.
+- The sidebar footer identity card now also refreshes from live guild events after shell creation, so late `GetGuildInfo("player")` availability replaces the temporary `No Guild` fallback without needing `/reload`.
 - `Options` now has a true six-tab shell (`Appearance`, `Permissions`, `Blacklist`, `Automation`, `Exports`, `Requests`) instead of relying on one long stacked settings canvas.
 - The request-only modernization pass is underway: the member `New Request` flow now has a four-step progress rail, a live preview card, explicit bank-tab selection, and quantity steppers while preserving the existing request persistence and sync path.
 - Appearance sliders now support direct slider interaction in addition to `+` / `-` stepping, and opening `Options` proactively reloads the current Guild Info auth policy before populating the visible auth controls.

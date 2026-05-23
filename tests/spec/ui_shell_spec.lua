@@ -8,6 +8,7 @@ local mainFrame = env.mainFrame
 local slash = env.slash
 local scanner = env.scanner
 local themeManager = env.ns.modules.themeManager
+local syncEvents = env.ns.modules.syncEvents
 local activeTheme = env.mainFrameShell.GetTheme()
 
 assert.truthy(type(mainFrame.closeButton) == "table", "main frame should expose a close button")
@@ -39,6 +40,7 @@ assert.truthy(type((((mainFrame.dashboardCards or {})[1] or {}).gbmArt or {}).he
 assert.truthy(type(mainFrame.sidebarIdentityPanel) == "table", "sidebar should expose a footer identity card")
 assert.truthy(type(mainFrame.sidebarIdentityNameText) == "table", "sidebar identity card should expose player identity text")
 assert.truthy(type(mainFrame.sidebarIdentityGuildText) == "table", "sidebar identity card should expose guild identity text")
+assert.truthy(type(mainFrame.RefreshSidebarIdentity) == "function", "sidebar identity card should expose a refresh helper for late guild data")
 assert.equal((activeTheme.colors.accentStrong or {})[1], (mainFrame.sidebarButtons[1].backdropBorderColor or {})[1], "active sidebar view should use the theme's stronger border glow")
 assert.same(mainFrame.closeButton, (mainFrame.scanButton.points[1] or {})[2], "scan button should anchor from the close button side to avoid scaled-header overlap")
 assert.same(mainFrame.scanButton, (mainFrame.statusText.points[1] or {})[2], "status text should anchor from the scan button side to avoid scaled-header overlap")
@@ -50,6 +52,19 @@ assert.truthy(mainFrame:IsShown(), "slash ui command should show the main frame"
 assert.truthy(mainFrame.mouseEnabled == true, "opening the main frame should enable mouse capture")
 assert.truthy(mainFrame.topLevel == true, "main frame should opt into top-level window ordering")
 assert.equal("MEDIUM", mainFrame.frameStrata, "main frame should sit below higher-priority Blizzard dialogs until refocused")
+
+local originalGetGuildInfo = _G.GetGuildInfo
+_G.GetGuildInfo = function()
+    return nil, "Officer", 1
+end
+mainFrame:RefreshSidebarIdentity()
+assert.equal("No Guild", mainFrame.sidebarIdentityGuildText:GetText(), "sidebar identity refresh should tolerate missing guild info during early load")
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Officer", 1
+end
+syncEvents.HandleEvent("PLAYER_GUILD_UPDATE")
+assert.equal("Guild Testers", mainFrame.sidebarIdentityGuildText:GetText(), "sidebar identity should refresh when guild identity becomes available after load")
+_G.GetGuildInfo = originalGetGuildInfo
 
 local originalFrameLevel = tonumber(mainFrame.frameLevel or 0) or 0
 local onMouseDown = mainFrame:GetScript("OnMouseDown")

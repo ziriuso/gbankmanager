@@ -1568,6 +1568,27 @@ local function clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
 end
 
+local function resolve_sidebar_identity()
+    local playerName = type(_G.UnitName) == "function" and tostring(_G.UnitName("player") or "Unknown") or "Unknown"
+    local realmName = type(_G.GetRealmName) == "function" and tostring(_G.GetRealmName() or "") or ""
+    local guildName = nil
+
+    if type(_G.GetGuildInfo) == "function" then
+        guildName = _G.GetGuildInfo("player")
+    end
+
+    if realmName ~= "" then
+        playerName = string.format("%s-%s", playerName, realmName)
+    end
+
+    guildName = tostring(guildName or "")
+    if guildName == "" then
+        guildName = "No Guild"
+    end
+
+    return playerName, guildName
+end
+
 function mainFrameShell.AttachScrollBehavior(scrollFrame, scrollBar, options)
     options = options or {}
     ensure_vertical_scroll_api(scrollFrame)
@@ -1981,14 +2002,14 @@ function mainFrameShell.EnsureShell(mainFrame)
         mainFrame.sidebarIdentityGuildText:SetWidth(160)
     end
 
-    local playerName = type(_G.UnitName) == "function" and tostring(_G.UnitName("player") or "Unknown") or "Unknown"
-    local realmName = type(_G.GetRealmName) == "function" and tostring(_G.GetRealmName() or "") or ""
-    local guildName = type(_G.GetGuildInfo) == "function" and tostring((_G.GetGuildInfo("player")) or "No Guild") or "No Guild"
-    if realmName ~= "" then
-        playerName = string.format("%s-%s", playerName, realmName)
+    function mainFrame:RefreshSidebarIdentity()
+        local playerName, guildName = resolve_sidebar_identity()
+        self.sidebarIdentityNameText:SetText(playerName)
+        self.sidebarIdentityGuildText:SetText(guildName)
+        return playerName, guildName
     end
-    mainFrame.sidebarIdentityNameText:SetText(playerName)
-    mainFrame.sidebarIdentityGuildText:SetText(guildName ~= "" and guildName or "No Guild")
+
+    mainFrame:RefreshSidebarIdentity()
 
     return mainFrame
 end

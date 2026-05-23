@@ -113,6 +113,7 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 59hab. Drag an appearance slider, release the mouse off the bar, and confirm the slider stops dragging immediately instead of staying latched until another click.
 59i. Collapse the sidebar and confirm nav icons remain visible, the active tab still glows clearly, and expanded mode still keeps the active nav and active workflow filter buttons visually stronger than inactive controls.
 59ia. Expand the sidebar again and confirm the footer identity card shows the current character plus guild text, then collapse it and confirm that text hides cleanly without clipped leftovers.
+59ib. Log in or `/reload` on a guilded character and confirm the footer identity card updates to the real guild name once guild data arrives instead of staying stuck on `No Guild`.
 59j. Open Exports with crafted items that are both present and absent in current bank stock, and confirm the visible `Tier` column uses the same quality symbol mapping in both states instead of swapping between mismatched icon families. Also confirm the `Tier` header text and `Excess Stock` column spacing no longer overflow.
 59k. Open Inventory and Minimums and confirm the far-right `Minimum` header no longer collides with the frame edge at the default scale or at the largest supported shell scale.
 59ka. Open Exports and Request Admin with only a few rows and confirm the shared scrollbar stays hidden until there is actual overflow.

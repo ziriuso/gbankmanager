@@ -2,6 +2,7 @@ local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
 dofile("tests/helpers/wow_stubs.lua")
+_G.C_Timer.ClearPending()
 
 _G.UnitName = function()
     return "GuildLead"
@@ -115,14 +116,24 @@ assert.truthy(not mainFrame.optionsBlacklistAddButton:IsShown(), "options blackl
 assert.truthy(not mainFrame.optionsBlacklistRemoveButton:IsShown(), "options blacklist should not expose remove actions")
 assert.truthy(not mainFrame.optionsBlacklistSaveButton:IsShown(), "options blacklist should not expose a save action")
 assert.truthy(not mainFrame.optionsBlacklistResetButton:IsShown(), "options blacklist should not expose a revert action")
+assert.truthy(not mainFrame.optionsBlacklistTitle:IsShown(), "options blacklist should hide the legacy duplicate blacklist header in the read-only view")
 assert.truthy(mainFrame.optionsBlacklistRefreshButton:IsShown(), "options blacklist should expose a refresh action for reparsing officer-note tags")
 assert.equal("Refresh", mainFrame.optionsBlacklistRefreshButton.labelText:GetText(), "options blacklist should label the read-only reparse action clearly")
+assert.equal("secondary", mainFrame.optionsBlacklistRefreshButton.gbmButtonVariant, "options blacklist refresh should use the themed secondary button variant")
+assert.equal("BOTTOMRIGHT", select(1, mainFrame.optionsBlacklistRefreshButton:GetPoint(1)), "options blacklist refresh should anchor above the parsed-member list")
+assert.equal(mainFrame.optionsBlacklistListPanel, select(2, mainFrame.optionsBlacklistRefreshButton:GetPoint(1)), "options blacklist refresh should position from the blacklist list panel")
 assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Parsed", 1, true) ~= nil, "options blacklist should summarize how many tagged guild members were parsed")
 
 local rosterRequestsBefore = _G.C_GuildInfo.guildRosterRequests or 0
 mainFrame.optionsBlacklistRefreshButton:GetScript("OnClick")(mainFrame.optionsBlacklistRefreshButton)
 assert.truthy((_G.C_GuildInfo.guildRosterRequests or 0) > rosterRequestsBefore, "options blacklist refresh should request fresh guild roster data before reparsing officer notes")
 assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Refreshing", 1, true) ~= nil, "options blacklist refresh should report that officer-note parsing is refreshing")
+syncEvents.HandleEvent("GUILD_ROSTER_UPDATE")
+assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Parsed", 1, true) ~= nil, "options blacklist refresh should restore the parsed-member summary after the guild roster update arrives")
+mainFrame.optionsBlacklistRefreshButton:GetScript("OnClick")(mainFrame.optionsBlacklistRefreshButton)
+assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Refreshing", 1, true) ~= nil, "options blacklist refresh should enter refreshing state on repeat clicks")
+_G.C_Timer.RunPending()
+assert.truthy(string.find(mainFrame.optionsBlacklistStatusText:GetText() or "", "Parsed", 1, true) ~= nil, "options blacklist refresh should recover to the parsed-member summary even if no roster event arrives")
 
 mainFrame:SelectAuthRank(0)
 mainFrame:SelectAuthCapability("available", "request_submit")

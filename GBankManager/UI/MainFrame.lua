@@ -1368,9 +1368,9 @@ mainFrame.optionsBlacklistAddButton:SetPoint("TOPLEFT", mainFrame.optionsBlackli
 move_to_panel(mainFrame.optionsBlacklistRemoveButton, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlacklistAddButton, "RIGHT", 8, 0)
 move_to_panel(mainFrame.optionsBlacklistListTitle, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistTitle, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistInstructionText, "BOTTOMLEFT", 0, -12)
 move_to_panel(mainFrame.optionsBlacklistRefreshButton, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistRefreshButton:SetPoint("RIGHT", mainFrame.optionsBlacklistListPanel, "RIGHT", 0, 28)
+mainFrame.optionsBlacklistRefreshButton:SetPoint("BOTTOMRIGHT", mainFrame.optionsBlacklistListPanel, "TOPRIGHT", 0, 8)
 move_to_panel(mainFrame.optionsBlacklistListPanel, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
 move_to_panel(mainFrame.optionsBlacklistStatusText, mainFrame.optionsBlacklistPanel)
@@ -1944,6 +1944,9 @@ end
 function mainFrame:RefreshBlacklistFromGuild()
     local db = current_db()
     local permissions = ns.modules.auth or ns.modules.permissions
+    self.blacklistRefreshRequestId = (tonumber(self.blacklistRefreshRequestId) or 0) + 1
+    local requestId = self.blacklistRefreshRequestId
+    self.pendingBlacklistRosterRefresh = true
     if _G.C_GuildInfo and type(_G.C_GuildInfo.GuildRoster) == "function" then
         _G.C_GuildInfo.GuildRoster()
     end
@@ -1963,7 +1966,25 @@ function mainFrame:RefreshBlacklistFromGuild()
     if self.optionsBlacklistStatusText then
         self.optionsBlacklistStatusText:SetText("Refreshing parsed officer-note tags from the guild roster...")
     end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0.5, function()
+            if self.blacklistRefreshRequestId ~= requestId then
+                return
+            end
+            if self.pendingBlacklistRosterRefresh then
+                self:OnGuildRosterRefresh()
+            end
+        end)
+    end
     return true
+end
+
+function mainFrame:OnGuildRosterRefresh()
+    if self.pendingBlacklistRosterRefresh then
+        self.pendingBlacklistRosterRefresh = nil
+    end
+
+    self:RefreshAuthOptions()
 end
 
 function mainFrame:ToggleAuthCapabilityRank(capability, rankIndex)
@@ -2246,9 +2267,14 @@ function mainFrame:RefreshAuthOptions()
     self.optionsAuthResetButton:SetEnabled(true)
     self.optionsPolicyStringSelectAllButton:SetEnabled(true)
     if self.optionsBlacklistStatusText then
-        self.optionsBlacklistStatusText:SetText(string.format("Parsed %d tagged guild member%s from officer notes.", #blacklistEntries, #blacklistEntries == 1 and "" or "s"))
+        if self.pendingBlacklistRosterRefresh then
+            self.optionsBlacklistStatusText:SetText("Refreshing parsed officer-note tags from the guild roster...")
+        else
+            self.optionsBlacklistStatusText:SetText(string.format("Parsed %d tagged guild member%s from officer notes.", #blacklistEntries, #blacklistEntries == 1 and "" or "s"))
+        end
     end
 
+    set_frame_shown(self.optionsBlacklistTitle, false)
     set_frame_shown(self.optionsBlacklistCharacterLabel, false)
     set_frame_shown(self.optionsBlacklistNameInput, false)
     set_frame_shown(self.optionsBlacklistReasonLabel, false)
@@ -2798,6 +2824,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.optionsAuthRemovePermissionButton, "secondary")
     apply_button_variant(self.optionsBlacklistAddButton, "primary")
     apply_button_variant(self.optionsBlacklistRemoveButton, "secondary")
+    apply_button_variant(self.optionsBlacklistRefreshButton, "secondary")
     apply_button_variant(self.optionsAuthSaveButton, "primary")
     apply_button_variant(self.optionsAuthReadButton, "secondary")
     apply_button_variant(self.optionsAuthResetButton, "secondary")

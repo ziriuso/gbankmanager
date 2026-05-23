@@ -457,6 +457,10 @@ function syncEvents.HandleEvent(event, ...)
         if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
             authPolicySource.PullPolicyFromGuildInfo(db)
         end
+        local mainFrame = ns.modules.mainFrame or {}
+        if type(mainFrame.RefreshSidebarIdentity) == "function" then
+            mainFrame:RefreshSidebarIdentity()
+        end
         return true
     end
 
@@ -488,8 +492,14 @@ function syncEvents.HandleEvent(event, ...)
         if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
             authPolicySource.PullPolicyFromGuildInfo(db)
         end
+        local mainFrame = ns.modules.mainFrame or {}
+        if type(mainFrame.RefreshSidebarIdentity) == "function" then
+            mainFrame:RefreshSidebarIdentity()
+        end
         if event == "GUILD_ROSTER_UPDATE" then
-            local mainFrame = ns.modules.mainFrame or {}
+            if type(mainFrame.OnGuildRosterRefresh) == "function" then
+                mainFrame:OnGuildRosterRefresh()
+            end
             if type(mainFrame.ResumePendingAuthPolicySave) == "function" then
                 mainFrame:ResumePendingAuthPolicySave()
             end
