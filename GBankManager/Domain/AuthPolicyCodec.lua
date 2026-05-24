@@ -185,13 +185,14 @@ function codec.EncodePolicy(policy)
     end
 
     return string.format(
-        "[GBMAUTH:%s;%s;%s;%s;%s;%s;%s;%s]",
-        2,
+        "[GBMAUTH:%s;%s;%s;%s;%s;%s;%s;%s;%s]",
+        3,
         to_base36(policy.revision or 0),
         to_base36(policy.updatedAt or 0),
         updatedByHash ~= "" and ("#" .. updatedByHash) or "-",
         updatedByRankIndex ~= nil and to_base36(updatedByRankIndex) or "-",
         restockDefault ~= nil and to_base36(restockDefault) or "-",
+        to_base36(math.max(0, math.min(100, tonumber(policy.criticalThresholdPercent or 50) or 50))),
         table.concat(rankMasks, ","),
         "-"
     )
@@ -200,27 +201,34 @@ end
 function codec.DecodePolicyString(policyString, rankMetadata)
     policyString = codec.ExtractPolicyString(policyString or "") or trim(policyString)
 
-    local version, revisionText, updatedAtText, updatedByText, updatedByRankText, restockDefaultText, masksText, blacklistText =
-        string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]*);([^;]*);([^;]*);([^;]+);([^%]]*)%]$")
+    local version, revisionText, updatedAtText, updatedByText, updatedByRankText, restockDefaultText, criticalThresholdText, masksText, blacklistText =
+        string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]*);([^;]*);([^;]*);([^;]*);([^;]+);([^%]]*)%]$")
 
-    if version == "2" then
+    if version == "3" then
+        -- parsed above
+    elseif version == "2" then
+        version, revisionText, updatedAtText, updatedByText, updatedByRankText, restockDefaultText, masksText, blacklistText =
+            string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]*);([^;]*);([^;]*);([^;]+);([^%]]*)%]$")
+        criticalThresholdText = "-"
         -- parsed above
     else
         version, revisionText, updatedAtText, masksText, blacklistText = string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]+);([^%]]*)%]$")
         updatedByText = "-"
         updatedByRankText = "-"
         restockDefaultText = "-"
+        criticalThresholdText = "-"
     end
 
-    if version ~= "1" and version ~= "2" then
+    if version ~= "1" and version ~= "2" and version ~= "3" then
         version, revisionText, masksText, blacklistText = string.match(trim(policyString), "^gbm%^([^;]+);([^;]+);([^;]+);([^%^]*)%^g$")
         updatedAtText = "0"
         updatedByText = "-"
         updatedByRankText = "-"
         restockDefaultText = "-"
+        criticalThresholdText = "-"
     end
 
-    if version ~= "1" and version ~= "2" then
+    if version ~= "1" and version ~= "2" and version ~= "3" then
         return nil
     end
 
@@ -232,6 +240,7 @@ function codec.DecodePolicyString(policyString, rankMetadata)
         updatedByHash = nil,
         updatedByRankIndex = updatedByRankText ~= "-" and from_base36(updatedByRankText) or nil,
         restockDefault = restockDefaultText ~= "-" and from_base36(restockDefaultText) or nil,
+        criticalThresholdPercent = criticalThresholdText ~= "-" and from_base36(criticalThresholdText) or 50,
         rankMetadata = rankMetadata or {},
         capabilities = {},
         blacklist = {},

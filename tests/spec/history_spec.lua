@@ -29,3 +29,8 @@ local sortedRows = historyView.BuildTableRows({
 assert.equal("Newest Item", sortedRows[1].itemName, "history rows should sort newest-first by timestamp")
 assert.equal("Middle Item", sortedRows[2].itemName, "history rows should keep the second-newest entry in the middle")
 assert.equal("Old Item", sortedRows[3].itemName, "history rows should place the oldest entry last")
+assert.equal(nil, sortedRows[1].oldValue, "history rows should no longer expose old value as a visible table column")
+assert.equal(nil, sortedRows[1].newValue, "history rows should no longer expose new value as a visible table column")
+assert.equal("PENDING", sortedRows[1].details.oldValue, "history rows should preserve the old value in drill-in details")
+assert.equal("APPROVED", sortedRows[1].details.newValue, "history rows should preserve the new value in drill-in details")
+assert.equal("REQUEST_APPROVED", sortedRows[1].details.type, "history rows should keep the raw audit type for detail modals")

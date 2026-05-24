@@ -27,12 +27,12 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.exportsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.exportsPanel:SetHeight(124)
+    mainFrame.exportsPanel:SetHeight(148)
     mainFrame.exportsPanel.transparentActions = true
     if type(mainFrame.exportsPanel.SetBackdrop) == "function" then
         mainFrame.exportsPanel:SetBackdrop(nil)
     end
-    applyPanelStyle(mainFrame.exportsPanel, theme.colors.panel)
+    mainFrame.exportsPanel.backdrop = nil
     mainFrame.exportsPanel:Hide()
 
     mainFrame.exportsTitle = mainFrame.exportsTitle or makeLabel(mainFrame.exportsPanel, "Export Output", "GameFontHighlight")
@@ -43,20 +43,23 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportsHint:SetPoint("TOPLEFT", mainFrame.exportsTitle, "BOTTOMLEFT", 0, -8)
     mainFrame.exportsHint:Hide()
 
+    mainFrame.exportsFootnoteText = mainFrame.exportsFootnoteText or makeLabel(mainFrame.exportsPanel, "* Does not provide Quantity in Export.", "GameFontHighlightSmall")
+    mainFrame.exportsFootnoteText:SetPoint("BOTTOMLEFT", mainFrame.exportsPanel, "BOTTOMLEFT", 0, 2)
+
     mainFrame.exportActionCards = mainFrame.exportActionCards or {}
     local actionCards = {
-        { key = "Auctionator", title = "Auctionator", description = "Generate a shopping list import compatible with Auctionator.", icon = "Interface\\ICONS\\INV_Inscription_Tradeskill01" },
-        { key = "TSM", title = "TSM", description = "Export item IDs for TradeSkillMaster shopping operations.", icon = "Interface\\ICONS\\INV_Misc_Gear_01" },
-        { key = "CSV", title = "CSV Spreadsheet", description = "Export to CSV for external analysis or sharing.", icon = "Interface\\ICONS\\INV_Misc_Note_01" },
-        { key = "MANUAL", title = "Manual Shopping List", description = "Open a local checklist for items to shop manually.", icon = "Interface\\ICONS\\INV_Scroll_03" },
+        { key = "Auctionator", title = "Auctionator*", description = "Generate Auctionator Shopping List.", icon = "Interface\\ICONS\\INV_Inscription_Tradeskill01" },
+        { key = "TSM", title = "TSM*", description = "Export Group for TradeSkillMaster.", icon = "Interface\\ICONS\\INV_Misc_Gear_01" },
+        { key = "CSV", title = "CSV", description = "Export to CSV.", icon = "Interface\\ICONS\\INV_Misc_Note_01" },
+        { key = "MANUAL", title = "Shopping List", description = "Open a local checklist for items to shop manually.", icon = "Interface\\ICONS\\INV_Scroll_03" },
     }
     for index, config in ipairs(actionCards) do
         local card = mainFrame.exportActionCards[index] or _G.CreateFrame("Frame", nil, mainFrame.exportsPanel, "BackdropTemplate")
-        card:SetSize(180, 108)
+        card:SetSize(176, 108)
         if index == 1 then
             card:SetPoint("TOPLEFT", mainFrame.exportsPanel, "TOPLEFT", 0, 0)
         else
-            card:SetPoint("LEFT", mainFrame.exportActionCards[index - 1], "RIGHT", 12, 0)
+            card:SetPoint("LEFT", mainFrame.exportActionCards[index - 1], "RIGHT", 16, 0)
         end
         applyPanelStyle(card, theme.colors.panelAlt)
 
@@ -72,29 +75,32 @@ function mainExportsController.Attach(mainFrame, options)
 
         card.titleText = card.titleText or makeLabel(card, config.title, "GameFontHighlight")
         card.titleText:SetPoint("TOPLEFT", card.iconTexture, "TOPRIGHT", 10, 2)
+        if type(card.titleText.SetWidth) == "function" then
+            card.titleText:SetWidth(124)
+        end
         card.descriptionText = card.descriptionText or makeLabel(card, config.description, "GameFontHighlightSmall")
-        card.descriptionText:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -46)
+        card.descriptionText:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -44)
         if type(card.descriptionText.SetWidth) == "function" then
-            card.descriptionText:SetWidth(150)
+            card.descriptionText:SetWidth(144)
         end
         card.actionKey = config.key
         mainFrame.exportActionCards[index] = card
     end
 
     mainFrame.exportPresetSpreadsheetButton = mainFrame.exportPresetSpreadsheetButton or makeButton(mainFrame.exportsPanel, 84, 28, "Generate")
-    mainFrame.exportPresetSpreadsheetButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[3], "BOTTOMLEFT", 14, 12)
+    mainFrame.exportPresetSpreadsheetButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[3], "BOTTOMLEFT", 14, 16)
     mainFrame.exportPresetSpreadsheetButton.labelText:SetText("Generate")
 
     mainFrame.exportPresetAuctionatorButton = mainFrame.exportPresetAuctionatorButton or makeButton(mainFrame.exportsPanel, 84, 28, "Generate")
-    mainFrame.exportPresetAuctionatorButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[1], "BOTTOMLEFT", 14, 12)
+    mainFrame.exportPresetAuctionatorButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[1], "BOTTOMLEFT", 14, 16)
     mainFrame.exportPresetAuctionatorButton.labelText:SetText("Generate")
 
     mainFrame.exportPresetTsmButton = mainFrame.exportPresetTsmButton or makeButton(mainFrame.exportsPanel, 84, 28, "Generate")
-    mainFrame.exportPresetTsmButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[2], "BOTTOMLEFT", 14, 12)
+    mainFrame.exportPresetTsmButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[2], "BOTTOMLEFT", 14, 16)
     mainFrame.exportPresetTsmButton.labelText:SetText("Generate")
 
     mainFrame.exportManualShoppingListButton = mainFrame.exportManualShoppingListButton or makeButton(mainFrame.exportsPanel, 84, 28, "Open List")
-    mainFrame.exportManualShoppingListButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[4], "BOTTOMLEFT", 14, 12)
+    mainFrame.exportManualShoppingListButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[4], "BOTTOMLEFT", 14, 14)
     mainFrame.exportManualShoppingListButton.labelText:SetText("Open List")
 
     mainFrame.exportPresetCustomButton = mainFrame.exportPresetCustomButton or makeButton(mainFrame.exportsPanel, 68, 28, "Custom")

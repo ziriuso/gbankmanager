@@ -77,8 +77,15 @@ local function ensure_v1_shape(db)
     db.ui.appearance.tableDensity = tonumber(db.ui.appearance.tableDensity or 1) or 1
     db.ui.appearance.shellOpacity = tonumber(db.ui.appearance.shellOpacity or 0.96) or 0.96
     db.ui.appearance.modalOpacity = tonumber(db.ui.appearance.modalOpacity or 1) or 1
+    if db.ui.appearance.showMinimapButton == nil then
+        db.ui.appearance.showMinimapButton = true
+    else
+        db.ui.appearance.showMinimapButton = db.ui.appearance.showMinimapButton == true
+    end
+    db.ui.appearance.minimapAngle = tonumber(db.ui.appearance.minimapAngle or 315) or 315
     db.ui.minimumSettings = ensure_table(db.ui.minimumSettings)
     db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
+    db.ui.minimumSettings.criticalThresholdPercent = tonumber(db.ui.minimumSettings.criticalThresholdPercent or 50) or 50
     db.ui.minimumItemCatalog = ensure_table(db.ui.minimumItemCatalog)
     db.ui.exportSettings = ensure_table(db.ui.exportSettings)
     db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"

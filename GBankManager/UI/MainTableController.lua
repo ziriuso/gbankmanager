@@ -298,9 +298,10 @@ function mainTableController.Attach(mainFrame, options)
             end
 
             local input = self.tableFilterInputs[index]
+            local inputInset = width > 0 and 4 or 0
             input:ClearAllPoints()
-            input:SetPoint("TOPLEFT", self.tableFilterFrame, "TOPLEFT", offset, -3)
-            input:SetWidth(width)
+            input:SetPoint("TOPLEFT", self.tableFilterFrame, "TOPLEFT", offset + inputInset, -3)
+            input:SetWidth(math.max(0, width - (inputInset * 2)))
             if not self:UsesInlineTableFilters() or columnLayout.filterMode == "none" or width == 0 then
                 input:SetText("")
                 input:Hide()

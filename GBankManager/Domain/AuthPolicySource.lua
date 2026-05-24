@@ -138,6 +138,7 @@ local function ensure_minimum_settings(db)
     db.ui = type(db.ui) == "table" and db.ui or {}
     db.ui.minimumSettings = type(db.ui.minimumSettings) == "table" and db.ui.minimumSettings or {}
     db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
+    db.ui.minimumSettings.criticalThresholdPercent = math.max(0, math.min(100, tonumber(db.ui.minimumSettings.criticalThresholdPercent or 50) or 50))
     return db.ui.minimumSettings
 end
 
@@ -177,12 +178,18 @@ function source.ApplyPolicy(db, policy, options)
     if decoded.restockDefault == nil then
         decoded.restockDefault = currentPolicy.restockDefault
     end
+    if decoded.criticalThresholdPercent == nil then
+        decoded.criticalThresholdPercent = currentPolicy.criticalThresholdPercent
+    end
     decoded.guildPolicyString = source.ExportPolicyString(decoded)
     decoded.guildPolicySource = tostring(options.source or decoded.guildPolicySource or "guild_info")
     db.auth = decoded
     local minimumSettings = ensure_minimum_settings(db)
     if decoded.restockDefault ~= nil then
         minimumSettings.defaultQuantity = tonumber(decoded.restockDefault) or minimumSettings.defaultQuantity
+    end
+    if decoded.criticalThresholdPercent ~= nil then
+        minimumSettings.criticalThresholdPercent = math.max(0, math.min(100, tonumber(decoded.criticalThresholdPercent) or minimumSettings.criticalThresholdPercent))
     end
     if type(permissions.AppendPolicyAudit) == "function" then
         permissions.AppendPolicyAudit(db, currentPolicy, decoded, decoded.guildPolicySource)
@@ -217,7 +224,9 @@ function source.PushPolicyToGuildInfo(db, options)
     options = options or {}
 
     local policy = permissions.NormalizePolicy(db.auth or {}, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
-    policy.restockDefault = tonumber((ensure_minimum_settings(db) or {}).defaultQuantity) or policy.restockDefault
+    local minimumSettings = ensure_minimum_settings(db) or {}
+    policy.restockDefault = tonumber(minimumSettings.defaultQuantity) or policy.restockDefault
+    policy.criticalThresholdPercent = math.max(0, math.min(100, tonumber(minimumSettings.criticalThresholdPercent) or policy.criticalThresholdPercent or 50))
     local policyString = source.ExportPolicyString(policy)
     policy.guildPolicyString = policyString
 

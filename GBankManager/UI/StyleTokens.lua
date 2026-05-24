@@ -10,7 +10,10 @@ local PRESET_ALIASES = {
     ["contrast"] = "high_contrast",
     ["horde"] = "horde",
     ["alliance"] = "alliance",
+    ["legion"] = "legion",
+    ["fel"] = "legion",
     ["void"] = "void",
+    ["pride"] = "pride",
     ["adventurer"] = "generic_wow",
     ["warm"] = "generic_wow",
     ["moonglade"] = "nature",
@@ -23,9 +26,14 @@ local PRESET_ORDER = {
     "high_contrast",
     "alliance",
     "horde",
+    "legion",
     "nature",
+    "pride",
     "void",
 }
+
+local ART_ROOT = "Interface\\AddOns\\GBankManager\\Art\\"
+local MINIMAP_BUTTON_TEXTURE = ART_ROOT .. "GBM_Minimap_Button.png"
 
 local BASE_SPACING = {
     spacingXS = 4,
@@ -64,7 +72,9 @@ local DENSITY = {
 local THEMES = {
     generic_wow = {
         key = "generic_wow",
-        label = "Generic WoW",
+        label = "Default",
+        logoTexture = ART_ROOT .. "GBM_Logo_Default.png",
+        logoTexCoord = { 0.1074, 0.1084, 0.8926, 0.8008 },
         tokens = {
             bg = { 0.03, 0.04, 0.06, 0.95 },
             bgAlt = { 0.05, 0.06, 0.08, 0.96 },
@@ -86,11 +96,11 @@ local THEMES = {
             warning = { 0.90, 0.66, 0.18, 1.00 },
             success = { 0.28, 0.69, 0.33, 1.00 },
             info = { 0.30, 0.56, 0.85, 1.00 },
-            row = { 0.07, 0.08, 0.09, 0.95 },
-            rowAlt = { 0.10, 0.10, 0.12, 0.95 },
+            row = { 0.08, 0.09, 0.10, 0.96 },
+            rowAlt = { 0.14, 0.15, 0.17, 0.96 },
             rowHover = { 0.15, 0.13, 0.10, 0.97 },
-            inputBg = { 0.03, 0.03, 0.04, 0.98 },
-            inputBorder = { 0.51, 0.41, 0.18, 0.92 },
+            inputBg = { 0.015, 0.016, 0.020, 0.99 },
+            inputBorder = { 0.60, 0.49, 0.21, 0.96 },
             modalBg = { 0.04, 0.04, 0.05, 0.98 },
             modalBorder = { 0.74, 0.61, 0.26, 0.95 },
             shadow = { 0.00, 0.00, 0.00, 0.70 },
@@ -99,6 +109,8 @@ local THEMES = {
     alliance = {
         key = "alliance",
         label = "Alliance",
+        logoTexture = ART_ROOT .. "GBM_Logo_Alliance.png",
+        logoTexCoord = { 0.0801, 0.0977, 0.9209, 0.8125 },
         tokens = {
             bg = { 0.04, 0.07, 0.13, 0.96 },
             bgAlt = { 0.07, 0.11, 0.18, 0.96 },
@@ -120,11 +132,11 @@ local THEMES = {
             warning = { 0.90, 0.66, 0.18, 1.00 },
             success = { 0.28, 0.69, 0.33, 1.00 },
             info = { 0.30, 0.56, 0.85, 1.00 },
-            row = { 0.07, 0.11, 0.18, 0.94 },
-            rowAlt = { 0.09, 0.14, 0.23, 0.94 },
+            row = { 0.08, 0.12, 0.20, 0.95 },
+            rowAlt = { 0.13, 0.18, 0.29, 0.95 },
             rowHover = { 0.12, 0.20, 0.31, 0.96 },
-            inputBg = { 0.04, 0.07, 0.12, 0.96 },
-            inputBorder = { 0.30, 0.49, 0.75, 0.88 },
+            inputBg = { 0.025, 0.045, 0.085, 0.98 },
+            inputBorder = { 0.35, 0.56, 0.84, 0.92 },
             modalBg = { 0.05, 0.08, 0.14, 0.98 },
             modalBorder = { 0.72, 0.64, 0.35, 0.94 },
             shadow = { 0.00, 0.00, 0.00, 0.70 },
@@ -133,6 +145,8 @@ local THEMES = {
     horde = {
         key = "horde",
         label = "Horde",
+        logoTexture = ART_ROOT .. "GBM_Logo_Horde.png",
+        logoTexCoord = { 0.0488, 0.0615, 0.9521, 0.8047 },
         tokens = {
             bg = { 0.09, 0.04, 0.04, 0.96 },
             bgAlt = { 0.12, 0.06, 0.05, 0.96 },
@@ -154,11 +168,11 @@ local THEMES = {
             warning = { 0.90, 0.66, 0.18, 1.00 },
             success = { 0.28, 0.69, 0.33, 1.00 },
             info = { 0.30, 0.56, 0.85, 1.00 },
-            row = { 0.13, 0.06, 0.05, 0.94 },
-            rowAlt = { 0.16, 0.08, 0.06, 0.94 },
+            row = { 0.14, 0.06, 0.05, 0.95 },
+            rowAlt = { 0.21, 0.10, 0.07, 0.95 },
             rowHover = { 0.23, 0.10, 0.08, 0.96 },
-            inputBg = { 0.08, 0.03, 0.03, 0.96 },
-            inputBorder = { 0.49, 0.19, 0.15, 0.88 },
+            inputBg = { 0.05, 0.02, 0.02, 0.98 },
+            inputBorder = { 0.58, 0.23, 0.18, 0.92 },
             modalBg = { 0.10, 0.04, 0.04, 0.98 },
             modalBorder = { 0.80, 0.58, 0.24, 0.94 },
             shadow = { 0.00, 0.00, 0.00, 0.74 },
@@ -167,6 +181,8 @@ local THEMES = {
     nature = {
         key = "nature",
         label = "Nature",
+        logoTexture = ART_ROOT .. "GBM_Logo_Nature.png",
+        logoTexCoord = { 0.0654, 0.0791, 0.9443, 0.9063 },
         tokens = {
             bg = { 0.05, 0.09, 0.07, 0.96 },
             bgAlt = { 0.08, 0.13, 0.10, 0.96 },
@@ -188,11 +204,11 @@ local THEMES = {
             warning = { 0.90, 0.66, 0.18, 1.00 },
             success = { 0.28, 0.69, 0.33, 1.00 },
             info = { 0.30, 0.56, 0.85, 1.00 },
-            row = { 0.08, 0.14, 0.10, 0.94 },
-            rowAlt = { 0.10, 0.18, 0.12, 0.94 },
+            row = { 0.09, 0.15, 0.10, 0.95 },
+            rowAlt = { 0.14, 0.22, 0.15, 0.95 },
             rowHover = { 0.15, 0.23, 0.16, 0.96 },
-            inputBg = { 0.05, 0.09, 0.06, 0.96 },
-            inputBorder = { 0.31, 0.51, 0.34, 0.88 },
+            inputBg = { 0.03, 0.06, 0.04, 0.98 },
+            inputBorder = { 0.37, 0.59, 0.39, 0.92 },
             modalBg = { 0.07, 0.11, 0.08, 0.98 },
             modalBorder = { 0.72, 0.63, 0.29, 0.94 },
             shadow = { 0.00, 0.00, 0.00, 0.70 },
@@ -201,6 +217,8 @@ local THEMES = {
     void = {
         key = "void",
         label = "Void",
+        logoTexture = ART_ROOT .. "GBM_Logo_Void.png",
+        logoTexCoord = { 0.0420, 0.0361, 0.9561, 0.8721 },
         tokens = {
             bg = { 0.05, 0.04, 0.10, 0.96 },
             bgAlt = { 0.08, 0.06, 0.15, 0.96 },
@@ -222,33 +240,107 @@ local THEMES = {
             warning = { 0.90, 0.66, 0.18, 1.00 },
             success = { 0.28, 0.69, 0.33, 1.00 },
             info = { 0.30, 0.56, 0.85, 1.00 },
-            row = { 0.09, 0.07, 0.16, 0.94 },
-            rowAlt = { 0.12, 0.09, 0.21, 0.94 },
+            row = { 0.10, 0.08, 0.17, 0.95 },
+            rowAlt = { 0.16, 0.12, 0.27, 0.95 },
             rowHover = { 0.17, 0.12, 0.29, 0.96 },
-            inputBg = { 0.05, 0.04, 0.10, 0.96 },
-            inputBorder = { 0.46, 0.31, 0.70, 0.88 },
+            inputBg = { 0.03, 0.025, 0.07, 0.98 },
+            inputBorder = { 0.52, 0.37, 0.76, 0.92 },
             modalBg = { 0.07, 0.05, 0.14, 0.98 },
             modalBorder = { 0.79, 0.62, 0.97, 0.94 },
+            shadow = { 0.00, 0.00, 0.00, 0.74 },
+        },
+    },
+    legion = {
+        key = "legion",
+        label = "Legion",
+        logoTexture = ART_ROOT .. "GBM_Logo_Fel.png",
+        logoTexCoord = { 0.0420, 0.0156, 0.9297, 0.9775 },
+        tokens = {
+            bg = { 0.03, 0.06, 0.04, 0.96 },
+            bgAlt = { 0.05, 0.09, 0.06, 0.96 },
+            panel = { 0.06, 0.11, 0.07, 0.98 },
+            panelAlt = { 0.08, 0.15, 0.09, 0.98 },
+            border = { 0.41, 0.88, 0.35, 0.92 },
+            borderSoft = { 0.16, 0.34, 0.14, 0.84 },
+            accent = { 0.33, 0.98, 0.30, 1.00 },
+            accentHover = { 0.53, 1.00, 0.47, 1.00 },
+            accentMuted = { 0.18, 0.54, 0.16, 1.00 },
+            text = { 0.88, 0.96, 0.88, 1.00 },
+            textMuted = { 0.61, 0.79, 0.61, 1.00 },
+            textStrong = { 0.96, 1.00, 0.94, 1.00 },
+            header = { 0.55, 1.00, 0.42, 1.00 },
+            button = { 0.07, 0.13, 0.08, 0.98 },
+            buttonHover = { 0.10, 0.19, 0.12, 0.98 },
+            buttonText = { 0.89, 0.99, 0.87, 1.00 },
+            danger = { 0.82, 0.24, 0.20, 1.00 },
+            warning = { 0.90, 0.70, 0.22, 1.00 },
+            success = { 0.33, 0.83, 0.40, 1.00 },
+            info = { 0.28, 0.72, 0.63, 1.00 },
+            row = { 0.06, 0.11, 0.07, 0.95 },
+            rowAlt = { 0.10, 0.17, 0.10, 0.95 },
+            rowHover = { 0.11, 0.20, 0.12, 0.96 },
+            inputBg = { 0.02, 0.05, 0.03, 0.98 },
+            inputBorder = { 0.31, 0.89, 0.30, 0.92 },
+            modalBg = { 0.04, 0.08, 0.05, 0.98 },
+            modalBorder = { 0.45, 0.92, 0.39, 0.95 },
+            shadow = { 0.00, 0.00, 0.00, 0.74 },
+        },
+    },
+    pride = {
+        key = "pride",
+        label = "Pride",
+        logoTexture = ART_ROOT .. "GBM_Logo_Pride.png",
+        logoTexCoord = { 0.0840, 0.0977, 0.9102, 0.8311 },
+        tokens = {
+            bg = { 0.11, 0.05, 0.12, 0.96 },
+            bgAlt = { 0.17, 0.08, 0.18, 0.96 },
+            panel = { 0.22, 0.10, 0.24, 0.98 },
+            panelAlt = { 0.30, 0.13, 0.31, 0.98 },
+            border = { 1.00, 0.56, 0.82, 0.94 },
+            borderSoft = { 0.58, 0.22, 0.40, 0.86 },
+            accent = { 1.00, 0.42, 0.86, 1.00 },
+            accentHover = { 1.00, 0.62, 0.91, 1.00 },
+            accentMuted = { 0.92, 0.29, 0.66, 1.00 },
+            text = { 0.99, 0.94, 0.99, 1.00 },
+            textMuted = { 0.89, 0.74, 0.86, 1.00 },
+            textStrong = { 1.00, 0.98, 1.00, 1.00 },
+            header = { 1.00, 0.50, 0.86, 1.00 },
+            button = { 0.28, 0.12, 0.27, 0.98 },
+            buttonHover = { 0.38, 0.16, 0.35, 0.98 },
+            buttonText = { 1.00, 0.94, 0.98, 1.00 },
+            danger = { 0.85, 0.24, 0.29, 1.00 },
+            warning = { 0.94, 0.72, 0.21, 1.00 },
+            success = { 0.30, 0.82, 0.50, 1.00 },
+            info = { 1.00, 0.54, 0.90, 1.00 },
+            row = { 0.20, 0.09, 0.22, 0.95 },
+            rowAlt = { 0.28, 0.12, 0.30, 0.95 },
+            rowHover = { 0.36, 0.16, 0.36, 0.96 },
+            inputBg = { 0.10, 0.04, 0.10, 0.98 },
+            inputBorder = { 1.00, 0.50, 0.86, 0.92 },
+            modalBg = { 0.14, 0.06, 0.15, 0.98 },
+            modalBorder = { 1.00, 0.64, 0.87, 0.95 },
             shadow = { 0.00, 0.00, 0.00, 0.74 },
         },
     },
     high_contrast = {
         key = "high_contrast",
         label = "High Contrast",
+        logoTexture = ART_ROOT .. "GBM_Logo_HighContrast.png",
+        logoTexCoord = { 0.0928, 0.0977, 0.9092, 0.8516 },
         tokens = {
             bg = { 0.02, 0.02, 0.02, 0.98 },
             bgAlt = { 0.06, 0.06, 0.06, 0.98 },
             panel = { 0.07, 0.07, 0.07, 0.98 },
             panelAlt = { 0.12, 0.12, 0.12, 0.98 },
-            border = { 0.93, 0.80, 0.21, 1.00 },
-            borderSoft = { 0.60, 0.60, 0.60, 0.92 },
-            accent = { 0.95, 0.84, 0.22, 1.00 },
-            accentHover = { 1.00, 0.92, 0.38, 1.00 },
-            accentMuted = { 0.72, 0.64, 0.19, 1.00 },
+            border = { 0.83, 0.85, 0.89, 1.00 },
+            borderSoft = { 0.52, 0.54, 0.58, 0.92 },
+            accent = { 0.92, 0.94, 0.97, 1.00 },
+            accentHover = { 1.00, 1.00, 1.00, 1.00 },
+            accentMuted = { 0.64, 0.67, 0.72, 1.00 },
             text = { 0.98, 0.98, 0.98, 1.00 },
             textMuted = { 0.82, 0.82, 0.82, 1.00 },
             textStrong = { 1.00, 1.00, 1.00, 1.00 },
-            header = { 1.00, 0.91, 0.36, 1.00 },
+            header = { 0.94, 0.96, 0.99, 1.00 },
             button = { 0.10, 0.10, 0.10, 0.98 },
             buttonHover = { 0.18, 0.18, 0.18, 0.98 },
             buttonText = { 1.00, 1.00, 1.00, 1.00 },
@@ -260,9 +352,9 @@ local THEMES = {
             rowAlt = { 0.11, 0.11, 0.11, 0.98 },
             rowHover = { 0.18, 0.18, 0.18, 0.98 },
             inputBg = { 0.02, 0.02, 0.02, 0.98 },
-            inputBorder = { 0.94, 0.80, 0.24, 1.00 },
+            inputBorder = { 0.88, 0.90, 0.94, 1.00 },
             modalBg = { 0.04, 0.04, 0.04, 0.98 },
-            modalBorder = { 1.00, 0.86, 0.26, 1.00 },
+            modalBorder = { 0.90, 0.92, 0.96, 1.00 },
             shadow = { 0.00, 0.00, 0.00, 0.78 },
         },
     },
@@ -290,6 +382,15 @@ function styleTokens.GetTheme(presetKey)
     return THEMES[styleTokens.NormalizePresetKey(presetKey)]
 end
 
+function styleTokens.GetThemeLogoTexCoord(presetKey)
+    local definition = THEMES[styleTokens.NormalizePresetKey(presetKey)]
+    local texCoord = definition and definition.logoTexCoord
+    if type(texCoord) == "table" then
+        return { unpack(texCoord) }
+    end
+    return { 0, 0, 1, 1 }
+end
+
 function styleTokens.GetThemeOrder()
     local order = {}
     for index, key in ipairs(PRESET_ORDER) do
@@ -304,6 +405,10 @@ function styleTokens.GetThemes()
         out[key] = copy_table(value)
     end
     return out
+end
+
+function styleTokens.GetMinimapButtonTexture()
+    return MINIMAP_BUTTON_TEXTURE
 end
 
 function styleTokens.GetBaseSpacing()

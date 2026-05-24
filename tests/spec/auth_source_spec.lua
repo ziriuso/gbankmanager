@@ -56,6 +56,7 @@ permissions.SetCapabilityRank(db.auth, "auth_manage", 1, true)
 permissions.SetCapabilityRank(db.auth, "request_delete", 1, true)
 permissions.UpsertBlacklist(db.auth, "Stormrage-Troublemaker", "Troublemaker", "Blocked", 44)
 db.auth.restockDefault = 250
+db.auth.criticalThresholdPercent = 40
 permissions.StampPolicy(db.auth, context, 111)
 
 local exportString = source.ExportPolicyString(db.auth)
@@ -66,6 +67,7 @@ assert.equal(db.auth.revision, decodedPolicy.revision, "auth source export shoul
 assert.truthy(string.find(exportString, "Stormrage%-GuildLead", 1, false) == nil, "auth source export should not store the full updater name in the compact guild-info string")
 assert.equal(permissions.HashCharacterKey("Stormrage-GuildLead"), decodedPolicy.updatedByHash, "auth source export should preserve the compact updater hash")
 assert.equal(250, decodedPolicy.restockDefault, "auth source export should preserve the shared restock default")
+assert.equal(40, decodedPolicy.criticalThresholdPercent, "auth source export should preserve the shared critical shortage threshold")
 assert.truthy(next(decodedPolicy.blacklistHashes or {}) == nil, "auth source export should no longer store blacklist membership in Guild Info")
 assert.truthy(decodedPolicy.capabilities.full_ui[1] == true, "auth source export should preserve capability rank masks")
 assert.truthy(decodedPolicy.capabilities.request_delete[1] == true, "auth source export should preserve the request-delete capability")
@@ -84,6 +86,7 @@ db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}
 db.auth.blacklistHashes = {}
 db.ui.minimumSettings.defaultQuantity = 100
+db.ui.minimumSettings.criticalThresholdPercent = 50
 db.auditLog = {}
 
 local appliedNewer, newerReason = source.ApplyPolicyString(db, exportString)
@@ -93,6 +96,7 @@ assert.equal(decodedPolicy.revision, db.auth.revision, "applied durable policy s
 assert.equal("Stormrage-GuildLead", db.auth.updatedBy, "applied durable policy should restore the last-updated actor identity")
 assert.equal(permissions.HashCharacterKey("Stormrage-GuildLead"), db.auth.updatedByHash, "applied durable policy should keep the updater hash alongside the local actor identity")
 assert.equal(250, db.ui.minimumSettings.defaultQuantity, "applied durable policy should restore the shared restock default into options settings")
+assert.equal(40, db.ui.minimumSettings.criticalThresholdPercent, "applied durable policy should restore the shared critical shortage threshold into options settings")
 assert.truthy(db.auth.capabilities.full_ui[1] == true, "applied durable policy should restore rank capability masks")
 assert.truthy(next(db.auth.blacklistHashes or {}) == nil, "applied durable policy should not restore blacklist membership from Guild Info")
 assert.equal("AUTH_POLICY_UPDATED", db.auditLog[1].type, "applying a newer durable policy should append an auth-policy history entry")
@@ -111,6 +115,7 @@ cachedBlacklistDb.auth.blacklistDirectory = {
     },
 }
 cachedBlacklistDb.ui.minimumSettings.defaultQuantity = 100
+cachedBlacklistDb.ui.minimumSettings.criticalThresholdPercent = 50
 cachedBlacklistDb.auditLog = {}
 
 local cachedPolicyDb = store.CreateFreshDatabase("Guild Testers")
@@ -130,12 +135,14 @@ db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}
 db.auth.blacklistHashes = {}
 db.ui.minimumSettings.defaultQuantity = 100
+db.ui.minimumSettings.criticalThresholdPercent = 50
 
 local pulled, pullReason = source.PullPolicyFromGuildInfo(db)
 assert.truthy(pulled, "guild-info pull should apply an embedded auth snippet")
 assert.equal("applied", pullReason, "guild-info pull should report a successful apply")
 assert.truthy(db.auth.capabilities.full_ui[1] == true, "guild-info pull should restore capability state")
 assert.equal(250, db.ui.minimumSettings.defaultQuantity, "guild-info pull should restore the shared restock default into options settings")
+assert.equal(40, db.ui.minimumSettings.criticalThresholdPercent, "guild-info pull should restore the shared critical shortage threshold into options settings")
 
 local slashExport = slash.command("auth export")
 assert.truthy(type(slashExport) == "string" and string.find(slashExport, "[GBMAUTH:", 1, true) ~= nil, "slash auth export should return the durable guild-info snippet")

@@ -177,9 +177,18 @@ function historyView.BuildTableRows(entries, filters)
             itemName = tostring(entry.itemName or entry.name or "Unknown"),
             action = action_labels[entry.type] or tostring(entry.type or "Unknown"),
             actor = tostring(entry.actor or "Unknown"),
-            oldValue = entry.oldValue ~= nil and tostring(entry.oldValue) or "-",
-            newValue = entry.newValue ~= nil and tostring(entry.newValue) or "-",
             date = format_timestamp(entry.timestamp or entry.scannedAt),
+            details = {
+                type = tostring(entry.type or "Unknown"),
+                category = category_labels[entry.category] or tostring(entry.category or "Unknown"),
+                itemName = tostring(entry.itemName or entry.name or "Unknown"),
+                action = action_labels[entry.type] or tostring(entry.type or "Unknown"),
+                actor = tostring(entry.actor or "Unknown"),
+                oldValue = entry.oldValue ~= nil and tostring(entry.oldValue) or "-",
+                newValue = entry.newValue ~= nil and tostring(entry.newValue) or "-",
+                timestamp = format_timestamp(entry.timestamp or entry.scannedAt),
+            },
+            historyEntry = entry,
         })
     end
 

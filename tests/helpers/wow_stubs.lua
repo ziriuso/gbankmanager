@@ -97,6 +97,12 @@ function _G.C_GuildInfo.GuildRoster()
     _G.C_GuildInfo.guildRosterRequests = (_G.C_GuildInfo.guildRosterRequests or 0) + 1
 end
 
+if _G.GetCursorPosition == nil then
+    _G.GetCursorPosition = function()
+        return 0, 0
+    end
+end
+
 function _G.C_Secrets.HasSecretRestrictions()
     return _G.C_Secrets.hasSecretRestrictions == true
 end
@@ -242,6 +248,12 @@ if _G.CreateFrame == nil then
             SetPoint = function(self, ...)
                 table.insert(self.points, { ... })
             end,
+            SetParent = function(self, parent)
+                self.parent = parent
+            end,
+            GetParent = function(self)
+                return self.parent
+            end,
             ClearAllPoints = function(self)
                 self.points = {}
             end,
@@ -251,6 +263,8 @@ if _G.CreateFrame == nil then
             SetTextColor = function(self, r, g, b, a) self.textColor = { r, g, b, a } end,
             SetJustifyH = function(self, value) self.justifyH = value end,
             SetJustifyV = function(self, value) self.justifyV = value end,
+            SetWordWrap = function(self, value) self.wordWrap = value and true or false end,
+            SetMaxLines = function(self, value) self.maxLines = value end,
             SetFontObject = function() end,
             SetSize = function(self, width, height)
                 self.width = width
@@ -304,6 +318,12 @@ if _G.CreateFrame == nil then
 
         function frame:SetPoint(...)
             table.insert(self.points, { ... })
+        end
+        function frame:SetParent(parent)
+            self.parent = parent
+        end
+        function frame:GetParent()
+            return self.parent
         end
         function frame:ClearAllPoints()
             self.points = {}
@@ -371,16 +391,21 @@ if _G.CreateFrame == nil then
             region.name = name
             region.layer = layer
             region.fontObject = inherits
+            region.parent = self
             table.insert(self.children, region)
             return region
         end
 
         function frame:CreateTexture()
             local region = make_region()
+            region.parent = self
             region.SetColorTexture = function() end
             region.SetAllPoints = function() end
             region.SetAtlas = function(self, atlas) self.atlas = atlas end
             region.SetTexture = function(self, texture) self.texture = texture end
+            region.SetTexCoord = function(self, ...)
+                self.texCoord = { ... }
+            end
             table.insert(self.children, region)
             return region
         end
@@ -504,6 +529,12 @@ if _G.CreateFrame == nil then
         function frame:IsEnabled()
             return self.enabled ~= false
         end
+        function frame:SetChecked(value)
+            self.checked = value and true or false
+        end
+        function frame:GetChecked()
+            return self.checked == true
+        end
 
         if type(template) == "string" and string.find(template, "UISliderTemplate", 1, true) then
             frame.Low = make_region()
@@ -519,6 +550,16 @@ if _G.CreateFrame == nil then
         table.insert((parent or _G.UIParent).children, frame)
         return frame
     end
+end
+
+_G.Minimap = _G.Minimap or _G.CreateFrame("Frame", "Minimap", _G.UIParent)
+_G.Minimap.width = _G.Minimap.width or 140
+_G.Minimap.height = _G.Minimap.height or 140
+function _G.Minimap:GetCenter()
+    return 70, 70
+end
+function _G.Minimap:GetEffectiveScale()
+    return 1
 end
 
 return _G

@@ -99,6 +99,12 @@ local function current_snapshot(db)
     return ordered[#ordered]
 end
 
+local function critical_threshold_percent(db)
+    local minimumSettings = (((db or {}).ui or {}).minimumSettings or {})
+    local threshold = tonumber(minimumSettings.criticalThresholdPercent or 50) or 50
+    return math.max(0, math.min(100, threshold))
+end
+
 local function build_stocking_history_rankings(db)
     local rankingsByItem = {}
     local snapshots = sorted_snapshots(db)
@@ -237,12 +243,15 @@ function dashboard.BuildSummary(db, planRows)
 
     local criticalShortageCount = 0
     local snapshot = current_snapshot(db)
+    local thresholdPercent = critical_threshold_percent(db)
     for _, rule in ipairs(db.minimums or {}) do
         local minimumQuantity = tonumber((rule or {}).quantity or 0) or 0
         if rule.enabled ~= false and minimumQuantity > 0 then
             local itemID = tonumber((rule or {}).itemID)
             local snapshotItem = itemID and ((snapshot or {}).items or {})[itemID] or nil
-            if current_count_for_rule(snapshotItem, rule) < minimumQuantity then
+            local currentQuantity = current_count_for_rule(snapshotItem, rule)
+            local criticalQuantity = minimumQuantity * (thresholdPercent / 100)
+            if currentQuantity <= criticalQuantity then
                 criticalShortageCount = criticalShortageCount + 1
             end
         end
@@ -255,6 +264,7 @@ function dashboard.BuildSummary(db, planRows)
         exportReadyCount = exportReadyCount,
         totalPurchaseQuantity = totalPurchaseQuantity,
         criticalShortageCount = criticalShortageCount,
+        criticalThresholdPercent = thresholdPercent,
     }
 end
 
@@ -298,7 +308,7 @@ function dashboard.BuildCards(db, planRows)
         {
             title = "Critical Shortages",
             value = tostring(summary.criticalShortageCount),
-            note = summary.criticalShortageCount == 1 and "1 item below minimum" or string.format("%d items below minimum", summary.criticalShortageCount),
+            note = string.format("<= %d%% of Min", summary.criticalThresholdPercent),
         },
     }
 end

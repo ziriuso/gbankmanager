@@ -132,6 +132,7 @@ assert.truthy(type(persisted.testing) == "table", "normalize should preserve the
 assert.truthy(type(persisted.testing.liveSmoke) == "table", "normalize should preserve the live-smoke persistence container")
 assert.truthy(type(persisted.testing.inGameUnit) == "table", "normalize should preserve the in-game-unit persistence container")
 assert.equal(100, persisted.ui.minimumSettings.defaultQuantity, "normalize should seed the default minimum quantity setting")
+assert.equal(50, persisted.ui.minimumSettings.criticalThresholdPercent, "normalize should seed the default critical shortage threshold percentage")
 assert.equal(100, db.ui.minimumSettings.defaultQuantity, "fresh databases should default minimum quantity to 100")
 assert.equal("generic_wow", persisted.ui.appearance.themePreset, "normalize should seed the default appearance theme preset")
 assert.equal(1, persisted.ui.appearance.shellScale, "normalize should seed the default shell scale")

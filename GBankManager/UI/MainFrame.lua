@@ -17,6 +17,7 @@ local apply_surface_variant = mainFrameShell.ApplySurfaceVariant or apply_panel_
 local apply_button_variant = mainFrameShell.ApplyButtonVariant or apply_panel_style
 local make_label = mainFrameShell.MakeLabel
 local make_button = mainFrameShell.MakeButton
+local make_checkbox = mainFrameShell.MakeCheckbox
 local set_button_icon = mainFrameShell.SetButtonIcon
 local make_input = mainFrameShell.MakeInput
 local make_slider = mainFrameShell.MakeSlider
@@ -26,6 +27,7 @@ local set_frame_shown = mainFrameShell.SetFrameShown
 local apply_frame_layer = mainFrameShell.ApplyFrameLayer
 local bring_frame_to_front = mainFrameShell.BringFrameToFront
 local set_surface_alpha = mainFrameShell.SetSurfaceAlpha
+local minimapButton = ns.modules.minimapButton or {}
 
 local function parse_number(value)
     local parsed = tonumber(value)
@@ -320,6 +322,17 @@ local function count_lines(text)
     return lineCount
 end
 
+local ABBREVIATED_TIMEZONES = {
+    ["Eastern Daylight Time"] = "EDT",
+    ["Eastern Standard Time"] = "EST",
+    ["Central Daylight Time"] = "CDT",
+    ["Central Standard Time"] = "CST",
+    ["Mountain Daylight Time"] = "MDT",
+    ["Mountain Standard Time"] = "MST",
+    ["Pacific Daylight Time"] = "PDT",
+    ["Pacific Standard Time"] = "PST",
+}
+
 local function format_timestamp(timestamp)
     if not timestamp or timestamp == 0 then
         return "No scan yet"
@@ -327,7 +340,14 @@ local function format_timestamp(timestamp)
 
     local formatter = _G.date or os.date
     if type(formatter) == "function" then
-        return formatter("%Y-%m-%d %H:%M", timestamp)
+        local baseText = formatter("%Y-%m-%d %H:%M", timestamp)
+        local zoneText = formatter("%Z", timestamp)
+        zoneText = tostring(zoneText or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        zoneText = ABBREVIATED_TIMEZONES[zoneText] or zoneText
+        if zoneText ~= "" then
+            return string.format("%s %s", baseText, zoneText)
+        end
+        return baseText
     end
 
     return tostring(timestamp)
@@ -424,7 +444,14 @@ local function current_appearance_settings(db)
         tableDensity = 1,
         shellOpacity = 0.96,
         modalOpacity = 1,
+        showMinimapButton = true,
+        minimapAngle = 315,
     }
+
+    if ui.appearance.showMinimapButton == nil then
+        ui.appearance.showMinimapButton = true
+    end
+    ui.appearance.minimapAngle = tonumber(ui.appearance.minimapAngle or 315) or 315
 
     return ui.appearance
 end
@@ -496,14 +523,15 @@ end
 
 local function nav_icon_texture_for(key)
     local icons = {
-        DASHBOARD = "Interface\\ICONS\\INV_Misc_Map_01",
-        INVENTORY = "Interface\\ICONS\\INV_Crate_03",
-        HISTORY = "Interface\\ICONS\\INV_Misc_Note_01",
-        MINIMUMS = "Interface\\ICONS\\INV_Misc_Coin_01",
-        REQUESTS = "Interface\\ICONS\\INV_Letter_15",
-        EXPORTS = "Interface\\ICONS\\INV_Scroll_03",
-        ABOUT = "Interface\\ICONS\\INV_Misc_Book_09",
-        OPTIONS = "Interface\\ICONS\\INV_Gizmo_02",
+        DASHBOARD = "Interface\\ICONS\\icon_treasuremap",
+        INVENTORY = "Interface\\ICONS\\item_bastion_paragonchest_01",
+        MINIMUMS = "Interface\\ICONS\\inv_10_fishing_dragonislescoins_gold",
+        REQUESTS = "Interface\\ICONS\\achievement_guildperk_gmail",
+        EXPORTS = "Interface\\ICONS\\achievement_guildperk_fasttrack",
+        HISTORY = "Interface\\ICONS\\inv_10_inscription2_book1_color2",
+        BANK_LEDGER = "Interface\\ICONS\\inv_misc_stonetablet_04",
+        OPTIONS = "Interface\\ICONS\\inv_10_engineering_manufacturedparts_gear_frost",
+        ABOUT = "Interface\\ICONS\\inv_misc_scrollunrolled04b",
     }
 
     return icons[key] or "Interface\\ICONS\\INV_Misc_QuestionMark"
@@ -725,7 +753,8 @@ local dashboardQuickActionIcons = {
     "Interface\\ICONS\\INV_Scroll_03",
 }
 for index, label in ipairs(dashboardQuickActionLabels) do
-    local button = mainFrame.dashboardQuickActionButtons[index] or make_button(mainFrame.dashboardQuickActionsPanel, 136, 48, label)
+    local button = mainFrame.dashboardQuickActionButtons[index] or make_button(mainFrame.dashboardQuickActionsPanel, 152, 54, label)
+    button:SetSize(152, 54)
     if index == 1 then
         button:SetPoint("TOPLEFT", mainFrame.dashboardQuickActionsTitle, "BOTTOMLEFT", 0, -16)
     else
@@ -750,6 +779,18 @@ for index, label in ipairs(dashboardQuickActionLabels) do
     button.labelText:SetPoint("LEFT", button.actionIcon, "RIGHT", 10, 0)
     if type(button.labelText.SetJustifyH) == "function" then
         button.labelText:SetJustifyH("LEFT")
+    end
+    if type(button.labelText.SetJustifyV) == "function" then
+        button.labelText:SetJustifyV("MIDDLE")
+    end
+    if type(button.labelText.SetWidth) == "function" then
+        button.labelText:SetWidth(104)
+    end
+    if type(button.labelText.SetWordWrap) == "function" then
+        button.labelText:SetWordWrap(true)
+    end
+    if type(button.labelText.SetMaxLines) == "function" then
+        button.labelText:SetMaxLines(2)
     end
     mainFrame.dashboardQuickActionButtons[index] = button
 end
@@ -787,10 +828,13 @@ mainFrame.aboutCrestTexture:SetPoint("TOP", mainFrame.aboutPanel, "TOP", 0, -24)
 if type(mainFrame.aboutCrestTexture.SetSize) == "function" then
     mainFrame.aboutCrestTexture:SetSize(56, 56)
 end
-if type(mainFrame.aboutCrestTexture.SetTexture) == "function" then
-    mainFrame.aboutCrestTexture:SetTexture(nav_icon_texture_for("DASHBOARD"))
-end
-mainFrame.aboutCrestTexture.texture = nav_icon_texture_for("DASHBOARD")
+    if type(mainFrame.aboutCrestTexture.SetTexture) == "function" then
+        mainFrame.aboutCrestTexture:SetTexture(mainFrameShell.GetThemeLogoTexture(mainFrame.appearanceThemePreset or "generic_wow"))
+    end
+    if type(mainFrame.aboutCrestTexture.SetTexCoord) == "function" then
+        mainFrame.aboutCrestTexture:SetTexCoord(unpack(mainFrameShell.GetThemeLogoTexCoord(mainFrame.appearanceThemePreset or "generic_wow")))
+    end
+    mainFrame.aboutCrestTexture.texture = mainFrameShell.GetThemeLogoTexture(mainFrame.appearanceThemePreset or "generic_wow")
 
 mainFrame.aboutNameText = mainFrame.aboutNameText or make_label(mainFrame.aboutPanel, "Guild Bank Manager", "GameFontHighlightLarge")
 mainFrame.aboutNameText:SetPoint("TOP", mainFrame.aboutCrestTexture, "BOTTOM", 0, -12)
@@ -815,6 +859,79 @@ end
 
 mainFrame.aboutSlashHintText = mainFrame.aboutSlashHintText or make_label(mainFrame.aboutPanel, "/gbm for slash commands", "GameFontHighlightSmall")
 mainFrame.aboutSlashHintText:SetPoint("BOTTOM", mainFrame.aboutPanel, "BOTTOM", 0, 24)
+
+mainFrame.historyDetailsModal = mainFrame.historyDetailsModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.historyDetailsModal:SetSize(520, 332)
+mainFrame.historyDetailsModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+mainFrame.historyDetailsModal:EnableMouse(true)
+apply_surface_variant(mainFrame.historyDetailsModal, "modal-sheet")
+mainFrame.historyDetailsModal:Hide()
+mainFrame:RegisterModalFrame(mainFrame.historyDetailsModal, 24, "FULLSCREEN_DIALOG")
+
+mainFrame.historyDetailsTitle = mainFrame.historyDetailsTitle or make_label(mainFrame.historyDetailsModal, "History Details", "GameFontHighlight")
+mainFrame.historyDetailsTitle:SetPoint("TOPLEFT", mainFrame.historyDetailsModal, "TOPLEFT", 16, -16)
+
+local function place_history_detail_row(label, value, y)
+    label:SetPoint("TOPLEFT", mainFrame.historyDetailsModal, "TOPLEFT", 24, y)
+    value:SetPoint("TOPLEFT", mainFrame.historyDetailsModal, "TOPLEFT", 166, y)
+end
+
+mainFrame.historyDetailsWhenLabel = mainFrame.historyDetailsWhenLabel or make_label(mainFrame.historyDetailsModal, "When", "GameFontHighlightSmall")
+mainFrame.historyDetailsWhenText = mainFrame.historyDetailsWhenText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsWhenLabel, mainFrame.historyDetailsWhenText, -58)
+
+mainFrame.historyDetailsCategoryLabel = mainFrame.historyDetailsCategoryLabel or make_label(mainFrame.historyDetailsModal, "Category", "GameFontHighlightSmall")
+mainFrame.historyDetailsCategoryText = mainFrame.historyDetailsCategoryText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsCategoryLabel, mainFrame.historyDetailsCategoryText, -84)
+
+mainFrame.historyDetailsItemLabel = mainFrame.historyDetailsItemLabel or make_label(mainFrame.historyDetailsModal, "Item", "GameFontHighlightSmall")
+mainFrame.historyDetailsItemText = mainFrame.historyDetailsItemText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsItemLabel, mainFrame.historyDetailsItemText, -110)
+
+mainFrame.historyDetailsActionLabel = mainFrame.historyDetailsActionLabel or make_label(mainFrame.historyDetailsModal, "Action", "GameFontHighlightSmall")
+mainFrame.historyDetailsActionText = mainFrame.historyDetailsActionText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsActionLabel, mainFrame.historyDetailsActionText, -136)
+
+mainFrame.historyDetailsWhoLabel = mainFrame.historyDetailsWhoLabel or make_label(mainFrame.historyDetailsModal, "Who", "GameFontHighlightSmall")
+mainFrame.historyDetailsWhoText = mainFrame.historyDetailsWhoText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsWhoLabel, mainFrame.historyDetailsWhoText, -162)
+
+mainFrame.historyDetailsOldValueLabel = mainFrame.historyDetailsOldValueLabel or make_label(mainFrame.historyDetailsModal, "Old Value", "GameFontHighlightSmall")
+mainFrame.historyDetailsOldValueText = mainFrame.historyDetailsOldValueText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsOldValueLabel, mainFrame.historyDetailsOldValueText, -204)
+if type(mainFrame.historyDetailsOldValueText.SetWidth) == "function" then
+    mainFrame.historyDetailsOldValueText:SetWidth(320)
+end
+
+mainFrame.historyDetailsNewValueLabel = mainFrame.historyDetailsNewValueLabel or make_label(mainFrame.historyDetailsModal, "New Value", "GameFontHighlightSmall")
+mainFrame.historyDetailsNewValueText = mainFrame.historyDetailsNewValueText or make_label(mainFrame.historyDetailsModal, "", "GameFontNormal")
+place_history_detail_row(mainFrame.historyDetailsNewValueLabel, mainFrame.historyDetailsNewValueText, -250)
+if type(mainFrame.historyDetailsNewValueText.SetWidth) == "function" then
+    mainFrame.historyDetailsNewValueText:SetWidth(320)
+end
+
+mainFrame.historyDetailsCloseButton = mainFrame.historyDetailsCloseButton or make_button(mainFrame.historyDetailsModal, 72, 28, "Close")
+mainFrame.historyDetailsCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.historyDetailsModal, "BOTTOMRIGHT", -16, 16)
+mainFrame.historyDetailsCloseButton:SetScript("OnClick", function()
+    mainFrame.historyDetailsModal:Hide()
+end)
+
+function mainFrame:OpenHistoryDetailsModal(row)
+    local details = row and row.details or nil
+    if not details then
+        return nil
+    end
+
+    self.historyDetailsWhenText:SetText(tostring(details.timestamp or "-"))
+    self.historyDetailsCategoryText:SetText(tostring(details.category or "-"))
+    self.historyDetailsItemText:SetText(tostring(details.itemName or "-"))
+    self.historyDetailsActionText:SetText(tostring(details.action or "-"))
+    self.historyDetailsWhoText:SetText(tostring(details.actor or "-"))
+    self.historyDetailsOldValueText:SetText(tostring(details.oldValue or "-"))
+    self.historyDetailsNewValueText:SetText(tostring(details.newValue or "-"))
+    self.historyDetailsModal:Show()
+    return self.historyDetailsModal
+end
 
 mainTableController.Attach(mainFrame, {
     applyPanelStyle = apply_panel_style,
@@ -933,6 +1050,7 @@ mainFrame.optionsViewportFrame:SetPoint("BOTTOMRIGHT", mainFrame.optionsPanel, "
 mainFrame.optionsTabButtons = mainFrame.optionsTabButtons or {}
 mainFrame.optionsTabOrder = {
     { key = "APPEARANCE", label = "Appearance" },
+    { key = "STOCK", label = "Stock Settings" },
     { key = "PERMISSIONS", label = "Permissions" },
     { key = "BLACKLIST", label = "Blacklist" },
     { key = "AUTOMATION", label = "Automation" },
@@ -940,7 +1058,9 @@ mainFrame.optionsTabOrder = {
     { key = "REQUESTS", label = "Requests" },
 }
 for index, item in ipairs(mainFrame.optionsTabOrder) do
-    local button = mainFrame.optionsTabButtons[index] or make_button(mainFrame.optionsTabBar, 94, 24, item.label)
+    local buttonWidth = item.key == "STOCK" and 118 or 94
+    local button = mainFrame.optionsTabButtons[index] or make_button(mainFrame.optionsTabBar, buttonWidth, 24, item.label)
+    button:SetWidth(buttonWidth)
     button.key = item.key
     button.labelText:SetText(item.label)
     if type(button.ClearAllPoints) == "function" then
@@ -959,14 +1079,14 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(308)
+mainFrame.optionsAppearancePanel:SetHeight(172)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
-mainFrame.optionsRestockPanel = mainFrame.optionsRestockPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsAppearancePanel, "BackdropTemplate")
-mainFrame.optionsRestockPanel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "BOTTOMLEFT", 0, -16)
-mainFrame.optionsRestockPanel:SetPoint("TOPRIGHT", mainFrame.optionsAppearancePanel, "BOTTOMRIGHT", 0, -16)
-mainFrame.optionsRestockPanel:SetHeight(96)
-apply_surface_variant(mainFrame.optionsRestockPanel, "panel-alt")
+mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsStockSettingsPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsStockSettingsPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsStockSettingsPanel:SetHeight(176)
+apply_surface_variant(mainFrame.optionsStockSettingsPanel, "panel-alt")
 
 mainFrame.optionsAuthPanel = mainFrame.optionsAuthPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAuthPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
@@ -1007,25 +1127,27 @@ apply_surface_variant(mainFrame.optionsRequestsPanel, "panel-alt")
 mainFrame.optionsTitle = mainFrame.optionsTitle or make_label(mainFrame.optionsAppearancePanel, "Appearance", "GameFontHighlight")
 mainFrame.optionsTitle:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Theme presets stay local, UI scale keeps the shell and shared table density aligned, and sidebar icons stay visible when text is collapsed.", "GameFontHighlightSmall")
+mainFrame.optionsHint = mainFrame.optionsHint or make_label(mainFrame.optionsAppearancePanel, "Theme presets stay local, UI scale keeps the shell and shared table density aligned, and the minimap launcher stays optional per character.", "GameFontHighlightSmall")
 mainFrame.optionsHint:SetPoint("TOPLEFT", mainFrame.optionsTitle, "BOTTOMLEFT", 0, -8)
 
 mainFrame.optionsThemePresetLabel = mainFrame.optionsThemePresetLabel or make_label(mainFrame.optionsAppearancePanel, "Theme Preset", "GameFontHighlightSmall")
 mainFrame.optionsThemePresetLabel:SetPoint("TOPLEFT", mainFrame.optionsHint, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsThemeButtons = mainFrame.optionsThemeButtons or {}
-local themePresetOrder = type(mainFrameShell.GetThemePresetOrder) == "function" and mainFrameShell.GetThemePresetOrder() or { "generic_wow", "high_contrast", "alliance", "horde", "nature", "void" }
+local themePresetOrder = type(mainFrameShell.GetThemePresetOrder) == "function" and mainFrameShell.GetThemePresetOrder() or { "generic_wow", "high_contrast", "alliance", "horde", "legion", "nature", "pride", "void" }
 local themePresets = type(mainFrameShell.GetThemePresets) == "function" and mainFrameShell.GetThemePresets() or {}
 local themeButtonLayout = {
-    generic_wow = { width = 92, row = 1 },
+    generic_wow = { width = 72, row = 1 },
     high_contrast = { width = 104, row = 1 },
     alliance = { width = 80, row = 1 },
     horde = { width = 68, row = 2 },
+    legion = { width = 72, row = 2 },
     nature = { width = 74, row = 2 },
-    void = { width = 64, row = 2 },
+    pride = { width = 64, row = 3 },
+    void = { width = 64, row = 3 },
 }
 local themeButtonRowAnchors = {}
-local previousThemeButton
+local lastThemeButtonByRow = {}
 for _, presetKey in ipairs(themePresetOrder) do
     local preset = themePresets[presetKey] or {}
     local buttonLayout = themeButtonLayout[presetKey] or { width = 80, row = 1 }
@@ -1033,29 +1155,27 @@ for _, presetKey in ipairs(themePresetOrder) do
     button:SetWidth(buttonLayout.width)
     button.labelText:SetText(preset.label or tostring(presetKey))
     button:ClearAllPoints()
-    if buttonLayout.row == 1 then
-        if themeButtonRowAnchors[1] == nil then
+    if lastThemeButtonByRow[buttonLayout.row] == nil then
+        if buttonLayout.row == 1 then
             button:SetPoint("TOPLEFT", mainFrame.optionsThemePresetLabel, "BOTTOMLEFT", 0, -6)
         else
-            button:SetPoint("LEFT", previousThemeButton, "RIGHT", 8, 0)
+            button:SetPoint("TOPLEFT", themeButtonRowAnchors[buttonLayout.row - 1], "BOTTOMLEFT", 0, -8)
         end
     else
-        if themeButtonRowAnchors[2] == nil then
-            button:SetPoint("TOPLEFT", themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -8)
-        else
-            button:SetPoint("LEFT", previousThemeButton, "RIGHT", 8, 0)
-        end
+        button:SetPoint("LEFT", lastThemeButtonByRow[buttonLayout.row], "RIGHT", 8, 0)
     end
     mainFrame.optionsThemeButtons[presetKey] = button
     themeButtonRowAnchors[buttonLayout.row] = themeButtonRowAnchors[buttonLayout.row] or button
-    previousThemeButton = button
+    lastThemeButtonByRow[buttonLayout.row] = button
 end
 mainFrame.optionsThemeDefaultButton = mainFrame.optionsThemeButtons.generic_wow
 mainFrame.optionsThemeContrastButton = mainFrame.optionsThemeButtons.high_contrast
 mainFrame.optionsThemeWarmButton = mainFrame.optionsThemeButtons.nature
+mainFrame.optionsThemeFelButton = mainFrame.optionsThemeButtons.legion
+mainFrame.optionsThemePrideButton = mainFrame.optionsThemeButtons.pride
 
 mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "UI Scale", "GameFontHighlightSmall")
-mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
+mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsShellScaleDecreaseButton = mainFrame.optionsShellScaleDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellScaleDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -4)
@@ -1140,17 +1260,39 @@ mainFrame.optionsModalOpacityIncreaseButton:SetPoint("LEFT", mainFrame.optionsMo
 mainFrame.optionsModalOpacityValueText = mainFrame.optionsModalOpacityValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
 mainFrame.optionsModalOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityDecreaseButton, "BOTTOMLEFT", 0, -6)
 
-mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsRestockPanel, "Restock Default", "GameFontHighlight")
-mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsRestockPanel, "TOPLEFT", 16, -16)
+mainFrame.optionsMinimapToggle = mainFrame.optionsMinimapToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Show Minimap Button")
+mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -74)
 
-mainFrame.optionsRestockHint = mainFrame.optionsRestockHint or make_label(mainFrame.optionsRestockPanel, "Save Min stores the maximum amount allowed for restock when new rows are staged.", "GameFontHighlightSmall")
+mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsStockSettingsPanel, "Restock Default", "GameFontHighlight")
+mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsStockSettingsPanel, "TOPLEFT", 16, -16)
+
+mainFrame.optionsRestockHint = mainFrame.optionsRestockHint or make_label(mainFrame.optionsStockSettingsPanel, "Used when staging new minimum rows without a custom quantity.", "GameFontHighlightSmall")
 mainFrame.optionsRestockHint:SetPoint("TOPLEFT", mainFrame.optionsRestockTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsRestockHint.SetWidth) == "function" then
+    mainFrame.optionsRestockHint:SetWidth(240)
+end
 
-mainFrame.defaultMinimumInput = mainFrame.defaultMinimumInput or make_input(mainFrame.optionsRestockPanel, 72, 22)
+mainFrame.defaultMinimumInput = mainFrame.defaultMinimumInput or make_input(mainFrame.optionsStockSettingsPanel, 72, 22)
 mainFrame.defaultMinimumInput:SetPoint("TOPLEFT", mainFrame.optionsRestockHint, "BOTTOMLEFT", 0, -16)
 
-mainFrame.defaultMinimumSaveButton = mainFrame.defaultMinimumSaveButton or make_button(mainFrame.optionsRestockPanel, 86, 28, "Save Min")
-mainFrame.defaultMinimumSaveButton:SetPoint("LEFT", mainFrame.defaultMinimumInput, "RIGHT", 8, 0)
+mainFrame.optionsCriticalThresholdTitle = mainFrame.optionsCriticalThresholdTitle or make_label(mainFrame.optionsStockSettingsPanel, "Critical Shortage Threshold", "GameFontHighlight")
+mainFrame.optionsCriticalThresholdTitle:SetPoint("TOPLEFT", mainFrame.optionsStockSettingsPanel, "TOPLEFT", 300, -16)
+
+mainFrame.optionsCriticalThresholdHint = mainFrame.optionsCriticalThresholdHint or make_label(mainFrame.optionsStockSettingsPanel, "Current stock at or below this percentage of minimum counts as critical.", "GameFontHighlightSmall")
+mainFrame.optionsCriticalThresholdHint:SetPoint("TOPLEFT", mainFrame.optionsCriticalThresholdTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsCriticalThresholdHint.SetWidth) == "function" then
+    mainFrame.optionsCriticalThresholdHint:SetWidth(250)
+end
+
+mainFrame.optionsCriticalThresholdInput = mainFrame.optionsCriticalThresholdInput or make_input(mainFrame.optionsStockSettingsPanel, 56, 22)
+mainFrame.optionsCriticalThresholdInput:SetPoint("TOPLEFT", mainFrame.optionsCriticalThresholdHint, "BOTTOMLEFT", 0, -16)
+
+mainFrame.optionsCriticalThresholdPercentText = mainFrame.optionsCriticalThresholdPercentText or make_label(mainFrame.optionsStockSettingsPanel, "%", "GameFontNormal")
+mainFrame.optionsCriticalThresholdPercentText:SetPoint("LEFT", mainFrame.optionsCriticalThresholdInput, "RIGHT", 6, 0)
+
+mainFrame.optionsStockSettingsSaveButton = mainFrame.optionsStockSettingsSaveButton or make_button(mainFrame.optionsStockSettingsPanel, 104, 28, "Save Settings")
+mainFrame.optionsStockSettingsSaveButton:SetPoint("BOTTOMLEFT", mainFrame.optionsStockSettingsPanel, "BOTTOMLEFT", 16, 16)
+mainFrame.defaultMinimumSaveButton = mainFrame.optionsStockSettingsSaveButton
 
 mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
 mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -16)
@@ -1417,6 +1559,7 @@ local function modal_frames(frame)
     return {
         frame.requestWizardModal,
         frame.requestDetailsModal,
+        frame.historyDetailsModal,
         frame.minimumAddModal,
         frame.minimumDetailsModal,
         frame.exportModal,
@@ -1489,9 +1632,10 @@ function mainFrame:ApplyModalOpacity(alpha)
                     set_surface_alpha(child, alpha)
                 end
             end, {})
-        elseif frame and type(frame.SetBackdropColor) == "function" then
+        end
+        if frame and type(frame.SetBackdropColor) == "function" then
             local color = frame.gbmBackdropBaseColor or fallbackColor
-            frame:SetBackdropColor(color[1] or 0, color[2] or 0, color[3] or 0, math.min(alpha, color[4] or alpha))
+            frame:SetBackdropColor(color[1] or 0, color[2] or 0, color[3] or 0, (color[4] or 1) * alpha)
         end
     end
 end
@@ -1517,6 +1661,9 @@ function mainFrame:RefreshAppearanceControls()
     if self.optionsModalOpacityValueText then
         self.optionsModalOpacityValueText:SetText(percent_text(self.appearanceModalOpacity or 1))
     end
+    if self.optionsMinimapToggle and type(self.optionsMinimapToggle.SetChecked) == "function" then
+        self.optionsMinimapToggle:SetChecked(self.appearanceShowMinimapButton ~= false)
+    end
     self.isRefreshingAppearanceControls = false
 end
 
@@ -1533,12 +1680,14 @@ function mainFrame:LoadAppearanceSettingsFromDb(db)
     self.appearanceTableDensity = self.appearanceShellScale
     self.appearanceShellOpacity = clamp_range(appearance.shellOpacity, 0.0, 1.0)
     self.appearanceModalOpacity = clamp_range(appearance.modalOpacity, 0.0, 1.0)
+    self.appearanceShowMinimapButton = appearance.showMinimapButton ~= false
 
     appearance.themePreset = self.appearanceThemePreset
     appearance.shellScale = self.appearanceShellScale
     appearance.tableDensity = self.appearanceTableDensity
     appearance.shellOpacity = self.appearanceShellOpacity
     appearance.modalOpacity = self.appearanceModalOpacity
+    appearance.showMinimapButton = self.appearanceShowMinimapButton
 
     if shell and shell.ApplyThemePreset then
         shell.ApplyThemePreset(self.appearanceThemePreset)
@@ -1557,6 +1706,15 @@ function mainFrame:LoadAppearanceSettingsFromDb(db)
 
     set_alpha(self.appearanceShellOpacity)
     self:ApplyModalOpacity(self.appearanceModalOpacity)
+    if minimapButton and type(minimapButton.EnsureButton) == "function" then
+        minimapButton.EnsureButton()
+    end
+    if minimapButton and type(minimapButton.SetShown) == "function" then
+        minimapButton.SetShown(self.appearanceShowMinimapButton ~= false)
+    end
+    if minimapButton and type(minimapButton.RefreshAppearance) == "function" then
+        minimapButton.RefreshAppearance()
+    end
     self:RefreshAppearanceControls()
 
     return appearance
@@ -1605,6 +1763,14 @@ function mainFrame:SetModalOpacity(alpha)
     local db = current_db()
     local appearance = current_appearance_settings(db)
     appearance.modalOpacity = clamp_range(alpha, 0.0, 1.0)
+    self:LoadAppearanceSettingsFromDb(db)
+    refresh_after_appearance_change()
+end
+
+function mainFrame:SetShowMinimapButton(isShown)
+    local db = current_db()
+    local appearance = current_appearance_settings(db)
+    appearance.showMinimapButton = isShown == true
     self:LoadAppearanceSettingsFromDb(db)
     refresh_after_appearance_change()
 end
@@ -1695,14 +1861,26 @@ mainFrame.optionsModalOpacitySlider.onValueChanged = function(_, value)
     end
 end
 
-mainFrame.defaultMinimumSaveButton:SetScript("OnClick", function()
-    mainFrame:SaveDefaultMinimumSetting()
+if mainFrame.optionsMinimapToggle then
+    mainFrame.optionsMinimapToggle:SetScript("OnClick", function(toggle)
+        if mainFrame.isRefreshingAppearanceControls then
+            return
+        end
+        mainFrame:SetShowMinimapButton(toggle:GetChecked() == true)
+    end)
+end
+
+mainFrame.optionsStockSettingsSaveButton:SetScript("OnClick", function()
+    mainFrame:SaveStockSettings()
 end)
 
 function mainFrame:GetOptionsCanvasPanel()
     local activeTab = self.optionsActiveTab or "APPEARANCE"
     if activeTab == "APPEARANCE" then
         return self.optionsAppearancePanel
+    end
+    if activeTab == "STOCK" then
+        return self.optionsStockSettingsPanel
     end
     if activeTab == "PERMISSIONS" or activeTab == "BLACKLIST" then
         return self.optionsAuthPanel
@@ -1725,15 +1903,17 @@ function mainFrame:SetOptionsTab(tabKey)
     self.optionsActiveTab = nextTab
 
     set_frame_shown(self.optionsAppearancePanel, nextTab == "APPEARANCE")
+    set_frame_shown(self.optionsStockSettingsPanel, nextTab == "STOCK")
     set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
     set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")
     set_frame_shown(self.optionsAutomationPanel, nextTab == "AUTOMATION")
     set_frame_shown(self.optionsExportsPanel, nextTab == "EXPORTS")
     set_frame_shown(self.optionsRequestsPanel, nextTab == "REQUESTS")
-    set_frame_shown(self.optionsAuthPanel, nextTab == "PERMISSIONS" or nextTab == "BLACKLIST" or nextTab == "APPEARANCE")
+    set_frame_shown(self.optionsAuthPanel, nextTab == "PERMISSIONS" or nextTab == "BLACKLIST")
 
     for _, button in ipairs(self.optionsTabButtons or {}) do
         apply_button_variant(button, button.key == nextTab and "primary" or "tab")
+        button.gbmTabStyle = "segmented-soft"
     end
 
     if self.optionsScrollFrame then
@@ -2080,6 +2260,7 @@ function mainFrame:SaveAuthPolicy(options)
 
     local minimumSettings = self.GetMinimumSettings and self:GetMinimumSettings(db) or (((db or {}).ui or {}).minimumSettings or {})
     draft.restockDefault = tonumber(minimumSettings.defaultQuantity or draft.restockDefault or 100) or 100
+    draft.criticalThresholdPercent = math.max(0, math.min(100, tonumber(minimumSettings.criticalThresholdPercent or draft.criticalThresholdPercent or 50) or 50))
 
     self.pendingAuthPolicySave = nil
 
@@ -2426,14 +2607,18 @@ function mainFrame:ApplyTheme()
     local topBarHeight = compactRequestMode and 44 or theme.spacing.topBarHeight
     local topBarWidth = math.max(320, shellWidth - (compactRequestMode and 0 or sidebarWidth))
     local contentHeight = math.max(280, shellHeight - topBarHeight)
-    local navButtonHeight = math.max(28, math.floor(32 * shellScale + 0.5))
-    local navButtonSpacing = math.max(40, math.floor(44 * shellScale + 0.5))
+    local navButtonHeight = math.max(28, math.floor(30 * shellScale + 0.5))
+    local navButtonSpacing = math.max(36, math.floor(40 * shellScale + 0.5))
+    local navStartOffset = self.collapsedSidebar and -52 or -52
     local titleBlockWidth = math.max(220, math.floor(topBarWidth * 0.30))
     local statusBlockWidth = math.max(120, math.floor(topBarWidth * 0.18))
     local availableStatusWidth = math.max(120, topBarWidth - titleBlockWidth - 96 - 120 - 72)
     statusBlockWidth = math.min(statusBlockWidth, availableStatusWidth)
 
     self:SetSize(shellWidth, shellHeight)
+    self.themeExpressionStyle = "colored-distinct"
+    self.defaultDensityStyle = "dense-clean"
+    self.navButtonSpacing = navButtonSpacing
     self.sidebar:SetWidth(sidebarWidth)
     self.sidebar:SetHeight(shellHeight)
     if type(self.topBar.ClearAllPoints) == "function" then
@@ -2453,15 +2638,37 @@ function mainFrame:ApplyTheme()
         self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
         self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
     end
+    topBarHeight = math.max(52, math.min(76, topBarHeight))
     self.topBar:SetSize(topBarWidth, topBarHeight)
     self.content:SetSize(topBarWidth, contentHeight)
     apply_surface_variant(self, "shell", theme.colors.background)
     apply_surface_variant(self.sidebar, "sidebar", theme.colors.panel)
-    apply_surface_variant(self.topBar, "header", theme.colors.panelAlt)
-    apply_surface_variant(self.content, "panel", theme.colors.background)
+    self.sidebarNavStyle = "sidebar-soft-row"
+    self.headerStyle = "toolbar-band"
+    self.contentSectionStyle = "flat-band"
+    apply_surface_variant(self.topBar, "header-toolbar", theme.colors.panelAlt)
+    apply_surface_variant(self.content, "content-band", theme.colors.background)
     apply_surface_variant(self.optionsPanel, "panel")
-    apply_surface_variant(self.optionsTabBar, "panel")
-    apply_surface_variant(self.optionsViewportFrame, "panel")
+    if type(self.optionsTabBar.SetBackdrop) == "function" then
+        self.optionsTabBar:SetBackdrop(nil)
+    end
+    if type(self.optionsViewportFrame.SetBackdrop) == "function" then
+        self.optionsViewportFrame:SetBackdrop(nil)
+    end
+    if self.optionsTabBar.gbmArt then
+        for _, region in pairs(self.optionsTabBar.gbmArt) do
+            if type(region) == "table" and type(region.Hide) == "function" then
+                region:Hide()
+            end
+        end
+    end
+    if self.optionsViewportFrame.gbmArt then
+        for _, region in pairs(self.optionsViewportFrame.gbmArt) do
+            if type(region) == "table" and type(region.Hide) == "function" then
+                region:Hide()
+            end
+        end
+    end
     if type(self.optionsScrollBar.SetBackdrop) == "function" then
         self.optionsScrollBar:SetBackdrop(nil)
     end
@@ -2478,7 +2685,7 @@ function mainFrame:ApplyTheme()
         self.optionsScrollChild:SetBackdrop(nil)
     end
     apply_surface_variant(self.optionsAppearancePanel, "panel-alt")
-    apply_surface_variant(self.optionsRestockPanel, "panel-alt")
+    apply_surface_variant(self.optionsStockSettingsPanel, "panel-alt")
     apply_surface_variant(self.optionsAuthPanel, "panel")
     apply_surface_variant(self.optionsPermissionsPanel, "panel-alt")
     apply_surface_variant(self.optionsBlacklistPanel, "panel-alt")
@@ -2502,32 +2709,31 @@ function mainFrame:ApplyTheme()
         self.requestAdminFilterPanel:SetBackdrop(nil)
     end
     apply_surface_variant(self.requestWorkflowPanel, "panel-alt")
-    apply_surface_variant(self.requestWizardModal, "modal")
-    apply_surface_variant(self.requestDetailsModal, "modal")
-    if type(self.requestWizardModal.SetBackdropColor) == "function" then
-        self.requestWizardModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
-        self.requestWizardModal:SetBackdropColor(0, 0, 0, 1)
-    end
-    if type(self.requestDetailsModal.SetBackdropColor) == "function" then
-        self.requestDetailsModal.gbmBackdropBaseColor = { 0, 0, 0, 1 }
-        self.requestDetailsModal:SetBackdropColor(0, 0, 0, 1)
-    end
+    apply_surface_variant(self.requestWizardModal, "modal-sheet")
+    apply_surface_variant(self.requestDetailsModal, "modal-sheet")
+    apply_surface_variant(self.historyDetailsModal, "modal-sheet")
     apply_surface_variant(self.requestCreatePanel, "panel")
     apply_surface_variant(self.minimumsPanel, "panel")
     if self.minimumsPanel.transparentActions == true and type(self.minimumsPanel.SetBackdrop) == "function" then
         self.minimumsPanel:SetBackdrop(nil)
     end
-    apply_surface_variant(self.minimumAddModal, "modal")
-    apply_surface_variant(self.minimumDetailsModal, "modal")
+    apply_surface_variant(self.minimumAddModal, "modal-sheet")
+    apply_surface_variant(self.minimumDetailsModal, "modal-sheet")
     apply_surface_variant(self.exportsPanel, "panel")
     if self.exportsPanel and self.exportsPanel.transparentActions == true and type(self.exportsPanel.SetBackdrop) == "function" then
         self.exportsPanel:SetBackdrop(nil)
+        self.exportsPanel.backdrop = nil
+        for _, region in pairs(self.exportsPanel.gbmArt or {}) do
+            if type(region) == "table" and type(region.Hide) == "function" then
+                region:Hide()
+            end
+        end
     end
     for _, card in ipairs(self.exportActionCards or {}) do
         apply_surface_variant(card, "action-card")
     end
-    apply_surface_variant(self.exportModal, "modal")
-    apply_surface_variant(self.exportStockedElsewhereModal, "modal")
+    apply_surface_variant(self.exportModal, "modal-sheet")
+    apply_surface_variant(self.exportStockedElsewhereModal, "modal-sheet")
     apply_panel_style(self.exportModalScrollFrame, theme.colors.background)
     apply_panel_style(self.exportModalScrollChild, theme.colors.background)
     if type(self.exportModalScrollFrame.SetBackdrop) == "function" then
@@ -2536,10 +2742,10 @@ function mainFrame:ApplyTheme()
     if type(self.exportModalScrollChild.SetBackdrop) == "function" then
         self.exportModalScrollChild:SetBackdrop(nil)
     end
-    apply_surface_variant(self.tableHeaderFrame, "table-header")
-    apply_surface_variant(self.tableFilterFrame, "table-filter")
-    apply_surface_variant(self.tableViewportFrame, "table-viewport")
-    apply_surface_variant(self.tableScrollFrame, "table-viewport")
+    apply_surface_variant(self.tableHeaderFrame, "table-header-flat")
+    apply_surface_variant(self.tableFilterFrame, "table-filter-flat")
+    apply_surface_variant(self.tableViewportFrame, "table-viewport-structured")
+    apply_surface_variant(self.tableScrollFrame, "table-viewport-structured")
 
     set_label_color(self.titleText, theme.tokens.header)
     set_label_color(self.subtitleText, theme.tokens.textMuted)
@@ -2552,7 +2758,7 @@ function mainFrame:ApplyTheme()
     set_label_color(self.sidebarIdentityGuildText, theme.tokens.textMuted)
 
     for _, card in ipairs(self.dashboardCards) do
-        apply_surface_variant(card, "metric-card")
+        apply_surface_variant(card, "metric-card-flat")
         set_label_color(card.titleText, theme.tokens.textStrong)
         set_label_color(card.valueText, theme.tokens.header)
         set_label_color(card.noteText, theme.tokens.textMuted)
@@ -2562,20 +2768,20 @@ function mainFrame:ApplyTheme()
         end
     end
     if self.dashboardCards[1] then
-        apply_surface_variant(self.dashboardCards[1], "metric-card", { 0.05, 0.12, 0.20, 0.98 })
+        apply_surface_variant(self.dashboardCards[1], "metric-card-flat", { 0.05, 0.12, 0.20, 0.98 })
     end
     if self.dashboardCards[2] then
-        apply_surface_variant(self.dashboardCards[2], "metric-card", { 0.15, 0.08, 0.24, 0.98 })
+        apply_surface_variant(self.dashboardCards[2], "metric-card-flat", { 0.15, 0.08, 0.24, 0.98 })
     end
     if self.dashboardCards[3] then
-        apply_surface_variant(self.dashboardCards[3], "metric-card", { 0.08, 0.18, 0.11, 0.98 })
+        apply_surface_variant(self.dashboardCards[3], "metric-card-flat", { 0.08, 0.18, 0.11, 0.98 })
     end
     if self.dashboardCards[4] then
-        apply_surface_variant(self.dashboardCards[4], "metric-card", { 0.20, 0.08, 0.07, 0.98 })
+        apply_surface_variant(self.dashboardCards[4], "metric-card-flat", { 0.20, 0.08, 0.07, 0.98 })
     end
-    apply_surface_variant(self.dashboardTopItemsPanel, "panel")
-    apply_surface_variant(self.dashboardRecentActivityPanel, "panel")
-    apply_surface_variant(self.dashboardQuickActionsPanel, "panel")
+    apply_surface_variant(self.dashboardTopItemsPanel, "panel-flat")
+    apply_surface_variant(self.dashboardRecentActivityPanel, "panel-flat")
+    apply_surface_variant(self.dashboardQuickActionsPanel, "panel-flat")
     set_label_color(self.dashboardTopItemsTitle, theme.tokens.header)
     set_label_color(self.dashboardTopItemsText, theme.tokens.text)
     set_label_color(self.dashboardRecentActivityTitle, theme.tokens.header)
@@ -2606,12 +2812,10 @@ function mainFrame:ApplyTheme()
     for index, button in ipairs(self.sidebarButtons) do
         local isActive = button.key == self.activeView
         apply_button_variant(button, "nav", isActive and theme.colors.panelAlt or theme.colors.panel)
+        button.gbmButtonFamily = "nav-soft"
+        button.gbmSelectionStyle = isActive and "selected-strong" or "selected-soft"
         if type(button.SetBackdropBorderColor) == "function" then
-            if isActive then
-                button:SetBackdropBorderColor(unpack(theme.colors.accentStrong))
-            else
-                button:SetBackdropBorderColor(unpack(theme.colors.border))
-            end
+            button:SetBackdropBorderColor(0, 0, 0, 0)
         end
         button:SetWidth(self.collapsedSidebar and 40 or (theme.spacing.sidebarExpanded - 32))
         button:SetHeight(navButtonHeight)
@@ -2619,7 +2823,7 @@ function mainFrame:ApplyTheme()
         if type(button.ClearAllPoints) == "function" then
             button:ClearAllPoints()
         end
-        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -52 - ((index - 1) * navButtonSpacing))
+        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, navStartOffset - ((index - 1) * navButtonSpacing))
         if button.navIcon then
             if type(button.navIcon.SetTexture) == "function" then
                 button.navIcon:SetTexture(nav_icon_texture_for(button.key))
@@ -2655,7 +2859,7 @@ function mainFrame:ApplyTheme()
             mainFrameShell.SetHeaderBand(
                 button,
                 color_with_alpha(isActive and (theme.tokens.accentMuted or theme.colors.accent) or (theme.tokens.accentMuted or theme.colors.border), isActive and 0.16 or 0.08),
-                true
+                false
             )
         end
         if mainFrameShell.SetGlow then
@@ -2668,29 +2872,69 @@ function mainFrame:ApplyTheme()
         end
     end
 
-    apply_surface_variant(self.sidebarIdentityPanel, "panel-alt")
+    apply_surface_variant(self.sidebarIdentityPanel, "panel-flat")
     self.sidebarIdentityPanel:SetWidth(math.max(40, sidebarWidth - 32))
     self.sidebarIdentityPanel:SetPoint("BOTTOMLEFT", self.sidebar, "BOTTOMLEFT", 16, 16)
-    if self.sidebarCrestTexture then
-        if type(self.sidebarCrestTexture.SetVertexColor) == "function" then
-            self.sidebarCrestTexture:SetVertexColor(unpack(theme.tokens.header or { 1, 1, 1, 1 }))
+    if type(self.sidebarIdentityPanel.SetBackdropColor) == "function" then
+        self.sidebarIdentityPanel:SetBackdropColor(0, 0, 0, 0)
+    end
+    if type(self.sidebarIdentityPanel.SetBackdropBorderColor) == "function" then
+        self.sidebarIdentityPanel:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    if type((self.sidebarIdentityPanel or {}).gbmArt) == "table" then
+        for _, region in pairs(self.sidebarIdentityPanel.gbmArt) do
+            if type(region) == "table" and type(region.Hide) == "function" then
+                region:Hide()
+            end
         end
-        if self.collapsedSidebar then
-            self.sidebarCrestTexture:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 12, -12)
-        else
-            self.sidebarCrestTexture:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, -12)
+    end
+    if self.sidebarCrestTexture then
+        local footerPanelWidth = self.sidebarIdentityPanel:GetWidth() or math.max(40, sidebarWidth - 32)
+        local footerPanelHeight = self.sidebarIdentityPanel:GetHeight() or (self.collapsedSidebar and 56 or 144)
+        local crestInset = self.collapsedSidebar and 0 or 4
+        local crestEdge = math.max(32, math.min(footerPanelWidth, footerPanelHeight) - crestInset)
+        if type(self.sidebarCrestTexture.SetTexture) == "function" then
+            self.sidebarCrestTexture:SetTexture(mainFrameShell.GetThemeLogoTexture(self.appearanceThemePreset))
+        end
+        if type(self.sidebarCrestTexture.SetTexCoord) == "function" then
+            self.sidebarCrestTexture:SetTexCoord(unpack(mainFrameShell.GetThemeLogoTexCoord(self.appearanceThemePreset)))
+        end
+        self.sidebarCrestTexture.texture = mainFrameShell.GetThemeLogoTexture(self.appearanceThemePreset)
+        if type(self.sidebarCrestTexture.SetVertexColor) == "function" then
+            self.sidebarCrestTexture:SetVertexColor(1, 1, 1, 1)
+        end
+        if type(self.sidebarCrestTexture.SetSize) == "function" then
+            self.sidebarCrestTexture:SetSize(crestEdge, crestEdge)
+        end
+        self.sidebarCrestTexture:SetPoint("CENTER", self.sidebarIdentityPanel, "CENTER", 0, self.collapsedSidebar and 0 or -2)
+    end
+    if self.aboutCrestTexture then
+        if type(self.aboutCrestTexture.SetTexture) == "function" then
+            self.aboutCrestTexture:SetTexture(mainFrameShell.GetThemeLogoTexture(self.appearanceThemePreset))
+        end
+        if type(self.aboutCrestTexture.SetTexCoord) == "function" then
+            self.aboutCrestTexture:SetTexCoord(unpack(mainFrameShell.GetThemeLogoTexCoord(self.appearanceThemePreset)))
+        end
+        self.aboutCrestTexture.texture = mainFrameShell.GetThemeLogoTexture(self.appearanceThemePreset)
+        if type(self.aboutCrestTexture.SetVertexColor) == "function" then
+            self.aboutCrestTexture:SetVertexColor(1, 1, 1, 1)
         end
     end
     if self.collapsedSidebar then
-        self.sidebarIdentityPanel:SetHeight(44)
+        self.sidebarIdentityPanel:SetHeight(56)
         self.sidebarIdentityNameText:Hide()
         self.sidebarIdentityGuildText:Hide()
     else
-        self.sidebarIdentityPanel:SetHeight(76)
-        self.sidebarIdentityNameText:Show()
-        self.sidebarIdentityGuildText:Show()
+        self.sidebarIdentityPanel:SetHeight(144)
+        self.sidebarIdentityNameText:Hide()
+        self.sidebarIdentityGuildText:Hide()
     end
     if compactRequestMode then
+        self.sidebarIdentityPanel:Hide()
+        if self.sidebarCrestTexture then
+            self.sidebarCrestTexture:Hide()
+        end
+    elseif self.collapsedSidebar then
         self.sidebarIdentityPanel:Hide()
         if self.sidebarCrestTexture then
             self.sidebarCrestTexture:Hide()
@@ -2752,6 +2996,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.closeButton, "secondary")
     apply_button_variant(self.scanButton, "primary")
     apply_button_variant(self.collapseButton, "icon")
+    self.collapseButton.gbmButtonFamily = "nav-soft"
     for presetKey, button in pairs(self.optionsThemeButtons or {}) do
         apply_button_variant(button, self.appearanceThemePreset == presetKey and "primary" or "tab", self.appearanceThemePreset == presetKey and theme.colors.panelAlt or theme.colors.panel)
     end
@@ -2763,6 +3008,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.optionsModalOpacityIncreaseButton, "icon")
     for _, button in ipairs(self.optionsTabButtons or {}) do
         apply_button_variant(button, button.key == self.optionsActiveTab and "primary" or "tab")
+        button.gbmTabStyle = "segmented-soft"
         if button.labelText then
             set_label_color(
                 button.labelText,
@@ -2801,7 +3047,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.requestWizardSubmitButton, "primary")
     apply_button_variant(self.requestWizardCancelButton, "secondary")
     apply_button_variant(self.requestCreateQuantityDecreaseButton, "secondary")
-    apply_button_variant(self.requestCreateQuantityIncreaseButton, "primary")
+    apply_button_variant(self.requestCreateQuantityIncreaseButton, "secondary")
     apply_button_variant(self.requestDetailsApproveButton, "primary")
     apply_button_variant(self.requestDetailsRejectButton, "secondary")
     apply_button_variant(self.requestDetailsFulfillButton, "primary")
@@ -2809,8 +3055,9 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.requestDetailsCancelRequestButton, "secondary")
     apply_button_variant(self.requestDetailsDeleteButton, "danger")
     apply_button_variant(self.requestDetailsCloseButton, "secondary")
-    apply_button_variant(self.requestDetailsBankTabDropdownButton, "secondary")
-    apply_panel_style(self.requestDetailsBankTabDropdownPanel, theme.colors.panelAlt)
+    apply_button_variant(self.historyDetailsCloseButton, "secondary")
+    apply_button_variant(self.requestDetailsBankTabDropdownButton, "select")
+    apply_surface_variant(self.requestDetailsBankTabDropdownPanel, "input")
     apply_button_variant(self.requestAdminAddButton, "secondary")
     apply_button_variant(self.requestAdminRefreshButton, "secondary")
     apply_button_variant(self.requestAdminFilterAllButton, "tab")
@@ -2826,8 +3073,8 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.minimumSaveButton, "primary")
     apply_button_variant(self.minimumSaveAllButton, "secondary")
     apply_panel_style(self.minimumEditorPanel, theme.colors.background)
-    apply_button_variant(self.minimumEditorBankTabDropdownButton, "secondary")
-    apply_panel_style(self.minimumEditorBankTabDropdownPanel, theme.colors.panelAlt)
+    apply_button_variant(self.minimumEditorBankTabDropdownButton, "select")
+    apply_surface_variant(self.minimumEditorBankTabDropdownPanel, "input")
     apply_button_variant(self.minimumEditorRestockToggleButton, "secondary")
     apply_button_variant(self.minimumEditorRemoveButton, "danger")
     apply_button_variant(self.minimumEditorUndoButton, "secondary")
@@ -2838,8 +3085,12 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.minimumDetailsRemoveButton, "danger")
     apply_button_variant(self.minimumDetailsUndoButton, "icon")
     apply_button_variant(self.minimumDetailsCancelButton, "secondary")
-    apply_button_variant(self.defaultMinimumSaveButton, "primary")
-    apply_button_variant(self.optionsAuthRankButton, "secondary")
+    apply_button_variant(self.minimumDetailsBankTabDropdownButton, "select")
+    apply_surface_variant(self.minimumDetailsBankTabDropdownPanel, "input")
+    apply_button_variant(self.optionsStockSettingsSaveButton, "primary")
+    apply_button_variant(self.optionsAuthRankButton, "select")
+    apply_surface_variant(self.optionsAuthRankDropdown, "input")
+    apply_surface_variant(self.optionsAuthRankDropdownBackdrop, "panel-flat")
     apply_button_variant(self.optionsAuthAddPermissionButton, "primary")
     apply_button_variant(self.optionsAuthRemovePermissionButton, "secondary")
     apply_button_variant(self.optionsBlacklistAddButton, "primary")
@@ -2883,9 +3134,12 @@ function mainFrame:ApplyTheme()
             apply_panel_style(button, theme.colors.panel)
         end
     end
+    apply_button_variant(self.requestWizardBankTabDropdownButton, "select")
+    apply_surface_variant(self.requestWizardBankTabDropdownPanel, "input")
     apply_button_variant(self.exportPresetSpreadsheetButton, "primary")
-    apply_button_variant(self.exportPresetAuctionatorButton, "secondary")
-    apply_button_variant(self.exportPresetTsmButton, "secondary")
+    apply_button_variant(self.exportPresetAuctionatorButton, "primary")
+    apply_button_variant(self.exportPresetTsmButton, "primary")
+    apply_button_variant(self.exportManualShoppingListButton, "primary")
     apply_button_variant(self.exportPresetCustomButton, "secondary")
     apply_button_variant(self.exportHeaderToggleButton, "secondary")
     apply_button_variant(self.exportApplyCustomButton, "primary")
@@ -2910,31 +3164,33 @@ function mainFrame:ApplyTheme()
     end
 
     for _, input in ipairs(self.tableFilterInputs) do
-        apply_panel_style(input, theme.colors.background)
+        apply_surface_variant(input, "input")
     end
 
-    apply_panel_style(self.requestActionNoteInput, theme.colors.background)
-    apply_panel_style(self.requestCreateRequesterInput, theme.colors.background)
-    apply_panel_style(self.requestCreateRoleInput, theme.colors.background)
-    apply_panel_style(self.requestCreateItemIDInput, theme.colors.background)
-    apply_panel_style(self.requestCreateItemNameInput, theme.colors.background)
-    apply_panel_style(self.requestCreateQuantityInput, theme.colors.background)
-    apply_panel_style(self.requestCreateNoteInput, theme.colors.background)
-    apply_panel_style(self.minimumItemIDInput, theme.colors.background)
-    apply_panel_style(self.minimumItemNameInput, theme.colors.background)
-    apply_panel_style(self.minimumQuantityInput, theme.colors.background)
-    apply_panel_style(self.minimumScopeInput, theme.colors.background)
-    apply_panel_style(self.minimumTabNameInput, theme.colors.background)
-    apply_panel_style(self.minimumSearchInput, theme.colors.background)
-    apply_panel_style(self.minimumEditorQuantityInput, theme.colors.background)
-    apply_panel_style(self.minimumDetailsQuantityInput, theme.colors.background)
-    apply_panel_style(self.defaultMinimumInput, theme.colors.background)
-    apply_panel_style(self.optionsPolicyStringInput, theme.colors.background)
-    apply_panel_style(self.optionsBlacklistNameInput, theme.colors.background)
-    apply_panel_style(self.optionsBlacklistReasonInput, theme.colors.background)
-    apply_panel_style(self.exportAuctionatorListNameInput, theme.colors.background)
-    apply_panel_style(self.exportDelimiterInput, theme.colors.background)
-    apply_panel_style(self.exportFieldsInput, theme.colors.background)
+    apply_surface_variant(self.requestActionNoteInput, "input")
+    apply_surface_variant(self.requestCreateRequesterInput, "input")
+    apply_surface_variant(self.requestCreateRoleInput, "input")
+    apply_surface_variant(self.requestCreateItemIDInput, "input")
+    apply_surface_variant(self.requestCreateItemNameInput, "input")
+    apply_surface_variant(self.requestCreateQuantityInput, "input")
+    apply_surface_variant(self.requestCreateNoteInput, "input")
+    apply_surface_variant(self.defaultMinimumInput, "input")
+    apply_surface_variant(self.optionsCriticalThresholdInput, "input")
+    apply_surface_variant(self.minimumItemIDInput, "input")
+    apply_surface_variant(self.minimumItemNameInput, "input")
+    apply_surface_variant(self.minimumQuantityInput, "input")
+    apply_surface_variant(self.minimumScopeInput, "input")
+    apply_surface_variant(self.minimumTabNameInput, "input")
+    apply_surface_variant(self.minimumSearchInput, "input")
+    apply_surface_variant(self.minimumEditorQuantityInput, "input")
+    apply_surface_variant(self.minimumDetailsQuantityInput, "input")
+    apply_surface_variant(self.defaultMinimumInput, "input")
+    apply_surface_variant(self.optionsPolicyStringInput, "input")
+    apply_surface_variant(self.optionsBlacklistNameInput, "input")
+    apply_surface_variant(self.optionsBlacklistReasonInput, "input")
+    apply_surface_variant(self.exportAuctionatorListNameInput, "input")
+    apply_surface_variant(self.exportDelimiterInput, "input")
+    apply_surface_variant(self.exportFieldsInput, "input")
     apply_panel_style(self.exportModalOutputInput, theme.colors.background)
     if type(self.exportModalOutputInput.SetBackdrop) == "function" then
         self.exportModalOutputInput:SetBackdrop(nil)
@@ -3034,6 +3290,7 @@ function mainFrame:HandleTableRowClick(row)
 
     if (self.requestWizardModal and self.requestWizardModal:IsShown())
         or (self.requestDetailsModal and self.requestDetailsModal:IsShown())
+        or (self.historyDetailsModal and self.historyDetailsModal:IsShown())
         or (self.minimumAddModal and self.minimumAddModal:IsShown())
         or (self.minimumDetailsModal and self.minimumDetailsModal:IsShown()) then
         return nil
@@ -3043,6 +3300,10 @@ function mainFrame:HandleTableRowClick(row)
         self:SelectRequestById(row.requestId)
         self:RefreshRequestActionButtons()
         return self:OpenRequestDetailsModal(row.requestId) or row
+    end
+
+    if self.activeView == "HISTORY" and row.details then
+        return self:OpenHistoryDetailsModal(row) or row
     end
 
     if self.activeView == "MINIMUMS" and row.itemID then
@@ -3144,6 +3405,7 @@ function mainFrame:RefreshView()
     end
     self.requestWizardModal:Hide()
     self.requestDetailsModal:Hide()
+    self.historyDetailsModal:Hide()
     self.requestCreatePanel:Hide()
     self.minimumsPanel:Hide()
     self.minimumAddModal:Hide()
@@ -3196,14 +3458,14 @@ function mainFrame:RefreshView()
         self:ConfigureTable({
             { key = "date", label = "When", width = 150, justifyH = "LEFT" },
             { key = "category", label = "Category", width = 90, justifyH = "LEFT" },
-            { key = "itemName", label = "Item", width = 150, justifyH = "LEFT" },
-            { key = "action", label = "Action", width = 80, justifyH = "LEFT" },
-            { key = "actor", label = "Who", width = 90, justifyH = "LEFT" },
-            { key = "oldValue", label = "Old", width = 70, justifyH = "LEFT" },
-            { key = "newValue", label = "New", width = 70, justifyH = "LEFT" },
+            { key = "itemName", label = "Item", width = 236, justifyH = "LEFT" },
+            { key = "action", label = "Action", width = 104, justifyH = "LEFT" },
+            { key = "actor", label = "Who", width = 156, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         showTable = true
+    elseif self.activeView == "BANK_LEDGER" then
+        bodyText = "Bank ledger reporting will appear here as the ledger surface is implemented."
     elseif self.activeView == "MINIMUMS" then
         if self.RefreshMinimumFilterButtons then
             self:RefreshMinimumFilterButtons()

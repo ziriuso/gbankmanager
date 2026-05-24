@@ -39,8 +39,10 @@ assert.truthy(type(selector.resultsDataProvider) == "table", "shared selector sh
 assert.equal(#largeResultSet, selector.resultsDataProvider:GetSize(), "shared selector should keep the full result set in the data provider")
 assert.truthy(#(selector.resultRows or {}) < selector.resultsDataProvider:GetSize(), "shared selector should recycle a smaller visible row pool than the full result set")
 assert.truthy(string.find((((selector.resultRows or {})[1] or {}).itemText or {}):GetText() or "", "900001", 1, true) ~= nil, "shared selector rows should render the item id inline")
-assert.truthy(string.find((((selector.resultRows or {})[1] or {}).itemText or {}):GetText() or "", "[T5]", 1, true) ~= nil, "shared selector rows should render the crafted tier label inline")
+assert.equal("[T5]", ((((selector.resultRows or {})[1] or {}).tierText or {}):GetText() or ""), "shared selector rows should render the crafted tier label in its own aligned slot")
 assert.equal("Professions-ChatIcon-Quality-Tier5", (((selector.resultRows or {})[1] or {}).qualityIcon or {}).atlas, "shared selector rows should render the crafted quality icon when present")
+assert.equal("LEFT", ((((selector.resultRows or {})[1] or {}).itemText or {}).justifyH), "shared selector rows should left-align the match text")
+assert.equal(6, ((((((selector.resultRows or {})[1] or {}).itemText or {}).points or {})[1] or {})[4]), "shared selector rows should keep a small gutter between the tier slot and the item text")
 
 local scrollStride = (selector.resultRowHeight or 20) + (selector.resultRowSpacing or 0)
 selector.resultsScrollController:SetOffset(scrollStride * 10, selector.resultsContentHeight, selector.resultsViewportHeight)

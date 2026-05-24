@@ -345,22 +345,34 @@ function mainMinimumsController.Attach(mainFrame, options)
     function mainFrame:LoadMinimumSettingsFromDb(db)
         local settings = self:GetMinimumSettings(db)
         self.defaultMinimumInput:SetText(tostring(settings.defaultQuantity or 100))
+        if self.optionsCriticalThresholdInput then
+            self.optionsCriticalThresholdInput:SetText(tostring(settings.criticalThresholdPercent or 50))
+        end
         if (self.minimumAddQuantityInput:GetText() or "") == "" then
             self.minimumAddQuantityInput:SetText(tostring(settings.defaultQuantity or 100))
         end
         return settings
     end
 
-    function mainFrame:SaveDefaultMinimumSetting()
+    function mainFrame:SaveStockSettings()
         local db = currentDb()
         local settings = self:GetMinimumSettings(db)
         settings.defaultQuantity = parseNumber(self.defaultMinimumInput:GetText() or "") or 100
+        settings.criticalThresholdPercent = math.max(0, math.min(100, parseNumber((self.optionsCriticalThresholdInput and self.optionsCriticalThresholdInput:GetText()) or "") or 50))
         self.defaultMinimumInput:SetText(tostring(settings.defaultQuantity))
+        if self.optionsCriticalThresholdInput then
+            self.optionsCriticalThresholdInput:SetText(tostring(settings.criticalThresholdPercent))
+        end
         db.auth = db.auth or {}
         db.auth.restockDefault = settings.defaultQuantity
         if self.authDraftPolicy then
             self.authDraftPolicy.restockDefault = settings.defaultQuantity
         end
+        return settings
+    end
+
+    function mainFrame:SaveDefaultMinimumSetting()
+        local settings = self:SaveStockSettings()
         return settings.defaultQuantity
     end
 

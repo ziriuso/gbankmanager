@@ -5,9 +5,9 @@
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
-- Latest pushed branch commit: `3b856bd` (`fix: harden guild bank auto scan startup`)
-- Latest local-only work in this phase: Blacklist has been simplified into a read-only officer-note parser view with an explicit themed `Refresh` button above the parsed-member list, the duplicate legacy blacklist header has been hidden, the refresh status now returns from `Refreshing...` to the parsed summary after `GUILD_ROSTER_UPDATE`, auto-scan reopen retries were hardened again, History now sorts newest-first, request creation now reparses guild-backed blacklist state before submit, and the sidebar footer identity now refreshes on load plus guild events so late guild data does not stick on `No Guild`. These changes are not committed yet.
-- Current repo status at handoff time: dirty with the blacklist simplification and polish cleanup, auto-scan and history follow-up, plus the sidebar guild refresh fix. Tests are green, and the next likely live validation is the sidebar guild footer recovering without `/reload` alongside the cleaned-up read-only Blacklist tab and guild-bank reopen-after-10-minutes scan path.
+- Latest pushed branch commit before this checkpoint: `c7967d4` (`fix: refresh guild identity and blacklist status`)
+- Latest checkpoint in this phase: the no-art-pack shell-polish pass from the approved 2026-05-23 design is now implemented on top of the existing theme foundation, and the current follow-up tightens control consistency plus theme branding. The shell now exposes a `Native Paneled` contract with softer nav metadata, stronger selected-state contract, a cleaner toolbar-band header, abbreviated top-header scan timestamps, flatter dashboard/table surface variants, slimmer action-family routing, segmented-tab metadata, cleaner floating-sheet modal variants, denser-clean spacing, stronger neutral action contrast, dedicated select/dropdown trigger styling, unified export card CTAs, wrapped dashboard quick-action labels, a dedicated `Stock Settings` tab, a configurable dashboard critical-threshold rule, cleaner export-card spacing without the old ghost strip behind the action cards, a shared `* Does not provide Quantity in Export.` footnote for Auctionator/TSM, request-wizard/search-row alignment polish for step-2 labels plus tier-text result rows, per-theme sidebar/about logos, a custom minimap launcher toggle in `Appearance`, refreshed nav order plus iconography including `Bank Ledger`, a crest-only sidebar footer zone that hides entirely when collapsed, and cropped theme-logo art so the visible crest fills more of the footer zone without distortion. The implementation plan doc for this pass exists at `docs/superpowers/plans/2026-05-23-gbankmanager-ui-shell-polish-implementation.md`.
+- Current repo status at handoff time: ready to commit as one coherent UI checkpoint. Automated tests are green, and the latest Retail validation covered theme switching, crest rendering, collapsed-sidebar footer hiding, the minimap toggle, request-wizard cleanup, `Options -> Stock Settings`, the Dashboard `Critical Shortages` card, and the cleaned Exports action-card row.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Latest verified result: `PASS tests/run_all.lua`
 
@@ -43,26 +43,26 @@
 - Scan snapshots now persist tab-scoped `itemRows` in addition to aggregate `items`, and Inventory plus Minimums `Show All` render one row per bank tab with per-tab quantities.
 - Inventory and Minimums now share the same table layout: `Item ID`, `Tier`, `Item`, `Bank Tab`, `Current`, `Restock`, and `Minimum`, with a wider Item column consuming the old right-side whitespace.
 - Minimums uses the shared header/filter row instead of the old bottom search box, and its footer is now a compact transparent action strip with `Add`, `Save All`, `Enabled Only`, and `Show All` controls.
-- The full-shell request surface is now `Request Admin`: workflow actions remain visible with more bottom spacing, inline request creation is hidden, shared table search is enabled, and the admin table exposes date requested, requestor, item ID, tier, item name, quantity, approval, fulfillment, and note.
+- The full-shell request surface is now `Requests`: workflow actions remain visible with more bottom spacing, inline request creation is hidden, shared table search is enabled, and the admin table exposes date requested, requestor, item ID, tier, item name, quantity, approval, fulfillment, and note.
 - `/gbm request` now opens a separate end-user request workflow panel with own-request status rows and a `New Request` wizard entrypoint.
 - Requests never auto-approve. Officers/admins cannot approve their own requests; the Guild Master can approve their own request only through an explicit workflow approval action.
-- `/gbm request` now uses a smaller compact window with `Guild Bank Manager` in the header, an own-request table (`Item ID`, `Item Name`, `Quantity`, `Status`), row-click details, pending-request cancellation for authors, and a four-step item -> quantity/reason -> bank-tab -> review wizard.
-- `Request Admin` now uses the same request-list/details pattern, with workflow actions available from the details popup.
+- `/gbm request` now uses a smaller compact window with `Guild Bank Manager` in the header, an own-request table (`Item ID`, `Item Name`, `Quantity`, `Status`), row-click details, pending-request cancellation for authors, and a three-step item -> quantity/reason -> review wizard.
+- `Requests` now uses the same request-list/details pattern, with workflow actions available from the details popup.
 - Request details now label the Decision Note input, align detail/readback values to fixed modal columns, and keep the details modal open after status changes.
 - Approving a request requires an approver-selected Bank Tab, stores the Decision Note and Bank Tab on the request, and immediately saves/updates an enabled tab-scoped Minimums rule for the requested quantity.
 - Request details now block table click-through, keep fixed label/value rows with tighter label/value spacing, show Requested By above Date Requested, show Updated By, Date Updated, and Decision Note at the bottom of the detail list, hide the decision-note editor after approval or denial, and request audit history normalizes actor tables into character names.
-- Request Admin no longer shows the old top workflow actions box. Actions live in the details modal, and the bottom filter strip switches between `All`, `Pending Approval`, and `Pending Fulfillment`.
-- Request Admin now also includes a `Completed` filter plus a left-side `Refresh` button beside `Add Request`.
+- Requests no longer shows the old top workflow actions box. Actions live in the details modal, and the bottom filter strip switches between `All`, `Pending Approval`, and `Pending Fulfillment`.
+- Requests now also includes a `Completed` filter plus a left-side `Refresh` button beside `Add Request`.
 - Approved open requests are now auto-marked `FULFILLED` by a guild-bank scan when scanned inventory for the requested item meets the requested quantity. Fulfillment records `fulfilledBy = Bank Scan` and Date Fulfilled.
 - Request dates now display with an abbreviated timezone and no `(Local)` suffix.
 - Shared table scrollbars now sit just outside the table viewport so the table frame ends before the bar and rightmost columns are not overlapped.
 - Exports now uses the shared table plus a bottom action strip. The table shows `Item ID`, `Tier`, `Item Name`, `Bank Tab`, `Amount to Stock`, and `Excess Stock`.
-- Exports now presents `Auctionator`, `TSM`, `CSV Spreadsheet`, and `Manual Shopping List` as four action cards on that bottom strip while keeping export formats unchanged.
+- Exports now presents `Auctionator*`, `TSM*`, `CSV`, and `Shopping List` as four action cards on that bottom strip while keeping export formats unchanged, with a shared `* Does not provide Quantity in Export.` note under the cards.
 - `Excess Stock` now shows either `None` or the alternate guild-bank tab with the highest quantity, and the stocked-elsewhere detail modal still lists every alternate tab and quantity.
 - Exports now renders crafted-quality icons in the visible `Item Tier` column while keeping numeric tier values available for CSV-style outputs.
 - Auctionator export now emits the modern shopping-list line format instead of the older quantity or quality overloaded string.
 - Request deletion is now a distinct permission capability, and authorized users can delete requests from the request-details workflow popup.
-- Request Admin now highlights the active bottom filter, right-aligns `All`, `Pending Approval`, and `Pending Fulfillment`, keeps a far-left `Add` launcher, and uses the shared table height without the `Date Fulfilled` filter overflowing.
+- Requests now highlights the active bottom filter, right-aligns `All`, `Pending Approval`, and `Pending Fulfillment`, keeps a far-left `Add` launcher, and uses the shared table height without the `Date Fulfilled` filter overflowing.
 - The guild auth policy string now carries the shared Restock Default plus updater metadata. Guild Info pull now refreshes those values into the local Options state, auth-policy updates now write History rows, and those auth-policy rows are now visible in the History view.
 - Guild-shared blacklist membership now comes from appended `[GBMBL]` officer-note tags instead of the Guild Info policy string, and `Options -> Blacklist` is now a read-only instructions-plus-list surface with a `Refresh` action that reparses tagged guild members from officer notes on demand and on guild-roster refresh.
 - Dashboard `Ready to Buy` mismatch investigation did not land a code fix in this slice. Obvious local machine paths did not reveal a live SavedVariables file, and the dashboard card count plus Exports row count both currently derive from the same demand-plan shape in code, so this should be reproed live before changing code.
@@ -70,7 +70,8 @@
 - Synced request create and update messages now append local History rows on receiving clients, approved request sync recreates the tab-scoped Minimums side effect on receivers, and request conflict resolution now prefers higher-authority updaters before timestamp tie-breaks.
 - CSV, Auctionator, and TSM export modals now remove the nested inner text box, and the output area now uses a dedicated scrollable edit-box surface so `Select All` and manual mouse selection both target a real copyable field. The old `Copy` button has been removed.
 - Auctionator and TSM now use the choice label `Not In Guild Bank` for the missing-only path.
-- Exports now includes a movable `Manual Shopping List` window with one-session checklist strike-through rows, plain checkbox marks, and an explicit `Does not sync back to addon.` note.
+- Exports now includes a movable `Shopping List` window with one-session checklist strike-through rows, plain checkbox marks, and an explicit `Does not sync back to addon.` note.
+- The shell navigation is now ordered as `Dashboard`, `Inventory`, `Minimums`, `Requests`, `Exports`, `History`, `Bank Ledger`, `Options`, and `About`, with refreshed per-tab icons and a placeholder `Bank Ledger` surface for the upcoming ledger workflow.
 - Minimums rows with unresolved `GLOBAL` Bank Tab now sort to the top in orange, open into an editable Bank Tab picker, and `Save All` blocks with `Bank Tab must be set on Orange Rows.` until the row is corrected.
 - Approved open requests that already carry a bank tab but are missing `minimumRuleKey` now self-heal on refresh by creating or rebinding the matching tab-scoped Minimums rule automatically. Only the truly tab-less legacy requests still surface as orange repair rows.
 - Approved open requests that lost both `minimumRuleKey` and request-side bank-tab data now attempt one more self-heal: if there is exactly one enabled tab-scoped Minimums rule for that item, the request binds to that existing rule automatically instead of surfacing a duplicate orange orphan row.
@@ -78,19 +79,24 @@
 - Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned reasons stay local and continue to sync through addon auth snapshots.
 - Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, and render in a read-only Blacklist tab that explains the `[GBMBL]` workflow instead of trying to write officer notes from inside the addon.
 - Crafted-quality rendering now normalizes the two-rank and max-rank atlas variants so Exports, Inventory, Minimums, Requests, and request details show the same visible tier symbols whether the source came from live scan data or fallback catalog/search data.
-- The appearance foundation is now live through a token-backed theme manager with local-only presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), a single `UI Scale` control that drives both shell scale and shared table density across a 90%-120% range, built-in WoW `UISliderTemplate` sliders for shell and modal opacity, collapsed-nav icons, stronger active-state glow for nav plus workflow filter buttons, and surface-only opacity treatment so content stays crisp.
+- The appearance foundation is now live through a token-backed theme manager with local-only presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), a single `UI Scale` control that drives both shell scale and shared table density across a 90%-120% range, built-in WoW `UISliderTemplate` sliders for shell and modal opacity, collapsed-nav icons, stronger active-state glow for nav plus workflow filter buttons, surface-only opacity treatment so content stays crisp, per-theme crest/logo art, a custom minimap launcher, and an appearance toggle that can hide the minimap launcher locally.
+- The 2026-05-23 shell-polish implementation pass is now layered on top of that foundation: sidebar nav buttons now expose a softer `nav-soft` family plus a stronger selected-state contract, dashboard and table surfaces now use flatter shared shell variants, primary/secondary/destructive actions expose the shared slimmer `action-slim` family, tabs expose `segmented-soft`, and key modals now use the cleaner `modal-sheet` surface variant instead of the older heavier boxed modal shell.
+- The top header now follows the cleaner toolbar-band direction more closely and renders scan timestamps with timezone abbreviations such as `EDT` or `EST` when a scan exists.
+- Shared shell surfaces have now been simplified further: the toolbar header drops its full framed top or side edges, the main content band drops its extra enclosing border box, flatter panels, cards, and soft nav buttons no longer draw the older inset header-strip chrome by default, and the flatter shell surfaces now stop relying on backdrop borders for their shape.
+- The current table follow-up on top of that shell pass now pushes structure into contrast instead of box lines: filter bands keep a single separator, search inputs use the dedicated `input` surface again instead of being repainted to the shell background, and alternating table rows now use stronger odd/even token contrast with softer bottom-only separators instead of boxed side edges.
+- That same table slice now also insets filter inputs slightly inside each column so adjacent search boxes keep visible spacing, and History now keeps `Old Value` plus `New Value` in a row-click `History Details` modal instead of forcing those long fields into the visible grid.
+- The latest control-consistency slice on top of that table pass now normalizes interactive surfaces further: neutral footer/action-strip buttons sit forward from parent panels more clearly, request/minimums/options Bank Tab or rank pickers use a dedicated select-style trigger instead of recycling the same muddy button chrome, export action-card CTAs now share one primary treatment, and dashboard quick-action labels can wrap instead of overflowing longer names.
 - The shell fidelity rewrite is now underway on top of that foundation: the main shell, sidebar, header, nav buttons, metric cards, export cards, and modal-capable panels now expose explicit surface/button variants plus reusable art layers instead of relying on one generic boxed treatment.
 - That shell rewrite now also covers the centered branded About panel, dedicated table header/filter/viewport surfaces, semantic alternating row tokens, and shared button variants across request and Minimums workflows.
-- The default `Generic WoW` preset is now darker and closer to the mockup baseline, dashboard quick actions now use icon-led primary buttons, the sidebar now carries a crest treatment above the nav stack, and appearance controls now render through built-in WoW `UISliderTemplate` widgets while preserving direct drag and stepper behavior.
-- The sidebar now includes a footer identity card that shows the current character and guild in expanded mode and hides that text cleanly when collapsed.
-- The sidebar footer identity card now also refreshes from live guild events after shell creation, so late `GetGuildInfo("player")` availability replaces the temporary `No Guild` fallback without needing `/reload`.
+- The default `Default` preset is now darker and closer to the mockup baseline, dashboard quick actions now use icon-led primary buttons, the sidebar now carries theme-specific crest treatment above the nav stack, and appearance controls now render through built-in WoW `UISliderTemplate` widgets while preserving direct drag and stepper behavior.
+- The sidebar footer now uses a theme crest/logo only. The older character-plus-guild identity card is gone, the crest hides entirely when the sidebar is collapsed, and the shipped crest art is cropped with texture coordinates so the visible logo fills more of the footer zone without distortion.
 - `Options` now has a true six-tab shell (`Appearance`, `Permissions`, `Blacklist`, `Automation`, `Exports`, `Requests`) instead of relying on one long stacked settings canvas.
-- The request-only modernization pass is underway: the member `New Request` flow now has a four-step progress rail, a live preview card, explicit bank-tab selection, and quantity steppers while preserving the existing request persistence and sync path.
+- The request-only modernization pass is underway: the member `New Request` flow now has a three-step progress rail, a live preview card, quantity/reason labeling, and quantity steppers while preserving the existing request persistence and sync path.
 - Appearance sliders now support direct slider interaction in addition to `+` / `-` stepping, and opening `Options` proactively reloads the current Guild Info auth policy before populating the visible auth controls.
 - Two-rank crafted items now stay on the shared visible chat-icon family across Inventory, Minimums, Requests, Exports, and the manual shopping list, and appearance sliders now stop dragging cleanly even when the mouse is released off the bar.
 - Sync now reports milestone chat feedback for login hello, accepted incoming updates, and ignored forged payloads without writing per-step noise into chat.
 - The shell now participates in top-level window ordering so other dragged addon or Blizzard UI can come above it, and clicking back onto the shell or its registered modals brings `GBankManager` back to the front.
-- The shell now defaults to a lower dialog stratum, keeps shared columns fitted inside the shell viewport, clamps shared table height so bottom action strips stay inside the window, hides zero-range scrollbars on Request Admin and Exports, applies shell or modal opacity through backdrop and art layers instead of whole-frame alpha, keeps the top-bar scan plus status controls separated at smaller scales, and keeps the manual shopping list plus Auctionator export output aligned with the live product expectations.
+- The shell now defaults to a lower dialog stratum, keeps shared columns fitted inside the shell viewport, clamps shared table height so bottom action strips stay inside the window, hides zero-range scrollbars on Requests and Exports, applies shell or modal opacity through backdrop and art layers instead of whole-frame alpha, keeps the top-bar scan plus status controls separated at smaller scales, and keeps the shopping list plus Auctionator export output aligned with the live product expectations.
 - The floating manual shopping list now lives independently from the main shell, survives tab switches and shell close, remembers its moved position locally, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot.
 - Dashboard now uses four metric cards (`Last Scan`, `Pending Requests`, `Ready to Buy`, `Critical Shortages`) plus dedicated `Top 5 Most Used`, `Recent Activity`, and `Quick Actions` panels.
 - Dashboard metric cards now also expose dedicated icon slots, and Exports action cards now expose dedicated icons plus shorter CTA labels closer to the target mockup.
@@ -111,12 +117,13 @@
 
 - `Dashboard`
 - `Inventory`
-- `History`
 - `Minimums`
-- `Request Admin`
+- `Requests`
 - `Exports`
-- `About`
+- `History`
+- `Bank Ledger`
 - `Options`
+- `About`
 
 ### Current Search/Catalog Constraints
 
@@ -134,12 +141,11 @@
 Work these in the exact order below unless a new blocking regression appears:
 
 1. `UI polish`
-   - Continue from the landed appearance foundation, but treat the next pass as art-pack-assisted mockup-fidelity work rather than more pure-frame approximation.
-   - Build or import a reusable addon-local art pack first: sidebar crest treatment, panel trims, header banding, nav active rails, card plates, and subtle inset divider assets.
-   - Re-apply the dashboard composition pass only after those shell assets exist, so the Alliance mockup can be matched more literally.
-   - Then continue the less-blocky pass: lighter panel treatment, tighter gaps, slimmer grouped controls, calmer corners, and selective icon expansion.
-   - Live-QA the new shell focus ordering against other draggable UI.
-   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the refinement shelf, but treat the art pack as the next actual build step.
+   - Live-review the newly landed shell-polish checkpoint in Retail against the approved browser `Target Look`.
+   - If the no-art-pack shell still feels too plain in any surface, tune within the shared shell contract first rather than adding one-off boxes back in.
+   - After that review, continue into the art-pack-assisted mockup-fidelity pass: sidebar crest treatment, panel trims, header banding, nav active rails, card plates, and subtle inset divider assets.
+   - Re-apply any more literal dashboard composition work only after those shell assets exist.
+   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the refinement shelf, but treat the art pack as the next actual build step after this shell checkpoint is reviewed live.
 
 2. `In-game unit test lane`
    - Live-verify the broadened `/gbm test unit` lane in retail after the automated lanes are green.
@@ -171,17 +177,17 @@ Work these in the exact order below unless a new blocking regression appears:
 - Export modal regression coverage now also verifies that the output surface is a real scrollable edit box, that `Select All` focuses it, rewinds the cursor, and highlights the full output for manual `Ctrl+C`.
 - Minimums regression coverage now includes unresolved `GLOBAL` row ordering, orange highlighting, editable Bank Tab recovery, save-time validation blocking, and approved-request self-heal when a bank tab already exists but the minimum binding is missing.
 - Request deletion regression coverage now spans auth, auth-source, request-domain, sync, and request-UI specs.
-- Request Admin regression coverage now also covers active-filter highlighting, far-left `Add Request` plus `Refresh`, the `Completed` filter, right-aligned filters, and shared-height sizing.
+- Requests regression coverage now also covers active-filter highlighting, far-left `Add Request` plus `Refresh`, the `Completed` filter, right-aligned filters, and shared-height sizing.
 - Minimums regression coverage now also covers the split `Enabled Only` and `Show All` filter buttons plus active-state highlighting.
 - Auth policy regression coverage now spans auth-source, auth, options UI, sync, history, and officer-note blacklist specs for Restock Default propagation, Guild Info updater metadata, Guild Info blacklist removal, officer-note tag writes, blacklist input normalization, and visible auth-policy history rows.
 - Scanner regression coverage now spans unit and sync specs for guild-bank-open auto-scan throttling plus the `GUILDBANKFRAME_OPENED` and `GUILDBANK_UPDATE_TABS` wake-up path in the scanner event adapter.
 - Guild-bank auto-scan now also wakes from `GUILDBANK_UPDATE_TABS`, not just the initial open event, timer retry, or bag-slot updates, so opening the bank before tab metadata is ready still starts a scan once the tab list finishes loading.
 - Blacklist regression coverage now spans guild-roster officer-note parsing plus the read-only Blacklist tab guidance and parsed-member rendering.
 - Sync-hardening regression coverage now spans request history parity on receiving clients, authority-first request conflict resolution, and approved-request minimum recreation on receiving clients.
-- Appearance regression coverage now spans `ui_shell_spec`, `ui_options_spec`, and `live_smoke_spec` for the token-backed theme presets, the linked `UI Scale` control, split shell-vs-modal opacity controls, active-state glow, collapsed-nav icons, and shell-top-level focus behavior.
+- Appearance regression coverage now spans `ui_shell_spec`, `ui_options_spec`, and `live_smoke_spec` for the token-backed theme presets, the linked `UI Scale` control, split shell-vs-modal opacity controls, active-state glow, collapsed-nav icons, per-theme crest art, minimap-launcher visibility, and shell-top-level focus behavior.
 - Appearance regression coverage now also verifies explicit shell/sidebar/header/card/button variant contracts, reusable art-layer presence, sidebar identity/footer collapse behavior, and the six-tab Options shell in `ui_shell_spec` and `ui_options_spec`.
-- UI fidelity regression coverage now also verifies the branded About panel contract, table-header/filter/viewport variants, semantic row token styling, and shared request/minimum button-variant routing in `ui_about_spec`, `ui_table_spec`, `ui_requests_spec`, and `ui_minimums_spec`.
-- Request-only UI regression coverage now also verifies the four-step wizard progress rail, preview visibility, quantity steppers, and preferred bank-tab persistence in `ui_requests_spec.lua`.
+- UI fidelity regression coverage now also verifies the branded About panel contract, table-header/filter/viewport variants, stronger semantic row token styling, bottom-only row separators, higher-contrast filter inputs, and shared request/minimum button-variant routing in `ui_about_spec`, `ui_table_spec`, `ui_requests_spec`, and `ui_minimums_spec`.
+- Request-only UI regression coverage now also verifies the three-step wizard progress rail, preview visibility, quantity steppers, left-rail modal actions, and the removal of the dedicated bank-tab step in `ui_requests_spec.lua`.
 - Appearance and crafted-quality regression coverage now also spans shared two-rank icon normalization plus slider drag-release behavior in `inventory_quality_spec`, `ui_table_spec`, `ui_exports_spec`, `ui_minimums_spec`, `ui_requests_spec`, and `ui_options_spec`.
 - Auth regression coverage now also spans compact updater-hash policy encoding plus legacy blacklist-key normalization.
 - Dashboard regression coverage now spans `dashboard_spec` for zero-shortage `Ready to Buy` counting plus `ui_dashboard_spec` for the four-card dashboard layout, `Recent Activity`, and `Quick Actions`.

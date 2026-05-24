@@ -6,6 +6,7 @@ ns.ui = ns.ui or {}
 
 local mainFrameShell = ns.modules.mainFrameShell or {}
 local themeManager = ns.modules.themeManager or {}
+local styleTokens = ns.modules.styleTokens or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 if craftedQuality.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
@@ -35,12 +36,24 @@ local SURFACE_VARIANTS = {
         colorToken = "panel",
         borderToken = "border",
     },
+    ["header-toolbar"] = {
+        colorToken = "panelAlt",
+        borderToken = "borderSoft",
+    },
     header = {
         colorToken = "panelAlt",
         borderToken = "borderSoft",
     },
+    ["content-band"] = {
+        colorToken = "bg",
+        borderToken = "borderSoft",
+    },
     panel = {
         colorToken = "panel",
+        borderToken = "borderSoft",
+    },
+    ["panel-flat"] = {
+        colorToken = "panelAlt",
         borderToken = "borderSoft",
     },
     ["panel-alt"] = {
@@ -50,6 +63,10 @@ local SURFACE_VARIANTS = {
     ["metric-card"] = {
         colorToken = "panelAlt",
         borderToken = "border",
+    },
+    ["metric-card-flat"] = {
+        colorToken = "panelAlt",
+        borderToken = "borderSoft",
     },
     ["action-card"] = {
         colorToken = "panelAlt",
@@ -67,11 +84,23 @@ local SURFACE_VARIANTS = {
         colorToken = "bgAlt",
         borderToken = "border",
     },
+    ["table-header-flat"] = {
+        colorToken = "bgAlt",
+        borderToken = "borderSoft",
+    },
     ["table-filter"] = {
         colorToken = "panel",
         borderToken = "borderSoft",
     },
+    ["table-filter-flat"] = {
+        colorToken = "panel",
+        borderToken = "borderSoft",
+    },
     ["table-viewport"] = {
+        colorToken = "bg",
+        borderToken = "borderSoft",
+    },
+    ["table-viewport-structured"] = {
         colorToken = "bg",
         borderToken = "borderSoft",
     },
@@ -91,6 +120,10 @@ local SURFACE_VARIANTS = {
         colorToken = "modalBg",
         borderToken = "modalBorder",
     },
+    ["modal-sheet"] = {
+        colorToken = "modalBg",
+        borderToken = "borderSoft",
+    },
     input = {
         colorToken = "inputBg",
         borderToken = "inputBorder",
@@ -99,24 +132,76 @@ local SURFACE_VARIANTS = {
 
 local BUTTON_VARIANTS = {
     nav = {
-        surfaceVariant = "panel",
+        surfaceVariant = "panel-flat",
     },
     primary = {
         surfaceVariant = "action-card",
     },
     secondary = {
-        surfaceVariant = "panel",
+        surfaceVariant = "panel-flat",
+    },
+    select = {
+        surfaceVariant = "input",
+        borderToken = "inputBorder",
     },
     tab = {
-        surfaceVariant = "panel-alt",
+        surfaceVariant = "panel-flat",
     },
     icon = {
-        surfaceVariant = "panel",
+        surfaceVariant = "panel-flat",
     },
     danger = {
         surfaceVariant = "panel-alt",
         borderToken = "danger",
     },
+}
+
+local BORDERLESS_VARIANTS = {
+    shell = true,
+    sidebar = true,
+    ["header-toolbar"] = true,
+    ["content-band"] = true,
+    panel = true,
+    ["panel-flat"] = true,
+    ["panel-alt"] = true,
+    ["metric-card"] = true,
+    ["metric-card-flat"] = true,
+    ["action-card"] = true,
+    ["brand-card"] = true,
+    ["wizard-rail"] = true,
+    ["table-header"] = true,
+    ["table-header-flat"] = true,
+    ["table-filter"] = true,
+    ["table-filter-flat"] = true,
+    ["table-viewport"] = true,
+    ["table-viewport-structured"] = true,
+    row = true,
+    ["row-alt"] = true,
+    ["row-selected"] = true,
+}
+
+local TRANSPARENT_BACKDROP_VARIANTS = {
+    shell = true,
+    sidebar = true,
+    ["header-toolbar"] = true,
+    ["content-band"] = true,
+    panel = true,
+    ["panel-flat"] = true,
+    ["panel-alt"] = true,
+    ["metric-card"] = true,
+    ["metric-card-flat"] = true,
+    ["action-card"] = true,
+    ["brand-card"] = true,
+    ["wizard-rail"] = true,
+    ["table-header"] = true,
+    ["table-header-flat"] = true,
+    ["table-filter"] = true,
+    ["table-filter-flat"] = true,
+    ["table-viewport"] = true,
+    ["table-viewport-structured"] = true,
+    row = true,
+    ["row-alt"] = true,
+    ["row-selected"] = true,
 }
 
 local function theme()
@@ -151,6 +236,28 @@ function mainFrameShell.GetThemePresetOrder()
     end
 
     return { "generic_wow" }
+end
+
+function mainFrameShell.GetThemeLogoTexture(presetKey)
+    local definition = type(themeManager.GetTheme) == "function" and themeManager.GetTheme(presetKey) or nil
+    return definition and definition.logoTexture or "Interface\\ICONS\\INV_Misc_Map_01"
+end
+
+function mainFrameShell.GetThemeLogoTexCoord(presetKey)
+    if type(styleTokens.GetThemeLogoTexCoord) == "function" then
+        local texCoord = styleTokens.GetThemeLogoTexCoord(presetKey)
+        if type(texCoord) == "table" and #texCoord >= 4 then
+            return { texCoord[1], texCoord[3], texCoord[2], texCoord[4] }
+        end
+    end
+    return { 0, 0, 1, 1 }
+end
+
+function mainFrameShell.GetMinimapButtonTexture()
+    if type(styleTokens.GetMinimapButtonTexture) == "function" then
+        return styleTokens.GetMinimapButtonTexture()
+    end
+    return "Interface\\ICONS\\INV_Misc_Map_01"
 end
 
 function mainFrameShell.ApplyThemePreset(presetKey)
@@ -446,14 +553,24 @@ local function apply_surface_art(frame, variant, baseColor, borderColor)
     local minimalRow = variant == "row" or variant == "row-alt" or variant == "row-selected"
     local isElevated = variant == "panel-alt"
         or variant == "metric-card"
+        or variant == "metric-card-flat"
         or variant == "action-card"
         or variant == "brand-card"
         or variant == "modal"
         or variant == "header"
     local showHeaderBand = isElevated
         or variant == "table-header"
+        or variant == "table-header-flat"
         or variant == "sidebar"
         or variant == "input"
+    local showOuterTop = true
+    local showOuterBottom = true
+    local showOuterLeft = true
+    local showOuterRight = true
+    local showInnerTop = not minimalRow
+    local showInnerBottom = not minimalRow
+    local showInnerLeft = not minimalRow
+    local showInnerRight = not minimalRow
 
     if variant == "shell" then
         darkFill = tint_color(baseColor, 0.62, 0.96)
@@ -462,38 +579,177 @@ local function apply_surface_art(frame, variant, baseColor, borderColor)
     elseif variant == "sidebar" then
         darkFill = tint_color(baseColor, 0.70, 0.96)
         bandColor = copy_color(accentMuted, 0.12)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterLeft = false
+        showOuterBottom = false
+        showInnerLeft = false
+        showInnerRight = false
     elseif variant == "header" then
         darkFill = tint_color(baseColor, 0.78, 0.98)
         bandColor = copy_color(accent, 0.12)
         glowColor = copy_color(accent, 0.10)
-    elseif variant == "metric-card" or variant == "action-card" or variant == "brand-card" then
-        darkFill = tint_color(baseColor, 0.76, 0.98)
-        bandColor = copy_color(accentMuted, 0.18)
-        glowColor = copy_color(accent, 0.05)
-    elseif variant == "table-header" then
-        darkFill = tint_color(baseColor, 0.85, 0.98)
-        bandColor = copy_color(accentMuted, 0.20)
-    elseif variant == "table-filter" or variant == "table-viewport" then
-        darkFill = tint_color(baseColor, 0.78, baseColor[4] or 0.96)
-        bandColor = copy_color(accentMuted, 0.08)
-    elseif minimalRow then
-        darkFill = tint_color(baseColor, 0.92, baseColor[4] or 0.94)
+    elseif variant == "header-toolbar" then
+        darkFill = tint_color(baseColor, 0.90, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.0)
+        shadowColor = copy_color(shadow, 0.20)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "content-band" then
+        darkFill = tint_color(baseColor, 0.86, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.0)
+        shadowColor = copy_color(shadow, 0.18)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "panel" then
+        darkFill = tint_color(baseColor, 0.82, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.0)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "panel-flat" then
+        darkFill = tint_color(baseColor, 0.88, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.0)
+        shadowColor = copy_color(shadow, 0.16)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "panel-alt" then
+        darkFill = tint_color(baseColor, 0.86, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.02)
+        shadowColor = copy_color(shadow, 0.18)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "metric-card" or variant == "metric-card-flat" or variant == "action-card" or variant == "brand-card" then
+        darkFill = tint_color(baseColor, 0.86, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, variant == "brand-card" and 0.04 or 0.0)
+        shadowColor = copy_color(shadow, 0.20)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "table-header" or variant == "table-header-flat" then
+        darkFill = tint_color(baseColor, 0.92, 0.98)
         bandColor = copy_color(accentMuted, 0.0)
         showHeaderBand = false
+        showOuterTop = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "table-filter" or variant == "table-filter-flat" then
+        darkFill = tint_color(baseColor, 0.96, baseColor[4] or 0.97)
+        bandColor = copy_color(accentMuted, 0.0)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif variant == "table-viewport" or variant == "table-viewport-structured" then
+        darkFill = tint_color(baseColor, 0.82, baseColor[4] or 0.96)
+        bandColor = copy_color(accentMuted, 0.0)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
+    elseif minimalRow then
+        darkFill = tint_color(baseColor, 1.00, baseColor[4] or 0.96)
+        bandColor = copy_color(accentMuted, 0.0)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
     elseif variant == "modal" then
         darkFill = tint_color(baseColor, 0.68, 0.98)
         bandColor = copy_color(accentMuted, 0.20)
         glowColor = copy_color(accent, 0.06)
+    elseif variant == "modal-sheet" then
+        darkFill = tint_color(baseColor, 0.84, 0.98)
+        bandColor = copy_color(accentMuted, 0.0)
+        glowColor = copy_color(accent, 0.03)
+        shadowColor = copy_color(shadow, 0.28)
+        showHeaderBand = false
+        showOuterTop = false
+        showOuterBottom = false
+        showOuterLeft = false
+        showOuterRight = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
     elseif variant == "input" then
         darkFill = tint_color(baseColor, 0.78, 0.98)
         bandColor = copy_color(accentMuted, 0.08)
+        showHeaderBand = false
+        showInnerTop = false
+        showInnerBottom = false
+        showInnerLeft = false
+        showInnerRight = false
     end
 
     set_texture_color(art.background, baseColor)
     set_texture_color(art.innerFill, darkFill)
     set_texture_color(art.shadow, shadowColor)
-    set_texture_color(art.topLine, borderColor)
-    set_texture_color(art.bottomLine, borderColor)
+    local rowSeparatorColor = copy_color(innerLine, 0.24)
+    set_texture_color(art.topLine, minimalRow and rowSeparatorColor or borderColor)
+    set_texture_color(art.bottomLine, minimalRow and rowSeparatorColor or borderColor)
     set_texture_color(art.leftLine, borderColor)
     set_texture_color(art.rightLine, borderColor)
     set_texture_color(art.innerTopLine, innerLine)
@@ -511,24 +767,14 @@ local function apply_surface_art(frame, variant, baseColor, borderColor)
     set_art_shown(art.accentBar, variant == "nav-active")
     set_art_shown(art.glow, (glowColor[4] or 0) > 0)
 
-    if minimalRow then
-        set_art_shown(art.topLine, false)
-        set_art_shown(art.leftLine, false)
-        set_art_shown(art.rightLine, false)
-        set_art_shown(art.innerTopLine, false)
-        set_art_shown(art.innerLeftLine, false)
-        set_art_shown(art.innerRightLine, false)
-        set_art_shown(art.innerBottomLine, false)
-    else
-        set_art_shown(art.topLine, true)
-        set_art_shown(art.bottomLine, true)
-        set_art_shown(art.leftLine, true)
-        set_art_shown(art.rightLine, true)
-        set_art_shown(art.innerTopLine, true)
-        set_art_shown(art.innerBottomLine, true)
-        set_art_shown(art.innerLeftLine, true)
-        set_art_shown(art.innerRightLine, true)
-    end
+    set_art_shown(art.topLine, showOuterTop)
+    set_art_shown(art.bottomLine, showOuterBottom)
+    set_art_shown(art.leftLine, showOuterLeft)
+    set_art_shown(art.rightLine, showOuterRight)
+    set_art_shown(art.innerTopLine, showInnerTop)
+    set_art_shown(art.innerBottomLine, showInnerBottom)
+    set_art_shown(art.innerLeftLine, showInnerLeft)
+    set_art_shown(art.innerRightLine, showInnerRight)
 end
 
 function mainFrameShell.ApplySurfaceVariant(frame, variant, colorOverride)
@@ -542,21 +788,31 @@ function mainFrameShell.ApplySurfaceVariant(frame, variant, colorOverride)
         and { unpack(colorOverride) }
         or theme_token_color(variantDefinition.colorToken, theme().colors.panel)
     local borderColor = theme_token_color(variantDefinition.borderToken, theme().colors.border)
+    local backdropColor = copy_color(baseColor)
+    local backdropBorderColor = copy_color(borderColor)
+
+    if TRANSPARENT_BACKDROP_VARIANTS[resolvedVariant] == true then
+        backdropColor[4] = 0
+    end
+
+    if BORDERLESS_VARIANTS[resolvedVariant] == true then
+        backdropBorderColor[4] = 0
+    end
 
     frame.gbmSurfaceVariant = resolvedVariant
-    frame.gbmBackdropBaseColor = baseColor
-    frame.gbmBorderColor = borderColor
+    frame.gbmBackdropBaseColor = backdropColor
+    frame.gbmBorderColor = backdropBorderColor
 
     if type(frame.SetBackdrop) == "function" then
         frame:SetBackdrop(backdrop)
     end
 
     if type(frame.SetBackdropColor) == "function" then
-        frame:SetBackdropColor(unpack(baseColor))
+        frame:SetBackdropColor(unpack(backdropColor))
     end
 
     if type(frame.SetBackdropBorderColor) == "function" then
-        frame:SetBackdropBorderColor(unpack(borderColor))
+        frame:SetBackdropBorderColor(unpack(backdropBorderColor))
     end
 
     apply_surface_art(frame, resolvedVariant, baseColor, borderColor)
@@ -619,6 +875,25 @@ function mainFrameShell.MakeLabel(parent, text, fontObject)
     return label
 end
 
+function mainFrameShell.MakeCheckbox(parent, text)
+    local checkbox = _G.CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    checkbox:SetSize(24, 24)
+    checkbox.labelText = checkbox.labelText or mainFrameShell.MakeLabel(parent, text or "", "GameFontHighlightSmall")
+    checkbox.labelText:SetPoint("LEFT", checkbox, "RIGHT", 6, 0)
+    checkbox.labelText:SetText(text or "")
+    if type(checkbox.SetChecked) ~= "function" then
+        function checkbox:SetChecked(value)
+            self.checked = value and true or false
+        end
+    end
+    if type(checkbox.GetChecked) ~= "function" then
+        function checkbox:GetChecked()
+            return self.checked == true
+        end
+    end
+    return checkbox
+end
+
 function mainFrameShell.MakeButton(parent, width, height, text)
     local button = _G.CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width, height)
@@ -632,6 +907,9 @@ function mainFrameShell.MakeButton(parent, width, height, text)
     end
     button.labelText:SetPoint("CENTER", button, "CENTER", 0, 0)
     button.labelText:SetText(text or "")
+    if type(button.labelText.SetWordWrap) == "function" then
+        button.labelText:SetWordWrap(false)
+    end
     return button
 end
 
@@ -644,55 +922,103 @@ function mainFrameShell.ApplyButtonVariant(button, variant, colorOverride)
     local definition = BUTTON_VARIANTS[resolvedVariant] or BUTTON_VARIANTS.secondary
     mainFrameShell.ApplySurfaceVariant(button, definition.surfaceVariant or "panel", colorOverride)
     button.gbmButtonVariant = resolvedVariant
+    button.gbmButtonFamily = nil
+    button.gbmTabStyle = nil
 
-    if type(button.SetBackdropBorderColor) == "function" and definition.borderToken then
+    if resolvedVariant == "tab" then
+        button.gbmTabStyle = "segmented-soft"
+    elseif resolvedVariant == "primary" or resolvedVariant == "secondary" or resolvedVariant == "danger" then
+        button.gbmButtonFamily = "action-slim"
+    elseif resolvedVariant == "nav" then
+        button.gbmButtonFamily = "nav-soft"
+    end
+
+    if type(button.SetBackdropBorderColor) == "function" and definition.borderToken and BORDERLESS_VARIANTS[definition.surfaceVariant or "panel"] ~= true then
         button:SetBackdropBorderColor(unpack(theme_token_color(definition.borderToken, theme().colors.border)))
     end
 
     local art = ensure_art_layers(button)
     if art then
         if resolvedVariant == "primary" then
-            set_texture_color(art.background, theme_token_color("button", theme().colors.panelAlt))
-            set_texture_color(art.innerFill, tint_color(theme_token_color("buttonHover", theme().colors.panelAlt), 0.92, 0.98))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.22), true)
-            mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.06), true)
+            set_texture_color(art.background, tint_color(theme_token_color("button", theme().colors.panelAlt), 0.90, 0.98))
+            set_texture_color(art.innerFill, tint_color(theme_token_color("buttonHover", theme().colors.panelAlt), 1.18, 0.99))
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.18), false)
+            mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.05), true)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
         elseif resolvedVariant == "secondary" then
-            set_texture_color(art.background, tint_color(theme_token_color("button", theme().colors.panel), 0.88, 0.98))
-            set_texture_color(art.innerFill, tint_color(theme_token_color("bgAlt", theme().colors.background), 1.0, 0.95))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.12), true)
-            mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.0), false)
+            set_texture_color(art.background, tint_color(theme_token_color("button", theme().colors.panel), 0.90, 0.98))
+            set_texture_color(art.innerFill, tint_color(theme_token_color("buttonHover", theme().colors.panelAlt), 1.18, 0.98))
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.10), false)
+            mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.02), true)
+            mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
+        elseif resolvedVariant == "select" then
+            set_texture_color(art.background, tint_color(theme_token_color("inputBg", theme().colors.background), 0.98, 0.99))
+            set_texture_color(art.innerFill, tint_color(theme_token_color("buttonHover", theme().colors.panelAlt), 1.10, 0.97))
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.08), false)
+            mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.03), true)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
         elseif resolvedVariant == "tab" then
             set_texture_color(art.background, tint_color(theme_token_color("panelAlt", theme().colors.panelAlt), 0.94, 0.98))
             set_texture_color(art.innerFill, tint_color(theme_token_color("bgAlt", theme().colors.background), 1.0, 0.96))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.18), true)
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.18), false)
             mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.04), true)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
         elseif resolvedVariant == "danger" then
             set_texture_color(art.background, tint_color(theme_token_color("danger", theme().colors.panelAlt), 0.45, 0.98))
             set_texture_color(art.innerFill, tint_color(theme_token_color("danger", theme().colors.panelAlt), 0.60, 0.94))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("danger", theme().colors.panelAlt), 0.22), true)
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("danger", theme().colors.panelAlt), 0.22), false)
             mainFrameShell.SetGlow(button, copy_color(theme_token_color("danger", theme().colors.panelAlt), 0.07), true)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("danger", theme().colors.panelAlt), 0), false)
         elseif resolvedVariant == "nav" then
             set_texture_color(art.background, tint_color(theme_token_color("panel", theme().colors.panel), 0.78, 0.96))
             set_texture_color(art.innerFill, tint_color(theme_token_color("bgAlt", theme().colors.background), 0.96, 0.90))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.08), true)
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.08), false)
             mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.0), false)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
         elseif resolvedVariant == "icon" then
             set_texture_color(art.background, tint_color(theme_token_color("panel", theme().colors.panel), 0.80, 0.96))
             set_texture_color(art.innerFill, tint_color(theme_token_color("bgAlt", theme().colors.background), 0.94, 0.90))
-            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.10), true)
+            mainFrameShell.SetHeaderBand(button, copy_color(theme_token_color("accentMuted", theme().colors.accent), 0.10), false)
             mainFrameShell.SetGlow(button, copy_color(theme_token_color("accent", theme().colors.accent), 0.02), true)
             mainFrameShell.SetAccentBar(button, copy_color(theme_token_color("accent", theme().colors.accent), 0), false)
         end
     end
 
+    button.dropdownGlyph = button.dropdownGlyph or mainFrameShell.MakeLabel(button, "v", "GameFontHighlightSmall")
+    if type(button.dropdownGlyph.ClearAllPoints) == "function" then
+        button.dropdownGlyph:ClearAllPoints()
+    end
+    button.dropdownGlyph:SetPoint("RIGHT", button, "RIGHT", -8, 0)
+
+    if resolvedVariant == "select" then
+        if button.labelText then
+            if type(button.labelText.ClearAllPoints) == "function" then
+                button.labelText:ClearAllPoints()
+            end
+            button.labelText:SetPoint("LEFT", button, "LEFT", 8, 0)
+            if type(button.labelText.SetJustifyH) == "function" then
+                button.labelText:SetJustifyH("LEFT")
+            end
+            if type(button.labelText.SetWidth) == "function" then
+                button.labelText:SetWidth(math.max(0, (button:GetWidth() or 0) - 28))
+            end
+        end
+        button.dropdownGlyph:SetText("v")
+        if type(button.dropdownGlyph.SetTextColor) == "function" then
+            button.dropdownGlyph:SetTextColor(unpack(theme_token_color("textMuted", theme().colors.textMuted)))
+        end
+        button.dropdownGlyph:Show()
+    elseif button.dropdownGlyph then
+        button.dropdownGlyph:Hide()
+    end
+
     if button.labelText and type(button.labelText.SetTextColor) == "function" then
         if resolvedVariant == "primary" then
             button.labelText:SetTextColor(unpack(theme_token_color("buttonText", theme().colors.accentStrong)))
+        elseif resolvedVariant == "secondary" then
+            button.labelText:SetTextColor(unpack(theme_token_color("buttonText", theme().colors.accentStrong)))
+        elseif resolvedVariant == "select" then
+            button.labelText:SetTextColor(unpack(theme_token_color("textStrong", theme().colors.accentStrong)))
         elseif resolvedVariant == "danger" then
             button.labelText:SetTextColor(unpack(theme_token_color("textStrong", theme().colors.accentStrong)))
         elseif resolvedVariant == "nav" then
@@ -749,7 +1075,7 @@ end
 function mainFrameShell.MakeInput(parent, width, height)
     local input = _G.CreateFrame("EditBox", nil, parent, "BackdropTemplate")
     input:SetSize(width, height)
-    mainFrameShell.ApplySurfaceVariant(input, "input", theme().colors.background)
+    mainFrameShell.ApplySurfaceVariant(input, "input")
     if type(input.SetAutoFocus) == "function" then
         input:SetAutoFocus(false)
     end
@@ -835,7 +1161,7 @@ local function create_virtualized_item_results_list(parent, options)
         end
 
         row.qualityIcon = row.qualityIcon or row:CreateTexture()
-        row.qualityIcon:SetPoint("LEFT", row, "LEFT", 6, 0)
+        row.qualityIcon:SetPoint("LEFT", row, "LEFT", 8, 0)
         if type(row.qualityIcon.SetWidth) == "function" then
             row.qualityIcon:SetWidth(16)
         end
@@ -844,10 +1170,25 @@ local function create_virtualized_item_results_list(parent, options)
         end
         row.qualityIcon:Hide()
 
+        row.tierText = row.tierText or mainFrameShell.MakeLabel(row, "", "GameFontHighlightSmall")
+        row.tierText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
+        if type(row.tierText.SetWidth) == "function" then
+            row.tierText:SetWidth(28)
+        end
+        if type(row.tierText.SetJustifyH) == "function" then
+            row.tierText:SetJustifyH("LEFT")
+        end
+
         row.itemText = row.itemText or mainFrameShell.MakeLabel(row, "", "GameFontHighlightSmall")
-        row.itemText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
+        row.itemText:SetPoint("LEFT", row.tierText, "RIGHT", 6, 0)
         if type(row.itemText.SetWidth) == "function" then
-            row.itemText:SetWidth(math.max(0, self.width - 36))
+            row.itemText:SetWidth(math.max(0, self.width - 66))
+        end
+        if type(row.itemText.SetJustifyH) == "function" then
+            row.itemText:SetJustifyH("LEFT")
+        end
+        if type(row.itemText.SetJustifyV) == "function" then
+            row.itemText:SetJustifyV("MIDDLE")
         end
 
         row:SetScript("OnClick", function(button)
@@ -899,6 +1240,21 @@ local function create_virtualized_item_results_list(parent, options)
             row.elementData = elementData
             row.resolvedItem = elementData
             row.itemText:SetText(self.formatLabel(elementData))
+
+            local craftedTier = tonumber((elementData or {}).craftedQuality)
+            if craftedTier and craftedTier > 0 then
+                row.tierText:SetText(string.format("[T%d]", craftedTier))
+                if type(row.itemText.ClearAllPoints) == "function" then
+                    row.itemText:ClearAllPoints()
+                end
+                row.itemText:SetPoint("LEFT", row.tierText, "RIGHT", 6, 0)
+            else
+                row.tierText:SetText("")
+                if type(row.itemText.ClearAllPoints) == "function" then
+                    row.itemText:ClearAllPoints()
+                end
+                row.itemText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
+            end
 
             local atlas = tostring((elementData or {}).craftedQualityIcon or "")
             local displayAtlas = type(craftedQuality.NormalizeDisplayAtlas) == "function" and craftedQuality.NormalizeDisplayAtlas(atlas) or atlas
@@ -1015,10 +1371,6 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
     local function match_label(item)
         local name = tostring((item or {}).name or (item or {}).itemName or "")
         local itemID = tostring((item or {}).itemID or "")
-        local craftedQuality = tonumber((item or {}).craftedQuality)
-        if craftedQuality and craftedQuality > 0 then
-            return string.format("[T%d] %s (%s)", craftedQuality, name, itemID)
-        end
         return string.format("%s (%s)", name, itemID)
     end
 
@@ -1778,25 +2130,30 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame.navItems = mainFrame.navItems or {
         { key = "DASHBOARD", label = "Dashboard" },
         { key = "INVENTORY", label = "Inventory" },
-        { key = "HISTORY", label = "History" },
         { key = "MINIMUMS", label = "Minimums" },
-        { key = "REQUESTS", label = "Request Admin" },
+        { key = "REQUESTS", label = "Requests" },
         { key = "EXPORTS", label = "Exports" },
-        { key = "ABOUT", label = "About" },
+        { key = "HISTORY", label = "History" },
+        { key = "BANK_LEDGER", label = "Bank Ledger" },
         { key = "OPTIONS", label = "Options" },
+        { key = "ABOUT", label = "About" },
     }
     mainFrame.viewDescriptions = mainFrame.viewDescriptions or {
         DASHBOARD = "Critical shortages, pending requests, and export readiness.",
         INVENTORY = "Search the latest bank snapshot and inspect current counts.",
-        HISTORY = "Review procurement audit events with explicit timestamps and before/after values.",
         MINIMUMS = "Manage Guild Bank Item Minimum Stock Levels",
         REQUESTS = "Review and manage guild member requests.",
         EXPORTS = "Prepare Auctionator and spreadsheet-ready purchase output.",
-        ABOUT = "Reference addon ownership, guild identity, runtime build info, and support notes.",
+        HISTORY = "Review procurement audit events with explicit timestamps and before or after values.",
+        BANK_LEDGER = "Review guild bank ledger history and future ledger reporting in one place.",
         OPTIONS = "Adjust shell behavior like transparency without cluttering the main toolbar.",
+        ABOUT = "Reference addon ownership, guild identity, runtime build info, and support notes.",
     }
 
     mainFrame.sidebar = mainFrame.sidebar or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
+    mainFrame.sidebarNavStyle = "sidebar-soft-row"
+    mainFrame.headerStyle = "toolbar-band"
+    mainFrame.contentSectionStyle = "flat-band"
     mainFrame.sidebar:SetPoint("TOPLEFT", mainFrame, "TOPLEFT", 0, 0)
     mainFrame.sidebar:SetPoint("BOTTOMLEFT", mainFrame, "BOTTOMLEFT", 0, 0)
     mainFrame.sidebar:SetWidth(currentTheme.spacing.sidebarExpanded)
@@ -1806,12 +2163,12 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame.topBar:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPRIGHT", 0, 0)
     mainFrame.topBar:SetPoint("TOPRIGHT", mainFrame, "TOPRIGHT", 0, 0)
     mainFrame.topBar:SetHeight(currentTheme.spacing.topBarHeight)
-    mainFrameShell.ApplySurfaceVariant(mainFrame.topBar, "header", currentTheme.colors.panelAlt)
+    mainFrameShell.ApplySurfaceVariant(mainFrame.topBar, "header-toolbar", currentTheme.colors.panelAlt)
 
     mainFrame.content = mainFrame.content or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")
     mainFrame.content:SetPoint("TOPLEFT", mainFrame.topBar, "BOTTOMLEFT", 0, 0)
     mainFrame.content:SetPoint("BOTTOMRIGHT", mainFrame, "BOTTOMRIGHT", 0, 0)
-    mainFrameShell.ApplySurfaceVariant(mainFrame.content, "panel", currentTheme.colors.background)
+    mainFrameShell.ApplySurfaceVariant(mainFrame.content, "content-band", currentTheme.colors.background)
 
     mainFrame.titleText = mainFrame.titleText or mainFrameShell.MakeLabel(mainFrame.topBar, "Guild Bank Manager", "GameFontHighlightLarge")
     if type(mainFrame.titleText.ClearAllPoints) == "function" then
@@ -1840,16 +2197,6 @@ function mainFrameShell.EnsureShell(mainFrame)
         end
     end)
 
-    mainFrame.sidebarCrestTexture = mainFrame.sidebarCrestTexture or mainFrame.sidebar:CreateTexture()
-    mainFrame.sidebarCrestTexture:SetPoint("TOPLEFT", mainFrame.sidebar, "TOPLEFT", 16, -12)
-    if type(mainFrame.sidebarCrestTexture.SetSize) == "function" then
-        mainFrame.sidebarCrestTexture:SetSize(24, 24)
-    end
-    if type(mainFrame.sidebarCrestTexture.SetTexture) == "function" then
-        mainFrame.sidebarCrestTexture:SetTexture("Interface\\ICONS\\INV_Misc_Map_01")
-    end
-    mainFrame.sidebarCrestTexture.texture = "Interface\\ICONS\\INV_Misc_Map_01"
-
     mainFrame.scanButton = mainFrame.scanButton or mainFrameShell.MakeButton(mainFrame.topBar, 120, 28, "Scan Bank")
     mainFrame.scanButton:SetPoint("TOP", mainFrame.topBar, "TOP", 0, -16)
     mainFrameShell.ApplyButtonVariant(mainFrame.scanButton, "primary")
@@ -1863,8 +2210,26 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame.sidebarIdentityPanel = mainFrame.sidebarIdentityPanel or _G.CreateFrame("Frame", nil, mainFrame.sidebar, "BackdropTemplate")
     mainFrame.sidebarIdentityPanel:SetPoint("LEFT", mainFrame.sidebar, "LEFT", 16, 0)
     mainFrame.sidebarIdentityPanel:SetPoint("RIGHT", mainFrame.sidebar, "RIGHT", -16, 0)
-    mainFrame.sidebarIdentityPanel:SetHeight(76)
-    mainFrameShell.ApplySurfaceVariant(mainFrame.sidebarIdentityPanel, "panel-alt")
+    mainFrame.sidebarIdentityPanel:SetHeight(144)
+    mainFrameShell.ApplySurfaceVariant(mainFrame.sidebarIdentityPanel, "panel-flat")
+
+    if not mainFrame.sidebarCrestTexture or type(mainFrame.sidebarCrestTexture.GetParent) ~= "function"
+        or mainFrame.sidebarCrestTexture:GetParent() ~= mainFrame.sidebarIdentityPanel then
+        mainFrame.sidebarCrestTexture = mainFrame.sidebarIdentityPanel:CreateTexture()
+    end
+    if type(mainFrame.sidebarCrestTexture.SetDrawLayer) == "function" then
+        mainFrame.sidebarCrestTexture:SetDrawLayer("ARTWORK", 2)
+    end
+    if type(mainFrame.sidebarCrestTexture.SetSize) == "function" then
+        mainFrame.sidebarCrestTexture:SetSize(128, 128)
+    end
+    if type(mainFrame.sidebarCrestTexture.SetTexture) == "function" then
+        mainFrame.sidebarCrestTexture:SetTexture(mainFrameShell.GetThemeLogoTexture((theme().themePreset or "generic_wow")))
+    end
+    if type(mainFrame.sidebarCrestTexture.SetTexCoord) == "function" then
+        mainFrame.sidebarCrestTexture:SetTexCoord(unpack(mainFrameShell.GetThemeLogoTexCoord((theme().themePreset or "generic_wow"))))
+    end
+    mainFrame.sidebarCrestTexture.texture = mainFrameShell.GetThemeLogoTexture((theme().themePreset or "generic_wow"))
 
     mainFrame.sidebarIdentityNameText = mainFrame.sidebarIdentityNameText or mainFrameShell.MakeLabel(mainFrame.sidebarIdentityPanel, "", "GameFontNormal")
     mainFrame.sidebarIdentityNameText:SetPoint("TOPLEFT", mainFrame.sidebarIdentityPanel, "TOPLEFT", 12, -12)
@@ -1886,6 +2251,7 @@ function mainFrameShell.EnsureShell(mainFrame)
     end
 
     mainFrame:RefreshSidebarIdentity()
+    mainFrame.sidebarCrestTexture:SetPoint("CENTER", mainFrame.sidebarIdentityPanel, "CENTER", 0, 0)
 
     return mainFrame
 end

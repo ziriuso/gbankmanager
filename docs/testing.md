@@ -32,7 +32,8 @@
   - migration/default-shape coverage, including the persisted live-smoke result container
 - `ui`
   - shell layout, shared table behavior, requests, exports, minimums, and options/auth ownership specs
-  - focused regression checks for shared scrollbars, request-only layout, options auth state, bundled indexed item-search behavior, the Minimums modal handoff from search into details, staged-row grouping, dashboard card or panel composition, shared visible crafted-tier symbols, slider drag-release behavior, shell surface variants, sidebar identity footer behavior, and tabbed Options navigation
+  - focused regression checks for shared scrollbars, request-only layout, options auth state, bundled indexed item-search behavior, the Minimums modal handoff from search into details, staged-row grouping, dashboard card or panel composition, shared visible crafted-tier symbols, slider drag-release behavior, shell surface variants, sidebar crest-footer behavior, and tabbed Options navigation
+  - shell-polish contracts for softer nav metadata, toolbar-band header state, timezone-bearing last-scan rendering, flatter dashboard/table surface variants, slimmer action-family routing, segmented-tab metadata, cleaner floating-sheet modal variants, dense-clean spacing, stronger neutral action contrast, higher-contrast select/dropdown triggers, wrapped dashboard quick-action labels, and the dedicated `Stock Settings` tab
 - `integration`
   - TOC order and duplicate-load protection
   - shared namespace/module registration after bootstrap
@@ -47,21 +48,24 @@
   - seeds its own request-access auth shape and clears stale request/minimum selector state first, so prior live guild policy or leftover UI state does not create false failures
   - confirms shell open/close, options scroll wiring, opacity controls, request-only vs full-shell access, current Minimums modal staging/save, and scan gating
   - confirms appearance sliders support both direct slider interaction and plus/minus stepping
-  - confirms local appearance controls cover the token-backed theme presets (`Generic WoW`, `High Contrast`, `Alliance`, `Horde`, `Nature`, `Void`), a single linked `UI Scale` slider with a 90%-120% range, shell opacity, modal opacity, active-nav glow, and collapsed-nav icons
+  - confirms the shell-polish pass keeps header scan metadata readable with timezone abbreviation, preserves structured tables under flatter content sections, and keeps modal content readable while floating-sheet surfaces update
+  - confirms local appearance controls cover the token-backed theme presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), a single linked `UI Scale` slider with a 90%-120% range, shell opacity, modal opacity, active-nav glow, collapsed-nav icons, and the minimap-button toggle
   - confirms the shell yields behind other dragged UI until clicked back to the front again
   - confirms the manual shopping list can stay open across tab switches or shell close, remembers its moved position, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot
   - auth policy publishing is manual in Retail: use `Save`, use `Select All` or mouse selection on the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
   - blacklist membership is no longer stored in Guild Info: edit a guild member's officer note manually, add or remove `[GBMBL]`, then confirm `Options -> Blacklist` can refresh the read-only parsed roster view
+  - the themed crest art should swap when theme presets change, and the minimap button should appear or disappear immediately when the appearance toggle changes
   - item search should use the required bundled `GBankManager_ItemData` payload; if that payload is unavailable, the search UI should report the unavailable state clearly instead of showing misleading sparse local-only name results
   - Minimums should open a centered details modal after a confirmed add-search selection instead of dropping the user into the old footer editor flow
   - Inventory and Minimums should share the same table layout, and Minimums should use a compact transparent action strip instead of the old boxed footer search/editor panel
   - Minimums draft rows should clearly show green `added`, yellow `changed`, and red `deleted` state before `Save All`
   - Minimums should backfill crafted tier from the bundled catalog when snapshot or scan data omits `craftedQuality` and `craftedQualityIcon`
-  - `/gbm request` should show the compact request window with the addon title, an own-request status table, row-click details, and the four-step `New Request` wizard with progress rail, preview card, quantity steppers, and explicit bank-tab selection
-  - `Request Admin` should use details-modal workflow actions only, with the bottom `All` / `Pending Approval` / `Pending Fulfillment` / `Completed` filter strip, a `Refresh` button beside `Add Request`, and no top workflow action box.
+  - `/gbm request` should show the compact request window with the addon title, an own-request status table, row-click details, and the three-step `New Request` wizard with progress rail, preview card, quantity steppers, and explicit quantity/reason labeling
+  - `Requests` should use details-modal workflow actions only, with the bottom `All` / `Pending Approval` / `Pending Fulfillment` / `Completed` filter strip, a `Refresh` button beside `Add Request`, and no top workflow action box.
   - Approved open requests should be auto-marked fulfilled by a guild-bank scan once scanned inventory meets the requested quantity, and fulfilled requests should retain Date Fulfilled.
   - Exports should show four export action cards, visible-table CSV output, Auctionator and TSM all-vs-missing modal choices, and a stocked-elsewhere tab/quantity detail modal.
   - Dashboard should show four metric cards plus `Top 5 Most Used`, `Recent Activity`, and `Quick Actions`
+  - `Options -> Stock Settings` should let you change both `Restock Default` and the `Critical Shortage Threshold`, and the dashboard card should update its critical count using that percentage rule
   - sync should report milestone chat feedback for login hello, accepted incoming updates, and rejected forged sync payloads without turning the chat frame into a step-by-step spam log
   - dashboard `Top 5 Most Used` should rank repeated shortage cycles from stocking history above one-off raw withdrawal spikes when minimum-backed history exists
 - `in-game unit`
@@ -91,6 +95,7 @@
 6. Do a short visual spot-check only where automation cannot prove correctness.
 7. During live Minimums and Requests search checks, confirm known query families such as `flask of`, `flask of the sha`, `flask sun`, and `thalassian phoenix oil` return the expected bundled result families and crafted-tier splits.
 8. During live Minimums editing checks, confirm add flow moves from the search modal into the centered details modal, existing rows open the same modal, and draft row colors match add/edit/remove state before `Save All`.
+9. During live shell-polish checks, confirm action buttons and dropdown triggers stand out from the screen surfaces instead of blending into them, and confirm longer dashboard quick-action labels wrap cleanly without clipping.
 
 ## Next Test Priorities
 
@@ -112,7 +117,7 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums uses shared table filters, hides the old bottom search, and keeps only the compact three-button action strip below the table.
 - `tests/spec/ui_minimums_spec.lua` verifies existing saved minimum rows auto-populate Bank Tab as a read-only value, including legacy saved rows that need the tab inferred from the table row.
 - `tests/spec/ui_requests_spec.lua` verifies the full-shell `Request Admin` surface has no inline creation panel or top workflow action box, uses shared table filters, includes date requested plus date fulfilled, exposes the bottom `All` / `Pending Approval` / `Pending Fulfillment` / `Completed` filter strip, and keeps `Add Request` plus `Refresh` on the left edge.
-- `tests/spec/ui_requests_spec.lua` also verifies request-only mode uses the smaller titled request window, own-request status columns, row-click details, and the item -> quantity/reason -> bank-tab -> review request wizard, including progress-rail state, preview visibility, and quantity steppers.
+- `tests/spec/ui_requests_spec.lua` also verifies request-only mode uses the smaller titled request window, own-request status columns, row-click details, and the item -> quantity/reason -> review request wizard, including progress-rail state, preview visibility, and quantity steppers.
 - `tests/spec/ui_requests_spec.lua` verifies request details align values to fixed modal columns, labels the Decision Note input, keeps details open after approval, prompts approvers for Bank Tab, and saves approval-created Minimums rules.
 - `tests/spec/ui_requests_spec.lua` also verifies request modals block table click-through, request details use fixed label/value rows, show Requested By above Date Requested, show Updated By and Date Updated near the bottom with Decision Note, hide the decision-note editor after approval or denial, and align workflow buttons with Close.
 - `tests/spec/requests_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/auth_source_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_requests_spec.lua` verify the new request-delete permission, stored delete action, delete sync handling, and the request-details `Delete` workflow path.
@@ -125,6 +130,7 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/ui_requests_spec.lua` verifies Request Admin active-filter styling, the far-left `Add Request` plus `Refresh` actions, right-aligned bottom filters, the `Completed` filter, and shared-height table sizing.
 - `tests/spec/ui_dashboard_spec.lua` verifies the modernized dashboard layout with four metric cards, `Top 5 Most Used`, `Recent Activity`, and `Quick Actions`.
 - `tests/spec/ui_dashboard_spec.lua` now also verifies metric-card icon slots so the dashboard fidelity pass keeps visual anchors on each card.
+- `tests/spec/ui_dashboard_spec.lua` also verifies `Critical Shortages` now honors the configurable threshold percentage from `Options -> Stock Settings`.
 - `tests/spec/ui_minimums_spec.lua` verifies staged Minimums rows group at the top, expose `ADD` / `EDIT` / `DELETE` badges, and reveal staged-summary plus `Revert All` footer affordances only while drafts exist.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums now uses separate `Enabled Only` and `Show All` buttons with active-state highlighting.
 - `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History newest-first, and the Blacklist tab explains the shared `[GBMBL]` officer-note contract.
@@ -138,12 +144,16 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/dashboard_spec.lua` verifies the dashboard ignores zero-shortage demand rows for `Ready to Buy` counting and now ranks the `Top 5 Most Used` card by repeated stocking-history shortage cycles before falling back to raw withdrawal totals.
 - `tests/spec/ui_shell_spec.lua` verifies the shell opts into top-level ordering, raises on click, and keeps registered modals layered above the shell when focus changes.
 - `tests/spec/ui_shell_spec.lua`, `tests/spec/ui_table_spec.lua`, `tests/spec/ui_requests_spec.lua`, and `tests/spec/ui_options_spec.lua` verify the shell now defaults below higher-priority dialogs, hides zero-range shared scrollbars, preloads auth policy from Guild Info on options open, applies shell and modal opacity to backdrop or art layers without dimming content, keeps scaled table layouts inside the shell viewport, keeps top-bar scan plus status controls from overlapping when scaled, uses built-in WoW `UISliderTemplate` appearance controls, and lets appearance sliders release cleanly even when the mouse-up happens off the bar.
-- `tests/spec/ui_shell_spec.lua` and `tests/spec/ui_options_spec.lua` also verify the newer art-layer shell contract: reusable frame background textures, nav accent bars, header-band card treatment, sidebar identity/footer behavior, late guild-name refresh behavior, and the six-tab Options shell contract.
+- `tests/spec/ui_dashboard_spec.lua`, `tests/spec/ui_requests_spec.lua`, `tests/spec/ui_options_spec.lua`, `tests/spec/ui_exports_spec.lua`, and `tests/spec/ui_minimums_spec.lua` also verify the current contrast pass: dashboard quick actions now get room to wrap labels, footer/action-strip buttons contrast from their parent surfaces, export CTAs share one primary treatment, and request/minimums/options dropdown triggers use the dedicated select control styling.
+- `tests/spec/ui_shell_spec.lua` and `tests/spec/ui_options_spec.lua` also verify the newer art-layer shell contract: reusable frame background textures, nav accent bars, flatter toolbar or content chrome with fewer framed edges, reduced reliance on full backdrop borders for flat shell surfaces, short timezone abbreviations in the top header, sidebar crest-footer behavior, minimap-button toggling, and the seven-tab Options shell contract including `Stock Settings`.
 - `tests/spec/ui_about_spec.lua` verifies the dedicated branded About panel, crest/icon slot, identity copy, slash-command hint, and removal of the old generic body-text fallback.
-- `tests/spec/ui_table_spec.lua` now also verifies dedicated table header/filter/viewport surface variants plus semantic alternating row-token styling.
+- `tests/spec/ui_table_spec.lua` now also verifies dedicated table header/filter/viewport surface variants, stronger semantic alternating row-token styling, row separators without boxed side edges, and higher-contrast filter inputs that sit forward from the darker filter band.
+- `tests/spec/ui_table_spec.lua` also verifies shared table filters keep visible spacing between adjacent search boxes instead of rendering as one continuous hard-edged strip.
+- `tests/spec/history_spec.lua` and `tests/spec/ui_history_spec.lua` verify History stays newest-first, removes visible `Old Value` plus `New Value` grid columns, and exposes those values through a row-click `History Details` modal instead.
 - `tests/spec/ui_requests_spec.lua` and `tests/spec/ui_minimums_spec.lua` now also verify the shared button-variant contracts for request admin filters, request wizard CTAs, destructive request actions, and Minimums modal actions.
 - `tests/spec/ui_exports_spec.lua` verifies the floating manual shopping list stays independent from the main shell, remembers its saved position, and keeps normalized low-tier crafted icons in fallback rows.
 - `tests/spec/ui_exports_spec.lua` now also verifies export action-card icon slots plus the `Generate` / `Open List` CTA labels used by the modernized cards.
+- `tests/spec/ui_exports_spec.lua` also verifies the cleaner export-card spacing and the removal of the ghost container behind the action-card row.
 - `tests/spec/test_runner_spec.lua` verifies the local Lua test runner emits progress before and after each spec.
 - `tests/spec/in_game_unit_spec.lua` verifies `/gbm test unit` availability, persistence, chat output, and the broadened deterministic in-client unit checks.
 - `tests/spec/item_catalog_maintainer_spec.lua` verifies the maintainer status adapter and deployment helper for resolved target paths, saved sync-state reporting, and copying both addon folders into `Interface\AddOns`.

@@ -12,6 +12,16 @@ local fixture = require("tests.helpers.ui_fixture")
 local env = fixture.load()
 local mainFrame = env.mainFrame
 
+local function color_distance(left, right)
+    left = left or {}
+    right = right or {}
+    local total = 0
+    for index = 1, 3 do
+        total = total + math.abs((left[index] or 0) - (right[index] or 0))
+    end
+    return total
+end
+
 _G.GBankManagerDB = {
     currentSnapshotId = "exports-modal",
     snapshots = {
@@ -48,19 +58,32 @@ env.ns.state.db = _G.GBankManagerDB
 mainFrame:SelectView("EXPORTS")
 assert.truthy(mainFrame.exportsPanel:IsShown(), "exports should expose a bottom action strip")
 assert.same(mainFrame.tableViewportFrame, (mainFrame.exportsPanel.points[1] or {})[2], "exports buttons should sit below the table viewport")
+assert.equal(nil, mainFrame.exportsPanel.backdrop, "exports should remove the ghost container box behind the action cards")
 assert.equal(4, #(mainFrame.exportActionCards or {}), "exports should present four action cards for the supported export targets")
-assert.equal("Auctionator", ((mainFrame.exportActionCards or {})[1] or {}).titleText:GetText(), "exports should title the first action card for Auctionator")
-assert.equal("TSM", ((mainFrame.exportActionCards or {})[2] or {}).titleText:GetText(), "exports should title the second action card for TSM")
-assert.equal("CSV Spreadsheet", ((mainFrame.exportActionCards or {})[3] or {}).titleText:GetText(), "exports should title the third action card for CSV")
-assert.equal("Manual Shopping List", ((mainFrame.exportActionCards or {})[4] or {}).titleText:GetText(), "exports should title the fourth action card for the manual list")
+assert.equal("Auctionator*", ((mainFrame.exportActionCards or {})[1] or {}).titleText:GetText(), "exports should title the first action card for Auctionator with the quantity footnote marker")
+assert.equal("TSM*", ((mainFrame.exportActionCards or {})[2] or {}).titleText:GetText(), "exports should title the second action card for TSM with the quantity footnote marker")
+assert.equal("CSV", ((mainFrame.exportActionCards or {})[3] or {}).titleText:GetText(), "exports should title the third action card for CSV")
+assert.equal("Shopping List", ((mainFrame.exportActionCards or {})[4] or {}).titleText:GetText(), "exports should title the fourth action card for the shopping list helper")
 assert.truthy(type(((mainFrame.exportActionCards or {})[1] or {}).iconTexture) == "table", "exports action cards should expose an icon texture")
 assert.truthy((((mainFrame.exportActionCards or {})[1] or {}).iconTexture or {}).texture ~= nil, "exports action cards should assign a real icon texture")
-assert.truthy(string.find((((mainFrame.exportActionCards or {})[1] or {}).descriptionText or {}):GetText() or "", "Auctionator", 1, true) ~= nil, "exports should explain what the Auctionator card generates")
-assert.truthy(string.find((((mainFrame.exportActionCards or {})[4] or {}).descriptionText or {}):GetText() or "", "manual", 1, true) ~= nil, "exports should explain that the manual card opens a checklist helper")
+assert.equal("Generate Auctionator Shopping List.", (((mainFrame.exportActionCards or {})[1] or {}).descriptionText or {}):GetText(), "exports should explain what the Auctionator card generates")
+assert.equal("Export Group for TradeSkillMaster.", (((mainFrame.exportActionCards or {})[2] or {}).descriptionText or {}):GetText(), "exports should explain what the TSM card generates")
+assert.equal("Export to CSV.", (((mainFrame.exportActionCards or {})[3] or {}).descriptionText or {}):GetText(), "exports should explain the CSV card concisely")
+assert.truthy(string.find((((mainFrame.exportActionCards or {})[4] or {}).descriptionText or {}):GetText() or "", "checklist", 1, true) ~= nil, "exports should explain that the shopping-list card opens a checklist helper")
+assert.equal("* Does not provide Quantity in Export.", (mainFrame.exportsFootnoteText or {}):GetText(), "exports should show a shared footnote for Auctionator and TSM quantity limits")
 assert.equal("Generate", mainFrame.exportPresetAuctionatorButton.labelText:GetText(), "exports should use a Generate action label on the Auctionator card")
 assert.equal("Generate", mainFrame.exportPresetTsmButton.labelText:GetText(), "exports should use a Generate action label on the TSM card")
 assert.equal("Generate", mainFrame.exportPresetSpreadsheetButton.labelText:GetText(), "exports should use a Generate action label on the CSV card")
 assert.equal("Open List", mainFrame.exportManualShoppingListButton.labelText:GetText(), "exports should use an Open List action label on the manual card")
+assert.equal("primary", mainFrame.exportPresetAuctionatorButton.gbmButtonVariant, "exports should keep Auctionator CTA styling consistent with the other action cards")
+assert.equal("primary", mainFrame.exportPresetTsmButton.gbmButtonVariant, "exports should keep TSM CTA styling consistent with the other action cards")
+assert.equal("primary", mainFrame.exportPresetSpreadsheetButton.gbmButtonVariant, "exports should keep CSV CTA styling consistent with the other action cards")
+assert.equal("primary", mainFrame.exportManualShoppingListButton.gbmButtonVariant, "exports should keep the manual shopping-list CTA styling consistent with the other action cards")
+assert.truthy(color_distance(((mainFrame.exportPresetAuctionatorButton.gbmArt or {}).innerFill or {}).color, ((mainFrame.exportActionCards[1].gbmArt or {}).innerFill or {}).color) >= 0.10, "exports CTAs should contrast from the export action cards")
+assert.truthy(((mainFrame.exportActionCards[2].points[1] or {})[4] or 0) >= 16, "exports action cards should leave a little more spacing between cards")
+assert.truthy((mainFrame.exportActionCards[1].descriptionText.width or 0) <= 144, "exports card descriptions should keep a narrower wrap width to avoid crowding the CTA")
+assert.truthy((mainFrame.exportPresetAuctionatorButton.points[1] or {})[5] >= 16, "exports CTAs should sit a little higher within the cards for cleaner spacing")
+assert.truthy((mainFrame.exportsFootnoteText.points[1] or {})[2] == mainFrame.exportsPanel, "exports should anchor the quantity footnote inside the transparent action area")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "exports table should start with Item ID")
 assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "exports table should label the crafted-quality column as Tier")
 assert.equal("Item Name", mainFrame.tableHeaderLabels[3]:GetText(), "exports table should show Item Name")
@@ -76,11 +99,13 @@ assert.truthy(not mainFrame.exportPresetCustomButton:IsShown(), "exports should 
 assert.truthy(mainFrame.exportPresetTsmButton:IsShown(), "exports should expose a TSM item-id import option when supported")
 mainFrame:OpenExportStockedElsewhereModal(mainFrame.tableRowsData[1])
 assert.truthy(mainFrame.exportStockedElsewhereModal:IsShown(), "clicking stocked elsewhere should open the tab quantity modal")
+assert.equal("modal-sheet", mainFrame.exportStockedElsewhereModal.gbmSurfaceVariant, "stocked elsewhere details should use the cleaner floating-sheet modal surface")
 assert.truthy(string.find(mainFrame.exportStockedElsewhereText:GetText() or "", "Freebiez: 10", 1, true) ~= nil, "stocked elsewhere modal should list other tabs and quantities")
 mainFrame.exportStockedElsewhereCloseButton:GetScript("OnClick")(mainFrame.exportStockedElsewhereCloseButton)
 
 mainFrame.exportPresetAuctionatorButton:GetScript("OnClick")(mainFrame.exportPresetAuctionatorButton)
 assert.truthy(mainFrame.exportModal:IsShown(), "auctionator export should open a modal")
+assert.equal("modal-sheet", mainFrame.exportModal.gbmSurfaceVariant, "exports should use the cleaner floating-sheet modal surface")
 assert.truthy(mainFrame.exportModalBuyAllButton:IsShown(), "auctionator export should ask whether to buy all")
 assert.truthy(mainFrame.exportModalMissingOnlyButton:IsShown(), "auctionator export should offer skipping items available in another tab")
 assert.equal("Not In Guild Bank", mainFrame.exportModalMissingOnlyButton.labelText:GetText(), "auctionator export should label the missing-only path the same way as the exports table")

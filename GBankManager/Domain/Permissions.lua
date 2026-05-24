@@ -199,6 +199,7 @@ function permissions.CreateDefaultPolicy()
         updatedByHash = nil,
         updatedByRankIndex = nil,
         restockDefault = nil,
+        criticalThresholdPercent = 50,
         guildPolicyString = "",
         guildPolicySource = "local",
         rankMetadata = {},
@@ -221,6 +222,7 @@ function permissions.NormalizePolicy(policy, liveRankMetadata)
     normalized.updatedByHash = normalized.updatedByHash or defaults.updatedByHash
     normalized.updatedByRankIndex = normalized.updatedByRankIndex
     normalized.restockDefault = normalized.restockDefault ~= nil and (tonumber(normalized.restockDefault) or nil) or defaults.restockDefault
+    normalized.criticalThresholdPercent = math.max(0, math.min(100, tonumber(normalized.criticalThresholdPercent or defaults.criticalThresholdPercent) or defaults.criticalThresholdPercent))
     normalized.guildPolicyString = normalized.guildPolicyString or defaults.guildPolicyString
     normalized.guildPolicySource = normalized.guildPolicySource or defaults.guildPolicySource
     normalized.rankMetadata = ensure_table(normalized.rankMetadata)

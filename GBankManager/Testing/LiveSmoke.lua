@@ -278,18 +278,39 @@ local function run_opacity_controls(mainFrame)
         return smoke_result("opacity_controls", false, "shell or modal opacity controls were not fully wired")
     end
 
-    local baselineShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
-    local baselineModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
+    local function surface_alpha(frame)
+        frame = frame or {}
+        local backdropAlpha = (((frame.backdropColor or {})[4]) or nil)
+        if backdropAlpha ~= nil and backdropAlpha > 0 then
+            return backdropAlpha
+        end
+
+        local art = frame.gbmArt or {}
+        local innerFillAlpha = (((art.innerFill or {}).color or {})[4]) or nil
+        if innerFillAlpha ~= nil then
+            return innerFillAlpha
+        end
+
+        local backgroundAlpha = (((art.background or {}).color or {})[4]) or nil
+        if backgroundAlpha ~= nil then
+            return backgroundAlpha
+        end
+
+        return 1
+    end
+
+    local baselineShellAlpha = surface_alpha(mainFrame.content)
+    local baselineModalAlpha = mainFrame.requestDetailsModal and surface_alpha(mainFrame.requestDetailsModal) or 1
 
     shellDecrease(mainFrame.optionsShellOpacityDecreaseButton)
-    local loweredShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
+    local loweredShellAlpha = surface_alpha(mainFrame.content)
     shellIncrease(mainFrame.optionsShellOpacityIncreaseButton)
-    local restoredShellAlpha = (((mainFrame.content or {}).backdropColor or {})[4] or 1)
+    local restoredShellAlpha = surface_alpha(mainFrame.content)
 
     modalDecrease(mainFrame.optionsModalOpacityDecreaseButton)
-    local loweredModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
+    local loweredModalAlpha = mainFrame.requestDetailsModal and surface_alpha(mainFrame.requestDetailsModal) or 1
     modalIncrease(mainFrame.optionsModalOpacityIncreaseButton)
-    local restoredModalAlpha = mainFrame.requestDetailsModal and ((((mainFrame.requestDetailsModal or {}).backdropColor or {})[4]) or 1) or 1
+    local restoredModalAlpha = mainFrame.requestDetailsModal and surface_alpha(mainFrame.requestDetailsModal) or 1
 
     if loweredShellAlpha >= baselineShellAlpha then
         return smoke_result("opacity_controls", false, "shell opacity decrement did not lower shell alpha")

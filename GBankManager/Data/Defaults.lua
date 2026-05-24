@@ -72,9 +72,12 @@ function defaults.CreateDatabase(guildName)
                 tableDensity = 1,
                 shellOpacity = 0.96,
                 modalOpacity = 1,
+                showMinimapButton = true,
+                minimapAngle = 315,
             },
             minimumSettings = {
                 defaultQuantity = 100,
+                criticalThresholdPercent = 50,
             },
             minimumItemCatalog = {},
             exportSettings = {
