@@ -103,20 +103,18 @@ assert.equal("panel-flat", mainFrame.dashboardQuickActionsPanel.gbmSurfaceVarian
 assert.equal("Top 10 Most Used", mainFrame.dashboardTopItemsTitle:GetText(), "dashboard top-items panel should now expose the top ten usage title")
 assert.equal("Recent Activity", mainFrame.dashboardRecentActivityTitle:GetText(), "dashboard should title the recent-activity panel")
 assert.equal("Quick Actions", mainFrame.dashboardQuickActionsTitle:GetText(), "dashboard should title the quick-actions row")
-assert.equal(5, #(mainFrame.dashboardQuickActionButtons or {}), "dashboard should expose five quick actions")
-assert.equal("Scan Bank", ((mainFrame.dashboardQuickActionButtons or {})[1] or {}).labelText:GetText(), "dashboard quick actions should include Scan Bank")
-assert.equal("View Inventory", ((mainFrame.dashboardQuickActionButtons or {})[2] or {}).labelText:GetText(), "dashboard quick actions should include View Inventory")
-assert.equal("Add Minimum", ((mainFrame.dashboardQuickActionButtons or {})[3] or {}).labelText:GetText(), "dashboard quick actions should include Add Minimum")
-assert.equal("Request Overview", ((mainFrame.dashboardQuickActionButtons or {})[4] or {}).labelText:GetText(), "dashboard quick actions should include Request Overview")
-assert.equal("Export Data", ((mainFrame.dashboardQuickActionButtons or {})[5] or {}).labelText:GetText(), "dashboard quick actions should include Export Data")
-assert.truthy((mainFrame.dashboardQuickActionButtons[4]:GetWidth() or 0) >= 148, "dashboard quick actions should widen enough for longer labels")
-assert.truthy((mainFrame.dashboardQuickActionButtons[4]:GetHeight() or 0) >= 52, "dashboard quick actions should give wrapped labels a little more vertical room")
-assert.equal(true, mainFrame.dashboardQuickActionButtons[4].labelText.wordWrap, "dashboard quick action labels should wrap instead of overflowing")
-assert.truthy((mainFrame.dashboardQuickActionButtons[4].labelText.width or 0) <= ((mainFrame.dashboardQuickActionButtons[4]:GetWidth() or 0) - 42), "dashboard quick action labels should reserve space for the icon and padding")
-assert.equal("action-slim", mainFrame.dashboardQuickActionButtons[4].gbmButtonFamily, "dashboard quick actions should use the slimmer shared action family")
+assert.equal(3, #(mainFrame.dashboardQuickActionButtons or {}), "dashboard should expose the trimmed quick-action set")
+assert.equal("Add Minimum", ((mainFrame.dashboardQuickActionButtons or {})[1] or {}).labelText:GetText(), "dashboard quick actions should include Add Minimum")
+assert.equal("Create Request", ((mainFrame.dashboardQuickActionButtons or {})[2] or {}).labelText:GetText(), "dashboard quick actions should include Create Request")
+assert.equal("Export Data", ((mainFrame.dashboardQuickActionButtons or {})[3] or {}).labelText:GetText(), "dashboard quick actions should include Export Data")
+assert.truthy((mainFrame.dashboardQuickActionButtons[2]:GetWidth() or 0) >= 148, "dashboard quick actions should widen enough for longer labels")
+assert.truthy((mainFrame.dashboardQuickActionButtons[2]:GetHeight() or 0) >= 52, "dashboard quick actions should give wrapped labels a little more vertical room")
+assert.equal(true, mainFrame.dashboardQuickActionButtons[2].labelText.wordWrap, "dashboard quick action labels should wrap instead of overflowing")
+assert.truthy((mainFrame.dashboardQuickActionButtons[2].labelText.width or 0) <= ((mainFrame.dashboardQuickActionButtons[2]:GetWidth() or 0) - 42), "dashboard quick action labels should reserve space for the icon and padding")
+assert.equal("action-slim", mainFrame.dashboardQuickActionButtons[2].gbmButtonFamily, "dashboard quick actions should use the slimmer shared action family")
 assert.truthy(
     color_distance(
-        ((mainFrame.dashboardQuickActionButtons[4].gbmArt or {}).innerFill or {}).color,
+        ((mainFrame.dashboardQuickActionButtons[2].gbmArt or {}).innerFill or {}).color,
         ((mainFrame.dashboardQuickActionsPanel.gbmArt or {}).innerFill or {}).color
     ) >= 0.10,
     "dashboard quick actions should contrast from the quick-actions panel background"
@@ -126,11 +124,14 @@ assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Flas
 assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Overflow Item", 1, true) == nil, "dashboard top-items panel should stop at ten ranked withdrawal items")
 assert.truthy(string.find(mainFrame.dashboardRecentActivityText:GetText() or "", "Silvermoon Health Potion", 1, true) ~= nil, "dashboard recent-activity panel should include recent audit rows")
 
+mainFrame.dashboardQuickActionButtons[1]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[1])
+assert.equal("MINIMUMS", mainFrame.activeView, "dashboard quick action should jump to minimums")
+mainFrame:SelectView("DASHBOARD")
 mainFrame.dashboardQuickActionButtons[2]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[2])
-assert.equal("INVENTORY", mainFrame.activeView, "dashboard quick action should jump to inventory")
-mainFrame:SelectView("DASHBOARD")
-mainFrame.dashboardQuickActionButtons[4]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[4])
+_G.C_Timer.RunPending()
 assert.equal("REQUESTS", mainFrame.activeView, "dashboard quick action should jump to requests")
+assert.truthy(mainFrame.requestWizardModal:IsShown(), "create request quick action should launch the request workflow")
+mainFrame:HideRequestWizard()
 mainFrame:SelectView("DASHBOARD")
-mainFrame.dashboardQuickActionButtons[5]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[5])
+mainFrame.dashboardQuickActionButtons[3]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[3])
 assert.equal("EXPORTS", mainFrame.activeView, "dashboard quick action should jump to exports")

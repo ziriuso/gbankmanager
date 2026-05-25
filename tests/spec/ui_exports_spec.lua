@@ -48,7 +48,7 @@ _G.GBankManagerDB = {
     },
     minimums = {
         { itemID = 1001, itemName = "Flask Alpha", quantity = 5, scope = "TAB", tabName = "Raid Buffer", enabled = true },
-        { itemID = 2002, itemName = "Potion Beta", quantity = 3, scope = "TAB", tabName = "Raid Buffer", enabled = true, craftedQuality = 2, craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2" },
+        { itemID = 2002, itemName = "Potion Beta", quantity = 3, scope = "TAB", tabName = "Raid Buffer", enabled = true, craftedQuality = 2, craftedQualityIcon = "|A:Professions-ChatIcon-Quality-Tier2:22:22|a" },
     },
     requests = {},
     auditLog = {},
@@ -93,7 +93,7 @@ assert.equal("Excess Stock", mainFrame.tableHeaderLabels[6]:GetText(), "exports 
 assert.truthy((mainFrame.tableColumnLayout[6].width or 0) >= 120, "exports should give Excess Stock enough width for longer tab names")
 assert.equal("Freebiez", mainFrame.tableRowsData[1].excessStockIn, "exports rows should name the other guild-bank tab with excess stock")
 assert.equal("|A:Professions-ChatIcon-Quality-Tier3:22:22|a", mainFrame.tableRowsData[1].itemTier, "exports rows should show the crafted-quality icon instead of a raw tier number")
-assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.tableRowsData[2].itemTier, "exports rows should normalize two-rank fallback icons even when the item has no live stock snapshot")
+assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", mainFrame.tableRowsData[2].itemTier, "exports rows should use the brighter max-rank reagent icon for two-rank crafted items even when the item has no live stock snapshot")
 assert.truthy((mainFrame.tableColumnLayout[2].width or 0) >= 56 and (mainFrame.tableColumnLayout[2].width or 0) <= 60, "exports should keep the Tier column compact to give text columns more room")
 assert.truthy(not mainFrame.exportPresetCustomButton:IsShown(), "exports should remove the custom option")
 assert.truthy(mainFrame.exportPresetTsmButton:IsShown(), "exports should expose a TSM item-id import option when supported")
@@ -142,16 +142,17 @@ assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shoppin
 assert.truthy(mainFrame.exportManualShoppingListModal.mouseEnabled == true, "manual shopping list modal should be draggable")
 assert.equal("LeftButton", (mainFrame.exportManualShoppingListModal.dragButtons or {})[1], "manual shopping list modal should register left-button dragging")
 assert.equal(_G.UIParent, mainFrame.exportManualShoppingListModal.parent, "manual shopping list should live on UIParent so it can stay open independently of the shell")
-assert.equal("Check off purchases as you work through the list. Does not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should explain that it is a one-session helper only")
+assert.equal("Check off purchases as you work through the list.\nDoes not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should line-break the local-only note for readability")
 assert.truthy(#(mainFrame.exportManualShoppingListRows or {}) >= 2, "manual shopping list should build one checklist row per purchase row")
 local manualShoppingRow = (mainFrame.exportManualShoppingListRows or {})[1]
+assert.equal("UICheckButtonTemplate", (manualShoppingRow.checkButton or {}).template, "manual shopping list should use a clearer built-in checkbox control")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "|A:", 1, true) ~= nil, "manual shopping list rows should render the crafted-quality icon inline")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "T3", 1, true) == nil, "manual shopping list rows should stop falling back to raw T-tier text")
 local missingSnapshotRow = (mainFrame.exportManualShoppingListRows or {})[2]
-assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions%-ChatIcon%-Quality%-Tier2", 1) ~= nil, "manual shopping list rows should normalize low-tier fallback icons for items without live stock")
-assert.equal("", manualShoppingRow.checkButton.labelText:GetText(), "unchecked manual shopping rows should use an empty checkbox instead of bracket text")
+assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Interface%-Crafting%-ReagentQuality%-2%-Med", 1) ~= nil, "manual shopping list rows should use the brighter max-rank reagent icon for two-rank items without live stock")
+assert.truthy(manualShoppingRow.checkButton:GetChecked() ~= true, "manual shopping rows should start unchecked")
 manualShoppingRow.checkButton:GetScript("OnClick")(manualShoppingRow.checkButton)
-assert.equal("x", manualShoppingRow.checkButton.labelText:GetText(), "checked manual shopping rows should use a simple x inside the checkbox")
+assert.truthy(manualShoppingRow.checkButton:GetChecked() == true, "checking a manual shopping row should toggle the built-in checkbox state")
 assert.truthy(manualShoppingRow.strikeLine:IsShown(), "checking a manual shopping list row should strike it through for the current session")
 mainFrame:SelectView("DASHBOARD")
 assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should stay open when switching tabs")

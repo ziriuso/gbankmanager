@@ -64,7 +64,7 @@ local outOfStockQualityRows = exports.MaterializePlanRows({
 })
 
 assert.equal(2, outOfStockQualityRows[1].quality, "materialized rows should preserve row quality when an item is missing from the current snapshot")
-assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", outOfStockQualityRows[1].itemTier, "materialized rows should normalize two-rank fallback icons to the shared visible crafted-quality icon family")
+assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", outOfStockQualityRows[1].itemTier, "materialized rows should use the brighter max-rank reagent icon for two-rank crafted exports")
 
 local enrichedRows = exports.MaterializePlanRows({
     [3003] = {

@@ -35,6 +35,56 @@ local function push_chat_line(message)
     end
 end
 
+local function open_request_wizard(mainFrame)
+    if not mainFrame or type(mainFrame.OpenRequestWizard) ~= "function" then
+        return
+    end
+
+    mainFrame:OpenRequestWizard()
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, function()
+            if mainFrame.activeView == "REQUESTS" and type(mainFrame.OpenRequestWizard) == "function" then
+                mainFrame:OpenRequestWizard()
+            end
+        end)
+    end
+end
+
+local function open_access_ui(mainFrame, accessProfile, requestOnlyOpensWizard)
+    if not mainFrame then
+        return
+    end
+
+    if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
+        mainFrame:ShowBlockedAccess("Access blocked")
+        return
+    end
+
+    if accessProfile == "full_shell" and type(mainFrame.ShowDashboard) == "function" then
+        mainFrame:ShowDashboard()
+        return
+    end
+
+    if type(mainFrame.ShowRequestOnly) == "function" then
+        mainFrame:ShowRequestOnly()
+        if requestOnlyOpensWizard then
+            open_request_wizard(mainFrame)
+        end
+    end
+end
+
+local function show_help()
+    push_chat_line("GBankManager commands:")
+    push_chat_line("/gbm - Open the UI you have access to.")
+    push_chat_line("/gbm help - Show all available commands.")
+    push_chat_line("/gbm ui - Open the main addon UI.")
+    push_chat_line("/gbm request - Open the request workflow.")
+    push_chat_line("/gbm scan - Scan the guild bank and ledger.")
+    push_chat_line("/gbm test smoke - Run the in-game smoke test.")
+    push_chat_line("/gbm test unit - Run the in-game unit checks.")
+    push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
+end
+
 _G.SLASH_GBANKMANAGER1 = "/gbm"
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.SlashCmdList.GBANKMANAGER = function(msg)
@@ -51,7 +101,10 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     local policy = store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or db.auth
     local accessProfile = auth and type(auth.GetEffectiveAccessProfile) == "function" and auth.GetEffectiveAccessProfile(context, policy) or "full_shell"
 
-    if command == "auth" and type(authPolicySource) == "table" then
+    if command == "help" then
+        show_help()
+        return "help"
+    elseif command == "auth" and type(authPolicySource) == "table" then
         local subcommand, payload = split_command(remainder)
         if subcommand == "" or subcommand == "export" or subcommand == "show" then
             local exportString = authPolicySource.ExportPolicyString(policy)
@@ -94,21 +147,29 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
         push_chat_line("GBankManager unknown test command.")
         return "unknown_test_command"
     elseif command == "ui" and mainFrame then
-        if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
-            mainFrame:ShowBlockedAccess("Access blocked")
-        elseif accessProfile == "full_shell" and type(mainFrame.ShowDashboard) == "function" then
-            mainFrame:ShowDashboard()
-        elseif type(mainFrame.ShowRequestOnly) == "function" then
-            mainFrame:ShowRequestOnly()
-        end
+        open_access_ui(mainFrame, accessProfile, false)
     elseif command == "request" and mainFrame then
         if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
             mainFrame:ShowBlockedAccess("Access blocked")
+        elseif accessProfile == "full_shell" then
+            if type(mainFrame.ShowDashboard) == "function" then
+                mainFrame:ShowDashboard()
+            end
+            if type(mainFrame.SelectView) == "function" then
+                mainFrame:SelectView("REQUESTS")
+            end
+            open_request_wizard(mainFrame)
         elseif type(mainFrame.ShowRequestOnly) == "function" then
             mainFrame:ShowRequestOnly()
+            open_request_wizard(mainFrame)
         end
-    elseif (command == "" or command == "scan") and type(scanner) == "table" then
+    elseif command == "scan" and type(scanner) == "table" then
         scanner.BeginScan()
+    elseif command == "" and mainFrame then
+        open_access_ui(mainFrame, accessProfile, accessProfile ~= "full_shell")
+    elseif command ~= "" then
+        show_help()
+        return "unknown_command"
     end
 end
 

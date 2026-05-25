@@ -754,15 +754,11 @@ mainFrame.dashboardQuickActionsTitle:SetPoint("TOPLEFT", mainFrame.dashboardQuic
 
 mainFrame.dashboardQuickActionButtons = mainFrame.dashboardQuickActionButtons or {}
 local dashboardQuickActionLabels = {
-    "Scan Bank",
-    "View Inventory",
     "Add Minimum",
-    "Request Overview",
+    "Create Request",
     "Export Data",
 }
 local dashboardQuickActionIcons = {
-    "Interface\\ICONS\\Ability_Spy",
-    "Interface\\ICONS\\INV_Crate_03",
     "Interface\\ICONS\\INV_Misc_Note_01",
     "Interface\\ICONS\\INV_Letter_15",
     "Interface\\ICONS\\INV_Scroll_03",
@@ -811,26 +807,152 @@ for index, label in ipairs(dashboardQuickActionLabels) do
 end
 
 mainFrame.dashboardQuickActionButtons[1]:SetScript("OnClick", function()
-    local handler = mainFrame.scanButton and mainFrame.scanButton.GetScript and mainFrame.scanButton:GetScript("OnClick") or nil
-    if type(handler) == "function" then
-        handler(mainFrame.scanButton)
-    end
-end)
-mainFrame.dashboardQuickActionButtons[2]:SetScript("OnClick", function()
-    mainFrame:SelectView("INVENTORY")
-end)
-mainFrame.dashboardQuickActionButtons[3]:SetScript("OnClick", function()
     mainFrame:SelectView("MINIMUMS")
     if type(mainFrame.OpenMinimumAddModal) == "function" then
         mainFrame:OpenMinimumAddModal()
     end
 end)
-mainFrame.dashboardQuickActionButtons[4]:SetScript("OnClick", function()
+mainFrame.dashboardQuickActionButtons[2]:SetScript("OnClick", function()
     mainFrame:SelectView("REQUESTS")
+    if type(mainFrame.OpenRequestWizard) == "function" then
+        mainFrame:OpenRequestWizard()
+        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            _G.C_Timer.After(0, function()
+                if mainFrame.activeView == "REQUESTS" and type(mainFrame.OpenRequestWizard) == "function" then
+                    mainFrame:OpenRequestWizard()
+                end
+            end)
+        end
+    end
 end)
-mainFrame.dashboardQuickActionButtons[5]:SetScript("OnClick", function()
+mainFrame.dashboardQuickActionButtons[3]:SetScript("OnClick", function()
     mainFrame:SelectView("EXPORTS")
 end)
+for index = #dashboardQuickActionLabels + 1, #(mainFrame.dashboardQuickActionButtons or {}) do
+    if mainFrame.dashboardQuickActionButtons[index] then
+        mainFrame.dashboardQuickActionButtons[index]:Hide()
+        mainFrame.dashboardQuickActionButtons[index] = nil
+    end
+end
+
+local function relayout_dashboard_shell(frame)
+    if type(frame) ~= "table" then
+        return
+    end
+
+    local shellScale = tonumber(frame.appearanceShellScale or 1) or 1
+    local cardWidth = math.max(172, math.floor(192 * shellScale + 0.5))
+    local cardHeight = math.max(94, math.floor(104 * shellScale + 0.5))
+    local cardGap = math.max(10, math.floor(12 * shellScale + 0.5))
+    local sectionGap = math.max(14, math.floor(16 * shellScale + 0.5))
+    local panelWidth = math.max(320, math.floor(352 * shellScale + 0.5))
+    local panelHeight = math.max(170, math.floor(188 * shellScale + 0.5))
+    local quickActionsHeight = math.max(100, math.floor(108 * shellScale + 0.5))
+    local metricInset = math.max(12, math.floor(14 * shellScale + 0.5))
+    local iconSize = math.max(24, math.floor(26 * shellScale + 0.5))
+
+    for index, card in ipairs(frame.dashboardCards or {}) do
+        card:SetSize(cardWidth, cardHeight)
+        if type(card.ClearAllPoints) == "function" then
+            card:ClearAllPoints()
+        end
+
+        if index == 1 then
+            card:SetPoint("TOPLEFT", frame.viewSubtitle, "BOTTOMLEFT", 0, -math.max(20, math.floor(24 * shellScale + 0.5)))
+        else
+            card:SetPoint("LEFT", frame.dashboardCards[index - 1], "RIGHT", cardGap, 0)
+        end
+
+        if card.iconTexture then
+            if type(card.iconTexture.ClearAllPoints) == "function" then
+                card.iconTexture:ClearAllPoints()
+            end
+            card.iconTexture:SetPoint("TOPLEFT", card, "TOPLEFT", math.max(10, math.floor(12 * shellScale + 0.5)), -math.max(12, math.floor(14 * shellScale + 0.5)))
+            if type(card.iconTexture.SetSize) == "function" then
+                card.iconTexture:SetSize(iconSize, iconSize)
+            end
+        end
+
+        if card.titleText then
+            if type(card.titleText.ClearAllPoints) == "function" then
+                card.titleText:ClearAllPoints()
+            end
+            card.titleText:SetPoint("TOPLEFT", card.iconTexture, "TOPRIGHT", math.max(8, math.floor(10 * shellScale + 0.5)), math.floor(2 * shellScale + 0.5))
+        end
+
+        if card.valueText then
+            if type(card.valueText.ClearAllPoints) == "function" then
+                card.valueText:ClearAllPoints()
+            end
+            card.valueText:SetPoint("TOPLEFT", card, "TOPLEFT", metricInset, -math.max(40, math.floor(46 * shellScale + 0.5)))
+        end
+
+        if card.noteText then
+            if type(card.noteText.ClearAllPoints) == "function" then
+                card.noteText:ClearAllPoints()
+            end
+            card.noteText:SetPoint("TOPLEFT", card.valueText, "BOTTOMLEFT", 0, -math.max(4, math.floor(6 * shellScale + 0.5)))
+        end
+
+        if card.linesText then
+            if type(card.linesText.ClearAllPoints) == "function" then
+                card.linesText:ClearAllPoints()
+            end
+            card.linesText:SetPoint("TOPLEFT", card.titleText, "BOTTOMLEFT", 0, -math.max(6, math.floor(8 * shellScale + 0.5)))
+        end
+    end
+
+    frame.dashboardTopItemsPanel:SetSize(panelWidth, panelHeight)
+    if type(frame.dashboardTopItemsPanel.ClearAllPoints) == "function" then
+        frame.dashboardTopItemsPanel:ClearAllPoints()
+    end
+    frame.dashboardTopItemsPanel:SetPoint("TOPLEFT", frame.dashboardCards[1], "BOTTOMLEFT", 0, -sectionGap)
+
+    if type(frame.dashboardTopItemsTitle.ClearAllPoints) == "function" then
+        frame.dashboardTopItemsTitle:ClearAllPoints()
+    end
+    frame.dashboardTopItemsTitle:SetPoint("TOPLEFT", frame.dashboardTopItemsPanel, "TOPLEFT", metricInset, -math.max(12, math.floor(14 * shellScale + 0.5)))
+
+    if type(frame.dashboardTopItemsText.ClearAllPoints) == "function" then
+        frame.dashboardTopItemsText:ClearAllPoints()
+    end
+    frame.dashboardTopItemsText:SetPoint("TOPLEFT", frame.dashboardTopItemsTitle, "BOTTOMLEFT", 0, -math.max(8, math.floor(10 * shellScale + 0.5)))
+    if type(frame.dashboardTopItemsText.SetWidth) == "function" then
+        frame.dashboardTopItemsText:SetWidth(math.max(280, panelWidth - (metricInset * 2)))
+    end
+
+    if type(frame.dashboardRecentActivityPanel.ClearAllPoints) == "function" then
+        frame.dashboardRecentActivityPanel:ClearAllPoints()
+    end
+    frame.dashboardRecentActivityPanel:SetPoint("TOPLEFT", frame.dashboardTopItemsPanel, "TOPRIGHT", sectionGap, 0)
+    frame.dashboardRecentActivityPanel:SetPoint("TOPRIGHT", frame.content, "RIGHT", -24, 0)
+    frame.dashboardRecentActivityPanel:SetHeight(panelHeight)
+
+    if type(frame.dashboardRecentActivityTitle.ClearAllPoints) == "function" then
+        frame.dashboardRecentActivityTitle:ClearAllPoints()
+    end
+    frame.dashboardRecentActivityTitle:SetPoint("TOPLEFT", frame.dashboardRecentActivityPanel, "TOPLEFT", metricInset, -math.max(12, math.floor(14 * shellScale + 0.5)))
+
+    if type(frame.dashboardRecentActivityText.ClearAllPoints) == "function" then
+        frame.dashboardRecentActivityText:ClearAllPoints()
+    end
+    frame.dashboardRecentActivityText:SetPoint("TOPLEFT", frame.dashboardRecentActivityTitle, "BOTTOMLEFT", 0, -math.max(8, math.floor(10 * shellScale + 0.5)))
+    if type(frame.dashboardRecentActivityText.SetWidth) == "function" then
+        frame.dashboardRecentActivityText:SetWidth(math.max(360, (frame.dashboardRecentActivityPanel:GetWidth() or 0) - (metricInset * 2)))
+    end
+
+    if type(frame.dashboardQuickActionsPanel.ClearAllPoints) == "function" then
+        frame.dashboardQuickActionsPanel:ClearAllPoints()
+    end
+    frame.dashboardQuickActionsPanel:SetPoint("TOPLEFT", frame.dashboardTopItemsPanel, "BOTTOMLEFT", 0, -sectionGap)
+    frame.dashboardQuickActionsPanel:SetPoint("TOPRIGHT", frame.dashboardRecentActivityPanel, "BOTTOMRIGHT", 0, -sectionGap)
+    frame.dashboardQuickActionsPanel:SetHeight(quickActionsHeight)
+
+    if type(frame.dashboardQuickActionsTitle.ClearAllPoints) == "function" then
+        frame.dashboardQuickActionsTitle:ClearAllPoints()
+    end
+    frame.dashboardQuickActionsTitle:SetPoint("TOPLEFT", frame.dashboardQuickActionsPanel, "TOPLEFT", metricInset, -math.max(12, math.floor(14 * shellScale + 0.5)))
+end
 
 mainFrame.aboutPanel = mainFrame.aboutPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
 mainFrame.aboutPanel:SetSize(420, 292)
@@ -872,7 +994,7 @@ if type(mainFrame.aboutDescriptionText.SetJustifyH) == "function" then
     mainFrame.aboutDescriptionText:SetJustifyH("CENTER")
 end
 
-mainFrame.aboutSlashHintText = mainFrame.aboutSlashHintText or make_label(mainFrame.aboutPanel, "/gbm for slash commands", "GameFontHighlightSmall")
+mainFrame.aboutSlashHintText = mainFrame.aboutSlashHintText or make_label(mainFrame.aboutPanel, "/gbm help for slash commands", "GameFontHighlightSmall")
 mainFrame.aboutSlashHintText:SetPoint("BOTTOM", mainFrame.aboutPanel, "BOTTOM", 0, 24)
 
 mainFrame.historyDetailsModal = mainFrame.historyDetailsModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
@@ -1151,7 +1273,7 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(214)
+mainFrame.optionsAppearancePanel:SetHeight(268)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1253,12 +1375,12 @@ mainFrame.optionsThemeFelButton = mainFrame.optionsThemeButtons.legion
 mainFrame.optionsThemePrideButton = mainFrame.optionsThemeButtons.pride
 
 mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "UI Scale", "GameFontHighlightSmall")
-mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -14)
+mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 408, -66)
 
 mainFrame.optionsShellScaleDecreaseButton = mainFrame.optionsShellScaleDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellScaleDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -4)
 
-mainFrame.optionsShellScaleSlider = mainFrame.optionsShellScaleSlider or make_slider(mainFrame.optionsAppearancePanel, 180, 18, 0.9, 1.2, 1)
+mainFrame.optionsShellScaleSlider = mainFrame.optionsShellScaleSlider or make_slider(mainFrame.optionsAppearancePanel, 160, 18, 0.9, 1.2, 1)
 mainFrame.optionsShellScaleSlider:SetPoint("LEFT", mainFrame.optionsShellScaleDecreaseButton, "RIGHT", 8, 0)
 if type(mainFrame.optionsShellScaleSlider.SetValueStep) == "function" then
     mainFrame.optionsShellScaleSlider:SetValueStep(0.05)
@@ -1271,7 +1393,7 @@ mainFrame.optionsShellScaleIncreaseButton = mainFrame.optionsShellScaleIncreaseB
 mainFrame.optionsShellScaleIncreaseButton:SetPoint("LEFT", mainFrame.optionsShellScaleSlider, "RIGHT", 8, 0)
 
 mainFrame.optionsShellScaleValueText = mainFrame.optionsShellScaleValueText or make_label(mainFrame.optionsAppearancePanel, "", "GameFontNormal")
-mainFrame.optionsShellScaleValueText:SetPoint("LEFT", mainFrame.optionsShellScaleIncreaseButton, "RIGHT", 8, 0)
+mainFrame.optionsShellScaleValueText:SetPoint("TOPLEFT", mainFrame.optionsShellScaleDecreaseButton, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsTableDensityLabel = mainFrame.optionsTableDensityLabel or make_label(mainFrame.optionsAppearancePanel, "Table Density (Linked)", "GameFontHighlightSmall")
 mainFrame.optionsTableDensityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellScaleDecreaseButton, "BOTTOMLEFT", 0, -12)
@@ -1297,7 +1419,7 @@ set_frame_shown(mainFrame.optionsTableDensityIncreaseButton, false)
 set_frame_shown(mainFrame.optionsTableDensityValueText, false)
 
 mainFrame.optionsShellOpacityLabel = mainFrame.optionsShellOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Opacity", "GameFontHighlightSmall")
-mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 352, -66)
+mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellScaleValueText, "BOTTOMLEFT", 0, -12)
 
 mainFrame.optionsShellOpacityDecreaseButton = mainFrame.optionsShellOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityLabel, "BOTTOMLEFT", 0, -4)
@@ -1339,7 +1461,7 @@ mainFrame.optionsModalOpacityValueText = mainFrame.optionsModalOpacityValueText 
 mainFrame.optionsModalOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityDecreaseButton, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsMinimapToggle = mainFrame.optionsMinimapToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Show Minimap Button")
-mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -74)
+mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -18)
 
 mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsStockSettingsPanel, "Restock Default", "GameFontHighlight")
 mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsStockSettingsPanel, "TOPLEFT", 16, -16)
@@ -1382,19 +1504,19 @@ if type(mainFrame.optionsLogsHistoryHint.SetWidth) == "function" then
 end
 
 mainFrame.optionsLedgerRetentionTitle = mainFrame.optionsLedgerRetentionTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Guild Bank Log Retention", "GameFontHighlight")
-mainFrame.optionsLedgerRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryHint, "BOTTOMLEFT", 0, -18)
+mainFrame.optionsLedgerRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -66)
 
 mainFrame.optionsLedgerRetentionButton = mainFrame.optionsLedgerRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
 mainFrame.optionsLedgerRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionTitle, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsHistoryRetentionTitle = mainFrame.optionsHistoryRetentionTitle or make_label(mainFrame.optionsLogsHistoryPanel, "History Retention", "GameFontHighlight")
-mainFrame.optionsHistoryRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 252, -66)
+mainFrame.optionsHistoryRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -66)
 
 mainFrame.optionsHistoryRetentionButton = mainFrame.optionsHistoryRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
 mainFrame.optionsHistoryRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsHistoryRetentionTitle, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsLedgerScanIntervalTitle = mainFrame.optionsLedgerScanIntervalTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Scan Interval", "GameFontHighlight")
-mainFrame.optionsLedgerScanIntervalTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 488, -66)
+mainFrame.optionsLedgerScanIntervalTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -66)
 
 mainFrame.optionsLedgerScanIntervalButton = mainFrame.optionsLedgerScanIntervalButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "5 Minutes")
 mainFrame.optionsLedgerScanIntervalButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerScanIntervalTitle, "BOTTOMLEFT", 0, -6)
@@ -1415,10 +1537,10 @@ if type(mainFrame.optionsClearDataHint.SetWidth) == "function" then
     mainFrame.optionsClearDataHint:SetWidth(640)
 end
 
-mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 192, 28, "Clear Guild Bank Log Data")
+mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Guild Bank Log Data")
 mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
 
-mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 216, 28, "Clear Guild Bank Inventory Data")
+mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Guild Bank Inventory Data")
 mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsClearCompletedRequestsButton = mainFrame.optionsClearCompletedRequestsButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Completed Request History")
@@ -1427,8 +1549,14 @@ mainFrame.optionsClearCompletedRequestsButton:SetPoint("TOPLEFT", mainFrame.opti
 mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
 mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsAuthHint = mainFrame.optionsAuthHint or make_label(mainFrame.optionsAuthPanel, "Configure rank-based access, request submission, and blacklist entries. Blacklist entries should use Character-Server formatting and save guild-shared membership through appended officer-note tags.", "GameFontHighlightSmall")
+mainFrame.optionsAuthHint = mainFrame.optionsAuthHint or make_label(mainFrame.optionsAuthPanel, "Configure rank-based access, request submission, and guild-shared blacklist membership.\nUse Character-Server formatting for blacklist entries stored through officer-note tags.", "GameFontHighlightSmall")
 mainFrame.optionsAuthHint:SetPoint("TOPLEFT", mainFrame.optionsAuthTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsAuthHint.SetWidth) == "function" then
+    mainFrame.optionsAuthHint:SetWidth(620)
+end
+if type(mainFrame.optionsAuthHint.SetWordWrap) == "function" then
+    mainFrame.optionsAuthHint:SetWordWrap(true)
+end
 
 mainFrame.optionsAuthMetadataText = mainFrame.optionsAuthMetadataText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
 mainFrame.optionsAuthMetadataText:SetPoint("TOPLEFT", mainFrame.optionsAuthHint, "BOTTOMLEFT", 0, -8)
@@ -1559,11 +1687,14 @@ mainFrame.optionsPolicyStringInput:SetPoint("TOPLEFT", mainFrame.optionsPolicySt
 mainFrame.optionsPolicyStringSelectAllButton = mainFrame.optionsPolicyStringSelectAllButton or make_button(mainFrame.optionsAuthPanel, 78, 22, "Select All")
 mainFrame.optionsPolicyStringSelectAllButton:SetPoint("LEFT", mainFrame.optionsPolicyStringInput, "RIGHT", 8, 0)
 
-mainFrame.optionsPolicyStringHelpText = mainFrame.optionsPolicyStringHelpText or make_label(mainFrame.optionsAuthPanel, "Compact auth policy string stored in Guild Info so addon users can read guild permissions. Blacklist membership now lives in appended officer-note tags, while reasons stay local and sync through the addon. Save updates the local policy and any changed officer-note tags. Copy the policy string into Guild Information, press Accept, then use Refresh Guild Info to confirm the live string.", "GameFontHighlightSmall")
+mainFrame.optionsPolicyStringHelpText = mainFrame.optionsPolicyStringHelpText or make_label(mainFrame.optionsAuthPanel, "1. Save to update the local policy.\n2. Copy the policy string into Guild Information.\n3. Press Accept in Guild Information.\n4. Use Refresh Guild Info to confirm the live string.\n\nGuild Info stores the compact policy string only.\nBlacklist membership stays in officer-note tags.\nBlacklist reasons stay local and sync through the addon.", "GameFontHighlightSmall")
 mainFrame.optionsPolicyStringHelpText:SetPoint("TOPLEFT", mainFrame.optionsPolicyStringInput, "BOTTOMLEFT", 0, -6)
 mainFrame.optionsPolicyStringHelpText:SetWidth(280)
 if type(mainFrame.optionsPolicyStringHelpText.SetJustifyH) == "function" then
     mainFrame.optionsPolicyStringHelpText:SetJustifyH("LEFT")
+end
+if type(mainFrame.optionsPolicyStringHelpText.SetWordWrap) == "function" then
+    mainFrame.optionsPolicyStringHelpText:SetWordWrap(true)
 end
 
 mainFrame.optionsAuthStatusText = mainFrame.optionsAuthStatusText or make_label(mainFrame.optionsAuthPanel, "", "GameFontHighlightSmall")
@@ -1639,11 +1770,14 @@ mainFrame.optionsBlacklistPanelTitle = mainFrame.optionsBlacklistPanelTitle or m
 mainFrame.optionsBlacklistPanelTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanel, "TOPLEFT", 16, -16)
 mainFrame.optionsBlacklistPanelHint = mainFrame.optionsBlacklistPanelHint or make_label(mainFrame.optionsBlacklistPanel, "Guild-shared blacklist membership is read from officer notes. This tab is read-only.", "GameFontHighlightSmall")
 mainFrame.optionsBlacklistPanelHint:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelTitle, "BOTTOMLEFT", 0, -8)
-mainFrame.optionsBlacklistInstructionText = mainFrame.optionsBlacklistInstructionText or make_label(mainFrame.optionsBlacklistPanel, "To blacklist a guild member, open Guild & Communities and append [GBMBL] to that member's officer note. The addon parses officer notes on load and guild-roster refresh, then lists all tagged members below.", "GameFontHighlightSmall")
+mainFrame.optionsBlacklistInstructionText = mainFrame.optionsBlacklistInstructionText or make_label(mainFrame.optionsBlacklistPanel, "1. Open Guild & Communities.\n2. Append [GBMBL] to the member's officer note.\n3. Refresh the guild roster or press Refresh below.\n4. Tagged members appear in the list.", "GameFontHighlightSmall")
 mainFrame.optionsBlacklistInstructionText:SetPoint("TOPLEFT", mainFrame.optionsBlacklistPanelHint, "BOTTOMLEFT", 0, -8)
 mainFrame.optionsBlacklistInstructionText:SetWidth(500)
 if type(mainFrame.optionsBlacklistInstructionText.SetJustifyH) == "function" then
     mainFrame.optionsBlacklistInstructionText:SetJustifyH("LEFT")
+end
+if type(mainFrame.optionsBlacklistInstructionText.SetWordWrap) == "function" then
+    mainFrame.optionsBlacklistInstructionText:SetWordWrap(true)
 end
 move_to_panel(mainFrame.optionsBlacklistTitle, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistInstructionText, "BOTTOMLEFT", 0, -12)
@@ -1662,11 +1796,11 @@ mainFrame.optionsBlacklistRemoveButton:SetPoint("LEFT", mainFrame.optionsBlackli
 move_to_panel(mainFrame.optionsBlacklistListTitle, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistListTitle:SetPoint("TOPLEFT", mainFrame.optionsBlacklistInstructionText, "BOTTOMLEFT", 0, -12)
 move_to_panel(mainFrame.optionsBlacklistRefreshButton, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistRefreshButton:SetPoint("BOTTOMRIGHT", mainFrame.optionsBlacklistListPanel, "TOPRIGHT", 0, 8)
+mainFrame.optionsBlacklistRefreshButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "BOTTOMLEFT", 0, -8)
 move_to_panel(mainFrame.optionsBlacklistListPanel, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistListPanel:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListTitle, "BOTTOMLEFT", 0, -4)
 move_to_panel(mainFrame.optionsBlacklistStatusText, mainFrame.optionsBlacklistPanel)
-mainFrame.optionsBlacklistStatusText:SetPoint("TOPLEFT", mainFrame.optionsBlacklistListPanel, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsBlacklistStatusText:SetPoint("TOPLEFT", mainFrame.optionsBlacklistRefreshButton, "BOTTOMLEFT", 0, -8)
 move_to_panel(mainFrame.optionsBlacklistSaveButton, mainFrame.optionsBlacklistPanel)
 mainFrame.optionsBlacklistSaveButton:SetPoint("TOPLEFT", mainFrame.optionsBlacklistStatusText, "BOTTOMLEFT", 0, -10)
 move_to_panel(mainFrame.optionsBlacklistResetButton, mainFrame.optionsBlacklistPanel)
@@ -2970,7 +3104,7 @@ function mainFrame:RefreshAuthOptions()
 
     local blacklistPanelHeight = math.max(220, (#blacklistEntries * 22) + 16)
     self.optionsBlacklistListPanel:SetHeight(blacklistPanelHeight)
-    self.optionsBlacklistPanel:SetHeight(math.max(390, 170 + blacklistPanelHeight))
+    self.optionsBlacklistPanel:SetHeight(math.max(402, 182 + blacklistPanelHeight))
 
     self.optionsPolicyStringInput:SetText(policy.guildPolicyString or "")
 
@@ -3141,6 +3275,7 @@ function mainFrame:ApplyTheme()
     topBarHeight = math.max(52, math.min(76, topBarHeight))
     self.topBar:SetSize(topBarWidth, topBarHeight)
     self.content:SetSize(topBarWidth, contentHeight)
+    relayout_dashboard_shell(self)
     apply_surface_variant(self, "shell", theme.colors.background)
     apply_surface_variant(self.sidebar, "sidebar", theme.colors.panel)
     self.sidebarNavStyle = "sidebar-soft-row"
@@ -4049,7 +4184,7 @@ function mainFrame:RefreshView()
         self.aboutAuthorText:SetText("Author: Zirleficent")
         self.aboutGuildText:SetText(string.format("%s - %s (%s)", characterName, guildName, realmName))
         self.aboutDescriptionText:SetText("Manage your guild's stock, requests, and exports with a polished WoW-native workflow.")
-        self.aboutSlashHintText:SetText("/gbm for slash commands")
+        self.aboutSlashHintText:SetText("/gbm help for slash commands")
         bodyText = ""
     else
         bodyText = "Detailed content for this view is coming next."

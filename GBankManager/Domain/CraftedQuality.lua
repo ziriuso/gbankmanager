@@ -28,7 +28,19 @@ function craftedQuality.GetIconText(icon)
     return icon_text(icon)
 end
 
-function craftedQuality.NormalizeDisplayAtlas(icon)
+local function display_atlas_for_tier(parsedTier, style)
+    if style == "reagent" and parsedTier >= 1 and parsedTier <= 2 then
+        return string.format("Interface-Crafting-ReagentQuality-%d-Med", parsedTier)
+    end
+
+    if parsedTier >= 1 and parsedTier <= 2 then
+        return string.format("Professions-ChatIcon-Quality-Tier%d", parsedTier)
+    end
+
+    return nil
+end
+
+function craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style)
     local atlasName = icon_text(icon)
     if atlasName == "" then
         return ""
@@ -38,16 +50,45 @@ function craftedQuality.NormalizeDisplayAtlas(icon)
         return atlasName
     end
 
-    local parsedTier = craftedQuality.ParseTier(atlasName, 0)
-    if parsedTier >= 1 and parsedTier <= 2 then
-        return string.format("Professions-ChatIcon-Quality-Tier%d", parsedTier)
+    local parsedTier = craftedQuality.ParseTier(atlasName, fallbackQuality or 0)
+    local displayAtlas = display_atlas_for_tier(parsedTier, style)
+    if displayAtlas ~= nil then
+        return displayAtlas
     end
 
     return atlasName
 end
 
-function craftedQuality.ToMarkup(icon, size)
-    local atlasName = craftedQuality.NormalizeDisplayAtlas(icon)
+function craftedQuality.GetDisplayAtlas(icon, fallbackQuality, style)
+    local parsedTier = craftedQuality.ParseTier(icon, fallbackQuality or 0)
+    if parsedTier >= 1 and parsedTier <= 5 then
+        local displayAtlas = display_atlas_for_tier(parsedTier, style)
+        if displayAtlas ~= nil and displayAtlas ~= "" then
+            return displayAtlas
+        end
+
+        return string.format("Professions-ChatIcon-Quality-Tier%d", parsedTier)
+    end
+
+    return craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style)
+end
+
+function craftedQuality.ToMarkup(icon, size, style, fallbackQuality)
+    local atlasName = craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style)
+    if atlasName == "" then
+        return ""
+    end
+
+    if string.sub(atlasName, 1, 3) == "|A:" or string.sub(atlasName, 1, 2) == "|T" then
+        return atlasName
+    end
+
+    local iconSize = math.max(1, math.floor(tonumber(size or 22) or 22))
+    return string.format("|A:%s:%d:%d|a", tostring(atlasName), iconSize, iconSize)
+end
+
+function craftedQuality.DisplayMarkup(icon, size, style, fallbackQuality)
+    local atlasName = craftedQuality.GetDisplayAtlas(icon, fallbackQuality, style)
     if atlasName == "" then
         return ""
     end

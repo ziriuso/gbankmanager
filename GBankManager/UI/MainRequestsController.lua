@@ -64,9 +64,14 @@ local function actor_summary(context)
     return string.format("Acting As: %s", name)
 end
 
-local function crafted_quality_markup(atlasName)
+local function crafted_quality_markup(atlasName, fallbackQuality)
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        local markup = craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality)
+        return markup ~= "" and markup or "-"
+    end
+
     if type(craftedQuality.ToMarkup) == "function" then
-        local markup = craftedQuality.ToMarkup(atlasName, 22)
+        local markup = craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality)
         return markup ~= "" and markup or "-"
     end
 
@@ -781,7 +786,7 @@ function mainRequestsController.Attach(mainFrame, options)
         local note = tostring(self.requestCreateNoteInput:GetText() or "")
 
         self.requestWizardPreviewItemText:SetText(tostring(item.name or item.itemName or "No item selected."))
-        self.requestWizardPreviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon))
+        self.requestWizardPreviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon, item.craftedQuality))
         self.requestWizardPreviewRequestedQuantityText:SetText(requestedQuantity and tostring(requestedQuantity) or "-")
         self.requestWizardPreviewReasonText:SetText(note ~= "" and note or "-")
     end
@@ -1035,7 +1040,7 @@ function mainRequestsController.Attach(mainFrame, options)
         local canCancel = actor_owns_request(request, context) and (not canActorApply or canActorApply(request, "CANCEL", context))
 
         self.requestDetailsItemNameText:SetText(tostring(request.itemName or ""))
-        self.requestDetailsQualityText:SetText(crafted_quality_markup(request.craftedQualityIcon))
+        self.requestDetailsQualityText:SetText(crafted_quality_markup(request.craftedQualityIcon, request.craftedQuality))
         self.requestDetailsQuantityText:SetText(tostring(request.quantity or ""))
         self.requestDetailsSubmissionNoteText:SetText(tostring(request.note or ""))
         self.requestDetailsStatusText:SetText(format_request_status(request))
@@ -1439,6 +1444,9 @@ function mainRequestsController.Attach(mainFrame, options)
             self:RefreshRequestWizardPreview()
         end
         self.requestWizardModal:Show()
+        if type(self.BringToFront) == "function" then
+            self:BringToFront(self.requestWizardModal)
+        end
         return self.requestWizardModal
     end
 

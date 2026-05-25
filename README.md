@@ -10,7 +10,7 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 
 - One-button guild bank scan foundation with snapshot, tab-scoped item rows, and change-log storage
 - Officer-first dashboard shell with inventory, minimums, requests, exports, history, bank-ledger, about, and options workspaces
-- Dashboard now uses four metric cards plus `Top 10 Most Used`, `Recent Activity`, and `Quick Actions` panels inside the officer shell
+- Dashboard now uses four metric cards plus `Top 10 Most Used`, `Recent Activity`, and a trimmed `Quick Actions` panel with `Add Minimum`, `Create Request`, and `Export Data`
 - The shared shell modernization pass now follows the approved no-art-pack `Hybrid Modern` direction: a native-paneled shell, soft distinct nav buttons with stronger selected state, a cleaner toolbar-band header, flatter dark-band content sections, separate metric cards, structured tables, slimmer actions, segmented tabs, cleaner floating-sheet modals, distinct colored themes, dense-but-clean spacing, and a more aggressively simplified chrome pass that removes nested line treatment, drops most full backdrop borders on flat shell surfaces, and relies on separators plus accent rails instead of boxes-within-boxes
 - The current shell follow-up also normalizes interactive control contrast: neutral action buttons now sit forward from panel backgrounds more consistently, select-style dropdown triggers now use a dedicated higher-contrast control treatment, export CTAs share one primary look, and dashboard `Quick Actions` now allow wrapped labels instead of overflowing longer text
 - `Options` now includes a dedicated `Stock Settings` tab that holds both `Restock Default` and a configurable `Critical Shortage Threshold`, where critical means current stock is at or below the chosen percentage of minimum
@@ -21,7 +21,7 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 - Auctionator, CSV, and custom-delimited export builders, including current caret-delimited Auctionator list import output
 - Guild sync foundation with authority-first conflict resolution, chat-visible sync milestones, and login hello messages
 - `Bank Ledger` now centralizes guild-bank item logs and money logs, stores append-only deltas from guild-bank log scans, avoids duplicating rows when repeated scans reread the same visible Blizzard log window, supports shared table filters plus a preset date-range dropdown, exposes ledger CSV export, shows item-log rows as `Date`, `Who`, `Action`, icon-based `Tier`, `Item`, `Quantity`, `Tab`, and `Moved From`, and summarizes item movement plus gold in, gold out, and repairs over the active date range
-- Local appearance customization with a token-backed theme system (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), built-in WoW `UISliderTemplate` controls for `UI Scale` (90%-120%), shell opacity, and modal opacity, collapsed-nav icons, a show/hide minimap-button toggle, direct slider interaction plus steppers, and a header last-scan display that now uses timezone abbreviations such as `EDT` or `EST` when a scan exists
+- Local appearance customization with a token-backed theme system (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), built-in WoW `UISliderTemplate` controls for `UI Scale` (90%-120%), shell opacity, and modal opacity, a right-column slider stack with matched slider widths, theme presets with the minimap toggle directly beneath them, collapsed-nav icons, a show/hide minimap-button toggle, direct slider interaction plus steppers, and a header last-scan display that now uses timezone abbreviations such as `EDT` or `EST` when a scan exists
 - In-client verification commands for both workflow smoke (`/gbm test smoke`) and deterministic in-game unit checks (`/gbm test unit`)
 
 ## Architecture
@@ -88,9 +88,14 @@ Current UI ownership is intentionally split across:
 7. If you are resuming on a MacBook, use [docs/macos-readme.md](docs/macos-readme.md) for clone, worktree, WoW path detection, deploy, and resume guidance.
 7. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
 8. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`, or use `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`.
-9. Use `/gbm ui` to open the officer shell.
-10. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
-11. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
+9. Use `/gbm` to open the UI you have access to:
+   - full-shell users land in the officer shell
+   - request-only users land directly in the request workflow
+10. Use `/gbm help` to print the currently supported slash commands in chat.
+11. Use `/gbm ui` to open the accessible shell without forcing a scan.
+12. Use `/gbm request` to open the request workflow directly.
+13. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+14. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
 
 ## Next Roadmap
 
@@ -123,20 +128,22 @@ The next planned work after the completed pre-polish workflow block is:
 - Minimums now uses separate `Enabled Only` and `Show All` buttons with an obvious active-state highlight instead of a single toggle label.
 - The guild auth policy string now carries the shared Restock Default plus updater metadata, pulls from Guild Info on load and guild updates, refreshes the Options restock input from live Guild Info data, and appends policy-update history rows that now show in the History view.
 - `Options -> Auth` now includes a `Select All` helper beside the compact `Policy String`, so officers can focus, highlight, and copy the full Guild Info snippet without manual drag selection.
-- `Options -> Blacklist` is now a read-only roster view with instructions for the shared `[GBMBL]` officer-note tag plus a `Refresh` action that reparses guild-roster officer notes, and guild-shared blacklist membership now comes from parsing those officer-note tags instead of the Guild Info policy string.
+- `Options -> Blacklist` is now a read-only roster view with short ordered-list instructions for the shared `[GBMBL]` officer-note tag plus a `Refresh` action placed below the parsed-member list, and guild-shared blacklist membership now comes from parsing those officer-note tags instead of the Guild Info policy string.
+- The Blacklist tab now reserves extra panel padding beneath the parsed-summary text so the footer summary does not crowd the surrounding chrome.
 - Dashboard mismatch investigation did not land a code change: the obvious local machine paths did not reveal a live SavedVariables file, and the dashboard plus Exports count paths both reduce from the same demand-plan shape, so live repro should come before any dashboard fix.
 - Opening the guild bank now auto-starts a scan when at least 10 minutes have elapsed since the last successful scan, and the retry path now stays alive long enough for delayed tab or slot metadata on reopen. Manual slash or button scans still work immediately.
 - Synced request create and update messages now append local history rows on receiving clients, approved request sync recreates the tab-scoped Minimums side effect on receivers, and request conflict resolution now prefers higher-authority updaters before timestamp tie-breaks.
-- The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still preserving local updater attribution when it can be rehydrated from live or previously known state.
+- The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still preserving local updater attribution when it can be rehydrated from live or previously known state. The `Policy String` helper text in `Options -> Permissions` is now written as a short step list so the manual Guild Info publish flow is easier to follow in game.
 - Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned blacklist reasons stay local and continue to travel through addon sync snapshots.
 - Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, and render in the read-only Blacklist tab directly from guild-roster officer-note parsing.
 - The read-only Blacklist tab no longer attempts officer-note writes. To blacklist or unblacklist a member, edit that member's officer note in Guild & Communities and add or remove `[GBMBL]`, then refresh guild data or `/reload`.
+- `Options -> Data` now keeps the retention and scan dropdown titles aligned on one baseline, sizes the three destructive clear-data buttons to one shared width with centered labels, and keeps the entire section inside the visible panel chrome.
 - Request creation now refreshes guild-backed blacklist state before submit, so a newly tagged blacklisted member is denied request creation as soon as the latest officer-note parse is available on that client.
 - History rows now build newest-first by timestamp so recent approvals, minimum edits, and auth changes stay at the top of the table.
 - History now keeps the visible table compact with `When`, `Category`, `Item`, `Action`, and `Who`, while `Old Value` and `New Value` move into a row-click `History Details` modal so long audit values stop overflowing the grid.
 - The sidebar branding footer now uses a theme-specific crest/logo instead of the older text identity card, hides completely when the sidebar is collapsed, and crops the shipped crest art so the visible logo fills more of the footer zone without distortion.
 - Crafted-quality rendering now normalizes the low-tier and max-tier atlas variants so Exports, Inventory, Minimums, Requests, and request-details all show the same visible quality symbols whether the source came from live scan data or fallback catalog/search data.
-- Two-rank crafted items now stay on one shared visible chat-icon family across table rows, details, request review, exports, and the manual shopping list instead of switching to a mismatched inventory-atlas family.
+- Two-rank crafted items now keep one shared display rule by surface: table-heavy views like Inventory and Minimums still use the compact chat-icon family, while Exports, Request Details, request review, and the Manual Shopping List now use the brighter reagent-quality icons for the two-rank low/max pair.
 - The shell now supports a token-backed theme manager with local-only presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), per-theme crest art, a minimap launcher with a local show/hide toggle, a single `UI Scale` control that drives both shell scale and shared table density across a 90%-120% range, built-in WoW `UISliderTemplate` sliders for shell and modal opacity, collapsed-nav icons, stronger active-state glow for nav plus workflow filter buttons, and surface-only opacity so text plus controls stay crisp while the shell or modal art fades.
 - The UI modernization pass is now in a committed checkpoint state: reusable shell, theme, table, request-wizard, export-card, and Options-tab scaffolding are in place, but the live addon still needs substantial art-pack-driven polish before it matches the Alliance mockup or broader visual guide literally.
 - The request-only workflow panel and shared request wizard are mid-modernization: the member-facing launcher now presents the three-step guided flow, and the wizard exposes a visual progress rail plus a request preview card without changing request persistence or sync behavior.
@@ -146,7 +153,7 @@ The next planned work after the completed pre-polish workflow block is:
 - Shared table filters now inset slightly inside each column so adjacent search boxes keep visible spacing and a softer edge treatment instead of touching edge-to-edge.
 - The addon shell now opts into top-level window ordering so other dragged UI can come above it, and clicking back onto the addon brings the shell and its registered modals forward again.
 - Dashboard `Top 10 Most Used` now uses ledger-backed withdrawal rankings first, with a ten-row panel instead of the older top-five fallback.
-- `Bank Ledger` is now a live shared-table workspace with `Item Log` and `Money Log` modes, action/date filters, CSV export, and summary lines for top item movement plus top user bank usage over the filtered range.
+- `Bank Ledger` is now a live shared-table workspace with `Item Log` and `Money Log` modes, action/date filters, CSV export, and summary lines for item movement plus gold in, gold out, and repairs over the filtered range.
 - Minimums now groups staged rows at the top of the table, exposes `ADD` / `EDIT` / `DELETE` row badges, shows a staged-change summary in the footer, and reveals `Revert All` only when draft changes exist.
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering so more pure-domain regressions can be caught in-client without relying on workflow smoke alone.
 - `/gbm test smoke` now follows the real Minimums modal add flow during its draft-stage check and hard-resets request selector state before the confirmed-selection gating check, so those two live smoke results match the current product workflow instead of the retired footer-editor path.

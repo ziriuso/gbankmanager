@@ -4,6 +4,21 @@ Date: 2026-05-23
 Branch: `codex/gbankmanager-v1`
 Scope: visual modernization pass for the shared shell and its first-order UI surfaces without depending on a new art pack
 
+## Status
+
+This design is no longer just a proposed direction. Its core shell pass has been implemented and extended in the live addon.
+
+The sections below still describe the approved visual direction, but the current product has also accumulated a few implemented addenda that should now be treated as part of the active shell contract:
+
+- dashboard `Quick Actions` is intentionally trimmed to `Add Minimum`, `Create Request`, and `Export Data`
+- `Create Request` should launch the request wizard, not only navigate to the Requests view
+- `Options` is intentionally trimmed to `Appearance`, `Stock Settings`, `Permissions`, `Blacklist`, and `Data`
+- `Options -> Blacklist` is a read-only instructions-plus-list view with the `Refresh` action below the parsed-member list
+- `Options -> Data` owns retention, scan interval, and destructive local-data cleanup actions
+- `/gbm` now opens the UI the current player can access, while `/gbm help` prints the supported slash-command list
+- the shell footer identity card is replaced by the theme crest zone, hidden while the sidebar is collapsed
+- `UI Scale` now lives in the right-hand slider column above shell and modal opacity, with the minimap toggle directly beneath the theme presets
+
 ## Purpose
 
 This design defines the next shell-focused UI polish pass for `GBankManager`.
@@ -151,7 +166,7 @@ Themes should not rely on noisy border recolors or heavy saturation everywhere.
 
 ### Lower Panels
 
-- `Top 5 Most Used`, `Recent Activity`, and `Quick Actions` should inherit the flatter dark-band treatment
+- `Top 10 Most Used`, `Recent Activity`, and `Quick Actions` should inherit the flatter dark-band treatment
 - preserve structure and readability
 - avoid returning to overly heavy card framing
 
@@ -266,6 +281,9 @@ Validation should cover:
 - continued theme switching
 - continued readability at current supported scales
 - last-scan timezone abbreviation in header rendering
+- `/gbm` opening the correct accessible UI surface
+- `/gbm help` reflecting the supported slash-command set
+- blacklist and data panels keeping their controls inside the visible chrome
 
 ## Risks and Mitigations
 

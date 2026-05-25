@@ -13,9 +13,13 @@ local function render_field(row, field)
     return tostring(row[field] or "")
 end
 
-local function crafted_quality_markup(atlasName)
+local function crafted_quality_markup(atlasName, fallbackQuality)
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        return craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality)
+    end
+
     if type(craftedQuality.ToMarkup) == "function" then
-        return craftedQuality.ToMarkup(atlasName, 22)
+        return craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality)
     end
 
     if atlasName == nil or atlasName == "" then
@@ -33,7 +37,7 @@ local function crafted_quality_icon_for_value(quality)
 
     local atlasName = string.format("Professions-ChatIcon-Quality-Tier%d", quality)
     if type(craftedQuality.NormalizeDisplayAtlas) == "function" then
-        return craftedQuality.NormalizeDisplayAtlas(atlasName)
+        return craftedQuality.NormalizeDisplayAtlas(atlasName, quality, "reagent")
     end
 
     return atlasName
@@ -242,7 +246,7 @@ function exports.MaterializePlanRows(plan, snapshot)
                 amountToStock = row.totalToBuy,
                 quality = quality,
                 craftedQualityIcon = craftedQualityIcon,
-                itemTier = crafted_quality_markup(craftedQualityIcon),
+                itemTier = crafted_quality_markup(craftedQualityIcon, quality),
                 itemTierValue = quality,
                 bankTab = bankTab,
                 scopeSummary = summarize_scopes(row.details or {}),
@@ -318,7 +322,7 @@ function exports.BuildRowsFromDatabase(db)
         if tostring(row.craftedQualityIcon or "") == "" then
             row.craftedQualityIcon = crafted_quality_icon_for_value(row.quality)
         end
-        row.itemTier = crafted_quality_markup(row.craftedQualityIcon)
+        row.itemTier = crafted_quality_markup(row.craftedQualityIcon, row.quality)
         row.itemTierValue = tonumber(row.quality or 0) or 0
     end
 

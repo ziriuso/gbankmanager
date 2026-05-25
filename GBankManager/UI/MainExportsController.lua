@@ -259,8 +259,11 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportManualShoppingListTitle = mainFrame.exportManualShoppingListTitle or makeLabel(mainFrame.exportManualShoppingListModal, "Manual Shopping List", "GameFontHighlight")
     mainFrame.exportManualShoppingListTitle:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListModal, "TOPLEFT", 16, -16)
 
-    mainFrame.exportManualShoppingListHint = mainFrame.exportManualShoppingListHint or makeLabel(mainFrame.exportManualShoppingListModal, "Check off purchases as you work through the list. Does not sync back to addon.", "GameFontHighlightSmall")
+    mainFrame.exportManualShoppingListHint = mainFrame.exportManualShoppingListHint or makeLabel(mainFrame.exportManualShoppingListModal, "Check off purchases as you work through the list.\nDoes not sync back to addon.", "GameFontHighlightSmall")
     mainFrame.exportManualShoppingListHint:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListTitle, "BOTTOMLEFT", 0, -8)
+    if type(mainFrame.exportManualShoppingListHint.SetWidth) == "function" then
+        mainFrame.exportManualShoppingListHint:SetWidth(420)
+    end
 
     mainFrame.exportManualShoppingListContent = mainFrame.exportManualShoppingListContent or _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListModal, "BackdropTemplate")
     mainFrame.exportManualShoppingListContent:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListHint, "BOTTOMLEFT", 0, -12)
@@ -291,14 +294,14 @@ function mainExportsController.Attach(mainFrame, options)
         local atlasName = tostring(row.craftedQualityIcon or "")
         if atlasName ~= "" then
             if type(craftedQuality.ToMarkup) == "function" then
-                return craftedQuality.ToMarkup(atlasName, 22)
+                return craftedQuality.ToMarkup(atlasName, 22, "reagent", row.quality or row.itemTierValue)
             end
             return string.format("|A:%s:22:22|a", atlasName)
         end
 
         local quality = tonumber(row.quality or row.itemTierValue or 0) or 0
         if quality > 0 and type(craftedQuality.ToMarkup) == "function" then
-            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22)
+            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality)
         end
         if quality > 0 then
             return string.format("|A:Professions-ChatIcon-Quality-Tier%d:22:22|a", quality)
@@ -315,10 +318,21 @@ function mainExportsController.Attach(mainFrame, options)
             if not rowFrame then
                 rowFrame = _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListContent, "BackdropTemplate")
                 rowFrame:SetSize(392, 24)
-                rowFrame.checkButton = makeButton(rowFrame, 24, 22, "")
+                rowFrame.checkButton = _G.CreateFrame("CheckButton", nil, rowFrame, "UICheckButtonTemplate")
+                rowFrame.checkButton:SetSize(24, 24)
+                if type(rowFrame.checkButton.SetChecked) ~= "function" then
+                    function rowFrame.checkButton:SetChecked(value)
+                        self.checked = value and true or false
+                    end
+                end
+                if type(rowFrame.checkButton.GetChecked) ~= "function" then
+                    function rowFrame.checkButton:GetChecked()
+                        return self.checked == true
+                    end
+                end
                 rowFrame.checkButton:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
                 rowFrame.itemText = makeLabel(rowFrame, "", "GameFontNormal")
-                rowFrame.itemText:SetPoint("LEFT", rowFrame.checkButton, "RIGHT", 8, 0)
+                rowFrame.itemText:SetPoint("LEFT", rowFrame.checkButton, "RIGHT", 10, 0)
                 if type(rowFrame.itemText.SetWidth) == "function" then
                     rowFrame.itemText:SetWidth(356)
                 end
@@ -337,7 +351,7 @@ function mainExportsController.Attach(mainFrame, options)
             rowFrame:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, -((index - 1) * 26))
             rowFrame.rowData = row
             rowFrame.checked = false
-            rowFrame.checkButton.labelText:SetText("")
+            rowFrame.checkButton:SetChecked(false)
             local qualityMarkup = manual_shopping_quality_label(row)
             local quantityText = tostring(row.amountToStock or row.totalToBuy or 0)
             if qualityMarkup ~= "" then
@@ -348,7 +362,7 @@ function mainExportsController.Attach(mainFrame, options)
             rowFrame.strikeLine:Hide()
             rowFrame.checkButton:SetScript("OnClick", function()
                 rowFrame.checked = not rowFrame.checked
-                rowFrame.checkButton.labelText:SetText(rowFrame.checked and "x" or "")
+                rowFrame.checkButton:SetChecked(rowFrame.checked)
                 if rowFrame.checked then
                     rowFrame.strikeLine:Show()
                 else

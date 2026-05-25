@@ -57,7 +57,7 @@ This is now a shelf document for the next refinement pass. The first appearance 
      - quick-action and export-card icon plates
      - subtle inset shadows or divider textures
    - Keep the pack theme-aware where possible, but design the first pass around Alliance because that is the current visual contract.
-   - Reuse the same assets across Dashboard, Inventory, History, Minimums, Request Admin, Exports, About, and Options instead of per-view one-offs.
+   - Reuse the same assets across Dashboard, Inventory, History, Minimums, Requests, Exports, About, and Options instead of per-view one-offs.
 
 ## Implementation Notes
 

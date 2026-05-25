@@ -90,7 +90,7 @@ _G.GBankManagerDB.requests = {
         itemName = "Thalassian Phoenix Oil",
         itemID = 243734,
         craftedQuality = 2,
-        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+        craftedQualityIcon = "|A:Professions-ChatIcon-Quality-Tier2:22:22|a",
         quantity = 100,
         approval = "PENDING",
         fulfillment = "OPEN",
@@ -324,6 +324,7 @@ mainFrame:ShowDashboard()
 mainFrame:SelectView("REQUESTS")
 mainFrame:OpenRequestDetailsModal("req-approve-bank-tab")
 assert.truthy(mainFrame.requestDetailsModal:IsShown(), "admin approval should use the shared details modal")
+assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", mainFrame.requestDetailsQualityText:GetText(), "request details should use the brighter max-rank reagent icon for two-rank crafted items")
 assert.truthy(mainFrame.requestDetailsBankTabLabel:IsShown(), "approving a request should prompt for a bank tab")
 assert.equal("Approval Bank Tab", mainFrame.requestDetailsBankTabLabel:GetText(), "approval bank tab prompt should be labeled")
 assert.truthy(mainFrame.requestDetailsApproveButton.enabled == false, "approve should stay disabled until the approver chooses a bank tab")
@@ -524,7 +525,7 @@ assert.truthy(not mainFrame.requestWizardReviewBankTabText:IsShown(), "request w
 assert.truthy(not mainFrame.requestWizardReviewReasonLabel:IsShown(), "request wizard should remove the extra reason readback under the progress rail")
 assert.truthy(not mainFrame.requestWizardReviewReasonText:IsShown(), "request wizard should remove the extra reason value under the progress rail")
 assert.equal("Test Variant Flask", mainFrame.requestWizardPreviewItemText:GetText(), "request wizard preview should read back item name")
-assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.requestWizardPreviewQualityText:GetText(), "request wizard preview should normalize two-rank quality icons to the shared visible icon family")
+assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", mainFrame.requestWizardPreviewQualityText:GetText(), "request wizard preview should use the brighter max-rank reagent icon for two-rank crafted items")
 assert.equal("4", mainFrame.requestWizardPreviewRequestedQuantityText:GetText(), "request wizard preview should read back quantity")
 assert.equal("Need four", mainFrame.requestWizardPreviewReasonText:GetText(), "request wizard preview should read back reason")
 assert.truthy(mainFrame.requestWizardPreviewSuggestedMinimumText == nil or not mainFrame.requestWizardPreviewSuggestedMinimumText:IsShown(), "request wizard should remove Suggested Minimum from the preview")
