@@ -27,12 +27,16 @@ _G.StaticPopupDialogs = _G.StaticPopupDialogs or {
     },
 }
 _G.StaticPopupCalls = _G.StaticPopupCalls or {}
+_G.__lastOpenedMenu = nil
+_G.__lastMenuAnchor = nil
 _G.DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME or {
     messages = {},
 }
 _G.GuildRosterSetOfficerNoteCalls = _G.GuildRosterSetOfficerNoteCalls or {}
 _G.guildRosterSelection = _G.guildRosterSelection or 0
 _G.SetGuildRosterSelectionCalls = _G.SetGuildRosterSelectionCalls or {}
+_G.currentGuildBankTab = _G.currentGuildBankTab or 1
+_G.SetCurrentGuildBankTabCalls = _G.SetCurrentGuildBankTabCalls or {}
 
 if _G.time == nil then
     _G.time = function()
@@ -124,6 +128,15 @@ function _G.GetGuildRosterSelection()
     return tonumber(_G.guildRosterSelection) or 0
 end
 
+function _G.SetCurrentGuildBankTab(index)
+    _G.currentGuildBankTab = tonumber(index) or 1
+    table.insert(_G.SetCurrentGuildBankTabCalls, _G.currentGuildBankTab)
+end
+
+function _G.GetCurrentGuildBankTab()
+    return tonumber(_G.currentGuildBankTab) or 1
+end
+
 function _G.DEFAULT_CHAT_FRAME:AddMessage(message)
     table.insert(self.messages, tostring(message or ""))
 end
@@ -150,7 +163,84 @@ function _G.C_Timer.ClearPending()
     _G.C_Timer.pending = {}
 end
 
+_G.MenuUtil = _G.MenuUtil or {}
+
+function _G.MenuUtil.CreateContextMenuDescription()
+    local description = {
+        buttons = {},
+    }
+
+    function description:CreateButton(text, callback)
+        local button = {
+            text = tostring(text or ""),
+            callback = callback,
+        }
+        table.insert(self.buttons, button)
+        return button
+    end
+
+    return description
+end
+
+function _G.CreateAnchor(point, relativeTo, relativePoint, offsetX, offsetY)
+    return {
+        point = point,
+        relativeTo = relativeTo,
+        relativePoint = relativePoint,
+        offsetX = offsetX,
+        offsetY = offsetY,
+    }
+end
+
+_G.Menu = _G.Menu or {}
+
+function _G.Menu.GetManager()
+    return {
+        OpenMenu = function(_, owner, description, anchor)
+            _G.__lastOpenedMenu = {
+                owner = owner,
+                description = description,
+                buttons = description and description.buttons or {},
+            }
+            _G.__lastMenuAnchor = anchor
+        end,
+    }
+end
+
+function _G.UIDropDownMenu_CreateInfo()
+    return {}
+end
+
+function _G.EasyMenu(menuList, dropdownFrame, anchor, offsetX, offsetY, displayMode, autoHideDelay)
+    local buttons = {}
+    for _, entry in ipairs(menuList or {}) do
+        buttons[#buttons + 1] = {
+            text = tostring(entry.text or ""),
+            callback = entry.func,
+            notCheckable = entry.notCheckable,
+            checked = entry.checked,
+            value = entry.value,
+        }
+    end
+    _G.__lastOpenedMenu = {
+        owner = (type(dropdownFrame) == "table" and dropdownFrame.__gbmOwnerButton) or anchor,
+        dropdownFrame = dropdownFrame,
+        anchor = anchor,
+        buttons = buttons,
+        displayMode = displayMode,
+        autoHideDelay = autoHideDelay,
+    }
+    _G.__lastMenuAnchor = {
+        point = "TOPLEFT",
+        relativeTo = anchor,
+        relativePoint = "BOTTOMLEFT",
+        offsetX = offsetX,
+        offsetY = offsetY,
+    }
+end
+
 function _G.StaticPopup_Show(which, text_arg1, text_arg2, data)
+    local dialog = (_G.StaticPopupDialogs or {})[which] or {}
     local popup = {
         which = which,
         data = data,
@@ -169,7 +259,7 @@ function _G.StaticPopup_Show(which, text_arg1, text_arg2, data)
 
     table.insert(_G.StaticPopupCalls, {
         which = which,
-        text_arg1 = text_arg1,
+        text_arg1 = text_arg1 or dialog.text,
         text_arg2 = text_arg2,
         data = data,
         popup = popup,

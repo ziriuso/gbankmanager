@@ -457,6 +457,11 @@ function mainTableController.Attach(mainFrame, options)
             offsetY = -24
             viewportHeight = 324
             footerHeight = ((self.exportsPanel and self.exportsPanel:GetHeight()) or 64) + 18
+        elseif self.activeView == "BANK_LEDGER" then
+            anchor = self.viewSubtitle
+            offsetY = -24
+            viewportHeight = 292
+            footerHeight = ((self.bankLedgerPanel and self.bankLedgerPanel:GetHeight()) or 96) + 18
         elseif self.activeView == "OPTIONS" then
             anchor = self.optionsPanel
             offsetY = -16
@@ -529,6 +534,15 @@ function mainTableController.Attach(mainFrame, options)
             self.exportsPanel:ClearAllPoints()
             self.exportsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
             self.exportsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        end
+        if self.activeView == "BANK_LEDGER" and self.bankLedgerPanel then
+            self.bankLedgerPanel:ClearAllPoints()
+            self.bankLedgerPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
+            self.bankLedgerPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        elseif self.bankLedgerPanel then
+            self.bankLedgerPanel:ClearAllPoints()
+            self.bankLedgerPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+            self.bankLedgerPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
         end
         if self.tableScrollController then
             self.tableSyncingScroll = true

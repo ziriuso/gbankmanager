@@ -9,6 +9,7 @@ local REGISTERED_EVENTS = {
     "GUILDBANKFRAME_OPENED",
     "GUILDBANK_UPDATE_TABS",
     "GUILDBANKBAGSLOTS_CHANGED",
+    "GUILDBANKLOG_UPDATE",
 }
 
 function scannerEvents.GetRegisteredEvents()
@@ -45,6 +46,15 @@ function scannerEvents.HandleEvent(event, ...)
         end
 
         scanner.OnGuildBankSlotsChanged(...)
+        return true
+    end
+
+    if event == "GUILDBANKLOG_UPDATE" then
+        if type(scanner.OnGuildBankLogUpdated) ~= "function" then
+            return false
+        end
+
+        scanner.OnGuildBankLogUpdated(...)
         return true
     end
 

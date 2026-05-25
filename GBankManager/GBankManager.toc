@@ -23,6 +23,7 @@ Domain/Planning.lua
 Domain/CraftedQuality.lua
 Domain/Exports.lua
 Domain/Requests.lua
+Domain/BankLedger.lua
 Bootstrap.lua
 Features/GuildBankScanner.lua
 Features/GuildBankScannerEvents.lua
@@ -45,6 +46,7 @@ UI/InventoryView.lua
 UI/MinimumsView.lua
 UI/RequestsView.lua
 UI/HistoryView.lua
+UI/BankLedgerView.lua
 UI/ExportsView.lua
 UI/ExportDialog.lua
 UI/RequestDialog.lua

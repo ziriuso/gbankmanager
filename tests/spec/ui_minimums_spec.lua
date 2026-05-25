@@ -100,7 +100,7 @@ env.ns.state.db = _G.GBankManagerDB
 
 mainFrame:SelectView("MINIMUMS")
 assert.truthy(mainFrame.minimumsPanel:IsShown(), "minimums editor panel should show in the minimums view")
-assert.equal("panel", mainFrame.minimumsPanel.gbmSurfaceVariant, "minimums footer strip should still route through the shared panel variant")
+assert.equal("panel-flat", mainFrame.minimumsPanel.gbmSurfaceVariant, "minimums footer strip should now match the bank ledger footer surface variant")
 assert.truthy(mainFrame.tableViewportFrame:IsShown(), "minimums view should show the shared table viewport")
 assert.truthy(mainFrame.tableFilterFrame:IsShown(), "minimums should reuse the shared table filter row")
 assert.truthy(not mainFrame.minimumSearchLabel:IsShown(), "minimums should remove the old bottom search label in favor of shared table filters")
@@ -140,6 +140,8 @@ assert.truthy((mainFrame.tableViewportHeight or 0) <= (mainFrame.defaultTableVie
 assert.truthy((mainFrame.minimumsPanel:GetHeight() or 0) <= 72, "minimums footer should be a compact action strip instead of a boxed editor panel")
 assert.truthy(mainFrame.minimumsPanel.transparentActions == true, "minimums footer should remove the old boxed panel styling")
 assert.equal(nil, mainFrame.minimumsPanel.backdrop, "minimums action strip should not draw a boxed backdrop")
+assert.equal(((((mainFrame.bankLedgerPanel or {}).gbmArt or {}).innerFill or {}).color or {})[1], (((mainFrame.minimumsPanel.gbmArt or {}).innerFill or {}).color or {})[1], "minimums action strip should reuse the bank ledger footer fill value")
+assert.equal(((((mainFrame.bankLedgerPanel or {}).gbmArt or {}).innerFill or {}).color or {})[4], (((mainFrame.minimumsPanel.gbmArt or {}).innerFill or {}).color or {})[4], "minimums action strip should reuse the bank ledger footer opacity")
 assert.truthy(mainFrame.minimumNewButton:IsShown(), "minimums action strip should keep Add visible")
 assert.truthy(mainFrame.minimumSaveButton:IsShown(), "minimums action strip should keep Save All visible")
 assert.truthy(mainFrame.minimumEnabledOnlyButton:IsShown(), "minimums action strip should keep Enabled Only visible")

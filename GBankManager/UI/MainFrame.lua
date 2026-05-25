@@ -9,6 +9,13 @@ local mainTableController = ns.modules.mainTableController or {}
 local mainRequestsController = ns.modules.mainRequestsController or {}
 local mainExportsController = ns.modules.mainExportsController or {}
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
+local bankLedger = ns.modules.bankLedger or {}
+
+if type(_G.CreateFrame) ~= "function" then
+    ns.modules.mainFrame = ns.modules.mainFrame or {}
+    return ns.modules.mainFrame
+end
+
 local mainFrame = mainFrameShell.EnsureShell and mainFrameShell.EnsureShell(ns.modules.mainFrame) or ns.modules.mainFrame
 local theme = mainFrameShell.GetTheme and mainFrameShell.GetTheme() or (ns.ui.theme or {})
 local themeManager = ns.modules.themeManager or {}
@@ -28,6 +35,14 @@ local apply_frame_layer = mainFrameShell.ApplyFrameLayer
 local bring_frame_to_front = mainFrameShell.BringFrameToFront
 local set_surface_alpha = mainFrameShell.SetSurfaceAlpha
 local minimapButton = ns.modules.minimapButton or {}
+
+local function current_bank_ledger_view()
+    local view = ns.modules.bankLedgerView or {}
+    if view.GetColumns == nil and type(_G.dofile) == "function" then
+        view = _G.dofile("GBankManager/UI/BankLedgerView.lua") or view
+    end
+    return view
+end
 
 local function parse_number(value)
     local parsed = tonumber(value)
@@ -338,7 +353,7 @@ local function format_timestamp(timestamp)
         return "No scan yet"
     end
 
-    local formatter = _G.date or os.date
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     if type(formatter) == "function" then
         local baseText = formatter("%Y-%m-%d %H:%M", timestamp)
         local zoneText = formatter("%Z", timestamp)
@@ -374,8 +389,8 @@ local function auth_metadata_text(policy)
 end
 
 local function build_about_stamp()
-    local timestampProvider = _G.time or os.time
-    local formatter = _G.date or os.date
+    local timestampProvider = type(_G.time) == "function" and _G.time or (type(os) == "table" and type(os.time) == "function" and os.time or nil)
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     local buildTimestamp = type(timestampProvider) == "function" and timestampProvider() or 0
 
     if type(formatter) == "function" then
@@ -706,7 +721,7 @@ mainFrame.dashboardTopItemsPanel:SetPoint("TOPLEFT", mainFrame.dashboardCards[1]
 mainFrame.dashboardTopItemsPanel:SetSize(352, 188)
 apply_panel_style(mainFrame.dashboardTopItemsPanel, theme.colors.panel)
 
-mainFrame.dashboardTopItemsTitle = mainFrame.dashboardTopItemsTitle or make_label(mainFrame.dashboardTopItemsPanel, "Top 5 Most Used", "GameFontHighlight")
+mainFrame.dashboardTopItemsTitle = mainFrame.dashboardTopItemsTitle or make_label(mainFrame.dashboardTopItemsPanel, "Top 10 Most Used", "GameFontHighlight")
 mainFrame.dashboardTopItemsTitle:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsPanel, "TOPLEFT", 16, -14)
 mainFrame.dashboardTopItemsText = mainFrame.dashboardTopItemsText or make_label(mainFrame.dashboardTopItemsPanel, "", "GameFontNormal")
 mainFrame.dashboardTopItemsText:SetPoint("TOPLEFT", mainFrame.dashboardTopItemsTitle, "BOTTOMLEFT", 0, -10)
@@ -933,6 +948,58 @@ function mainFrame:OpenHistoryDetailsModal(row)
     return self.historyDetailsModal
 end
 
+mainFrame.bankLedgerMode = mainFrame.bankLedgerMode or "ITEM"
+mainFrame.bankLedgerActionFilter = mainFrame.bankLedgerActionFilter or ""
+
+mainFrame.bankLedgerPanel = mainFrame.bankLedgerPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.bankLedgerPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
+mainFrame.bankLedgerPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
+mainFrame.bankLedgerPanel:SetHeight(116)
+apply_surface_variant(mainFrame.bankLedgerPanel, "panel-flat")
+if type(mainFrame.bankLedgerPanel.SetBackdrop) == "function" then
+    mainFrame.bankLedgerPanel:SetBackdrop(nil)
+end
+mainFrame.bankLedgerPanel:Hide()
+
+mainFrame.bankLedgerItemModeButton = mainFrame.bankLedgerItemModeButton or make_button(mainFrame.bankLedgerPanel, 84, 24, "Item Log")
+mainFrame.bankLedgerItemModeButton:SetPoint("TOPLEFT", mainFrame.bankLedgerPanel, "TOPLEFT", 16, -14)
+
+mainFrame.bankLedgerMoneyModeButton = mainFrame.bankLedgerMoneyModeButton or make_button(mainFrame.bankLedgerPanel, 92, 24, "Money Log")
+mainFrame.bankLedgerMoneyModeButton:SetPoint("LEFT", mainFrame.bankLedgerItemModeButton, "RIGHT", 8, 0)
+
+mainFrame.bankLedgerActionFilterTitle = mainFrame.bankLedgerActionFilterTitle or make_label(mainFrame.bankLedgerPanel, "Action", "GameFontHighlightSmall")
+mainFrame.bankLedgerActionFilterTitle:SetPoint("LEFT", mainFrame.bankLedgerMoneyModeButton, "RIGHT", 20, 0)
+
+mainFrame.bankLedgerActionFilterButton = mainFrame.bankLedgerActionFilterButton or make_button(mainFrame.bankLedgerPanel, 112, 24, "All Actions")
+mainFrame.bankLedgerActionFilterButton:SetPoint("LEFT", mainFrame.bankLedgerActionFilterTitle, "RIGHT", 8, 0)
+
+mainFrame.bankLedgerDateRangeTitle = mainFrame.bankLedgerDateRangeTitle or make_label(mainFrame.bankLedgerPanel, "Date Range", "GameFontHighlightSmall")
+mainFrame.bankLedgerDateRangeTitle:SetPoint("LEFT", mainFrame.bankLedgerActionFilterButton, "RIGHT", 20, 0)
+
+mainFrame.bankLedgerDateRangeButton = mainFrame.bankLedgerDateRangeButton or make_button(mainFrame.bankLedgerPanel, 108, 24, "All")
+mainFrame.bankLedgerDateRangeButton:SetPoint("LEFT", mainFrame.bankLedgerDateRangeTitle, "RIGHT", 8, 0)
+
+mainFrame.bankLedgerExportButton = mainFrame.bankLedgerExportButton or make_button(mainFrame.bankLedgerPanel, 88, 24, "Export CSV")
+mainFrame.bankLedgerExportButton:SetPoint("RIGHT", mainFrame.bankLedgerPanel, "RIGHT", -16, 0)
+
+mainFrame.bankLedgerSummaryPrimaryText = mainFrame.bankLedgerSummaryPrimaryText or make_label(mainFrame.bankLedgerPanel, "", "GameFontHighlightSmall")
+mainFrame.bankLedgerSummaryPrimaryText:SetPoint("TOPLEFT", mainFrame.bankLedgerPanel, "TOPLEFT", 16, -52)
+if type(mainFrame.bankLedgerSummaryPrimaryText.SetWidth) == "function" then
+    mainFrame.bankLedgerSummaryPrimaryText:SetWidth(760)
+end
+
+mainFrame.bankLedgerSummarySecondaryText = mainFrame.bankLedgerSummarySecondaryText or make_label(mainFrame.bankLedgerPanel, "", "GameFontHighlightSmall")
+mainFrame.bankLedgerSummarySecondaryText:SetPoint("TOPLEFT", mainFrame.bankLedgerSummaryPrimaryText, "BOTTOMLEFT", 0, -6)
+if type(mainFrame.bankLedgerSummarySecondaryText.SetWidth) == "function" then
+    mainFrame.bankLedgerSummarySecondaryText:SetWidth(760)
+end
+
+mainFrame.bankLedgerSummaryTertiaryText = mainFrame.bankLedgerSummaryTertiaryText or make_label(mainFrame.bankLedgerPanel, "", "GameFontHighlightSmall")
+mainFrame.bankLedgerSummaryTertiaryText:SetPoint("TOPLEFT", mainFrame.bankLedgerSummarySecondaryText, "BOTTOMLEFT", 0, -6)
+if type(mainFrame.bankLedgerSummaryTertiaryText.SetWidth) == "function" then
+    mainFrame.bankLedgerSummaryTertiaryText:SetWidth(760)
+end
+
 mainTableController.Attach(mainFrame, {
     applyPanelStyle = apply_panel_style,
     makeLabel = make_label,
@@ -948,6 +1015,7 @@ mainTableController.Attach(mainFrame, {
         return frame.activeView == "INVENTORY"
             or frame.activeView == "MINIMUMS"
             or frame.activeView == "HISTORY"
+            or frame.activeView == "BANK_LEDGER"
             or (frame.activeView == "REQUESTS" and frame.requestOnlyMode ~= true)
     end,
     getActiveSortState = function(frame)
@@ -1053,12 +1121,10 @@ mainFrame.optionsTabOrder = {
     { key = "STOCK", label = "Stock Settings" },
     { key = "PERMISSIONS", label = "Permissions" },
     { key = "BLACKLIST", label = "Blacklist" },
-    { key = "AUTOMATION", label = "Automation" },
-    { key = "EXPORTS", label = "Exports" },
-    { key = "REQUESTS", label = "Requests" },
+    { key = "LOGS_HISTORY", label = "Data" },
 }
 for index, item in ipairs(mainFrame.optionsTabOrder) do
-    local buttonWidth = item.key == "STOCK" and 118 or 94
+    local buttonWidth = item.key == "STOCK" and 118 or (item.key == "LOGS_HISTORY" and 108 or 94)
     local button = mainFrame.optionsTabButtons[index] or make_button(mainFrame.optionsTabBar, buttonWidth, 24, item.label)
     button:SetWidth(buttonWidth)
     button.key = item.key
@@ -1073,13 +1139,19 @@ for index, item in ipairs(mainFrame.optionsTabOrder) do
     end
     mainFrame.optionsTabButtons[index] = button
 end
+for index = #mainFrame.optionsTabOrder + 1, #(mainFrame.optionsTabButtons or {}) do
+    if mainFrame.optionsTabButtons[index] then
+        mainFrame.optionsTabButtons[index]:Hide()
+        mainFrame.optionsTabButtons[index] = nil
+    end
+end
 
 mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(172)
+mainFrame.optionsAppearancePanel:SetHeight(214)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1105,6 +1177,12 @@ mainFrame.optionsBlacklistPanel:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, 
 mainFrame.optionsBlacklistPanel:SetPoint("TOPRIGHT", mainFrame.optionsAuthPanel, "TOPRIGHT", 0, 0)
 mainFrame.optionsBlacklistPanel:SetHeight(390)
 apply_surface_variant(mainFrame.optionsBlacklistPanel, "panel-alt")
+
+mainFrame.optionsLogsHistoryPanel = mainFrame.optionsLogsHistoryPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsLogsHistoryPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsLogsHistoryPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsLogsHistoryPanel:SetHeight(360)
+apply_surface_variant(mainFrame.optionsLogsHistoryPanel, "panel-alt")
 
 mainFrame.optionsAutomationPanel = mainFrame.optionsAutomationPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAutomationPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
@@ -1293,6 +1371,58 @@ mainFrame.optionsCriticalThresholdPercentText:SetPoint("LEFT", mainFrame.options
 mainFrame.optionsStockSettingsSaveButton = mainFrame.optionsStockSettingsSaveButton or make_button(mainFrame.optionsStockSettingsPanel, 104, 28, "Save Settings")
 mainFrame.optionsStockSettingsSaveButton:SetPoint("BOTTOMLEFT", mainFrame.optionsStockSettingsPanel, "BOTTOMLEFT", 16, 16)
 mainFrame.defaultMinimumSaveButton = mainFrame.optionsStockSettingsSaveButton
+
+mainFrame.optionsLogsHistoryTitle = mainFrame.optionsLogsHistoryTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Data", "GameFontHighlight")
+mainFrame.optionsLogsHistoryTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -16)
+
+mainFrame.optionsLogsHistoryHint = mainFrame.optionsLogsHistoryHint or make_label(mainFrame.optionsLogsHistoryPanel, "Control how long local guild-bank logs and audit history are retained, and how often guild-bank scans and ledger rescans can run.", "GameFontHighlightSmall")
+mainFrame.optionsLogsHistoryHint:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsLogsHistoryHint.SetWidth) == "function" then
+    mainFrame.optionsLogsHistoryHint:SetWidth(640)
+end
+
+mainFrame.optionsLedgerRetentionTitle = mainFrame.optionsLedgerRetentionTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Guild Bank Log Retention", "GameFontHighlight")
+mainFrame.optionsLedgerRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryHint, "BOTTOMLEFT", 0, -18)
+
+mainFrame.optionsLedgerRetentionButton = mainFrame.optionsLedgerRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
+mainFrame.optionsLedgerRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionTitle, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsHistoryRetentionTitle = mainFrame.optionsHistoryRetentionTitle or make_label(mainFrame.optionsLogsHistoryPanel, "History Retention", "GameFontHighlight")
+mainFrame.optionsHistoryRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 252, -66)
+
+mainFrame.optionsHistoryRetentionButton = mainFrame.optionsHistoryRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
+mainFrame.optionsHistoryRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsHistoryRetentionTitle, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsLedgerScanIntervalTitle = mainFrame.optionsLedgerScanIntervalTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Scan Interval", "GameFontHighlight")
+mainFrame.optionsLedgerScanIntervalTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 488, -66)
+
+mainFrame.optionsLedgerScanIntervalButton = mainFrame.optionsLedgerScanIntervalButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "5 Minutes")
+mainFrame.optionsLedgerScanIntervalButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerScanIntervalTitle, "BOTTOMLEFT", 0, -6)
+
+mainFrame.optionsLogsHistorySaveButton = mainFrame.optionsLogsHistorySaveButton or make_button(mainFrame.optionsLogsHistoryPanel, 104, 28, "Save Settings")
+mainFrame.optionsLogsHistorySaveButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionButton, "BOTTOMLEFT", 0, -24)
+
+mainFrame.optionsLogsHistoryStatusText = mainFrame.optionsLogsHistoryStatusText or make_label(mainFrame.optionsLogsHistoryPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsLogsHistoryStatusText:SetPoint("TOPLEFT", mainFrame.optionsLogsHistorySaveButton, "BOTTOMLEFT", 0, -8)
+mainFrame.optionsLogsHistoryStatusText:SetWidth(360)
+
+mainFrame.optionsClearDataTitle = mainFrame.optionsClearDataTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Clear Data", "GameFontHighlight")
+mainFrame.optionsClearDataTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryStatusText, "BOTTOMLEFT", 0, -18)
+
+mainFrame.optionsClearDataHint = mainFrame.optionsClearDataHint or make_label(mainFrame.optionsLogsHistoryPanel, "These actions are irreversible. Use them only when you want to remove saved local data on purpose.", "GameFontHighlightSmall")
+mainFrame.optionsClearDataHint:SetPoint("TOPLEFT", mainFrame.optionsClearDataTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsClearDataHint.SetWidth) == "function" then
+    mainFrame.optionsClearDataHint:SetWidth(640)
+end
+
+mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 192, 28, "Clear Guild Bank Log Data")
+mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
+
+mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 216, 28, "Clear Guild Bank Inventory Data")
+mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)
+
+mainFrame.optionsClearCompletedRequestsButton = mainFrame.optionsClearCompletedRequestsButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Completed Request History")
+mainFrame.optionsClearCompletedRequestsButton:SetPoint("TOPLEFT", mainFrame.optionsClearInventoryDataButton, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
 mainFrame.optionsAuthTitle:SetPoint("TOPLEFT", mainFrame.optionsAuthPanel, "TOPLEFT", 16, -16)
@@ -1874,6 +2004,293 @@ mainFrame.optionsStockSettingsSaveButton:SetScript("OnClick", function()
     mainFrame:SaveStockSettings()
 end)
 
+function mainFrame:RefreshLogsHistoryControls()
+    local db = current_db()
+    local settings = bankLedger and type(bankLedger.GetSettings) == "function"
+        and bankLedger.GetSettings(db)
+        or (((db or {}).ui or {}).logsHistorySettings or {})
+    if self.optionsLedgerRetentionButton then
+        self.optionsLedgerRetentionButton.labelText:SetText(bankLedger.GetRetentionLabel(settings.ledgerRetention))
+    end
+    if self.optionsHistoryRetentionButton then
+        self.optionsHistoryRetentionButton.labelText:SetText(bankLedger.GetRetentionLabel(settings.historyRetention))
+    end
+    if self.optionsLedgerScanIntervalButton then
+        self.optionsLedgerScanIntervalButton.labelText:SetText(bankLedger.GetScanIntervalLabel(settings.ledgerScanIntervalSeconds))
+    end
+    return settings
+end
+
+function mainFrame:ApplyLogsHistoryChoice(fieldName, value)
+    local db = current_db()
+    local settings = bankLedger.GetSettings(db)
+    if fieldName == "ledgerScanIntervalSeconds" then
+        settings.ledgerScanIntervalSeconds = tonumber(value) or 300
+    else
+        settings[fieldName] = tostring(value or "indefinite")
+    end
+    self:RefreshLogsHistoryControls()
+end
+
+function mainFrame:CycleLogsHistoryChoice(fieldName)
+    local db = current_db()
+    local settings = bankLedger.GetSettings(db)
+    if fieldName == "ledgerScanIntervalSeconds" then
+        local choices = bankLedger.GetScanIntervalChoices()
+        local nextValue = choices[1] and choices[1].value or 300
+        for index, choice in ipairs(choices) do
+            if tonumber(choice.value) == tonumber(settings.ledgerScanIntervalSeconds) then
+                nextValue = (choices[index + 1] or choices[1]).value
+                break
+            end
+        end
+        self:ApplyLogsHistoryChoice(fieldName, nextValue)
+    else
+        local choices = bankLedger.GetRetentionChoices()
+        local current = tostring(settings[fieldName] or "indefinite")
+        local nextValue = choices[1] and choices[1].value or "indefinite"
+        for index, choice in ipairs(choices) do
+            if tostring(choice.value) == current then
+                nextValue = (choices[index + 1] or choices[1]).value
+                break
+            end
+        end
+        self:ApplyLogsHistoryChoice(fieldName, nextValue)
+    end
+end
+
+function mainFrame:OpenChoiceMenu(ownerButton, choices, onSelect, fallbackCallback)
+    choices = type(choices) == "table" and choices or {}
+    if ownerButton == nil
+        or type(ownerButton.GetWidth) ~= "function"
+        or type(ownerButton.ClearAllPoints) ~= "function"
+        or #choices == 0
+        or type(onSelect) ~= "function"
+    then
+        if type(fallbackCallback) == "function" then
+            fallbackCallback()
+        end
+        return false
+    end
+
+    self.sharedChoiceDropdownPanel = self.sharedChoiceDropdownPanel or _G.CreateFrame("Frame", nil, self, "BackdropTemplate")
+    self.sharedChoiceDropdownPanel:SetFrameStrata("DIALOG")
+    if type(self.sharedChoiceDropdownPanel.SetFrameLevel) == "function" then
+        self.sharedChoiceDropdownPanel:SetFrameLevel(60)
+    end
+    self.sharedChoiceDropdownPanel:EnableMouse(true)
+    apply_surface_variant(self.sharedChoiceDropdownPanel, "input")
+    self.sharedChoiceDropdownOptions = self.sharedChoiceDropdownOptions or {}
+
+    if self.sharedChoiceDropdownOwner == ownerButton and self.sharedChoiceDropdownPanel:IsShown() then
+        self.sharedChoiceDropdownPanel:Hide()
+        self.sharedChoiceDropdownOwner = nil
+        return true
+    end
+
+    local maxLabelLength = 0
+    for _, choice in ipairs(choices) do
+        maxLabelLength = math.max(maxLabelLength, string.len(tostring(choice.label or "")))
+    end
+    local dropdownWidth = math.max(type(ownerButton.GetWidth) == "function" and (ownerButton:GetWidth() or 0) or 0, math.min(260, math.max(132, 28 + (maxLabelLength * 7))))
+    local dropdownHeight = math.max(28, (#choices * 24) + 8)
+    self.sharedChoiceDropdownPanel:ClearAllPoints()
+    self.sharedChoiceDropdownPanel:SetPoint("TOPLEFT", ownerButton, "BOTTOMLEFT", 0, -2)
+    self.sharedChoiceDropdownPanel:SetSize(dropdownWidth, dropdownHeight)
+
+    for index, choice in ipairs(choices) do
+        local option = self.sharedChoiceDropdownOptions[index] or make_button(self.sharedChoiceDropdownPanel, dropdownWidth - 8, 22, "")
+        option:ClearAllPoints()
+        option:SetPoint("TOPLEFT", self.sharedChoiceDropdownPanel, "TOPLEFT", 4, -4 - ((index - 1) * 24))
+        option:SetWidth(dropdownWidth - 8)
+        option.labelText:SetText(choice.label)
+        option:SetScript("OnClick", function()
+            self.sharedChoiceDropdownPanel:Hide()
+            self.sharedChoiceDropdownOwner = nil
+            onSelect(choice.value)
+        end)
+        self.sharedChoiceDropdownOptions[index] = option
+        option:Show()
+    end
+    for index = #choices + 1, #(self.sharedChoiceDropdownOptions or {}) do
+        self.sharedChoiceDropdownOptions[index]:Hide()
+    end
+
+    self.sharedChoiceDropdownOwner = ownerButton
+    self.sharedChoiceDropdownPanel:Show()
+    return true
+end
+
+function mainFrame:HideChoiceMenu()
+    if self.sharedChoiceDropdownPanel then
+        self.sharedChoiceDropdownPanel:Hide()
+        self.sharedChoiceDropdownOwner = nil
+    end
+end
+
+function mainFrame:OpenLogsHistoryChoiceMenu(fieldName, ownerButton)
+    local choiceProvider = fieldName == "ledgerScanIntervalSeconds"
+        and bankLedger.GetScanIntervalChoices
+        or bankLedger.GetRetentionChoices
+    local choices = type(choiceProvider) == "function" and choiceProvider() or {}
+    self:OpenChoiceMenu(ownerButton, choices, function(value)
+        self:ApplyLogsHistoryChoice(fieldName, value)
+    end, function()
+        self:CycleLogsHistoryChoice(fieldName)
+    end)
+end
+
+function mainFrame:OpenBankLedgerActionFilterMenu()
+    local bankLedgerView = current_bank_ledger_view()
+    local choices = type(bankLedgerView.GetActionChoices) == "function"
+        and bankLedgerView.GetActionChoices(mainFrame.bankLedgerMode)
+        or {}
+    self:OpenChoiceMenu(self.bankLedgerActionFilterButton, choices, function(value)
+        self.bankLedgerActionFilter = value
+        if self.activeView == "BANK_LEDGER" then
+            self:RefreshBankLedgerTable()
+        end
+    end, function()
+        self.bankLedgerActionFilter = bankLedgerView.CycleActionFilter(mainFrame.bankLedgerMode, mainFrame.bankLedgerActionFilter)
+        if self.activeView == "BANK_LEDGER" then
+            self:RefreshBankLedgerTable()
+        end
+    end)
+end
+
+function mainFrame:OpenBankLedgerDateRangeMenu()
+    local bankLedgerView = current_bank_ledger_view()
+    local choices = type(bankLedgerView.GetDateRangeChoices) == "function"
+        and bankLedgerView.GetDateRangeChoices()
+        or {}
+    self:OpenChoiceMenu(self.bankLedgerDateRangeButton, choices, function(value)
+        self.bankLedgerDateRangeFilter = tostring(value or "all")
+        if self.activeView == "BANK_LEDGER" then
+            self:RefreshBankLedgerTable()
+        end
+    end)
+end
+
+function mainFrame:SaveLogsHistorySettings()
+    local db = current_db()
+    local settings = bankLedger.GetSettings(db)
+    settings.ledgerScanIntervalSeconds = math.max(300, tonumber(settings.ledgerScanIntervalSeconds or 300) or 300)
+    settings.ledgerRetention = tostring(settings.ledgerRetention or "indefinite")
+    settings.historyRetention = tostring(settings.historyRetention or "indefinite")
+    if bankLedger and type(bankLedger.PruneRetention) == "function" then
+        local now = type(_G.time) == "function" and (_G.time() or 0) or 0
+        bankLedger.PruneRetention(db, now)
+    end
+    self:RefreshLogsHistoryControls()
+    if self.activeView == "HISTORY" or self.activeView == "BANK_LEDGER" then
+        self:RefreshView()
+    end
+    if self.optionsLogsHistoryStatusText then
+        self.optionsLogsHistoryStatusText:SetText("Saved logs/history settings.")
+    end
+    return settings
+end
+
+local function ensure_clear_data_popups()
+    _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
+    local popupDefinitions = {
+        GBM_CONFIRM_CLEAR_BANK_LEDGER = "This is irreversible. Clear all saved guild bank log data?",
+        GBM_CONFIRM_CLEAR_INVENTORY = "This is irreversible. Clear all saved guild bank inventory data?",
+        GBM_CONFIRM_CLEAR_COMPLETED_REQUESTS = "This is irreversible. Clear completed request history and matching audit rows?",
+    }
+
+    for which, text in pairs(popupDefinitions) do
+        if _G.StaticPopupDialogs[which] == nil then
+            _G.StaticPopupDialogs[which] = {
+                text = text,
+                button1 = "Confirm",
+                button2 = "Cancel",
+                OnAccept = function(_, data)
+                    if type(data) == "table" and type(data.confirm) == "function" then
+                        data.confirm()
+                    end
+                end,
+                timeout = 0,
+                whileDead = 1,
+                hideOnEscape = 1,
+                preferredIndex = 3,
+            }
+        end
+    end
+end
+
+local function show_clear_popup(which, confirmCallback)
+    ensure_clear_data_popups()
+    if type(_G.StaticPopup_Show) == "function" then
+        _G.StaticPopup_Show(which, nil, nil, {
+            confirm = confirmCallback,
+        })
+    elseif type(confirmCallback) == "function" then
+        confirmCallback()
+    end
+end
+
+mainFrame.optionsLedgerRetentionButton:SetScript("OnClick", function()
+    mainFrame:OpenLogsHistoryChoiceMenu("ledgerRetention", mainFrame.optionsLedgerRetentionButton)
+end)
+
+mainFrame.optionsHistoryRetentionButton:SetScript("OnClick", function()
+    mainFrame:OpenLogsHistoryChoiceMenu("historyRetention", mainFrame.optionsHistoryRetentionButton)
+end)
+
+mainFrame.optionsLedgerScanIntervalButton:SetScript("OnClick", function()
+    mainFrame:OpenLogsHistoryChoiceMenu("ledgerScanIntervalSeconds", mainFrame.optionsLedgerScanIntervalButton)
+end)
+
+mainFrame.optionsLogsHistorySaveButton:SetScript("OnClick", function()
+    mainFrame:SaveLogsHistorySettings()
+end)
+
+mainFrame.optionsClearBankLedgerButton:SetScript("OnClick", function()
+    show_clear_popup("GBM_CONFIRM_CLEAR_BANK_LEDGER", function()
+        local store = ns.modules.store or {}
+        if type(store.ClearGuildBankLogData) == "function" then
+            store.ClearGuildBankLogData(current_db())
+        end
+        if type(mainFrame.RefreshView) == "function" then
+            mainFrame:RefreshView()
+        end
+        if mainFrame.optionsLogsHistoryStatusText then
+            mainFrame.optionsLogsHistoryStatusText:SetText("Cleared guild bank log data.")
+        end
+    end)
+end)
+
+mainFrame.optionsClearInventoryDataButton:SetScript("OnClick", function()
+    show_clear_popup("GBM_CONFIRM_CLEAR_INVENTORY", function()
+        local store = ns.modules.store or {}
+        if type(store.ClearGuildBankInventoryData) == "function" then
+            store.ClearGuildBankInventoryData(current_db())
+        end
+        if type(mainFrame.RefreshView) == "function" then
+            mainFrame:RefreshView()
+        end
+        if mainFrame.optionsLogsHistoryStatusText then
+            mainFrame.optionsLogsHistoryStatusText:SetText("Cleared guild bank inventory data.")
+        end
+    end)
+end)
+
+mainFrame.optionsClearCompletedRequestsButton:SetScript("OnClick", function()
+    show_clear_popup("GBM_CONFIRM_CLEAR_COMPLETED_REQUESTS", function()
+        local store = ns.modules.store or {}
+        if type(store.ClearCompletedRequestHistory) == "function" then
+            store.ClearCompletedRequestHistory(current_db())
+        end
+        if type(mainFrame.RefreshView) == "function" then
+            mainFrame:RefreshView()
+        end
+        if mainFrame.optionsLogsHistoryStatusText then
+            mainFrame.optionsLogsHistoryStatusText:SetText("Cleared completed request history.")
+        end
+    end)
+end)
+
 function mainFrame:GetOptionsCanvasPanel()
     local activeTab = self.optionsActiveTab or "APPEARANCE"
     if activeTab == "APPEARANCE" then
@@ -1885,14 +2302,8 @@ function mainFrame:GetOptionsCanvasPanel()
     if activeTab == "PERMISSIONS" or activeTab == "BLACKLIST" then
         return self.optionsAuthPanel
     end
-    if activeTab == "AUTOMATION" then
-        return self.optionsAutomationPanel
-    end
-    if activeTab == "EXPORTS" then
-        return self.optionsExportsPanel
-    end
-    if activeTab == "REQUESTS" then
-        return self.optionsRequestsPanel
+    if activeTab == "LOGS_HISTORY" then
+        return self.optionsLogsHistoryPanel
     end
 
     return self.optionsAppearancePanel
@@ -1906,10 +2317,11 @@ function mainFrame:SetOptionsTab(tabKey)
     set_frame_shown(self.optionsStockSettingsPanel, nextTab == "STOCK")
     set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
     set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")
-    set_frame_shown(self.optionsAutomationPanel, nextTab == "AUTOMATION")
-    set_frame_shown(self.optionsExportsPanel, nextTab == "EXPORTS")
-    set_frame_shown(self.optionsRequestsPanel, nextTab == "REQUESTS")
+    set_frame_shown(self.optionsLogsHistoryPanel, nextTab == "LOGS_HISTORY")
     set_frame_shown(self.optionsAuthPanel, nextTab == "PERMISSIONS" or nextTab == "BLACKLIST")
+    set_frame_shown(self.optionsAutomationPanel, false)
+    set_frame_shown(self.optionsExportsPanel, false)
+    set_frame_shown(self.optionsRequestsPanel, false)
 
     for _, button in ipairs(self.optionsTabButtons or {}) do
         apply_button_variant(button, button.key == nextTab and "primary" or "tab")
@@ -1931,6 +2343,94 @@ for _, button in ipairs(mainFrame.optionsTabButtons or {}) do
         mainFrame:SetOptionsTab(selfButton.key)
     end)
 end
+
+function mainFrame:GetBankLedgerFilters()
+    local tableFilters = self:GetSharedFilterState()
+    local bankLedgerView = current_bank_ledger_view()
+    return bankLedgerView.BuildFilters(
+        self.bankLedgerMode,
+        tableFilters,
+        self.bankLedgerActionFilter,
+        self.bankLedgerDateRangeFilter or "all"
+    )
+end
+
+function mainFrame:RefreshBankLedgerSummary()
+    local bankLedgerView = current_bank_ledger_view()
+    local summary = bankLedgerView.BuildSummaryTexts(current_db(), self.bankLedgerMode, self:GetBankLedgerFilters())
+    self.bankLedgerSummaryPrimaryText:SetText(summary[1] or "")
+    self.bankLedgerSummarySecondaryText:SetText(summary[2] or "")
+    self.bankLedgerSummaryTertiaryText:SetText(summary[3] or "")
+end
+
+function mainFrame:RefreshBankLedgerTable()
+    local db = current_db()
+    local bankLedgerView = current_bank_ledger_view()
+    local columns = bankLedgerView.GetColumns(self.bankLedgerMode)
+    local rows = bankLedgerView.BuildDisplayRows(db, self.bankLedgerMode, self:GetBankLedgerFilters())
+    self.tableScrollOffset = 0
+    self:ConfigureTable(columns, rows)
+    self:RefreshVisibleTableRows()
+    self:RefreshBankLedgerSummary()
+    if self.bankLedgerActionFilterButton and self.bankLedgerActionFilterButton.labelText then
+        self.bankLedgerActionFilterButton.labelText:SetText(bankLedgerView.GetActionChoiceLabel(self.bankLedgerMode, self.bankLedgerActionFilter))
+    end
+    if self.bankLedgerDateRangeButton and self.bankLedgerDateRangeButton.labelText then
+        self.bankLedgerDateRangeButton.labelText:SetText(bankLedgerView.GetDateRangeChoiceLabel(self.bankLedgerDateRangeFilter))
+    end
+end
+
+function mainFrame:SetBankLedgerMode(mode)
+    self.bankLedgerMode = tostring(mode or "ITEM")
+    self.bankLedgerActionFilter = ""
+    self.bankLedgerDateRangeFilter = self.bankLedgerDateRangeFilter or "all"
+    apply_button_variant(self.bankLedgerItemModeButton, self.bankLedgerMode == "ITEM" and "primary" or "tab")
+    apply_button_variant(self.bankLedgerMoneyModeButton, self.bankLedgerMode == "MONEY" and "primary" or "tab")
+    if self.activeView == "BANK_LEDGER" then
+        self:RefreshBankLedgerTable()
+    end
+    return self.bankLedgerMode
+end
+
+function mainFrame:OpenBankLedgerExportModal()
+    local bankLedgerView = current_bank_ledger_view()
+    local csvText = bankLedgerView.BuildCsvText(current_db(), self.bankLedgerMode, self:GetBankLedgerFilters())
+    self.exportModalTitle:SetText(self.bankLedgerMode == "MONEY" and "Bank Ledger Money CSV" or "Bank Ledger Item CSV")
+    self.exportModalHint:SetText("Select all and copy the filtered ledger export.")
+    self.exportModalOutputInput:SetText(csvText or "")
+    if type(self.RefreshExportModalScrollMetrics) == "function" then
+        self:RefreshExportModalScrollMetrics()
+    end
+    if type(set_frame_shown) == "function" then
+        set_frame_shown(self.exportModalBuyAllButton, false)
+        set_frame_shown(self.exportModalMissingOnlyButton, false)
+        set_frame_shown(self.exportModalScrollFrame, true)
+        set_frame_shown(self.exportModalSelectAllButton, true)
+        set_frame_shown(self.exportModalCopyButton, false)
+    end
+    self.exportModal:Show()
+    return self.exportModal
+end
+
+mainFrame.bankLedgerItemModeButton:SetScript("OnClick", function()
+    mainFrame:SetBankLedgerMode("ITEM")
+end)
+
+mainFrame.bankLedgerMoneyModeButton:SetScript("OnClick", function()
+    mainFrame:SetBankLedgerMode("MONEY")
+end)
+
+mainFrame.bankLedgerActionFilterButton:SetScript("OnClick", function()
+    mainFrame:OpenBankLedgerActionFilterMenu()
+end)
+
+mainFrame.bankLedgerDateRangeButton:SetScript("OnClick", function()
+    mainFrame:OpenBankLedgerDateRangeMenu()
+end)
+
+mainFrame.bankLedgerExportButton:SetScript("OnClick", function()
+    mainFrame:OpenBankLedgerExportModal()
+end)
 
 function mainFrame:ScrollOptionsBy(delta)
     local controller = self.optionsScrollController
@@ -2689,6 +3189,7 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.optionsAuthPanel, "panel")
     apply_surface_variant(self.optionsPermissionsPanel, "panel-alt")
     apply_surface_variant(self.optionsBlacklistPanel, "panel-alt")
+    apply_surface_variant(self.optionsLogsHistoryPanel, "panel-alt")
     apply_surface_variant(self.optionsAutomationPanel, "panel-alt")
     apply_surface_variant(self.optionsExportsPanel, "panel-alt")
     apply_surface_variant(self.optionsRequestsPanel, "panel-alt")
@@ -2704,7 +3205,7 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.optionsAvailablePermissionPanel, "panel")
     apply_surface_variant(self.optionsBlacklistListPanel, "panel")
     apply_surface_variant(self.requestActionsPanel, "panel")
-    apply_surface_variant(self.requestAdminFilterPanel, "panel")
+    apply_surface_variant(self.requestAdminFilterPanel, "panel-flat")
     if self.requestAdminFilterPanel and self.requestAdminFilterPanel.transparentActions == true and type(self.requestAdminFilterPanel.SetBackdrop) == "function" then
         self.requestAdminFilterPanel:SetBackdrop(nil)
     end
@@ -2713,7 +3214,7 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.requestDetailsModal, "modal-sheet")
     apply_surface_variant(self.historyDetailsModal, "modal-sheet")
     apply_surface_variant(self.requestCreatePanel, "panel")
-    apply_surface_variant(self.minimumsPanel, "panel")
+    apply_surface_variant(self.minimumsPanel, "panel-flat")
     if self.minimumsPanel.transparentActions == true and type(self.minimumsPanel.SetBackdrop) == "function" then
         self.minimumsPanel:SetBackdrop(nil)
     end
@@ -3042,6 +3543,7 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.requestWizardProgressPanel, "panel-alt")
     apply_surface_variant(self.requestWizardPrimaryPanel, "panel")
     apply_surface_variant(self.requestWizardPreviewPanel, "panel-alt")
+    apply_surface_variant(self.bankLedgerPanel, "panel-flat")
     apply_button_variant(self.requestWizardBackButton, "secondary")
     apply_button_variant(self.requestWizardNextButton, "primary")
     apply_button_variant(self.requestWizardSubmitButton, "primary")
@@ -3088,6 +3590,13 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.minimumDetailsBankTabDropdownButton, "select")
     apply_surface_variant(self.minimumDetailsBankTabDropdownPanel, "input")
     apply_button_variant(self.optionsStockSettingsSaveButton, "primary")
+    apply_button_variant(self.optionsLedgerRetentionButton, "select")
+    apply_button_variant(self.optionsHistoryRetentionButton, "select")
+    apply_button_variant(self.optionsLedgerScanIntervalButton, "select")
+    apply_button_variant(self.optionsLogsHistorySaveButton, "primary")
+    apply_button_variant(self.optionsClearBankLedgerButton, "secondary")
+    apply_button_variant(self.optionsClearInventoryDataButton, "secondary")
+    apply_button_variant(self.optionsClearCompletedRequestsButton, "secondary")
     apply_button_variant(self.optionsAuthRankButton, "select")
     apply_surface_variant(self.optionsAuthRankDropdown, "input")
     apply_surface_variant(self.optionsAuthRankDropdownBackdrop, "panel-flat")
@@ -3136,6 +3645,7 @@ function mainFrame:ApplyTheme()
     end
     apply_button_variant(self.requestWizardBankTabDropdownButton, "select")
     apply_surface_variant(self.requestWizardBankTabDropdownPanel, "input")
+    apply_button_variant(self.bankLedgerDateRangeButton, "select")
     apply_button_variant(self.exportPresetSpreadsheetButton, "primary")
     apply_button_variant(self.exportPresetAuctionatorButton, "primary")
     apply_button_variant(self.exportPresetTsmButton, "primary")
@@ -3146,6 +3656,10 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.exportModalSelectAllButton, "secondary")
     apply_button_variant(self.exportModalCopyButton, "primary")
     apply_button_variant(self.exportModalCloseButton, "secondary")
+    apply_button_variant(self.bankLedgerItemModeButton, self.bankLedgerMode == "ITEM" and "primary" or "tab")
+    apply_button_variant(self.bankLedgerMoneyModeButton, self.bankLedgerMode == "MONEY" and "primary" or "tab")
+    apply_button_variant(self.bankLedgerActionFilterButton, "select")
+    apply_button_variant(self.bankLedgerExportButton, "secondary")
     if type(self.RefreshRequestWizardProgress) == "function" then
         self:RefreshRequestWizardProgress()
     end
@@ -3412,6 +3926,7 @@ function mainFrame:RefreshView()
     self.minimumDetailsModal:Hide()
     self.minimumEmptyStateText:Hide()
     self.exportsPanel:Hide()
+    self.bankLedgerPanel:Hide()
     self.exportModal:Hide()
     if self.exportStockedElsewhereModal then
         self.exportStockedElsewhereModal:Hide()
@@ -3465,7 +3980,8 @@ function mainFrame:RefreshView()
         self:RefreshVisibleTableRows()
         showTable = true
     elseif self.activeView == "BANK_LEDGER" then
-        bodyText = "Bank ledger reporting will appear here as the ledger surface is implemented."
+        self:RefreshBankLedgerTable()
+        showTable = true
     elseif self.activeView == "MINIMUMS" then
         if self.RefreshMinimumFilterButtons then
             self:RefreshMinimumFilterButtons()
@@ -3515,6 +4031,7 @@ function mainFrame:RefreshView()
     elseif self.activeView == "OPTIONS" then
         self:LoadMinimumSettingsFromDb(db)
         self:LoadAuthOptionsFromDb(db)
+        self:RefreshLogsHistoryControls()
         self:SetOptionsTab(self.optionsActiveTab or "APPEARANCE")
         bodyText = ""
     elseif self.activeView == "ABOUT" then
@@ -3645,6 +4162,12 @@ function mainFrame:RefreshView()
         self.exportsPanel:Hide()
     end
 
+    if self.activeView == "BANK_LEDGER" then
+        self.bankLedgerPanel:Show()
+    else
+        self.bankLedgerPanel:Hide()
+    end
+
     if self.activeView == "OPTIONS" then
         self.optionsPanel:Show()
         self.optionsViewportFrame:Show()
@@ -3670,6 +4193,8 @@ for _, input in ipairs(mainFrame.tableFilterInputs) do
             mainFrame:ApplyMinimumFilters()
         elseif mainFrame.activeView == "HISTORY" then
             mainFrame:RefreshView()
+        elseif mainFrame.activeView == "BANK_LEDGER" then
+            mainFrame:RefreshBankLedgerTable()
         elseif mainFrame.activeView == "REQUESTS" and mainFrame.requestOnlyMode ~= true then
             mainFrame:RefreshView()
         end

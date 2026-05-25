@@ -165,6 +165,19 @@ assert.equal(raisedShellLevel + 20, modal.frameLevel, "opened modals should laye
 onMouseDown(mainFrame)
 assert.equal((tonumber(mainFrame.frameLevel or 0) or 0) + 20, modal.frameLevel, "raising the shell should keep registered modals above it")
 
+local originalBeginScan = scanner.BeginScan
+local beginScanOptions = nil
+scanner.BeginScan = function(options)
+    beginScanOptions = options
+    return "Scanning 0/0 tabs"
+end
 scanner.scanInProgress = false
 mainFrame.scanButton:GetScript("OnClick")(mainFrame.scanButton)
 assert.truthy(type(mainFrame.scanButton:GetScript("OnClick")) == "function", "scan button should stay wired to the scanner entrypoint")
+assert.truthy(type(beginScanOptions) == "table" and beginScanOptions.forceLedgerScan == true, "Scan Bank should explicitly request the ledger follow-up alongside the inventory scan")
+scanner.BeginScan = originalBeginScan
+
+minimapButton.button:GetScript("OnClick")(minimapButton.button)
+assert.truthy(not mainFrame:IsShown(), "clicking the minimap launcher while the addon is open should close it")
+minimapButton.button:GetScript("OnClick")(minimapButton.button)
+assert.truthy(mainFrame:IsShown(), "clicking the minimap launcher while the addon is closed should reopen it")

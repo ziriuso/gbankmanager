@@ -190,51 +190,48 @@ local function run_crafted_quality_normalization()
     return unit_result("crafted_quality_normalization", true, "crafted-quality fallback icons normalize to the shared visible atlas family")
 end
 
-local function run_dashboard_stocking_history()
+local function run_dashboard_withdrawals()
     local dashboard = ns.modules.dashboardView or {}
     if type(dashboard.BuildTopItemsLines) ~= "function" then
-        return unit_result("dashboard_stocking_history", false, "dashboard card builder missing")
+        return unit_result("dashboard_withdrawals", false, "dashboard card builder missing")
     end
 
     local lines = dashboard.BuildTopItemsLines({
-        minimums = {
-            { itemID = 1001, itemName = "Flask Alpha", quantity = 100, scope = "GLOBAL", enabled = true },
-            { itemID = 2002, itemName = "Potion Beta", quantity = 50, scope = "GLOBAL", enabled = true },
+        bankLedger = {
+            itemLogs = {
+                {
+                    timestamp = 100,
+                    who = "RaiderOne",
+                    action = "Withdrawal",
+                    itemID = 1001,
+                    item = "Flask Alpha",
+                    quantity = 7,
+                    entryId = "alpha-1",
+                },
+                {
+                    timestamp = 99,
+                    who = "RaiderTwo",
+                    action = "Withdrawal",
+                    itemID = 2002,
+                    item = "Potion Beta",
+                    quantity = 4,
+                    entryId = "beta-1",
+                },
+                {
+                    timestamp = 98,
+                    who = "RaiderThree",
+                    action = "Deposit",
+                    itemID = 9009,
+                    item = "Mega Feast",
+                    quantity = 800,
+                    entryId = "feast-in",
+                },
+            },
+            itemFingerprints = {},
+            moneyLogs = {},
+            moneyFingerprints = {},
         },
-        snapshots = {
-            scan1 = {
-                scanId = "scan1",
-                scannedAt = 10,
-                items = {
-                    [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 120, tabs = { Alchemy = 120 } },
-                    [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 55, tabs = { Potions = 55 } },
-                },
-            },
-            scan2 = {
-                scanId = "scan2",
-                scannedAt = 20,
-                items = {
-                    [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 35, tabs = { Alchemy = 35 } },
-                    [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 45, tabs = { Potions = 45 } },
-                },
-            },
-            scan3 = {
-                scanId = "scan3",
-                scannedAt = 30,
-                items = {
-                    [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 140, tabs = { Alchemy = 140 } },
-                    [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 40, tabs = { Potions = 40 } },
-                },
-            },
-            scan4 = {
-                scanId = "scan4",
-                scannedAt = 40,
-                items = {
-                    [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 30, tabs = { Alchemy = 30 } },
-                    [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 70, tabs = { Potions = 70 } },
-                },
-            },
-        },
+        auditLog = {},
         changeLog = {
             {
                 type = "QUANTITY_DECREASED",
@@ -247,11 +244,15 @@ local function run_dashboard_stocking_history()
     }, {})
 
     local firstLine = (lines or {})[1] or ""
-    if string.find(firstLine, "Flask Alpha", 1, true) == nil or string.find(firstLine, "2 restocks", 1, true) == nil then
-        return unit_result("dashboard_stocking_history", false, "dashboard top-five card no longer prioritizes repeated shortage cycles")
+    local secondLine = (lines or {})[2] or ""
+    if string.find(firstLine, "Flask Alpha", 1, true) == nil
+        or string.find(firstLine, "x7", 1, true) == nil
+        or string.find(secondLine, "Potion Beta", 1, true) == nil
+        or string.find(firstLine, "Mega Feast", 1, true) ~= nil then
+        return unit_result("dashboard_withdrawals", false, "dashboard top-used card no longer prioritizes bank withdrawals")
     end
 
-    return unit_result("dashboard_stocking_history", true, "dashboard top-five card prefers stocking-history shortage cycles")
+    return unit_result("dashboard_withdrawals", true, "dashboard top-used card is driven by bank withdrawals")
 end
 
 local function run_sync_sender_guard()
@@ -451,7 +452,7 @@ function inGameUnit.Run()
         run_auth_policy_round_trip(),
         run_request_contracts(),
         run_crafted_quality_normalization(),
-        run_dashboard_stocking_history(),
+        run_dashboard_withdrawals(),
         run_sync_sender_guard(),
         run_blacklist_normalization(),
         run_request_admin_queue(),

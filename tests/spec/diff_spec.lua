@@ -1,5 +1,7 @@
 local assert = require("tests.helpers.assert")
 
+dofile("tests/helpers/wow_stubs.lua")
+
 _G.UnitName = function()
     return "OfficerOne"
 end
@@ -224,6 +226,8 @@ scanner.BeginScan = function()
     return "Scanning 0/2 tabs"
 end
 
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 600
+
 scanner.OnGuildBankOpened()
 assert.equal(1, autoScanCalls, "opening the guild bank should auto-scan when there is no prior scan timestamp")
 
@@ -249,16 +253,32 @@ _G.time = function()
     return 1100
 end
 scanner.OnGuildBankOpened()
-assert.equal(4, autoScanCalls, "opening the guild bank after 10 minutes should auto-scan again")
+assert.equal(4, autoScanCalls, "opening the guild bank after the configured ledger scan interval should auto-scan again")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1100
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 900
+_G.time = function()
+    return 1900
+end
+scanner.OnGuildBankOpened()
+assert.equal(4, autoScanCalls, "opening the guild bank before the configured logs/history interval should still skip auto-scan")
+
+_G.time = function()
+    return 2000
+end
+scanner.OnGuildBankOpened()
+assert.equal(5, autoScanCalls, "opening the guild bank once the configured logs/history interval elapses should auto-scan again")
 
 scanner.scanInProgress = true
 _G.time = function()
     return 1800
 end
 scanner.OnGuildBankOpened()
-assert.equal(4, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
+assert.equal(5, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
 
 scanner.BeginScan = originalBeginScan
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
 scanner.pendingAutoScan = false
 scanner.autoScanRetryCount = 0
 scanner.scanInProgress = false

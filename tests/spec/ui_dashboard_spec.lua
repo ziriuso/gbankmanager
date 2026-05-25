@@ -60,6 +60,27 @@ _G.GBankManagerDB.auditLog = {
         timestamp = 1715523100,
     },
 }
+_G.GBankManagerDB.bankLedger = {
+    itemLogs = {
+        { action = "Withdrawal", itemName = "Flask of the Magisters", quantity = 12, timestamp = 1715523250 },
+        { action = "Withdrawal", itemName = "Silvermoon Health Potion", quantity = 8, timestamp = 1715523240 },
+        { action = "Withdrawal", itemName = "Thalassian Phoenix Oil", quantity = 6, timestamp = 1715523230 },
+        { action = "Withdrawal", itemName = "Bright Eyeball", quantity = 5, timestamp = 1715523220 },
+        { action = "Withdrawal", itemName = "Flask of Tempered Swiftness", quantity = 4, timestamp = 1715523210 },
+        { action = "Withdrawal", itemName = "Potion of Controlled Fury", quantity = 3, timestamp = 1715523200 },
+        { action = "Withdrawal", itemName = "Arcanoweave Spellthread", quantity = 2, timestamp = 1715523190 },
+        { action = "Withdrawal", itemName = "Dawn Crystal", quantity = 2, timestamp = 1715523180 },
+        { action = "Withdrawal", itemName = "Contract: The Amani Tribe", quantity = 1, timestamp = 1715523170 },
+        { action = "Withdrawal", itemName = "Flask of Frozen Focus", quantity = 1, timestamp = 1715523160 },
+        { action = "Withdrawal", itemName = "Overflow Item", quantity = 1, timestamp = 1715523150 },
+    },
+    moneyLogs = {},
+}
+_G.GBankManagerDB.ui.logsHistorySettings = {
+    ledgerRetention = "indefinite",
+    historyRetention = "indefinite",
+    ledgerScanIntervalSeconds = 300,
+}
 _G.GBankManagerDB.requests = {}
 env.ns.state.db = _G.GBankManagerDB
 
@@ -79,7 +100,7 @@ assert.truthy(mainFrame.dashboardQuickActionsPanel:IsShown(), "dashboard should 
 assert.equal("panel-flat", mainFrame.dashboardTopItemsPanel.gbmSurfaceVariant, "dashboard top-items panel should inherit the flatter dark-band surface")
 assert.equal("panel-flat", mainFrame.dashboardRecentActivityPanel.gbmSurfaceVariant, "dashboard recent-activity panel should inherit the flatter dark-band surface")
 assert.equal("panel-flat", mainFrame.dashboardQuickActionsPanel.gbmSurfaceVariant, "dashboard quick-actions panel should inherit the flatter dark-band surface")
-assert.equal("Top 5 Most Used", mainFrame.dashboardTopItemsTitle:GetText(), "dashboard top-items panel should keep the stable title")
+assert.equal("Top 10 Most Used", mainFrame.dashboardTopItemsTitle:GetText(), "dashboard top-items panel should now expose the top ten usage title")
 assert.equal("Recent Activity", mainFrame.dashboardRecentActivityTitle:GetText(), "dashboard should title the recent-activity panel")
 assert.equal("Quick Actions", mainFrame.dashboardQuickActionsTitle:GetText(), "dashboard should title the quick-actions row")
 assert.equal(5, #(mainFrame.dashboardQuickActionButtons or {}), "dashboard should expose five quick actions")
@@ -100,7 +121,9 @@ assert.truthy(
     ) >= 0.10,
     "dashboard quick actions should contrast from the quick-actions panel background"
 )
-assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Arcanoweave Spellthread", 1, true) ~= nil, "dashboard top-items panel should include ranked item text")
+assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Flask of the Magisters", 1, true) ~= nil, "dashboard top-items panel should now use ledger withdrawals to rank the most used items")
+assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Flask of Frozen Focus", 1, true) ~= nil, "dashboard top-items panel should render through the tenth ranked withdrawal item")
+assert.truthy(string.find(mainFrame.dashboardTopItemsText:GetText() or "", "Overflow Item", 1, true) == nil, "dashboard top-items panel should stop at ten ranked withdrawal items")
 assert.truthy(string.find(mainFrame.dashboardRecentActivityText:GetText() or "", "Silvermoon Health Potion", 1, true) ~= nil, "dashboard recent-activity panel should include recent audit rows")
 
 mainFrame.dashboardQuickActionButtons[2]:GetScript("OnClick")(mainFrame.dashboardQuickActionButtons[2])

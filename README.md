@@ -2,20 +2,25 @@
 
 World of Warcraft guild bank inventory, planning, request, and export addon.
 
+Marketplace copy for publishing is kept in [docs/curseforge-description.md](docs/curseforge-description.md).
+
 Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order with one shared namespace, matching the WoW addon runtime shape.
 
 ## Features
 
 - One-button guild bank scan foundation with snapshot, tab-scoped item rows, and change-log storage
-- Officer-first dashboard shell with inventory, history, minimums, requests, exports, about, and options workspaces
-- Dashboard now uses four metric cards plus `Top 5 Most Used`, `Recent Activity`, and `Quick Actions` panels inside the officer shell
+- Officer-first dashboard shell with inventory, minimums, requests, exports, history, bank-ledger, about, and options workspaces
+- Dashboard now uses four metric cards plus `Top 10 Most Used`, `Recent Activity`, and `Quick Actions` panels inside the officer shell
 - The shared shell modernization pass now follows the approved no-art-pack `Hybrid Modern` direction: a native-paneled shell, soft distinct nav buttons with stronger selected state, a cleaner toolbar-band header, flatter dark-band content sections, separate metric cards, structured tables, slimmer actions, segmented tabs, cleaner floating-sheet modals, distinct colored themes, dense-but-clean spacing, and a more aggressively simplified chrome pass that removes nested line treatment, drops most full backdrop borders on flat shell surfaces, and relies on separators plus accent rails instead of boxes-within-boxes
 - The current shell follow-up also normalizes interactive control contrast: neutral action buttons now sit forward from panel backgrounds more consistently, select-style dropdown triggers now use a dedicated higher-contrast control treatment, export CTAs share one primary look, and dashboard `Quick Actions` now allow wrapped labels instead of overflowing longer text
 - `Options` now includes a dedicated `Stock Settings` tab that holds both `Restock Default` and a configurable `Critical Shortage Threshold`, where critical means current stock is at or below the chosen percentage of minimum
+- `Options` now also includes a dedicated `Data` tab that controls guild-bank ledger retention, audit-history retention, and the configurable `Scan Interval` through real WoW dropdown menus instead of one-click cycling controls. Saving that panel now gives visible confirmation, that one scan interval now drives both the guild-bank-open auto-scan throttle and direct ledger rescans when the inventory snapshot is still fresh, and that same panel now owns irreversible local-data cleanup actions behind confirmation prompts.
+- Dashboard `Top 10 Most Used` is now driven by bank-ledger withdrawal rows instead of the older stocking-history fallback.
 - Recurring stock minimum helpers with a modal-based add/edit flow and procurement-planning export workflows
 - Member request submission with explicit approval workflow and no auto-approval path
 - Auctionator, CSV, and custom-delimited export builders, including current caret-delimited Auctionator list import output
 - Guild sync foundation with authority-first conflict resolution, chat-visible sync milestones, and login hello messages
+- `Bank Ledger` now centralizes guild-bank item logs and money logs, stores append-only deltas from guild-bank log scans, avoids duplicating rows when repeated scans reread the same visible Blizzard log window, supports shared table filters plus a preset date-range dropdown, exposes ledger CSV export, shows item-log rows as `Date`, `Who`, `Action`, icon-based `Tier`, `Item`, `Quantity`, `Tab`, and `Moved From`, and summarizes item movement plus gold in, gold out, and repairs over the active date range
 - Local appearance customization with a token-backed theme system (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), built-in WoW `UISliderTemplate` controls for `UI Scale` (90%-120%), shell opacity, and modal opacity, collapsed-nav icons, a show/hide minimap-button toggle, direct slider interaction plus steppers, and a header last-scan display that now uses timezone abbreviations such as `EDT` or `EST` when a scan exists
 - In-client verification commands for both workflow smoke (`/gbm test smoke`) and deterministic in-game unit checks (`/gbm test unit`)
 
@@ -140,7 +145,8 @@ The next planned work after the completed pre-polish workflow block is:
 - Shell scaling now clamps shared table height inside the content area so footer action strips stay visible, keeps the top-bar scan and status controls from overlapping at smaller scales, and preserves the floating manual shopping list across tab switches or shell close while remembering its saved position.
 - Shared table filters now inset slightly inside each column so adjacent search boxes keep visible spacing and a softer edge treatment instead of touching edge-to-edge.
 - The addon shell now opts into top-level window ordering so other dragged UI can come above it, and clicking back onto the addon brings the shell and its registered modals forward again.
-- Dashboard `Top 5 Most Used` now ranks repeated shortage or restock cycles from persisted snapshot history and active Minimums rules before falling back to raw withdrawal totals when no stocking history exists.
+- Dashboard `Top 10 Most Used` now uses ledger-backed withdrawal rankings first, with a ten-row panel instead of the older top-five fallback.
+- `Bank Ledger` is now a live shared-table workspace with `Item Log` and `Money Log` modes, action/date filters, CSV export, and summary lines for top item movement plus top user bank usage over the filtered range.
 - Minimums now groups staged rows at the top of the table, exposes `ADD` / `EDIT` / `DELETE` row badges, shows a staged-change summary in the footer, and reveals `Revert All` only when draft changes exist.
 - `/gbm test unit` now also covers blacklist normalization, officer request-queue prioritization, and unresolved minimum repair-row ordering so more pure-domain regressions can be caught in-client without relying on workflow smoke alone.
 - `/gbm test smoke` now follows the real Minimums modal add flow during its draft-stage check and hard-resets request selector state before the confirmed-selection gating check, so those two live smoke results match the current product workflow instead of the retired footer-editor path.

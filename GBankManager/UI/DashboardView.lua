@@ -4,6 +4,7 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local dashboard = ns.modules.dashboardView or {}
+local bankLedger = ns.modules.bankLedger or {}
 local function normalize_timestamp(timestamp)
     local numeric = tonumber(timestamp)
     if numeric ~= nil then
@@ -46,7 +47,7 @@ local function format_timestamp(timestamp)
         return "No scan yet"
     end
 
-    local formatter = _G.date or os.date
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     if type(formatter) == "function" then
         return abbreviate_timezone_name(formatter("%Y-%m-%d %H:%M %Z", timestamp))
     end
@@ -185,36 +186,6 @@ local function build_stocking_history_rankings(db)
     return ranked
 end
 
-local function build_withdrawal_rankings(db)
-    local withdrawals = {}
-
-    for _, entry in ipairs((db or {}).changeLog or {}) do
-        if entry.type == "QUANTITY_DECREASED" or entry.type == "ITEM_REMOVED" then
-            local key = tostring(entry.name or "Unknown")
-            local current = withdrawals[key] or {
-                itemName = key,
-                quantity = 0,
-            }
-            current.quantity = current.quantity + tonumber(entry.delta or 0)
-            withdrawals[key] = current
-        end
-    end
-
-    local ranked = {}
-    for _, item in pairs(withdrawals) do
-        table.insert(ranked, item)
-    end
-
-    table.sort(ranked, function(left, right)
-        if left.quantity == right.quantity then
-            return left.itemName < right.itemName
-        end
-        return left.quantity > right.quantity
-    end)
-
-    return ranked
-end
-
 function dashboard.BuildSummary(db, planRows)
     db = db or {}
     db.meta = db.meta or {}
@@ -314,25 +285,21 @@ function dashboard.BuildCards(db, planRows)
 end
 
 function dashboard.BuildTopItemsLines(db)
-    local topItems = build_stocking_history_rankings(db)
-    local usesStockingHistory = #topItems > 0
-    if not usesStockingHistory then
-        topItems = build_withdrawal_rankings(db)
+    local topItems = {}
+    local usesLedger = bankLedger and type(bankLedger.BuildWithdrawalRankings) == "function"
+    if usesLedger then
+        topItems = bankLedger.BuildWithdrawalRankings(db, {
+            limit = 10,
+        })
     end
 
     local ranked = {}
-    for index = 1, math.min(5, #topItems) do
-        if usesStockingHistory then
-            local item = topItems[index]
-            local restockLabel = item.restockCount == 1 and "restock" or "restocks"
-            table.insert(ranked, string.format("%d. %s - %d %s", index, item.itemName, item.restockCount, restockLabel))
-        else
-            table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
-        end
+    for index = 1, math.min(10, #topItems) do
+        table.insert(ranked, string.format("%d. %s x%d", index, topItems[index].itemName, topItems[index].quantity))
     end
 
     if #ranked == 0 then
-        table.insert(ranked, "No stocking history yet.")
+        table.insert(ranked, "No bank withdrawals logged yet.")
     end
 
     return ranked

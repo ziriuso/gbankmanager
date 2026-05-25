@@ -1,5 +1,9 @@
 local assert = require("tests.helpers.assert")
-local dashboard = dofile("GBankManager/UI/DashboardView.lua")
+
+dofile("tests/helpers/wow_stubs.lua")
+
+local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
+local dashboard = ns.modules.dashboardView
 
 local summary = dashboard.BuildSummary({
     meta = {
@@ -116,71 +120,47 @@ assert.equal("Critical Shortages", cards[4].title, "dashboard should expose a de
 assert.truthy(tonumber(cards[4].value or "0") >= 0, "dashboard critical-shortage metric should expose a numeric value")
 
 local topUsedLines = dashboard.BuildTopItemsLines({
-    minimums = {
-        {
-            itemID = 1001,
-            itemName = "Flask Alpha",
-            quantity = 100,
-            scope = "GLOBAL",
-            enabled = true,
-        },
-        {
-            itemID = 2002,
-            itemName = "Potion Beta",
-            quantity = 50,
-            scope = "GLOBAL",
-            enabled = true,
-        },
-    },
-    snapshots = {
-        scan1 = {
-            scanId = "scan1",
-            scannedAt = 10,
-            items = {
-                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 120, tabs = { Alchemy = 120 } },
-                [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 55, tabs = { Potions = 55 } },
+    bankLedger = {
+        itemLogs = {
+            {
+                timestamp = 100,
+                who = "RaiderOne",
+                action = "Withdrawal",
+                itemID = 1001,
+                item = "Flask Alpha",
+                quantity = 7,
+                entryId = "alpha-1",
+            },
+            {
+                timestamp = 99,
+                who = "RaiderTwo",
+                action = "Withdrawal",
+                itemID = 2002,
+                item = "Potion Beta",
+                quantity = 4,
+                entryId = "beta-1",
+            },
+            {
+                timestamp = 98,
+                who = "RaiderThree",
+                action = "Deposit",
+                itemID = 9009,
+                item = "Mega Feast",
+                quantity = 800,
+                entryId = "feast-in",
             },
         },
-        scan2 = {
-            scanId = "scan2",
-            scannedAt = 20,
-            items = {
-                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 35, tabs = { Alchemy = 35 } },
-                [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 45, tabs = { Potions = 45 } },
-            },
-        },
-        scan3 = {
-            scanId = "scan3",
-            scannedAt = 30,
-            items = {
-                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 140, tabs = { Alchemy = 140 } },
-                [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 40, tabs = { Potions = 40 } },
-            },
-        },
-        scan4 = {
-            scanId = "scan4",
-            scannedAt = 40,
-            items = {
-                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 30, tabs = { Alchemy = 30 } },
-                [2002] = { itemID = 2002, name = "Potion Beta", totalCount = 70, tabs = { Potions = 70 } },
-            },
-        },
-    },
-    changeLog = {
-        {
-            type = "QUANTITY_DECREASED",
-            itemID = 9009,
-            name = "Mega Feast",
-            delta = 800,
-        },
+        itemFingerprints = {},
+        moneyLogs = {},
+        moneyFingerprints = {},
     },
     requests = {},
 }, {})
 
-assert.truthy(string.find(topUsedLines[1], "Flask Alpha", 1, true) ~= nil, "dashboard top-five panel should rank repeated restock items first")
-assert.truthy(string.find(topUsedLines[1], "2 restocks", 1, true) ~= nil, "dashboard top-five panel should show repeated shortage cycles")
-assert.truthy(string.find(topUsedLines[2], "Potion Beta", 1, true) ~= nil, "dashboard top-five panel should include other minimum-tracked shortage history")
-assert.truthy(string.find(topUsedLines[1], "Mega Feast", 1, true) == nil, "dashboard top-five panel should prefer stocking history over raw withdrawal totals when minimum history exists")
+assert.truthy(string.find(topUsedLines[1], "Flask Alpha", 1, true) ~= nil, "dashboard top-items panel should rank item withdrawals from the bank first")
+assert.truthy(string.find(topUsedLines[1], "x7", 1, true) ~= nil, "dashboard top-items panel should total the withdrawn quantity")
+assert.truthy(string.find(topUsedLines[2], "Potion Beta", 1, true) ~= nil, "dashboard top-items panel should include the next-ranked withdrawn item")
+assert.truthy(string.find(topUsedLines[1], "Mega Feast", 1, true) == nil, "dashboard top-items panel should ignore deposits when ranking usage")
 
 local recentActivity = dashboard.BuildRecentActivityLines({
     auditLog = {

@@ -152,6 +152,14 @@ function minimapButton.EnsureButton()
     button:SetScript("OnDragStart", begin_drag)
     button:SetScript("OnDragStop", stop_drag)
     button:SetScript("OnClick", function()
+        local mainFrame = ns.modules.mainFrame
+        if type(mainFrame) == "table" and type(mainFrame.IsShown) == "function" and mainFrame:IsShown() then
+            if type(mainFrame.Hide) == "function" then
+                mainFrame:Hide()
+                return
+            end
+        end
+
         local slash = ns.modules.slash
         if slash and type(slash.command) == "function" then
             slash.command("ui")

@@ -72,6 +72,7 @@ assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
 assert.truthy(db.requests ~= nil, "requests table should exist")
+assert.truthy(type(db.bankLedger) == "table", "fresh db should include a bank ledger container")
 assert.truthy(type(db.testing) == "table", "fresh db should include a testing container for smoke persistence")
 assert.truthy(type(db.testing.liveSmoke) == "table", "fresh db should include a live-smoke persistence container")
 assert.truthy(type(db.testing.inGameUnit) == "table", "fresh db should include an in-game-unit persistence container")
@@ -79,7 +80,7 @@ assert.equal("NEVER", db.testing.liveSmoke.status, "fresh db should default live
 assert.equal("NEVER", db.testing.inGameUnit.status, "fresh db should default in-game unit status to NEVER")
 assert.truthy(permissions.CanApproveRequests("OFFICER"), "officers should approve requests")
 assert.truthy(not permissions.CanViewInventory("MEMBER"), "members should not view inventory")
-events:GetScript("OnEvent")(events, "ADDON_LOADED", "GBankManager")
+store.GetDatabase("My Guild")
 assert.same(_G.GBankManagerDB, ns.state.db, "addon loaded should keep normalized db in addon state")
 assert.equal(1, _G.GBankManagerDB.meta.schemaVersion, "addon loaded should normalize schema version at runtime")
 assert.truthy(_G.GBankManagerDB.requests ~= nil, "addon loaded should normalize missing tables at runtime")
@@ -127,12 +128,16 @@ assert.truthy(type(persisted.ui.exportSettings) == "table", "normalize should pr
 assert.truthy(type(persisted.ui.appearance) == "table", "normalize should preserve appearance ui settings")
 assert.truthy(type(persisted.ui.inventoryColumnWidths) == "table", "normalize should preserve inventory column width settings")
 assert.truthy(type(persisted.ui.minimumSettings) == "table", "normalize should preserve minimum ui settings")
+assert.truthy(type(persisted.ui.logsHistorySettings) == "table", "normalize should preserve logs/history ui settings")
 assert.truthy(type(persisted.ui.minimumItemCatalog) == "table", "normalize should preserve the saved minimum item catalog")
 assert.truthy(type(persisted.testing) == "table", "normalize should preserve the testing container")
 assert.truthy(type(persisted.testing.liveSmoke) == "table", "normalize should preserve the live-smoke persistence container")
 assert.truthy(type(persisted.testing.inGameUnit) == "table", "normalize should preserve the in-game-unit persistence container")
 assert.equal(100, persisted.ui.minimumSettings.defaultQuantity, "normalize should seed the default minimum quantity setting")
 assert.equal(50, persisted.ui.minimumSettings.criticalThresholdPercent, "normalize should seed the default critical shortage threshold percentage")
+assert.equal("indefinite", persisted.ui.logsHistorySettings.ledgerRetention, "normalize should seed the default ledger retention setting")
+assert.equal("indefinite", persisted.ui.logsHistorySettings.historyRetention, "normalize should seed the default history retention setting")
+assert.equal(300, persisted.ui.logsHistorySettings.ledgerScanIntervalSeconds, "normalize should seed the default ledger scan interval")
 assert.equal(100, db.ui.minimumSettings.defaultQuantity, "fresh databases should default minimum quantity to 100")
 assert.equal("generic_wow", persisted.ui.appearance.themePreset, "normalize should seed the default appearance theme preset")
 assert.equal(1, persisted.ui.appearance.shellScale, "normalize should seed the default shell scale")
@@ -245,6 +250,9 @@ scanner.rawTabs = {
     },
 }
 
+_G.time = function()
+    return 1715523420
+end
 local reboundSnapshot = scanner.FinishScan("OfficerOne", "Persisted Guild")
 
 assert.same(_G.GBankManagerDB, ns.state.db, "scanner should rebind runtime state back onto the saved variables table before writing")
@@ -258,3 +266,96 @@ local reboundDb = store.GetDatabase()
 
 assert.same(persisted, reboundDb, "store database accessor should prefer the populated runtime state when the saved-variables global is empty")
 assert.same(_G.GBankManagerDB, ns.state.db, "store database accessor should keep the global and runtime db references aligned")
+
+local clearDb = store.Normalize({
+    meta = {
+        schemaVersion = 1,
+        guildName = "Persisted Guild",
+        updatedAt = 88,
+        lastScanSequence = 12,
+    },
+    currentSnapshotId = "scan-clear",
+    snapshots = {
+        ["scan-clear"] = {
+            scanId = "scan-clear",
+            scannedAt = 88,
+            items = {
+                [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 7 },
+            },
+        },
+    },
+    changeLog = {
+        { type = "SNAPSHOT_DIFF", timestamp = 88 },
+    },
+    requests = {
+        {
+            requestId = "req-open",
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            itemName = "Open Request",
+        },
+        {
+            requestId = "req-fulfilled",
+            approval = "APPROVED",
+            fulfillment = "FULFILLED",
+            itemName = "Done Request",
+        },
+        {
+            requestId = "req-rejected",
+            approval = "REJECTED",
+            fulfillment = "OPEN",
+            itemName = "Denied Request",
+        },
+        {
+            requestId = "req-canceled",
+            approval = "CANCELED",
+            fulfillment = "OPEN",
+            itemName = "Canceled Request",
+        },
+    },
+    auditLog = {
+        { category = "REQUEST", requestId = "req-open", type = "REQUEST_CREATED", timestamp = 70 },
+        { category = "REQUEST", requestId = "req-fulfilled", type = "REQUEST_FULFILLED", timestamp = 71 },
+        { category = "REQUEST", requestId = "req-rejected", type = "REQUEST_REJECTED", timestamp = 72 },
+        { category = "REQUEST", requestId = "req-canceled", type = "REQUEST_CANCELED", timestamp = 73 },
+        { category = "MINIMUM", type = "MINIMUM_UPDATED", timestamp = 74 },
+    },
+    bankLedger = {
+        itemLogs = {
+            { entryId = "item-1", timestamp = 80 },
+        },
+        moneyLogs = {
+            { entryId = "money-1", timestamp = 81 },
+        },
+        itemFingerprints = {
+            ["item-1"] = true,
+        },
+        moneyFingerprints = {
+            ["money-1"] = true,
+        },
+        lastScanAt = 90,
+        lastItemScanAt = 91,
+        lastMoneyScanAt = 92,
+    },
+})
+
+store.ClearGuildBankLogData(clearDb)
+assert.equal(0, #((clearDb.bankLedger or {}).itemLogs or {}), "clearing guild-bank log data should remove saved item logs")
+assert.equal(0, #((clearDb.bankLedger or {}).moneyLogs or {}), "clearing guild-bank log data should remove saved money logs")
+assert.equal(0, (((clearDb.bankLedger or {}).lastScanAt) or 0), "clearing guild-bank log data should reset the combined ledger scan timestamp")
+assert.equal(nil, next((clearDb.bankLedger or {}).itemFingerprints or {}), "clearing guild-bank log data should clear item fingerprints")
+assert.equal(nil, next((clearDb.bankLedger or {}).moneyFingerprints or {}), "clearing guild-bank log data should clear money fingerprints")
+
+store.ClearGuildBankInventoryData(clearDb)
+assert.equal(nil, clearDb.currentSnapshotId, "clearing guild-bank inventory data should remove the current snapshot pointer")
+assert.equal(nil, next(clearDb.snapshots or {}), "clearing guild-bank inventory data should remove saved snapshots")
+assert.equal(0, #(clearDb.changeLog or {}), "clearing guild-bank inventory data should remove saved snapshot diff history")
+assert.equal(0, tonumber(((clearDb.meta or {}).updatedAt) or 0), "clearing guild-bank inventory data should reset last-scan metadata")
+assert.equal(0, tonumber(((clearDb.meta or {}).lastScanSequence) or 0), "clearing guild-bank inventory data should reset the snapshot id sequence")
+
+store.ClearCompletedRequestHistory(clearDb)
+assert.equal(1, #(clearDb.requests or {}), "clearing completed request history should keep only open requests")
+assert.equal("req-open", ((clearDb.requests or {})[1] or {}).requestId, "clearing completed request history should preserve the still-open request")
+assert.equal(2, #(clearDb.auditLog or {}), "clearing completed request history should also remove matching completed request audit rows")
+assert.equal("req-open", ((clearDb.auditLog or {})[1] or {}).requestId, "clearing completed request history should preserve open-request audit rows")
+assert.equal("MINIMUM", ((clearDb.auditLog or {})[2] or {}).category, "clearing completed request history should preserve unrelated audit history")

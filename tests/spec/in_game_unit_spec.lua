@@ -40,7 +40,7 @@ end
 assert.truthy(checksById.auth_policy_round_trip ~= nil, "in-game unit lane should cover auth policy round-tripping")
 assert.truthy(checksById.request_contracts ~= nil, "in-game unit lane should cover request workflow invariants")
 assert.truthy(checksById.crafted_quality_normalization ~= nil, "in-game unit lane should cover crafted-quality normalization")
-assert.truthy(checksById.dashboard_stocking_history ~= nil, "in-game unit lane should cover dashboard stocking-history ranking")
+assert.truthy(checksById.dashboard_withdrawals ~= nil, "in-game unit lane should cover dashboard withdrawal-driven ranking")
 assert.truthy(checksById.sync_sender_guard ~= nil, "in-game unit lane should cover sync sender validation")
 assert.truthy(checksById.blacklist_normalization ~= nil, "in-game unit lane should cover blacklist normalization behavior")
 assert.truthy(checksById.request_admin_queue ~= nil, "in-game unit lane should cover officer queue prioritization")

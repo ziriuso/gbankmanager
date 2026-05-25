@@ -2203,7 +2203,9 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame.scanButton:SetScript("OnClick", function()
         local scanner = ns.modules.scanner
         if scanner and type(scanner.BeginScan) == "function" then
-            scanner.BeginScan()
+            scanner.BeginScan({
+                forceLedgerScan = true,
+            })
         end
     end)
 

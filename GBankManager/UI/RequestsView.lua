@@ -14,7 +14,7 @@ local function format_timestamp(timestamp)
         return "-"
     end
 
-    local formatter = _G.date or os.date
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     if type(formatter) == "function" then
         return formatter("%Y-%m-%d %H:%M", timestamp)
     end
@@ -72,7 +72,7 @@ function requestsView.FormatLocalTimestamp(timestamp)
         return "-"
     end
 
-    local formatter = _G.date or os.date
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     local localTime = type(formatter) == "function" and formatter("%Y-%m-%d %H:%M", timestamp) or tostring(timestamp)
     local zone = type(formatter) == "function" and formatter("%Z", timestamp) or "Local"
     if zone == nil or zone == "" then

@@ -63,6 +63,18 @@ function defaults.CreateDatabase(guildName)
         oneTimeTargets = {},
         requests = {},
         exportTemplates = {},
+        bankLedger = {
+            itemLogs = {},
+            moneyLogs = {},
+            itemFingerprints = {},
+            moneyFingerprints = {},
+            itemSourceSnapshots = {},
+            moneySourceSnapshots = {},
+            nextEntrySequence = 0,
+            lastScanAt = 0,
+            lastItemScanAt = 0,
+            lastMoneyScanAt = 0,
+        },
         auth = defaults.CreateDefaultAuthPolicy(),
         ui = {
             inventoryColumnWidths = {},
@@ -78,6 +90,11 @@ function defaults.CreateDatabase(guildName)
             minimumSettings = {
                 defaultQuantity = 100,
                 criticalThresholdPercent = 50,
+            },
+            logsHistorySettings = {
+                ledgerRetention = "indefinite",
+                historyRetention = "indefinite",
+                ledgerScanIntervalSeconds = 300,
             },
             minimumItemCatalog = {},
             exportSettings = {
