@@ -72,7 +72,7 @@ Optional variable:
 
 - `CF_GAME_VERSION_IDS`
 
-This can be a comma-separated list of CurseForge game version ids if automatic TOC-interface resolution ever needs an override.
+This can be a single CurseForge game version id or a comma-separated list if automatic TOC-interface resolution ever needs an override.
 
 If `CF_GAME_VERSION_IDS` is not set, the publish script will:
 

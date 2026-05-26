@@ -101,7 +101,7 @@ $metadata = @{
     changelog = "Automated $ReleaseType build for $TagName. See the matching GitHub Release for full notes."
     changelogType = "markdown"
     displayName = $display
-    gameVersions = $versionIds
+    gameVersions = [object[]]@($versionIds)
     releaseType = $ReleaseType
 }
 

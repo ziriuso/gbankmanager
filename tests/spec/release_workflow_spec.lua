@@ -33,6 +33,7 @@ assert.truthy(string.find(buildScript, "release", 1, true) ~= nil, "build script
 
 assert.truthy(string.find(publishScript, "upload-file", 1, true) ~= nil, "publish script should upload files to the CurseForge upload API")
 assert.truthy(string.find(publishScript, "gameVersions", 1, true) ~= nil, "publish script should submit CurseForge game version ids")
+assert.truthy(string.find(publishScript, "[object[]]@($versionIds)", 1, true) ~= nil, "publish script should force game version ids to serialize as an array even when only one id is present")
 assert.truthy(string.find(publishScript, "releaseType", 1, true) ~= nil, "publish script should submit the derived CurseForge release type")
 
 assert.truthy(string.find(releaseDoc, "CF_API_TOKEN", 1, true) ~= nil, "release workflow doc should explain which GitHub secret stores the CurseForge token")
