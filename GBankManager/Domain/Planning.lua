@@ -99,7 +99,7 @@ function planning.BuildDemandPlan(input)
     end
 
     for _, request in ipairs(input.requests or {}) do
-        if request.approval == "APPROVED" and request.fulfillment == "OPEN" then
+        if request.approval == "APPROVED" and request.fulfillment == "OPEN" and request.minimumRuleKey == nil then
             local row = ensure_row(plan, request.itemID, request.itemName)
             row.sources.REQUEST = row.sources.REQUEST + (request.quantity or 0)
             row.totalToBuy = row.totalToBuy + (request.quantity or 0)

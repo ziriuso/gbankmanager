@@ -20,7 +20,9 @@ function defaults.CreateDefaultAuthPolicy()
         revision = 0,
         updatedAt = 0,
         updatedBy = "",
+        updatedByHash = nil,
         updatedByRankIndex = nil,
+        restockDefault = nil,
         guildPolicyString = "",
         guildPolicySource = "local",
         rankMetadata = {},
@@ -36,9 +38,12 @@ function defaults.CreateDefaultAuthPolicy()
             minimum_edit = {},
             minimum_delete = {},
             auth_manage = {},
+            request_delete = {},
         },
         blacklist = {},
         blacklistHashes = {},
+        blacklistDirectory = {},
+        blacklistRosterDirectory = {},
     }
 end
 
@@ -58,17 +63,45 @@ function defaults.CreateDatabase(guildName)
         oneTimeTargets = {},
         requests = {},
         exportTemplates = {},
+        bankLedger = {
+            itemLogs = {},
+            moneyLogs = {},
+            itemFingerprints = {},
+            moneyFingerprints = {},
+            itemSourceSnapshots = {},
+            moneySourceSnapshots = {},
+            nextEntrySequence = 0,
+            lastScanAt = 0,
+            lastItemScanAt = 0,
+            lastMoneyScanAt = 0,
+        },
         auth = defaults.CreateDefaultAuthPolicy(),
         ui = {
             inventoryColumnWidths = {},
+            appearance = {
+                themePreset = "generic_wow",
+                shellScale = 1,
+                tableDensity = 1,
+                shellOpacity = 0.96,
+                modalOpacity = 1,
+                showMinimapButton = true,
+                minimapAngle = 315,
+            },
             minimumSettings = {
                 defaultQuantity = 100,
+                criticalThresholdPercent = 50,
+            },
+            logsHistorySettings = {
+                ledgerRetention = "indefinite",
+                historyRetention = "indefinite",
+                ledgerScanIntervalSeconds = 300,
             },
             minimumItemCatalog = {},
             exportSettings = {
                 selectedPreset = "Spreadsheet",
                 shoppingListName = "GBankManager",
                 customTemplate = defaults.CreateDefaultExportTemplate(),
+                manualShoppingListPosition = nil,
             },
         },
         syncState = {
@@ -76,6 +109,12 @@ function defaults.CreateDatabase(guildName)
         },
         testing = {
             liveSmoke = {
+                runAt = 0,
+                status = "NEVER",
+                summary = "",
+                results = {},
+            },
+            inGameUnit = {
                 runAt = 0,
                 status = "NEVER",
                 summary = "",

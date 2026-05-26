@@ -1,5 +1,7 @@
 local assert = require("tests.helpers.assert")
 
+dofile("tests/helpers/wow_stubs.lua")
+
 _G.UnitName = function()
     return "OfficerOne"
 end
@@ -42,6 +44,13 @@ local snapshot = snapshots.FromTabScan({
                 { itemID = 1001, name = "Flask Alpha", count = 6 },
             },
         },
+        {
+            index = 2,
+            name = "Raid",
+            slots = {
+                { itemID = 1001, name = "Flask Alpha", count = 5 },
+            },
+        },
     },
 })
 
@@ -65,9 +74,14 @@ assert.truthy(type(diff) == "table", "diff module should load from the toc")
 assert.truthy(type(scanner) == "table", "scanner module should load")
 assert.truthy(type(dashboard) == "table", "dashboard view should load from the toc")
 assert.truthy(type(historyView) == "table", "history view should load from the toc")
-assert.equal(10, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
+assert.equal(15, snapshot.items[1001].totalCount, "snapshot should aggregate duplicate item stacks")
+assert.equal(2, #snapshot.itemRows, "snapshot should preserve one canonical item row per bank tab")
+assert.equal("Flasks", snapshot.itemRows[1].tabName, "snapshot item rows should keep the source bank tab")
+assert.equal(10, snapshot.itemRows[1].quantity, "snapshot item rows should aggregate same-tab stacks")
+assert.equal("Raid", snapshot.itemRows[2].tabName, "snapshot item rows should keep later bank tabs for the same item")
+assert.equal(5, snapshot.itemRows[2].quantity, "snapshot item rows should keep per-tab quantities")
 assert.equal("QUANTITY_INCREASED", changes[1].type, "diff should report quantity increase")
-assert.equal(7, changes[1].delta, "diff should capture quantity delta")
+assert.equal(12, changes[1].delta, "diff should capture quantity delta")
 
 local originalDate = _G.date
 local dateCalls = {}
@@ -191,3 +205,195 @@ assert.equal(1, #scanner.rawTabs, "scanner should append scanned tabs to the raw
 scanner.OnGuildBankSlotsChanged()
 assert.equal(3, queriedTabs[2], "scanner should request the next queued tab after a tab finishes loading")
 assert.equal("Scanning 1/2 tabs", scanner:GetStatusText(), "scanner should report completed tab progress")
+
+local originalTime = _G.time
+local originalBeginScan = scanner.BeginScan
+local originalReadCurrentTab = scanner.ReadCurrentTab
+local originalRetryPendingAutoScan = scanner.RetryPendingAutoScan
+local originalMessages = _G.DEFAULT_CHAT_FRAME.messages
+local autoScanCalls = 0
+_G.time = function()
+    return 1000
+end
+_G.C_Timer.ClearPending()
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
+ns.state.db.meta.updatedAt = 0
+scanner.scanInProgress = false
+scanner.BeginScan = function()
+    autoScanCalls = autoScanCalls + 1
+    scanner.scanInProgress = true
+    return "Scanning 0/2 tabs"
+end
+
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 600
+
+scanner.OnGuildBankOpened()
+assert.equal(1, autoScanCalls, "opening the guild bank should auto-scan when there is no prior scan timestamp")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 0
+scanner.pendingAutoScan = false
+scanner.OnGuildBankTabsUpdated()
+assert.equal(2, autoScanCalls, "guild bank tab updates should also be able to start the first auto-scan if the open event was missed or premature")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 0
+scanner.pendingAutoScan = false
+scanner.OnGuildBankSlotsChanged()
+assert.equal(3, autoScanCalls, "guild bank slot updates should also be able to start the first auto-scan if both the open event and tab-update wakeup were missed")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 500
+scanner.OnGuildBankOpened()
+assert.equal(3, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
+
+scanner.scanInProgress = false
+_G.time = function()
+    return 1100
+end
+scanner.OnGuildBankOpened()
+assert.equal(4, autoScanCalls, "opening the guild bank after the configured ledger scan interval should auto-scan again")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1100
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 900
+_G.time = function()
+    return 1900
+end
+scanner.OnGuildBankOpened()
+assert.equal(4, autoScanCalls, "opening the guild bank before the configured logs/history interval should still skip auto-scan")
+
+_G.time = function()
+    return 2000
+end
+scanner.OnGuildBankOpened()
+assert.equal(5, autoScanCalls, "opening the guild bank once the configured logs/history interval elapses should auto-scan again")
+
+scanner.scanInProgress = true
+_G.time = function()
+    return 1800
+end
+scanner.OnGuildBankOpened()
+assert.equal(5, autoScanCalls, "auto-scan should not restart while a scan is already in progress")
+
+scanner.BeginScan = originalBeginScan
+ns.state.db.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+scanner.pendingAutoScan = false
+scanner.autoScanRetryCount = 0
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1000
+_G.time = function()
+    return 2000
+end
+_G.C_Timer.ClearPending()
+queriedTabs = {}
+local delayedTabCountCalls = 0
+local originalGetNumGuildBankTabs = _G.GetNumGuildBankTabs
+_G.GetNumGuildBankTabs = function()
+    delayedTabCountCalls = delayedTabCountCalls + 1
+    if delayedTabCountCalls < 5 then
+        return 0
+    end
+    return 3
+end
+scanner.OnGuildBankOpened()
+for _ = 1, 4 do
+    _G.C_Timer.RunPending()
+end
+assert.equal(1, queriedTabs[1], "auto-scan should keep retrying long enough for delayed guild-bank tab data to become available after the throttle window")
+_G.GetNumGuildBankTabs = originalGetNumGuildBankTabs
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 1750
+queriedTabs = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+scanner.BeginScan()
+assert.equal(1, queriedTabs[1], "manual scan should still run even inside the auto-scan throttle window")
+assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status")
+assert.truthy(_G.DEFAULT_CHAT_FRAME.messages[2] == nil, "scanner should not spam per-tab progress into chat")
+
+_G.time = originalTime
+_G.DEFAULT_CHAT_FRAME.messages = originalMessages
+
+local timedOutTabs = {}
+scanner.scanInProgress = true
+scanner.totalTabs = 1
+scanner.completedTabs = 0
+scanner.tabsToScan = {}
+scanner.rawTabs = {}
+scanner.waitingForTab = 1
+scanner.waitToken = 4
+_G.DEFAULT_CHAT_FRAME.messages = {}
+scanner.ReadCurrentTab = function(tabIndex)
+    table.insert(timedOutTabs, tabIndex)
+end
+scanner.OnGuildBankSlotsChanged(2)
+assert.equal(0, #timedOutTabs, "scanner should ignore guild bank slot events for tabs other than the one it is waiting on")
+
+scanner.waitingForTab = nil
+scanner.pendingAutoScan = true
+local retryCalls = 0
+scanner.RetryPendingAutoScan = function()
+    retryCalls = retryCalls + 1
+    return true
+end
+scanner.OnGuildBankSlotsChanged()
+assert.equal(1, retryCalls, "guild bank slot updates should wake a pending auto-scan retry when the bank data arrives")
+scanner.OnGuildBankTabsUpdated()
+assert.equal(2, retryCalls, "guild bank tab updates should also wake a pending auto-scan retry when tab data arrives")
+
+scanner.scanInProgress = false
+scanner.pendingAutoScan = false
+scanner.totalTabs = 1
+scanner.completedTabs = 0
+scanner.tabsToScan = {}
+scanner.rawTabs = {}
+scanner.waitingForTab = nil
+scanner.waitToken = 0
+_G.DEFAULT_CHAT_FRAME.messages = {}
+_G.C_Timer.ClearPending()
+queriedTabs = {}
+scanner.BeginScan()
+_G.C_Timer.RunPending()
+assert.equal(1, #timedOutTabs, "scanner timeout fallback should read the waited tab when no guild bank slot event arrives")
+assert.equal(3, queriedTabs[2], "scanner timeout fallback should continue requesting queued tabs after a missed event")
+assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[2], "timeout fallback should report a chat-visible recovery message")
+
+local snapshotDb = ns.modules.store.CreateFreshDatabase("My Guild")
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 2 },
+        },
+    },
+}
+snapshotDb.snapshots = {}
+snapshotDb.changeLog = {}
+snapshotDb.currentSnapshotId = nil
+snapshotDb.meta.lastScanSequence = 0
+ns.state.db = snapshotDb
+_G.GBankManagerDB = snapshotDb
+_G.time = function()
+    return 2000
+end
+local firstSnapshot = scanner.FinishScan("OfficerOne", "My Guild")
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 3 },
+        },
+    },
+}
+local secondSnapshot = scanner.FinishScan("OfficerOne", "My Guild")
+assert.truthy(firstSnapshot.scanId ~= secondSnapshot.scanId, "scanner should produce unique scan ids even when scans land in the same second")
+
+scanner.ReadCurrentTab = originalReadCurrentTab
+scanner.RetryPendingAutoScan = originalRetryPendingAutoScan
+_G.DEFAULT_CHAT_FRAME.messages = originalMessages
+_G.C_Timer.ClearPending()
+_G.time = originalTime

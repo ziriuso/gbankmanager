@@ -1,3 +1,11 @@
+package.path = table.concat({
+    "./?.lua",
+    "./tests/?.lua",
+    package.path,
+}, ";")
+
+dofile("tests/helpers/wow_stubs.lua")
+
 local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
@@ -6,9 +14,20 @@ local ns = env.ns
 local slash = env.slash
 local store = ns.modules.store
 local liveSmoke = ns.modules.liveSmoke
+local itemCatalog = ns.modules.itemCatalog
 
 assert.truthy(type(liveSmoke) == "table", "live smoke module should load from the addon toc")
 assert.truthy(type(liveSmoke.Run) == "function", "live smoke module should expose an explicit runner")
+assert.truthy(type(itemCatalog) == "table", "live smoke spec should load the shared item catalog module")
+assert.truthy(type(itemCatalog.GetBundledSearchPayload) == "function", "live smoke spec should expose bundled search payload access")
+assert.truthy(type(itemCatalog.ResolveIndexedQuery) == "function", "live smoke spec should expose indexed bundled search resolution")
+
+local bundledPayload = itemCatalog.GetBundledSearchPayload()
+assert.truthy(itemCatalog.IsBundledSearchReady(bundledPayload), "live smoke spec should start from a ready bundled indexed-search payload")
+assert.truthy(#(itemCatalog.ResolveIndexedQuery(bundledPayload, "flask").matches or {}) >= 4, "bundled indexed search should surface a broader flask family than the broken two-result regression")
+assert.truthy(#(itemCatalog.ResolveIndexedQuery(bundledPayload, "flask of").matches or {}) >= 4, "bundled indexed search should keep broad token queries like flask of populated")
+assert.truthy(#(itemCatalog.ResolveIndexedQuery(bundledPayload, "flask magister").matches or {}) >= 2, "bundled indexed search should keep both Magisters quality variants available")
+assert.truthy(#(itemCatalog.ResolveIndexedQuery(bundledPayload, "flask of the shat").matches or {}) >= 2, "bundled indexed search should keep the Shattered Sun family available when narrowed by a stable partial token")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 
@@ -33,5 +52,81 @@ assert.truthy(checksById.shell_open_close ~= nil, "live smoke should cover shell
 assert.truthy(checksById.options_render_scroll ~= nil, "live smoke should cover options rendering and scroll reachability")
 assert.truthy(checksById.opacity_controls ~= nil, "live smoke should cover in-client opacity controls")
 assert.truthy(checksById.request_access_modes ~= nil, "live smoke should cover request-only versus full-shell access")
+assert.truthy(checksById.request_sync_contract ~= nil, "live smoke should cover the request sync contract invariants")
 assert.truthy(checksById.minimums_render ~= nil, "live smoke should cover minimums rendering flows")
+assert.truthy(checksById.request_selection_gating ~= nil, "live smoke should cover confirmed-selection gating for request creation")
 assert.truthy(checksById.scan_access_gating ~= nil, "live smoke should cover scan/officer gating")
+
+local mainFrame = ns.modules.mainFrame
+
+local restrictiveAuthDb = store.CreateFreshDatabase("Guild Testers")
+restrictiveAuthDb.auth.capabilities.request_submit = {
+    [3] = true,
+    [4] = true,
+}
+restrictiveAuthDb.auth.capabilities.full_ui = {
+    [1] = true,
+}
+_G.GBankManagerDB = restrictiveAuthDb
+ns.state.db = restrictiveAuthDb
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
+local restrictiveSummary = liveSmoke.Run()
+
+assert.truthy(type(restrictiveSummary) == "string" and string.find(restrictiveSummary, "PASS", 1, true) ~= nil, "live smoke should stay deterministic even when the ambient auth policy denies raider request submission")
+local restrictiveChecksById = {}
+for _, result in ipairs(restrictiveAuthDb.testing.liveSmoke.results or {}) do
+    restrictiveChecksById[result.id] = result
+end
+assert.truthy(restrictiveChecksById.request_access_modes ~= nil and restrictiveChecksById.request_access_modes.passed == true, "request access smoke should seed its own auth contract instead of inheriting live guild policy")
+
+local staleStateDb = store.CreateFreshDatabase("Guild Testers")
+_G.GBankManagerDB = staleStateDb
+ns.state.db = staleStateDb
+mainFrame.requestCreateSelectedCatalogItem = {
+    itemID = 7007,
+    name = "Algari Mana Oil",
+}
+if mainFrame.requestCreateSearchSelector then
+    mainFrame.requestCreateSearchSelector:ApplySelectedItem({
+        itemID = 7007,
+        name = "Algari Mana Oil",
+    }, true)
+end
+mainFrame.minimumPendingRules = {
+    staleDraft = {
+        draftKey = "staleDraft",
+        itemID = 9999,
+        itemName = "Stale Draft",
+        quantity = 1,
+        scope = "TAB",
+        tabName = "Alchemy",
+    },
+}
+mainFrame.minimumPendingDirty = {
+    staleDraft = true,
+}
+mainFrame.minimumPendingDeleted = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
+local staleStateSummary = liveSmoke.Run()
+
+assert.truthy(type(staleStateSummary) == "string" and string.find(staleStateSummary, "PASS", 1, true) ~= nil, "live smoke should clear stale request and minimum editor state before asserting gating behavior")
+local staleChecksById = {}
+for _, result in ipairs(staleStateDb.testing.liveSmoke.results or {}) do
+    staleChecksById[result.id] = result
+end
+assert.truthy(staleChecksById.minimums_render ~= nil and staleChecksById.minimums_render.passed == true, "minimums smoke should reset pending draft state before staging a new draft")
+assert.truthy(staleChecksById.request_selection_gating ~= nil and staleChecksById.request_selection_gating.passed == true, "request selection smoke should clear prior confirmed selections before checking disabled-by-default behavior")
+assert.truthy(#(staleStateDb.minimums or {}) >= 1, "minimums smoke should still persist a staged draft after the modal-driven add flow resets stale state")
+assert.truthy(#(staleStateDb.requests or {}) >= 1, "request selection smoke should still create a request after stale editor state is cleared")
+
+local originalLiveSmoke = ns.modules.liveSmoke
+_G.DEFAULT_CHAT_FRAME.messages = {}
+ns.modules.liveSmoke = nil
+local unavailable = slash.command("test smoke")
+ns.modules.liveSmoke = originalLiveSmoke
+
+assert.equal("smoke_test_unavailable", unavailable, "slash test smoke should return an explicit unavailable code when the live smoke module is missing")
+assert.truthy(#_G.DEFAULT_CHAT_FRAME.messages >= 1, "slash test smoke should emit visible chat feedback when the live smoke module is unavailable")
+assert.truthy(string.find(_G.DEFAULT_CHAT_FRAME.messages[1] or "", "unavailable", 1, true) ~= nil, "missing live smoke feedback should explain that the smoke command is unavailable")

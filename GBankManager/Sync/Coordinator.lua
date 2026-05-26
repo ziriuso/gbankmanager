@@ -47,6 +47,49 @@ local function auth_policy_authority_rank(record)
     return 0
 end
 
+local function workflow_authority_rank(record)
+    record = record or {}
+    local rankIndex = tonumber(record.updatedByRankIndex)
+    if rankIndex == 0 then
+        return 2
+    end
+
+    if rankIndex ~= nil and rankIndex <= 1 then
+        return 1
+    end
+
+    return 0
+end
+
+function coordinator.ResolveRequestConflict(localRequest, remoteRequest)
+    localRequest = localRequest or {}
+    remoteRequest = remoteRequest or {}
+
+    local localAuthority = workflow_authority_rank(localRequest)
+    local remoteAuthority = workflow_authority_rank(remoteRequest)
+    if remoteAuthority > localAuthority then
+        return remoteRequest
+    end
+
+    if remoteAuthority < localAuthority then
+        return localRequest
+    end
+
+    if (remoteRequest.updatedAt or 0) > (localRequest.updatedAt or 0) then
+        return remoteRequest
+    end
+
+    if (remoteRequest.updatedAt or 0) < (localRequest.updatedAt or 0) then
+        return localRequest
+    end
+
+    if tostring(remoteRequest.updatedBy or "") > tostring(localRequest.updatedBy or "") then
+        return remoteRequest
+    end
+
+    return localRequest
+end
+
 function coordinator.ResolveAuthConflict(localPolicy, remotePolicy)
     localPolicy = localPolicy or {}
     remotePolicy = remotePolicy or {}

@@ -28,27 +28,51 @@ local function write_guild_info_text(text)
     end
 
     if type(_G.SetGuildInfoText) == "function" then
-        wrote = _G.SetGuildInfoText(text) == true or wrote
+        local result = _G.SetGuildInfoText(text)
+        wrote = result ~= false or wrote
     end
 
     return wrote
 end
 
+local function guild_info_contains_policy(text, policyString)
+    text = tostring(text or "")
+    policyString = tostring(policyString or "")
+    return policyString ~= "" and string.find(text, policyString, 1, true) ~= nil
+end
+
 local function rehydrate_blacklist_details(localPolicy, nextPolicy)
     local knownEntriesByHash = {}
-
-    localPolicy = permissions.NormalizePolicy(localPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
-    nextPolicy = permissions.NormalizePolicy(nextPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
-    nextPolicy.blacklist = {}
-
-    for characterKey, entry in pairs(localPolicy.blacklist or {}) do
-        local hash = (entry and entry.hash) or (type(codec.HashCharacterKey) == "function" and codec.HashCharacterKey(characterKey) or nil)
-        if hash then
+    local function remember_entry(characterKey, entry)
+        local hash = (type(entry) == "table" and entry.hash) or (type(codec.HashCharacterKey) == "function" and codec.HashCharacterKey(characterKey) or nil)
+        if hash and hash ~= "" then
             knownEntriesByHash[hash] = {
-                characterKey = characterKey,
+                characterKey = tostring((type(entry) == "table" and entry.characterKey) or characterKey or ""),
                 entry = entry,
             }
         end
+    end
+
+    localPolicy = permissions.NormalizePolicy(localPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    nextPolicy = permissions.NormalizePolicy(nextPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    if next(nextPolicy.blacklistHashes or {}) == nil and next(nextPolicy.blacklist or {}) == nil then
+        nextPolicy.blacklist = localPolicy.blacklist or {}
+        nextPolicy.blacklistHashes = localPolicy.blacklistHashes or {}
+        nextPolicy.blacklistDirectory = localPolicy.blacklistDirectory or {}
+        nextPolicy.blacklistRosterDirectory = localPolicy.blacklistRosterDirectory or {}
+        return permissions.NormalizePolicy(nextPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    end
+    nextPolicy.blacklist = {}
+
+    for hash, entry in pairs(localPolicy.blacklistDirectory or {}) do
+        if type(entry) == "table" then
+            local characterKey = entry.characterKey or ("#" .. tostring(hash))
+            remember_entry(characterKey, entry)
+        end
+    end
+
+    for characterKey, entry in pairs(localPolicy.blacklist or {}) do
+        remember_entry(characterKey, entry)
     end
 
     for hash in pairs(nextPolicy.blacklistHashes or {}) do
@@ -73,6 +97,51 @@ local function rehydrate_blacklist_details(localPolicy, nextPolicy)
     return permissions.NormalizePolicy(nextPolicy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
 end
 
+local function rehydrate_updated_by(localPolicy, nextPolicy)
+    local nextHash = tostring((nextPolicy or {}).updatedByHash or "")
+    local nextUpdatedBy = tostring((nextPolicy or {}).updatedBy or "")
+    if nextUpdatedBy ~= "" then
+        if nextHash == "" and type(codec.HashCharacterKey) == "function" then
+            nextPolicy.updatedByHash = codec.HashCharacterKey(nextUpdatedBy)
+        end
+        return nextPolicy
+    end
+
+    if nextHash == "" then
+        return nextPolicy
+    end
+
+    local currentUpdatedBy = tostring((localPolicy or {}).updatedBy or "")
+    local currentHash = tostring((localPolicy or {}).updatedByHash or "")
+    if currentUpdatedBy ~= "" and (currentHash == nextHash or (type(codec.HashCharacterKey) == "function" and codec.HashCharacterKey(currentUpdatedBy) == nextHash)) then
+        nextPolicy.updatedBy = currentUpdatedBy
+        nextPolicy.updatedByHash = nextHash
+        return nextPolicy
+    end
+
+    if type(permissions.GetLivePlayerContext) == "function" then
+        local liveContext = permissions.GetLivePlayerContext({})
+        local liveCharacterKey = tostring((liveContext or {}).characterKey or "")
+        if liveCharacterKey ~= "" and type(codec.HashCharacterKey) == "function" and codec.HashCharacterKey(liveCharacterKey) == nextHash then
+            nextPolicy.updatedBy = liveCharacterKey
+            nextPolicy.updatedByHash = nextHash
+            return nextPolicy
+        end
+    end
+
+    nextPolicy.updatedBy = "#" .. nextHash
+    nextPolicy.updatedByHash = nextHash
+    return nextPolicy
+end
+
+local function ensure_minimum_settings(db)
+    db.ui = type(db.ui) == "table" and db.ui or {}
+    db.ui.minimumSettings = type(db.ui.minimumSettings) == "table" and db.ui.minimumSettings or {}
+    db.ui.minimumSettings.defaultQuantity = tonumber(db.ui.minimumSettings.defaultQuantity or 100) or 100
+    db.ui.minimumSettings.criticalThresholdPercent = math.max(0, math.min(100, tonumber(db.ui.minimumSettings.criticalThresholdPercent or 50) or 50))
+    return db.ui.minimumSettings
+end
+
 function source.ExportPolicyString(policy)
     return codec.EncodePolicy(permissions.NormalizePolicy(policy or {}, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {}))
 end
@@ -87,17 +156,14 @@ function source.DecodePolicyString(policyString)
     return permissions.NormalizePolicy(decoded, rankMetadata), "ok"
 end
 
-function source.ApplyPolicyString(db, policyString, options)
+function source.ApplyPolicy(db, policy, options)
     db = db or {}
     options = options or {}
-
-    local decoded, reason = source.DecodePolicyString(policyString)
-    if not decoded then
-        return false, reason
-    end
+    policy = type(policy) == "table" and policy or {}
 
     local currentPolicy = permissions.NormalizePolicy((db.auth or {}), permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
     local currentRevision = tonumber(currentPolicy.revision or 0) or 0
+    local decoded = permissions.NormalizePolicy(policy, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
     local nextRevision = tonumber(decoded.revision or 0) or 0
     if not options.force and nextRevision < currentRevision then
         return false, "stale_revision"
@@ -108,10 +174,40 @@ function source.ApplyPolicyString(db, policyString, options)
     end
 
     decoded = rehydrate_blacklist_details(currentPolicy, decoded)
+    decoded = rehydrate_updated_by(currentPolicy, decoded)
+    if decoded.restockDefault == nil then
+        decoded.restockDefault = currentPolicy.restockDefault
+    end
+    if decoded.criticalThresholdPercent == nil then
+        decoded.criticalThresholdPercent = currentPolicy.criticalThresholdPercent
+    end
     decoded.guildPolicyString = source.ExportPolicyString(decoded)
-    decoded.guildPolicySource = "guild_info"
+    decoded.guildPolicySource = tostring(options.source or decoded.guildPolicySource or "guild_info")
     db.auth = decoded
+    local minimumSettings = ensure_minimum_settings(db)
+    if decoded.restockDefault ~= nil then
+        minimumSettings.defaultQuantity = tonumber(decoded.restockDefault) or minimumSettings.defaultQuantity
+    end
+    if decoded.criticalThresholdPercent ~= nil then
+        minimumSettings.criticalThresholdPercent = math.max(0, math.min(100, tonumber(decoded.criticalThresholdPercent) or minimumSettings.criticalThresholdPercent))
+    end
+    if type(permissions.AppendPolicyAudit) == "function" then
+        permissions.AppendPolicyAudit(db, currentPolicy, decoded, decoded.guildPolicySource)
+    end
     return true, "applied", decoded
+end
+
+function source.ApplyPolicyString(db, policyString, options)
+    db = db or {}
+    options = options or {}
+
+    local decoded, reason = source.DecodePolicyString(policyString)
+    if not decoded then
+        return false, reason
+    end
+
+    options.source = options.source or "guild_info"
+    return source.ApplyPolicy(db, decoded, options)
 end
 
 function source.PullPolicyFromGuildInfo(db, options)
@@ -128,6 +224,9 @@ function source.PushPolicyToGuildInfo(db, options)
     options = options or {}
 
     local policy = permissions.NormalizePolicy(db.auth or {}, permissions.GetGuildRankMetadata and permissions.GetGuildRankMetadata() or {})
+    local minimumSettings = ensure_minimum_settings(db) or {}
+    policy.restockDefault = tonumber(minimumSettings.defaultQuantity) or policy.restockDefault
+    policy.criticalThresholdPercent = math.max(0, math.min(100, tonumber(minimumSettings.criticalThresholdPercent) or policy.criticalThresholdPercent or 50))
     local policyString = source.ExportPolicyString(policy)
     policy.guildPolicyString = policyString
 
@@ -146,6 +245,13 @@ function source.PushPolicyToGuildInfo(db, options)
 
     local wrote = write_guild_info_text(nextText)
     if not wrote then
+        policy.guildPolicySource = "local"
+        db.auth = policy
+        return false, "write_failed", policyString
+    end
+
+    local confirmedText = read_guild_info_text()
+    if not guild_info_contains_policy(confirmedText, policyString) then
         policy.guildPolicySource = "local"
         db.auth = policy
         return false, "write_failed", policyString

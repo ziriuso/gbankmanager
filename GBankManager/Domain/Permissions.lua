@@ -19,6 +19,7 @@ local CAPABILITIES = {
     "minimum_edit",
     "minimum_delete",
     "auth_manage",
+    "request_delete",
 }
 
 local OFFICER_FALLBACK_CAPABILITIES = {
@@ -31,6 +32,7 @@ local OFFICER_FALLBACK_CAPABILITIES = {
     minimum_add = true,
     minimum_edit = true,
     minimum_delete = true,
+    request_delete = true,
 }
 
 local function ensure_table(value)
@@ -43,6 +45,27 @@ end
 
 local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function build_blacklist_directory_entry(characterKey, entry, fallbackUpdatedAt)
+    local normalizedCharacterKey = trim(characterKey)
+    if normalizedCharacterKey == "" then
+        return nil, nil
+    end
+
+    local hash = type(authPolicyCodec.HashCharacterKey) == "function" and authPolicyCodec.HashCharacterKey(normalizedCharacterKey) or nil
+    if not hash or hash == "" then
+        return nil, nil
+    end
+
+    entry = type(entry) == "table" and entry or {}
+    return hash, {
+        characterKey = normalizedCharacterKey,
+        name = trim(entry.name or "") ~= "" and entry.name or normalizedCharacterKey,
+        reason = entry.reason or "",
+        updatedAt = tonumber(entry.updatedAt or fallbackUpdatedAt or 0) or 0,
+        hash = hash,
+    }
 end
 
 local function default_rank_name(rankIndex)
@@ -105,6 +128,25 @@ function permissions.NormalizeCharacterKey(value, realmName)
     return permissions.BuildCharacterKey(normalized, realmName)
 end
 
+function permissions.NormalizeEnteredCharacterKey(value, realmName)
+    local normalized = trim(value)
+    if normalized == "" then
+        return ""
+    end
+
+    local left, right = string.match(normalized, "^([^%-]+)%-(.+)$")
+    if left and right and left ~= "" and right ~= "" then
+        return string.format("%s-%s", left, right)
+    end
+
+    local normalizedRealm = trim(realmName)
+    if normalizedRealm == "" then
+        return normalized
+    end
+
+    return string.format("%s-%s", normalized, normalizedRealm)
+end
+
 function permissions.DisplayCharacterKey(characterKey)
     local normalized = trim(characterKey)
     if normalized == "" then
@@ -116,13 +158,21 @@ function permissions.DisplayCharacterKey(characterKey)
         return normalized
     end
 
-    local realmName = string.sub(normalized, 1, delimiterIndex - 1)
-    local characterName = string.sub(normalized, delimiterIndex + 1)
-    if characterName == "" or realmName == "" then
+    local left = string.sub(normalized, 1, delimiterIndex - 1)
+    local right = string.sub(normalized, delimiterIndex + 1)
+    if right == "" or left == "" then
         return normalized
     end
 
-    return string.format("%s-%s", characterName, realmName)
+    local currentRealm = trim(type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
+    if right == currentRealm then
+        return string.format("%s-%s", left, right)
+    end
+    if left == currentRealm then
+        return string.format("%s-%s", right, left)
+    end
+
+    return normalized
 end
 
 function permissions.GetGuildRankMetadata()
@@ -146,13 +196,18 @@ function permissions.CreateDefaultPolicy()
         revision = 0,
         updatedAt = 0,
         updatedBy = "",
+        updatedByHash = nil,
         updatedByRankIndex = nil,
+        restockDefault = nil,
+        criticalThresholdPercent = 50,
         guildPolicyString = "",
         guildPolicySource = "local",
         rankMetadata = {},
         capabilities = ensure_capabilities({}),
         blacklist = {},
         blacklistHashes = {},
+        blacklistDirectory = {},
+        blacklistRosterDirectory = {},
     }
 end
 
@@ -164,18 +219,62 @@ function permissions.NormalizePolicy(policy, liveRankMetadata)
     normalized.revision = tonumber(normalized.revision or defaults.revision) or defaults.revision
     normalized.updatedAt = tonumber(normalized.updatedAt or defaults.updatedAt) or defaults.updatedAt
     normalized.updatedBy = normalized.updatedBy or defaults.updatedBy
+    normalized.updatedByHash = normalized.updatedByHash or defaults.updatedByHash
     normalized.updatedByRankIndex = normalized.updatedByRankIndex
+    normalized.restockDefault = normalized.restockDefault ~= nil and (tonumber(normalized.restockDefault) or nil) or defaults.restockDefault
+    normalized.criticalThresholdPercent = math.max(0, math.min(100, tonumber(normalized.criticalThresholdPercent or defaults.criticalThresholdPercent) or defaults.criticalThresholdPercent))
     normalized.guildPolicyString = normalized.guildPolicyString or defaults.guildPolicyString
     normalized.guildPolicySource = normalized.guildPolicySource or defaults.guildPolicySource
     normalized.rankMetadata = ensure_table(normalized.rankMetadata)
     normalized.capabilities = ensure_capabilities(normalized.capabilities)
     normalized.blacklist = ensure_table(normalized.blacklist)
     normalized.blacklistHashes = ensure_table(normalized.blacklistHashes)
+    normalized.blacklistDirectory = ensure_table(normalized.blacklistDirectory)
+    normalized.blacklistRosterDirectory = ensure_table(normalized.blacklistRosterDirectory)
 
-    for characterKey in pairs(normalized.blacklist) do
+    local migratedBlacklist = {}
+    for characterKey, entry in pairs(normalized.blacklist) do
+        local finalCharacterKey = characterKey
+        local left, right = string.match(tostring(characterKey or ""), "^([^%-]+)%-(.+)$")
+        if type(entry) == "table" and left and right and trim(entry.name or "") ~= "" and trim(entry.name or "") == right then
+            finalCharacterKey = string.format("%s-%s", right, left)
+        end
+        migratedBlacklist[finalCharacterKey] = entry
         if type(authPolicyCodec.HashCharacterKey) == "function" then
             normalized.blacklistHashes[authPolicyCodec.HashCharacterKey(characterKey)] = true
+            normalized.blacklistHashes[authPolicyCodec.HashCharacterKey(finalCharacterKey)] = true
         end
+        local hash, directoryEntry = build_blacklist_directory_entry(finalCharacterKey, entry, normalized.updatedAt)
+        if hash and directoryEntry then
+            normalized.blacklistDirectory[hash] = directoryEntry
+        end
+    end
+    normalized.blacklist = migratedBlacklist
+
+    local normalizedDirectory = {}
+    for hash, entry in pairs(normalized.blacklistDirectory) do
+        local actualHash = tostring((type(entry) == "table" and entry.hash) or hash or "")
+        local characterKey = type(entry) == "table" and entry.characterKey or nil
+        local directoryHash, directoryEntry = build_blacklist_directory_entry(characterKey, entry, normalized.updatedAt)
+        if directoryHash and directoryEntry then
+            normalizedDirectory[directoryHash] = directoryEntry
+            if normalized.blacklistHashes[directoryHash] ~= true then
+                normalized.blacklistHashes[directoryHash] = nil
+            end
+        elseif actualHash ~= "" and type(entry) == "table" then
+            normalizedDirectory[actualHash] = {
+                characterKey = tostring(entry.characterKey or "#" .. actualHash),
+                name = tostring(entry.name or entry.characterKey or "#" .. actualHash),
+                reason = tostring(entry.reason or ""),
+                updatedAt = tonumber(entry.updatedAt or normalized.updatedAt or 0) or 0,
+                hash = actualHash,
+            }
+        end
+    end
+    normalized.blacklistDirectory = normalizedDirectory
+
+    if normalized.updatedByHash == nil and trim(normalized.updatedBy) ~= "" and type(authPolicyCodec.HashCharacterKey) == "function" then
+        normalized.updatedByHash = authPolicyCodec.HashCharacterKey(normalized.updatedBy)
     end
 
     for rankIndex, metadata in pairs(liveRankMetadata or {}) do
@@ -214,6 +313,10 @@ end
 function permissions.RefreshPolicyFromGuild(db)
     db = db or {}
     db.auth = permissions.NormalizePolicy(db.auth, permissions.GetGuildRankMetadata())
+    local officerNoteBlacklist = ns.modules.officerNoteBlacklist or {}
+    if type(officerNoteBlacklist.RefreshPolicyFromRoster) == "function" then
+        db.auth = officerNoteBlacklist.RefreshPolicyFromRoster(db.auth) or db.auth
+    end
     return db.auth
 end
 
@@ -234,6 +337,63 @@ function permissions.GetSortedRankMetadata(policy)
     end)
 
     return ranks
+end
+
+local function policy_audit_actor(updatedBy)
+    local actor = permissions.DisplayCharacterKey(updatedBy)
+    if actor == "" then
+        return "Unknown"
+    end
+
+    return actor
+end
+
+local function policy_audit_summary(policy)
+    policy = permissions.NormalizePolicy(policy)
+    local revision = tonumber(policy.revision or 0) or 0
+    local restockDefault = tonumber(policy.restockDefault)
+    if restockDefault == nil then
+        return string.format("Revision %d", revision)
+    end
+
+    return string.format("Revision %d | Restock %d", revision, restockDefault)
+end
+
+function permissions.BuildPolicyAuditEntry(previousPolicy, nextPolicy, source)
+    previousPolicy = permissions.NormalizePolicy(previousPolicy)
+    nextPolicy = permissions.NormalizePolicy(nextPolicy)
+
+    return {
+        category = "OPTIONS",
+        type = "AUTH_POLICY_UPDATED",
+        itemName = "Guild Permissions",
+        actor = policy_audit_actor(nextPolicy.updatedBy),
+        oldValue = policy_audit_summary(previousPolicy),
+        newValue = policy_audit_summary(nextPolicy),
+        timestamp = tonumber(nextPolicy.updatedAt or 0) or 0,
+        revision = tonumber(nextPolicy.revision or 0) or 0,
+        source = tostring(source or nextPolicy.guildPolicySource or "local"),
+        updatedBy = tostring(nextPolicy.updatedBy or ""),
+    }
+end
+
+function permissions.AppendPolicyAudit(db, previousPolicy, nextPolicy, source)
+    db = db or {}
+    db.auditLog = ensure_table(db.auditLog)
+
+    local nextRevision = tonumber((nextPolicy or {}).revision or 0) or 0
+    local nextUpdatedBy = tostring((nextPolicy or {}).updatedBy or "")
+    for _, entry in ipairs(db.auditLog) do
+        if entry.type == "AUTH_POLICY_UPDATED"
+            and (tonumber(entry.revision or 0) or 0) == nextRevision
+            and tostring(entry.updatedBy or "") == nextUpdatedBy then
+            return false, entry
+        end
+    end
+
+    local entry = permissions.BuildPolicyAuditEntry(previousPolicy, nextPolicy, source)
+    table.insert(db.auditLog, entry)
+    return true, entry
 end
 
 function permissions.IsBlacklisted(context, policy)
@@ -349,6 +509,13 @@ function permissions.UpsertBlacklist(policy, characterKey, name, reason, updated
     }
     if hash then
         policy.blacklistHashes[hash] = true
+        policy.blacklistDirectory[hash] = {
+            characterKey = characterKey,
+            name = name or characterKey,
+            reason = reason or "",
+            updatedAt = updatedAt or 0,
+            hash = hash,
+        }
     end
 
     return policy.blacklist[characterKey]
@@ -358,7 +525,17 @@ function permissions.RemoveBlacklist(policy, characterKey)
     policy = permissions.NormalizePolicy(policy)
     local removed = policy.blacklist[characterKey]
     local hash = type(authPolicyCodec.HashCharacterKey) == "function" and authPolicyCodec.HashCharacterKey(characterKey) or nil
-    policy.blacklist[characterKey] = nil
+    if removed ~= nil then
+        policy.blacklist[characterKey] = nil
+    elseif hash ~= nil then
+        for existingKey, entry in pairs(policy.blacklist) do
+            local existingHash = type(authPolicyCodec.HashCharacterKey) == "function" and authPolicyCodec.HashCharacterKey(existingKey) or nil
+            if existingHash == hash then
+                removed = entry
+                policy.blacklist[existingKey] = nil
+            end
+        end
+    end
     if hash then
         policy.blacklistHashes[hash] = nil
     end
@@ -371,6 +548,7 @@ function permissions.StampPolicy(policy, context, updatedAt)
     policy.revision = (tonumber(policy.revision or 0) or 0) + 1
     policy.updatedAt = updatedAt or (_G.time and _G.time() or 0)
     policy.updatedBy = context.characterKey or context.name or ""
+    policy.updatedByHash = type(authPolicyCodec.HashCharacterKey) == "function" and authPolicyCodec.HashCharacterKey(policy.updatedBy) or nil
     policy.updatedByRankIndex = context.guildRankIndex
     if type(authPolicyCodec.EncodePolicy) == "function" then
         policy.guildPolicyString = authPolicyCodec.EncodePolicy(policy)

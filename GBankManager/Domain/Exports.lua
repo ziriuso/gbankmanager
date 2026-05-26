@@ -4,9 +4,43 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local exports = ns.modules.exports or {}
+local craftedQuality = ns.modules.craftedQuality or {}
+if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
+    craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
 
 local function render_field(row, field)
     return tostring(row[field] or "")
+end
+
+local function crafted_quality_markup(atlasName, fallbackQuality)
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        return craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality)
+    end
+
+    if type(craftedQuality.ToMarkup) == "function" then
+        return craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality)
+    end
+
+    if atlasName == nil or atlasName == "" then
+        return ""
+    end
+
+    return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_icon_for_value(quality)
+    quality = math.max(0, math.floor(tonumber(quality or 0) or 0))
+    if quality < 1 or quality > 5 then
+        return ""
+    end
+
+    local atlasName = string.format("Professions-ChatIcon-Quality-Tier%d", quality)
+    if type(craftedQuality.NormalizeDisplayAtlas) == "function" then
+        return craftedQuality.NormalizeDisplayAtlas(atlasName, quality, "reagent")
+    end
+
+    return atlasName
 end
 
 function exports.BuildDelimited(rows, template)
@@ -20,7 +54,8 @@ function exports.BuildDelimited(rows, template)
     for _, row in ipairs(rows or {}) do
         local values = {}
         for _, field in ipairs(template.fields or {}) do
-            table.insert(values, render_field(row, field))
+            local valueField = (template.labels or {})[field] or field
+            table.insert(values, render_field(row, valueField))
         end
         table.insert(lines, table.concat(values, template.delimiter or ","))
     end
@@ -29,22 +64,24 @@ function exports.BuildDelimited(rows, template)
 end
 
 function exports.BuildAuctionator(rows, shoppingListName)
-    local values = {}
+    local lines = {}
+    local seen = {}
 
     shoppingListName = tostring(shoppingListName or "GBankManager")
     rows = type(rows) == "table" and rows or {}
+    lines[1] = shoppingListName
 
     for _, row in ipairs(rows) do
         local itemName = tostring(row.itemName or "")
         local totalToBuy = tonumber(row.totalToBuy or 0) or 0
-        local quality = math.max(0, math.floor(tonumber(row.quality or row.craftedQuality or 0) or 0))
 
-        if itemName ~= "" and totalToBuy > 0 then
-            table.insert(values, string.format('"%s";0;0;0;0;0;0;0;%d;%d', itemName, quality, totalToBuy))
+        if itemName ~= "" and totalToBuy > 0 and not seen[itemName] then
+            seen[itemName] = true
+            table.insert(lines, itemName)
         end
     end
 
-    return shoppingListName .. "^" .. table.concat(values, "^")
+    return table.concat(lines, "^")
 end
 
 local function current_total(snapshot, itemID)
@@ -74,6 +111,46 @@ local function summarize_scopes(details)
 
     table.sort(scopes)
     return #scopes > 0 and table.concat(scopes, "|") or "GLOBAL"
+end
+
+local function primary_bank_tab(details)
+    for _, detail in ipairs(details or {}) do
+        if detail.scope == "TAB" and detail.tabName and detail.tabName ~= "" then
+            return detail.tabName
+        end
+    end
+
+    return summarize_scopes(details)
+end
+
+local function stocked_elsewhere(snapshotItem, bankTab)
+    local out = {}
+    bankTab = tostring(bankTab or "")
+
+    if bankTab == "" or bankTab == "GLOBAL" then
+        return out
+    end
+
+    for tabName, quantity in pairs((snapshotItem or {}).tabs or {}) do
+        quantity = tonumber(quantity or 0) or 0
+        if tostring(tabName) ~= bankTab and quantity > 0 then
+            table.insert(out, {
+                tabName = tostring(tabName),
+                quantity = quantity,
+            })
+        end
+    end
+
+    table.sort(out, function(left, right)
+        local leftQuantity = tonumber(left.quantity or 0) or 0
+        local rightQuantity = tonumber(right.quantity or 0) or 0
+        if leftQuantity ~= rightQuantity then
+            return leftQuantity > rightQuantity
+        end
+
+        return tostring(left.tabName or "") < tostring(right.tabName or "")
+    end)
+    return out
 end
 
 local function quality_for_item(db, snapshot, itemID)
@@ -106,6 +183,34 @@ local function quality_for_item(db, snapshot, itemID)
     return 0
 end
 
+local function quality_icon_for_item(db, snapshot, itemID)
+    db = db or {}
+    snapshot = snapshot or { items = {} }
+
+    local snapshotItem = snapshot.items and snapshot.items[itemID]
+    local atlasName = tostring((snapshotItem or {}).craftedQualityIcon or "")
+    if atlasName ~= "" then
+        return atlasName
+    end
+
+    for _, source in ipairs({
+        db.minimums,
+        db.oneTimeTargets,
+        db.requests,
+    }) do
+        for _, entry in ipairs(source or {}) do
+            if entry.itemID == itemID then
+                atlasName = tostring(entry.craftedQualityIcon or "")
+                if atlasName ~= "" then
+                    return atlasName
+                end
+            end
+        end
+    end
+
+    return ""
+end
+
 function exports.MaterializePlanRows(plan, snapshot)
     local rows = {}
     snapshot = snapshot or { items = {} }
@@ -122,6 +227,14 @@ function exports.MaterializePlanRows(plan, snapshot)
             end
 
             table.sort(reasons)
+            local bankTab = primary_bank_tab(row.details or {})
+            local elsewhereTabs = stocked_elsewhere(currentItem, bankTab)
+            local topElsewhereTab = elsewhereTabs[1]
+            local quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0
+            local craftedQualityIcon = tostring(row.craftedQualityIcon or (currentItem and currentItem.craftedQualityIcon) or "") or ""
+            if craftedQualityIcon == "" then
+                craftedQualityIcon = crafted_quality_icon_for_value(quality)
+            end
             table.insert(rows, {
                 itemID = row.itemID,
                 itemName = row.itemName,
@@ -130,9 +243,17 @@ function exports.MaterializePlanRows(plan, snapshot)
                 targetQuantity = (row.sources and row.sources.ONE_TIME_TARGET) or 0,
                 requestQuantity = (row.sources and row.sources.REQUEST) or 0,
                 totalToBuy = row.totalToBuy,
-                quality = tonumber(row.quality or row.craftedQuality or (currentItem and currentItem.craftedQuality) or 0) or 0,
+                amountToStock = row.totalToBuy,
+                quality = quality,
+                craftedQualityIcon = craftedQualityIcon,
+                itemTier = crafted_quality_markup(craftedQualityIcon, quality),
+                itemTierValue = quality,
+                bankTab = bankTab,
                 scopeSummary = summarize_scopes(row.details or {}),
                 reason = table.concat(reasons, "|"),
+                excessStockIn = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "None",
+                stockedElsewhere = topElsewhereTab and tostring(topElsewhereTab.tabName or "") or "None",
+                stockedElsewhereTabs = elsewhereTabs,
             })
         end
     end
@@ -142,6 +263,36 @@ function exports.MaterializePlanRows(plan, snapshot)
     end)
 
     return rows
+end
+
+function exports.FilterRowsUnavailableElsewhere(rows)
+    local out = {}
+
+    for _, row in ipairs(rows or {}) do
+        if #((row or {}).stockedElsewhereTabs or {}) == 0 then
+            table.insert(out, row)
+        end
+    end
+
+    return out
+end
+
+function exports.BuildTsmItemIdList(rows)
+    local values = {}
+    local seen = {}
+
+    for _, row in ipairs(rows or {}) do
+        local itemID = tonumber(row.itemID)
+        if itemID and not seen[itemID] then
+            seen[itemID] = true
+            table.insert(values, tostring(itemID))
+        end
+    end
+
+    table.sort(values, function(left, right)
+        return tonumber(left) < tonumber(right)
+    end)
+    return table.concat(values, ",")
 end
 
 function exports.BuildRowsFromDatabase(db)
@@ -165,6 +316,14 @@ function exports.BuildRowsFromDatabase(db)
         if (tonumber(row.quality or 0) or 0) <= 0 then
             row.quality = quality_for_item(db, snapshot, row.itemID)
         end
+        if tostring(row.craftedQualityIcon or "") == "" then
+            row.craftedQualityIcon = quality_icon_for_item(db, snapshot, row.itemID)
+        end
+        if tostring(row.craftedQualityIcon or "") == "" then
+            row.craftedQualityIcon = crafted_quality_icon_for_value(row.quality)
+        end
+        row.itemTier = crafted_quality_markup(row.craftedQualityIcon, row.quality)
+        row.itemTierValue = tonumber(row.quality or 0) or 0
     end
 
     return rows, snapshot

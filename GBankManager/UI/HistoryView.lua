@@ -6,7 +6,9 @@ ns.modules = ns.modules or {}
 local historyView = ns.modules.historyView or {}
 
 local action_labels = {
+    AUTH_POLICY_UPDATED = "Updated",
     REQUEST_CREATED = "Created",
+    REQUEST_UPDATED = "Updated",
     REQUEST_APPROVED = "Approved",
     REQUEST_REJECTED = "Rejected",
     REQUEST_FULFILLED = "Fulfilled",
@@ -23,6 +25,7 @@ local action_labels = {
 }
 
 local category_labels = {
+    OPTIONS = "Options",
     REQUEST = "Request",
     MINIMUM = "Minimum",
     TARGET = "Target",
@@ -75,7 +78,7 @@ local function format_timestamp(timestamp)
         return "-"
     end
 
-    local formatter = _G.date or os.date
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
     if type(formatter) == "function" then
         return abbreviate_timezone_name(formatter("%Y-%m-%d %H:%M %Z", timestamp))
     end
@@ -133,7 +136,7 @@ function historyView.FilterProcurementEntries(entries)
     local filtered = {}
 
     for _, entry in ipairs(entries or {}) do
-        if procurement_categories[entry.category] then
+        if procurement_categories[entry.category] or (entry.category == "OPTIONS" and entry.type == "AUTH_POLICY_UPDATED") then
             table.insert(filtered, entry)
         end
     end
@@ -157,16 +160,35 @@ end
 
 function historyView.BuildTableRows(entries, filters)
     local rows = {}
+    local filteredEntries = historyView.Filter(entries, filters)
 
-    for _, entry in ipairs(historyView.Filter(entries, filters)) do
+    table.sort(filteredEntries, function(left, right)
+        local leftTimestamp = normalize_timestamp(left.timestamp or left.scannedAt)
+        local rightTimestamp = normalize_timestamp(right.timestamp or right.scannedAt)
+        if leftTimestamp == rightTimestamp then
+            return tostring(left.itemName or left.name or "") < tostring(right.itemName or right.name or "")
+        end
+        return leftTimestamp > rightTimestamp
+    end)
+
+    for _, entry in ipairs(filteredEntries) do
         table.insert(rows, {
             category = category_labels[entry.category] or tostring(entry.category or "Unknown"),
             itemName = tostring(entry.itemName or entry.name or "Unknown"),
             action = action_labels[entry.type] or tostring(entry.type or "Unknown"),
             actor = tostring(entry.actor or "Unknown"),
-            oldValue = entry.oldValue ~= nil and tostring(entry.oldValue) or "-",
-            newValue = entry.newValue ~= nil and tostring(entry.newValue) or "-",
             date = format_timestamp(entry.timestamp or entry.scannedAt),
+            details = {
+                type = tostring(entry.type or "Unknown"),
+                category = category_labels[entry.category] or tostring(entry.category or "Unknown"),
+                itemName = tostring(entry.itemName or entry.name or "Unknown"),
+                action = action_labels[entry.type] or tostring(entry.type or "Unknown"),
+                actor = tostring(entry.actor or "Unknown"),
+                oldValue = entry.oldValue ~= nil and tostring(entry.oldValue) or "-",
+                newValue = entry.newValue ~= nil and tostring(entry.newValue) or "-",
+                timestamp = format_timestamp(entry.timestamp or entry.scannedAt),
+            },
+            historyEntry = entry,
         })
     end
 

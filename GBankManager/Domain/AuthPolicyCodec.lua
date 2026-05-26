@@ -17,6 +17,7 @@ local CAPABILITY_ORDER = {
     "minimum_edit",
     "minimum_delete",
     "auth_manage",
+    "request_delete",
 }
 
 local HASH_MODULUS = 2147483647
@@ -80,8 +81,21 @@ local function split_csv(text)
     return out
 end
 
+local function normalized_hash_input(characterKey)
+    local normalized = trim(characterKey):upper()
+    local left, right = string.match(normalized, "^([^%-]+)%-(.+)$")
+    if left and right and left ~= "" and right ~= "" then
+        if left > right then
+            left, right = right, left
+        end
+        return string.format("%s-%s", left, right)
+    end
+
+    return normalized
+end
+
 function codec.HashCharacterKey(characterKey)
-    characterKey = trim(characterKey):upper()
+    characterKey = normalized_hash_input(characterKey)
     local hash = 5381
 
     for index = 1, #characterKey do
@@ -162,52 +176,71 @@ function codec.EncodePolicy(policy)
         rankMasks[1] = "0"
     end
 
-    local blacklistHashes = {}
-    local seen = {}
-    for characterKey in pairs((policy.blacklist or {})) do
-        local hash = codec.HashCharacterKey(characterKey)
-        if not seen[hash] then
-            seen[hash] = true
-            blacklistHashes[#blacklistHashes + 1] = hash
-        end
+    local updatedBy = trim(policy.updatedBy)
+    local updatedByHash = trim(policy.updatedByHash)
+    local updatedByRankIndex = tonumber(policy.updatedByRankIndex)
+    local restockDefault = tonumber(policy.restockDefault)
+    if updatedByHash == "" and updatedBy ~= "" then
+        updatedByHash = codec.HashCharacterKey(updatedBy)
     end
-    for hash in pairs((policy.blacklistHashes or {})) do
-        if not seen[hash] then
-            seen[hash] = true
-            blacklistHashes[#blacklistHashes + 1] = hash
-        end
-    end
-    table.sort(blacklistHashes)
 
     return string.format(
-        "[GBMAUTH:%s;%s;%s;%s;%s]",
-        1,
+        "[GBMAUTH:%s;%s;%s;%s;%s;%s;%s;%s;%s]",
+        3,
         to_base36(policy.revision or 0),
         to_base36(policy.updatedAt or 0),
+        updatedByHash ~= "" and ("#" .. updatedByHash) or "-",
+        updatedByRankIndex ~= nil and to_base36(updatedByRankIndex) or "-",
+        restockDefault ~= nil and to_base36(restockDefault) or "-",
+        to_base36(math.max(0, math.min(100, tonumber(policy.criticalThresholdPercent or 50) or 50))),
         table.concat(rankMasks, ","),
-        #blacklistHashes > 0 and table.concat(blacklistHashes, ",") or "-"
+        "-"
     )
 end
 
 function codec.DecodePolicyString(policyString, rankMetadata)
     policyString = codec.ExtractPolicyString(policyString or "") or trim(policyString)
 
-    local version, revisionText, updatedAtText, masksText, blacklistText = string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]+);([^%]]*)%]$")
-    if version ~= "1" then
-        version, revisionText, masksText, blacklistText = string.match(trim(policyString), "^gbm%^([^;]+);([^;]+);([^;]+);([^%^]*)%^g$")
-        updatedAtText = "0"
+    local version, revisionText, updatedAtText, updatedByText, updatedByRankText, restockDefaultText, criticalThresholdText, masksText, blacklistText =
+        string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]*);([^;]*);([^;]*);([^;]*);([^;]+);([^%]]*)%]$")
+
+    if version == "3" then
+        -- parsed above
+    elseif version == "2" then
+        version, revisionText, updatedAtText, updatedByText, updatedByRankText, restockDefaultText, masksText, blacklistText =
+            string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]*);([^;]*);([^;]*);([^;]+);([^%]]*)%]$")
+        criticalThresholdText = "-"
+        -- parsed above
+    else
+        version, revisionText, updatedAtText, masksText, blacklistText = string.match(trim(policyString), "^%[GBMAUTH:([^;]+);([^;]+);([^;]+);([^;]+);([^%]]*)%]$")
+        updatedByText = "-"
+        updatedByRankText = "-"
+        restockDefaultText = "-"
+        criticalThresholdText = "-"
     end
 
-    if version ~= "1" then
+    if version ~= "1" and version ~= "2" and version ~= "3" then
+        version, revisionText, masksText, blacklistText = string.match(trim(policyString), "^gbm%^([^;]+);([^;]+);([^;]+);([^%^]*)%^g$")
+        updatedAtText = "0"
+        updatedByText = "-"
+        updatedByRankText = "-"
+        restockDefaultText = "-"
+        criticalThresholdText = "-"
+    end
+
+    if version ~= "1" and version ~= "2" and version ~= "3" then
         return nil
     end
 
     local policy = {
-        version = 1,
+        version = tonumber(version) or 1,
         revision = from_base36(revisionText),
         updatedAt = from_base36(updatedAtText),
-        updatedBy = "",
-        updatedByRankIndex = nil,
+        updatedBy = updatedByText ~= "-" and updatedByText or "",
+        updatedByHash = nil,
+        updatedByRankIndex = updatedByRankText ~= "-" and from_base36(updatedByRankText) or nil,
+        restockDefault = restockDefaultText ~= "-" and from_base36(restockDefaultText) or nil,
+        criticalThresholdPercent = criticalThresholdText ~= "-" and from_base36(criticalThresholdText) or 50,
         rankMetadata = rankMetadata or {},
         capabilities = {},
         blacklist = {},
@@ -215,6 +248,13 @@ function codec.DecodePolicyString(policyString, rankMetadata)
         guildPolicyString = policyString,
         guildPolicySource = "guild_info",
     }
+
+    if string.sub(policy.updatedBy, 1, 1) == "#" then
+        policy.updatedByHash = string.sub(policy.updatedBy, 2)
+        policy.updatedBy = ""
+    elseif policy.updatedBy ~= "" then
+        policy.updatedByHash = codec.HashCharacterKey(policy.updatedBy)
+    end
 
     for _, capability in ipairs(CAPABILITY_ORDER) do
         policy.capabilities[capability] = {}

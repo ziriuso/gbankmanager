@@ -22,6 +22,8 @@ function snapshots.FromTabScan(raw)
     raw = raw or {}
 
     local items = {}
+    local itemRows = {}
+    local itemRowsByKey = {}
 
     for _, tab in ipairs(raw.scannedTabs or {}) do
         local tabName = tab.name or tostring(tab.index or "Unknown")
@@ -47,6 +49,28 @@ function snapshots.FromTabScan(raw)
                 entry.craftedQualityIcon = entry.craftedQualityIcon or slot.craftedQualityIcon
                 entry.tabs[tabName] = (entry.tabs[tabName] or 0) + count
                 items[itemID] = entry
+
+                local rowKey = table.concat({ tostring(itemID), "TAB", tostring(tabName) }, "|")
+                local itemRow = itemRowsByKey[rowKey]
+                if itemRow == nil then
+                    itemRow = {
+                        rowKey = rowKey,
+                        itemID = itemID,
+                        name = item_name(slot),
+                        quality = slot.quality,
+                        craftedQuality = slot.craftedQuality,
+                        craftedQualityIcon = slot.craftedQualityIcon,
+                        tabName = tabName,
+                        quantity = 0,
+                    }
+                    itemRowsByKey[rowKey] = itemRow
+                    table.insert(itemRows, itemRow)
+                end
+
+                itemRow.quantity = itemRow.quantity + count
+                itemRow.quality = itemRow.quality or slot.quality
+                itemRow.craftedQuality = itemRow.craftedQuality or slot.craftedQuality
+                itemRow.craftedQualityIcon = itemRow.craftedQualityIcon or slot.craftedQualityIcon
             end
         end
     end
@@ -58,6 +82,7 @@ function snapshots.FromTabScan(raw)
         scannedTabs = raw.scannedTabs or {},
         scannedAt = normalize_utc_timestamp(raw.scannedAt),
         items = items,
+        itemRows = itemRows,
     }
 end
 

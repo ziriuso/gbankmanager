@@ -34,6 +34,8 @@ function exportDialog.BuildPresetState(rows, presetName, template)
 
     if selectedPreset == "Auctionator" then
         text = exports.BuildAuctionator(rows or {}, shoppingListName)
+    elseif selectedPreset == "TSM" then
+        text = exports.BuildTsmItemIdList(rows or {})
     elseif selectedPreset == "Custom" then
         text = exports.BuildDelimited(rows or {}, template or {
             delimiter = "|",
@@ -44,7 +46,15 @@ function exportDialog.BuildPresetState(rows, presetName, template)
         text = exports.BuildDelimited(rows or {}, {
             delimiter = ",",
             includeHeader = true,
-            fields = { "itemName", "itemID", "currentQuantity", "restockQuantity", "targetQuantity", "requestQuantity", "totalToBuy", "scopeSummary", "reason" },
+            fields = { "Item ID", "Tier", "Item Name", "Bank Tab", "Amount to Stock", "Excess Stock" },
+            labels = {
+                ["Item ID"] = "itemID",
+                ["Tier"] = "itemTierValue",
+                ["Item Name"] = "itemName",
+                ["Bank Tab"] = "bankTab",
+                ["Amount to Stock"] = "amountToStock",
+                ["Excess Stock"] = "excessStockIn",
+            },
         })
     end
 

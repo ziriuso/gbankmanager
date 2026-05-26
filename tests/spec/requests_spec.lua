@@ -40,6 +40,7 @@ local officerRequest = requests.Create({
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             full_ui = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
@@ -53,8 +54,31 @@ local officerRequest = requests.Create({
     quantity = 3,
 })
 
-assert.equal("APPROVED", officerRequest.approval, "officer requests should auto-approve")
+assert.equal("PENDING", officerRequest.approval, "officer requests should not auto-approve")
 assert.equal(0, officerRequest.createdAt, "requests should store creation timestamp")
+
+local guildMasterRequest = requests.Create({
+    actorContext = {
+        characterKey = "Stormrage-GuildLead",
+        name = "GuildLead",
+        guildRankName = "Guild Master",
+        guildRankIndex = 0,
+        isGuildMaster = true,
+        inGuild = true,
+    },
+    auth = {
+        capabilities = {
+            request_submit = {},
+            request_approve = { [0] = true },
+        },
+        blacklist = {},
+    },
+    itemID = 1001,
+    itemName = "Flask Alpha",
+    quantity = 3,
+})
+
+assert.equal("PENDING", guildMasterRequest.approval, "guildmaster requests should still start pending")
 
 local approvedRequest = requests.Approve(memberRequest, "GuildLead", 55)
 assert.equal("APPROVED", approvedRequest.approval, "approve should transition the request")
@@ -99,8 +123,14 @@ local requestDb = {
 }
 
 local storedRequest = requests.CreateAndStore(requestDb, {
-    requester = "MemberOne",
-    role = "MEMBER",
+    actorContext = {
+        characterKey = "Stormrage-MemberOne",
+        name = "MemberOne",
+        guildRankName = "Member",
+        guildRankIndex = 4,
+        isGuildMaster = false,
+        inGuild = true,
+    },
     itemID = 1001,
     itemName = "Flask Alpha",
     quantity = 5,
@@ -129,6 +159,7 @@ local deniedDb = {
             request_edit = { [1] = true },
             request_fulfill = { [1] = true },
             request_reopen = { [1] = true },
+            request_delete = { [1] = true },
             minimum_add = { [1] = true },
             minimum_edit = { [1] = true },
             minimum_delete = { [1] = true },
@@ -150,6 +181,232 @@ local deniedDb = {
     auditLog = {},
 }
 
+local selfApprovalDb = {
+    auth = {
+        capabilities = {
+            full_ui = { [1] = true },
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            request_delete = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "self-request-1",
+            requester = "OfficerOne",
+            requesterCharacterKey = "Stormrage-OfficerOne",
+            itemID = 1001,
+            itemName = "Flask Alpha",
+            quantity = 2,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+        },
+    },
+    auditLog = {},
+}
+
+local deniedSelfApproval = requests.ApproveStored(selfApprovalDb, "self-request-1", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+    isGuildMaster = false,
+}, 110)
+
+assert.truthy(deniedSelfApproval == nil, "request approvers should not approve their own requests")
+assert.equal("PENDING", selfApprovalDb.requests[1].approval, "denied self approvals should leave the request pending")
+assert.equal(0, #selfApprovalDb.auditLog, "denied self approvals should not write audit entries")
+
+local guildmasterSelfApproval = requests.ApproveStored(selfApprovalDb, "self-request-1", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 0,
+    guildRankName = "Guild Master",
+    inGuild = true,
+    isGuildMaster = true,
+}, 111)
+
+assert.truthy(guildmasterSelfApproval ~= nil, "guildmasters should be able to manually approve their own request through workflow")
+assert.equal("APPROVED", selfApprovalDb.requests[1].approval, "guildmaster self approvals should still require the explicit approval action")
+
+local approvalMetadataDb = {
+    auth = {
+        capabilities = {
+            request_approve = { [1] = true },
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "approval-metadata-request",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 243734,
+            itemName = "Thalassian Phoenix Oil",
+            quantity = 100,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+        },
+    },
+    auditLog = {},
+}
+
+local approvalWithMetadata = requests.ApproveStored(approvalMetadataDb, "approval-metadata-request", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, "Approved for raid supplies", 130, "Raid Buffer")
+
+assert.truthy(approvalWithMetadata ~= nil, "approve stored should accept decision note and bank tab metadata")
+assert.equal("APPROVED", approvalMetadataDb.requests[1].approval, "approval metadata requests should approve")
+assert.equal("Approved for raid supplies", approvalMetadataDb.requests[1].decisionNote, "approve stored should preserve the decision note")
+assert.equal("Raid Buffer", approvalMetadataDb.requests[1].approvedBankTab, "approve stored should preserve the approver-selected bank tab")
+assert.equal("Raid Buffer", approvalMetadataDb.requests[1].tabName, "approve stored should expose the selected bank tab for downstream request details")
+assert.equal("OfficerOne", approvalMetadataDb.auditLog[1].actor, "approve stored should normalize actor tables to names for history rows")
+assert.truthy(string.find(tostring(approvalMetadataDb.auditLog[1].actor or ""), "table:", 1, true) == nil, "request audit actor should never render Lua table identities")
+
+local cancelDb = {
+    auth = {
+        capabilities = {
+            request_submit = {},
+            request_approve = { [1] = true },
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "cancel-request-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1001,
+            itemName = "Flask Alpha",
+            quantity = 2,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 10,
+        },
+        {
+            requestId = "approved-request-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1002,
+            itemName = "Rune Delta",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 11,
+        },
+    },
+    auditLog = {},
+}
+
+local canceledRequest = requests.CancelStored(cancelDb, "cancel-request-1", {
+    characterKey = "Stormrage-MemberOne",
+    name = "MemberOne",
+    guildRankIndex = 4,
+    guildRankName = "Member",
+    inGuild = true,
+}, "No longer needed", 120)
+
+assert.truthy(canceledRequest ~= nil, "request authors should be able to cancel pending requests")
+assert.equal("CANCELED", cancelDb.requests[1].approval, "canceled requests should move to canceled status")
+assert.equal("No longer needed", cancelDb.requests[1].decisionNote, "request cancel should preserve the cancellation note")
+assert.equal("REQUEST_CANCELED", cancelDb.auditLog[1].type, "cancel stored should append a cancel audit row")
+
+local deniedApprovedCancel = requests.CancelStored(cancelDb, "approved-request-1", {
+    characterKey = "Stormrage-MemberOne",
+    name = "MemberOne",
+    guildRankIndex = 4,
+    guildRankName = "Member",
+    inGuild = true,
+}, "Too late", 121)
+
+assert.truthy(deniedApprovedCancel == nil, "request authors should not cancel approved requests")
+assert.equal("APPROVED", cancelDb.requests[2].approval, "denied approved-request cancels should leave status unchanged")
+
+local deleteDb = {
+    auth = {
+        capabilities = {
+            request_delete = { [1] = true },
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "delete-request-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1003,
+            itemName = "Delete Me Flask",
+            quantity = 7,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 130,
+        },
+    },
+    auditLog = {},
+}
+
+local deletedRequest = requests.DeleteStored(deleteDb, "delete-request-1", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 131)
+
+assert.truthy(deletedRequest ~= nil, "request delete should remove the saved request when the actor has request-delete permission")
+assert.equal(0, #deleteDb.requests, "request delete should remove the request row from saved data")
+assert.equal("REQUEST_DELETED", deleteDb.auditLog[1].type, "request delete should append a deletion audit row")
+assert.equal("OfficerOne", deleteDb.auditLog[1].actor, "request delete audit should record the deleting actor")
+
+local deniedDeleteDb = {
+    auth = {
+        capabilities = {
+            request_delete = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "delete-request-2",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 1004,
+            itemName = "Keep Me Oil",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 132,
+        },
+    },
+    auditLog = {},
+}
+
+local deniedDelete = requests.DeleteStored(deniedDeleteDb, "delete-request-2", {
+    characterKey = "Stormrage-MemberOne",
+    name = "MemberOne",
+    guildRankIndex = 2,
+    guildRankName = "Raider",
+    inGuild = true,
+}, 133)
+
+assert.truthy(deniedDelete == nil, "request delete should be denied when the actor lacks request-delete permission")
+assert.equal(1, #deniedDeleteDb.requests, "denied request delete should leave the saved request in place")
+assert.equal(0, #deniedDeleteDb.auditLog, "denied request delete should not append audit rows")
+
 local deniedApproval = requests.ApproveStored(deniedDb, "request-1", {
     characterKey = "Stormrage-MemberOne",
     name = "MemberOne",
@@ -161,3 +418,122 @@ local deniedApproval = requests.ApproveStored(deniedDb, "request-1", {
 assert.truthy(deniedApproval == nil, "request approvals should be denied when the actor lacks request-approve permission")
 assert.equal("PENDING", deniedDb.requests[1].approval, "denied request approvals should leave the saved request unchanged")
 assert.equal(0, #deniedDb.auditLog, "denied request approvals should not write audit entries")
+
+local invalidTransitionDb = {
+    auth = {
+        capabilities = {
+            full_ui = { [1] = true },
+            request_submit = {},
+            request_approve = { [1] = true },
+            request_reject = { [1] = true },
+            request_edit = { [1] = true },
+            request_fulfill = { [1] = true },
+            request_reopen = { [1] = true },
+            request_delete = { [1] = true },
+            minimum_add = { [1] = true },
+            minimum_edit = { [1] = true },
+            minimum_delete = { [1] = true },
+            auth_manage = {},
+        },
+        blacklist = {},
+    },
+    requests = {
+        {
+            requestId = "request-pending",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 1001,
+            itemName = "Flask Alpha",
+            quantity = 2,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 10,
+        },
+        {
+            requestId = "request-open",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 1002,
+            itemName = "Rune Delta",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 12,
+        },
+    },
+    auditLog = {},
+}
+
+local invalidFulfill = requests.MarkFulfilledStored(invalidTransitionDb, "request-pending", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 200)
+assert.truthy(invalidFulfill == nil, "pending requests should not be fulfillable before approval")
+assert.equal("PENDING", invalidTransitionDb.requests[1].approval, "invalid fulfill attempts should not change approval state")
+assert.equal("OPEN", invalidTransitionDb.requests[1].fulfillment, "invalid fulfill attempts should not change fulfillment state")
+assert.equal(0, #invalidTransitionDb.auditLog, "invalid fulfill attempts should not write audit entries")
+
+local invalidReopen = requests.ReopenStored(invalidTransitionDb, "request-open", {
+    characterKey = "Stormrage-OfficerOne",
+    name = "OfficerOne",
+    guildRankIndex = 1,
+    guildRankName = "Officer",
+    inGuild = true,
+}, 201)
+assert.truthy(invalidReopen == nil, "open requests should not reopen when they are not fulfilled")
+assert.equal("OPEN", invalidTransitionDb.requests[2].fulfillment, "invalid reopen attempts should not change fulfillment state")
+assert.equal(0, #invalidTransitionDb.auditLog, "invalid reopen attempts should not write audit entries")
+
+local scanFulfillmentDb = {
+    requests = {
+        {
+            requestId = "approved-open",
+            requester = "MemberOne",
+            itemID = 3001,
+            itemName = "Flask Alpha",
+            quantity = 10,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+        },
+        {
+            requestId = "approved-short",
+            requester = "MemberTwo",
+            itemID = 3002,
+            itemName = "Rune Beta",
+            quantity = 10,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+        },
+        {
+            requestId = "already-fulfilled",
+            requester = "MemberThree",
+            itemID = 3003,
+            itemName = "Potion Gamma",
+            quantity = 1,
+            approval = "APPROVED",
+            fulfillment = "FULFILLED",
+            fulfillmentUpdatedAt = 700,
+        },
+    },
+    auditLog = {},
+}
+
+local fulfilledByScan = requests.AutoFulfillApprovedFromSnapshot(scanFulfillmentDb, {
+    items = {
+        [3001] = { totalCount = 10 },
+        [3002] = { totalCount = 9 },
+        [3003] = { totalCount = 99 },
+    },
+}, "Bank Scan", 800)
+
+assert.equal(1, #fulfilledByScan, "bank-scan fulfillment should return only newly fulfilled requests")
+assert.equal("approved-open", fulfilledByScan[1].requestId, "bank scans should fulfill approved open requests with enough inventory")
+assert.equal("FULFILLED", scanFulfillmentDb.requests[1].fulfillment, "bank scans should mark stocked approved requests fulfilled")
+assert.equal("Bank Scan", scanFulfillmentDb.requests[1].fulfilledBy, "bank scans should record the automated fulfillment actor")
+assert.equal(800, scanFulfillmentDb.requests[1].fulfillmentUpdatedAt, "bank scans should record date fulfilled")
+assert.equal("OPEN", scanFulfillmentDb.requests[2].fulfillment, "bank scans should leave short approved requests open")
+assert.equal(700, scanFulfillmentDb.requests[3].fulfillmentUpdatedAt, "bank scans should not re-check already fulfilled requests")
+assert.equal("REQUEST_FULFILLED", scanFulfillmentDb.auditLog[1].type, "bank-scan fulfillment should append request audit rows")
