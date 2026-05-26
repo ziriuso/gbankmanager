@@ -87,21 +87,23 @@ Current UI ownership is intentionally split across:
 5. Optionally launch the local maintainer workflow UI with `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Open-ItemCatalogMaintainer.ps1` for target selection, saved status, refresh, and deploy. See [docs/maintainer-catalog-workflow.md](docs/maintainer-catalog-workflow.md).
 6. Optionally run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath <path>` before a PTR or Beta refresh if addon-learned discoveries need to be preserved.
 7. If you are resuming on a MacBook, use [docs/macos-readme.md](docs/macos-readme.md) for clone, worktree, WoW path detection, deploy, and resume guidance.
-7. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo at `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager-wowless-smoke`. The companion report records the selected Wowless product and per-product fallback attempts.
-8. Copy both `GBankManager` and `GBankManager_ItemData` into `World of Warcraft\_retail_\Interface\AddOns\`, or use `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`.
-9. Use `/gbm` to open the UI you have access to:
+8. Optionally run the companion Wowless smoke lane with `.\tools\test\run-wowless.ps1` after setting up the sibling repo [ziriuso/GBankManager-wowless-smoke](https://github.com/ziriuso/GBankManager-wowless-smoke). The companion report records the selected Wowless product and per-product fallback attempts.
+9. Copy both `GBankManager` and `GBankManager_ItemData` into your WoW Retail `Interface\AddOns\` folder, or use `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail`.
+10. Use `/gbm` to open the UI you have access to:
    - full-shell users land in the officer shell
    - request-only users land directly in the request workflow
-10. Use `/gbm help` to print the currently supported slash commands in chat.
-11. Use `/gbm ui` to open the accessible shell without forcing a scan.
-12. Use `/gbm request` to open the request workflow directly.
-13. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
-14. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
+11. Use `/gbm help` to print the currently supported slash commands in chat.
+12. Use `/gbm ui` to open the accessible shell without forcing a scan.
+13. Use `/gbm request` to open the request workflow directly.
+14. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
+15. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
 
 ## Release Automation
 
 - Git tags matching `v*` now drive release packaging through `.github/workflows/release-curseforge.yml`.
 - The release workflow runs `.\tools\lua\lua.exe .\tests\run_all.lua`, builds one combined zip containing both `GBankManager/` and `GBankManager_ItemData/`, uploads that zip to the single CurseForge project, and attaches the same zip to the matching GitHub Release.
+- A repo-local release skill lives at `docs/skills/gbankmanager-release-operator/SKILL.md` for normal publish handling plus failed-release follow-up.
+- The companion Wowless smoke lane lives in [ziriuso/GBankManager-wowless-smoke](https://github.com/ziriuso/GBankManager-wowless-smoke) and can be used alongside this repo for addon-load and smoke verification.
 - Tag naming controls the release channel:
   - `v0.9.0-alpha.1` -> CurseForge `alpha`
   - `v0.9.0-beta.1` -> CurseForge `beta`
@@ -110,7 +112,6 @@ Current UI ownership is intentionally split across:
   - GitHub Actions secret `CF_API_TOKEN`
   - GitHub Actions variable `CF_PROJECT_ID`
   - optional GitHub Actions variable `CF_GAME_VERSION_IDS`
-- Because the original CurseForge token was shared during setup, rotate it and replace the repository secret before relying on automated releases.
 
 ## Next Roadmap
 

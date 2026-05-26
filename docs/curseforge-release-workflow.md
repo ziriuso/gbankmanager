@@ -9,6 +9,16 @@ The published zip contains:
 
 The same built zip is also attached to the matching GitHub Release.
 
+Repo-local release handling skill:
+
+- `docs/skills/gbankmanager-release-operator/SKILL.md`
+
+Use that skill when you want Codex to run the normal GBankManager release flow or diagnose a failed release workflow.
+
+Example prompt:
+
+> Use `$gbankmanager-release-operator` at `docs/skills/gbankmanager-release-operator` to handle the next beta release for this repo.
+
 ## Release Channels
 
 The workflow derives the CurseForge release type directly from the git tag:
