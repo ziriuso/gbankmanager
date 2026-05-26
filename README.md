@@ -7,6 +7,12 @@ Release automation setup for CurseForge and GitHub Releases is documented in [do
 
 Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order with one shared namespace, matching the WoW addon runtime shape.
 
+## License
+
+- Source code in this repository is licensed under the [Mozilla Public License 2.0](LICENSE).
+- Custom branding and image assets in `art/` are covered by the separate [asset and IP notice](LICENSE-assets.md) and are not included in the MPL grant unless explicitly stated otherwise.
+- The project license does not grant rights to Blizzard Entertainment intellectual property or other third-party content referenced by the addon.
+
 ## Features
 
 - One-button guild bank scan foundation with snapshot, tab-scoped item rows, and change-log storage
