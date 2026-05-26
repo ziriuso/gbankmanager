@@ -82,6 +82,7 @@
 - `ui` failures usually mean a shell/controller contract drifted, even if the live client still partly renders.
 - Minimums-specific UI failures should be read against the new modal contract first: search-to-details handoff, details-shell reuse for existing rows, and draft-state styling are now the primary behavior surface instead of the old footer editor.
 - `integration` failures usually mean load order, slash routing, or smoke harness wiring broke.
+- `release workflow` failures usually mean the tag format, CurseForge project settings, GitHub Actions secret or variable configuration, or package-shape expectations drifted.
 - `wowless` failures usually mean a Docker/runtime issue, a broken Wowless product target, or a headless addon-load regression under Wowless.
 - `live smoke` failures mean the addon loaded but a real in-client workflow no longer behaved as expected.
 - because the smoke lane now resets its own auth and selector scratch state, a remaining `live smoke` failure is much more likely to be a real workflow regression than leftover local UI state
@@ -92,6 +93,7 @@
 1. Run the local `unit`, `ui`, and `integration` lanes until they are green.
 2. Optionally run `.\tools\test\run-wowless.ps1` once the companion repo and Docker Desktop are set up.
 3. Confirm the GitHub Actions workflow is green.
+3a. For tagged release work, confirm `.github/workflows/release-curseforge.yml` is green and that the matching GitHub Release contains the packaged zip attachment.
 4. Run `/gbm test unit` in retail and review the chat summary.
 5. Run `/gbm test smoke` in retail and review the chat summary.
 6. Do a short visual spot-check only where automation cannot prove correctness.
@@ -131,11 +133,13 @@ The next planned validation work should follow product priority, not test-only c
 - `tests/spec/inventory_quality_spec.lua`, `tests/spec/ui_table_spec.lua`, `tests/spec/ui_exports_spec.lua`, `tests/spec/ui_minimums_spec.lua`, and `tests/spec/ui_requests_spec.lua` verify the split two-rank crafted-item display contract: Inventory and Minimums keep the compact chat-icon family, while Exports, request review, and request details use the brighter reagent-quality icons for the low/max two-rank pair.
 - `tests/spec/ui_requests_spec.lua` verifies Requests active-filter styling, the far-left `Add Request` plus `Refresh` actions, right-aligned bottom filters, the `Completed` filter, and shared-height table sizing.
 - `tests/spec/ui_dashboard_spec.lua` verifies the modernized dashboard layout with four metric cards, `Top 10 Most Used`, `Recent Activity`, and the trimmed `Quick Actions` set (`Add Minimum`, `Create Request`, `Export Data`).
+- `tests/spec/release_workflow_spec.lua` verifies the CurseForge release workflow exists, runs the full Lua suite before packaging, uses the protected `CF_API_TOKEN` and `CF_PROJECT_ID` configuration names, builds one combined zip with both addon folders, uploads through the CurseForge upload API, and attaches that same zip to the GitHub Release.
 - `tests/spec/ui_dashboard_spec.lua` now also verifies metric-card icon slots so the dashboard fidelity pass keeps visual anchors on each card.
 - `tests/spec/ui_dashboard_spec.lua` also verifies `Critical Shortages` now honors the configurable threshold percentage from `Options -> Stock Settings`.
 - `tests/spec/ui_options_spec.lua` now also verifies `UI Scale` resizes dashboard cards and support panels instead of only scaling the shell frame and shared table density.
 - `tests/spec/ui_options_spec.lua` also verifies the latest Appearance/Data relayout: `UI Scale` now lives in the right-hand slider column above shell and modal opacity, the minimap toggle sits directly under the theme presets, and the `Data` dropdown labels stay aligned on one row inside the panel chrome.
 - `tests/spec/slash_commands_spec.lua` verifies `/gbm` now opens the accessible UI instead of scanning, request-only access opens the request wizard, and `/gbm help` prints the supported slash-command list in chat.
+- `tests/spec/toc_spec.lua` and `tests/spec/ui_about_spec.lua` verify `GBankManager.toc` carries the current addon `Version` metadata and that the About panel renders that semantic version alongside the local build stamp.
 - `tests/spec/ui_minimums_spec.lua` verifies staged Minimums rows group at the top, expose `ADD` / `EDIT` / `DELETE` badges, and reveal staged-summary plus `Revert All` footer affordances only while drafts exist.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums now uses separate `Enabled Only` and `Show All` buttons with active-state highlighting.
 - `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History newest-first, and the Blacklist tab explains the shared `[GBMBL]` officer-note contract.

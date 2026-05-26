@@ -401,6 +401,18 @@ local function build_about_stamp()
 end
 
 local ABOUT_BUILD_STAMP = build_about_stamp()
+local ABOUT_VERSION = (function()
+    local addonName = tostring((ns and ns.addonName) or "GBankManager")
+    local getMetadata = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
+    if type(getMetadata) == "function" then
+        local version = getMetadata(addonName, "Version")
+        if tostring(version or "") ~= "" then
+            return tostring(version)
+        end
+    end
+
+    return "dev"
+end)()
 
 local function apply_table_row_style(rowFrame, rowIndex, isSelected)
     if not rowFrame then
@@ -4180,7 +4192,7 @@ function mainFrame:RefreshView()
             end
         end
         self.aboutNameText:SetText("Guild Bank Manager")
-        self.aboutVersionText:SetText(string.format("Version %s", ABOUT_BUILD_STAMP))
+        self.aboutVersionText:SetText(string.format("Version %s (%s)", ABOUT_VERSION, ABOUT_BUILD_STAMP))
         self.aboutAuthorText:SetText("Author: Zirleficent")
         self.aboutGuildText:SetText(string.format("%s - %s (%s)", characterName, guildName, realmName))
         self.aboutDescriptionText:SetText("Manage your guild's stock, requests, and exports with a polished WoW-native workflow.")

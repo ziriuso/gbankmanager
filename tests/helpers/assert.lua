@@ -1,6 +1,7 @@
 local M = {}
 local addonTocRegistry = {}
 local loadedAddons = {}
+local addonMetadataRegistry = {}
 
 function M.equal(expected, actual, message)
     if expected ~= actual then
@@ -46,9 +47,23 @@ local function toc_entries(path)
     return entries
 end
 
+local function toc_metadata(path)
+    local metadata = {}
+
+    for line in io.lines(path) do
+        local key, value = tostring(line or ""):match("^##%s*([^:]+):%s*(.-)%s*$")
+        if key and value then
+            metadata[trim(key)] = trim(value)
+        end
+    end
+
+    return metadata
+end
+
 function M.load_addon_from_toc(path)
     local addonName = addon_name_from_toc(path)
     addonTocRegistry[addonName] = path
+    addonMetadataRegistry[addonName] = toc_metadata(path)
     local ns = {}
     local loaded = {}
     local originalDofile = _G.dofile
@@ -86,6 +101,7 @@ end
 
 function M.register_addon_toc(addonName, path)
     addonTocRegistry[addonName] = path
+    addonMetadataRegistry[addonName] = toc_metadata(path)
 end
 
 _G.EnableAddOn = _G.EnableAddOn or function()
@@ -119,6 +135,13 @@ _G.C_AddOns.LoadAddOn = _G.C_AddOns.LoadAddOn or function(addonName)
 end
 _G.C_AddOns.IsAddOnLoaded = _G.C_AddOns.IsAddOnLoaded or function(addonName)
     return loadedAddons[addonName] == true
+end
+_G.GetAddOnMetadata = _G.GetAddOnMetadata or function(addonName, fieldName)
+    local metadata = addonMetadataRegistry[tostring(addonName or "")] or {}
+    return metadata[tostring(fieldName or "")]
+end
+_G.C_AddOns.GetAddOnMetadata = _G.C_AddOns.GetAddOnMetadata or function(addonName, fieldName)
+    return _G.GetAddOnMetadata(addonName, fieldName)
 end
 
 return M

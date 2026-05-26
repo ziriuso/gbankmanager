@@ -29,7 +29,7 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 10b. Confirm those four export cards each show a large icon and use `Generate` or `Open List` call-to-action labels instead of the older long button names.
 10c. Confirm there is no ghost container box behind the four export cards, that the card descriptions plus CTA buttons have enough breathing room instead of feeling cramped, and that the shared note `* Does not provide Quantity in Export.` appears below the cards.
 11. Confirm the sidebar includes Minimums, Requests, Exports, About, and Options without changing the shell style.
-11a. Open `About` and confirm it now renders through a centered branded panel with crest art, addon name, version, author, guild identity, and `/gbm` hint instead of the old plain text block.
+11a. Open `About` and confirm it now renders through a centered branded panel with crest art, addon name, semantic version plus build stamp, author, guild identity, and `/gbm help` hint instead of the old plain text block.
 12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
 13. Confirm the dashboard purchase summary changes when minimums and approved open requests change.
 13a. Confirm the dashboard now shows four metric cards (`Last Scan`, `Pending Requests`, `Ready to Buy`, `Critical Shortages`) plus separate `Top 10 Most Used`, `Recent Activity`, and `Quick Actions` panels.
@@ -171,4 +171,5 @@ When resuming product QA after this checkpoint, prioritize the next manual check
 68. From the maintainer launcher or CLI, run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Refresh-ItemCatalog.ps1 -Target Retail -Fresh` and confirm it completes with `nextStep = "addon-rebuilt"` and no failure class. If the run is interrupted, rerun the same target with `-Resume` and confirm it continues from the saved progress state.
 69. If PTR or Beta discoveries were exported from addon testing, run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Import-LearnedItemCatalog.ps1 -LearnedRowsPath <path>` and confirm the manifest gains learned rows without overwriting existing confirmed rows.
 70. Run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail` or use the maintainer launcher `Deploy Addons` action and confirm both addon folders copy into the selected target's `Interface\AddOns`.
+71. For release automation, create a beta tag such as `v0.9.0-beta.1` on a throwaway branch or dry-run repository, confirm `.github/workflows/release-curseforge.yml` runs the Lua suite, confirm the matching GitHub Release is created as a prerelease, and confirm the attached zip contains both `GBankManager/` and `GBankManager_ItemData/`.
 71. After any catalog refresh or learned import, run `.\tools\lua\lua.exe .\tests\run_all.lua` and confirm the bundled item-data addon still supports Minimums and Requests item search.

@@ -3,6 +3,7 @@
 World of Warcraft guild bank inventory, planning, request, and export addon.
 
 Marketplace copy for publishing is kept in [docs/curseforge-description.md](docs/curseforge-description.md).
+Release automation setup for CurseForge and GitHub Releases is documented in [docs/curseforge-release-workflow.md](docs/curseforge-release-workflow.md).
 
 Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order with one shared namespace, matching the WoW addon runtime shape.
 
@@ -97,6 +98,20 @@ Current UI ownership is intentionally split across:
 13. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
 14. Use `/gbm test smoke` for workflow smoke and `/gbm test unit` for the in-client unit lane after copying the addon into WoW.
 
+## Release Automation
+
+- Git tags matching `v*` now drive release packaging through `.github/workflows/release-curseforge.yml`.
+- The release workflow runs `.\tools\lua\lua.exe .\tests\run_all.lua`, builds one combined zip containing both `GBankManager/` and `GBankManager_ItemData/`, uploads that zip to the single CurseForge project, and attaches the same zip to the matching GitHub Release.
+- Tag naming controls the release channel:
+  - `v0.9.0-alpha.1` -> CurseForge `alpha`
+  - `v0.9.0-beta.1` -> CurseForge `beta`
+  - `v1.0.0` -> CurseForge `release`
+- Configure the release workflow with:
+  - GitHub Actions secret `CF_API_TOKEN`
+  - GitHub Actions variable `CF_PROJECT_ID`
+  - optional GitHub Actions variable `CF_GAME_VERSION_IDS`
+- Because the original CurseForge token was shared during setup, rotate it and replace the repository secret before relying on automated releases.
+
 ## Next Roadmap
 
 The next planned work after the completed pre-polish workflow block is:
@@ -121,6 +136,7 @@ The next planned work after the completed pre-polish workflow block is:
 - Exports now shows `Excess Stock`, uses `None` for missing alternate stock, renders crafted-quality icons in the visible `Item Tier` column, and emits the newer Auctionator shopping-list line format while keeping numeric tier values for CSV-style outputs.
 - Exports now presents the supported outputs as four action cards: `Auctionator`, `TSM`, `CSV`, and `Shopping List`, while keeping the generated formats unchanged.
 - The shell navigation is now ordered as `Dashboard`, `Inventory`, `Minimums`, `Requests`, `Exports`, `History`, `Bank Ledger`, `Options`, and `About`, with refreshed iconography for each section.
+- The `About` panel now reads addon version metadata from `GBankManager.toc` and shows that semantic version alongside the local build stamp, so in-game version reporting lines up with release packaging.
 - Dashboard metric cards and export action cards now carry dedicated large icons, and the export cards now use `Generate` or `Open List` CTA labels closer to the target mockup.
 - Dashboard `Critical Shortages` now reads from the configurable stock threshold instead of always counting every below-minimum row as critical.
 - The near-literal mockup fidelity pass now also drives the live shell palette and chrome more aggressively: the `Default` preset is darker and bluer, nav buttons carry left accent rails, dashboard quick actions use icon-led primary buttons, and shared sliders now render through a more deliberate track/thumb treatment instead of the earlier plain boxed controls.

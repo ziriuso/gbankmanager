@@ -1,0 +1,128 @@
+# CurseForge Release Workflow
+
+This repo now supports tag-driven CurseForge publishing for the combined `GBankManager` release artifact.
+
+The published zip contains:
+
+- `GBankManager/`
+- `GBankManager_ItemData/`
+
+The same built zip is also attached to the matching GitHub Release.
+
+## Release Channels
+
+The workflow derives the CurseForge release type directly from the git tag:
+
+- `v0.9.0-alpha.1` -> `alpha`
+- `v0.9.0-beta.1` -> `beta`
+- `v1.0.0` -> `release`
+
+Anything containing `-alpha` publishes as an alpha file.
+Anything containing `-beta` publishes as a beta file.
+A plain semantic version tag publishes as a release file.
+
+Because the project is still working toward `1.0`, prefer beta tags until the first public stable release.
+
+## GitHub Actions Workflow
+
+Workflow file:
+
+- `.github/workflows/release-curseforge.yml`
+
+Trigger:
+
+- pushes to tags matching `v*`
+
+Behavior:
+
+1. checks out the repo
+2. runs `.\tools\lua\lua.exe .\tests\run_all.lua`
+3. builds one combined zip
+4. uploads that zip to CurseForge
+5. creates or updates the matching GitHub Release
+6. attaches the same zip to the GitHub Release
+
+## Required GitHub Repository Settings
+
+### Repository secret
+
+Create this in:
+
+- `GitHub repo -> Settings -> Secrets and variables -> Actions -> Secrets`
+
+Secret name:
+
+- `CF_API_TOKEN`
+
+This must be the CurseForge API token. Never store the token in the repository, workflow YAML, scripts, docs, commit messages, or tags.
+
+### Repository variables
+
+Create these in:
+
+- `GitHub repo -> Settings -> Secrets and variables -> Actions -> Variables`
+
+Required variable:
+
+- `CF_PROJECT_ID`
+
+Set it to the CurseForge project id for the main combined project.
+
+Optional variable:
+
+- `CF_GAME_VERSION_IDS`
+
+This can be a comma-separated list of CurseForge game version ids if automatic TOC-interface resolution ever needs an override.
+
+If `CF_GAME_VERSION_IDS` is not set, the publish script will:
+
+1. read `## Interface:` from `GBankManager/GBankManager.toc`
+2. convert it to a retail version string like `12.0.5`
+3. query CurseForge for the matching WoW game version id
+
+## Token Rotation Reminder
+
+The CurseForge token that was shared during setup should be treated as exposed and rotated.
+
+After generating a new token:
+
+1. open `GitHub repo -> Settings -> Secrets and variables -> Actions -> Secrets`
+2. edit `CF_API_TOKEN`
+3. paste the new token value
+4. save the secret
+
+No repository code changes are needed when the token rotates.
+
+## First Beta Release
+
+Suggested first tag while the addon is still in beta:
+
+- `v0.9.0-beta.1`
+
+Example flow:
+
+```powershell
+git tag v0.9.0-beta.1
+git push origin v0.9.0-beta.1
+```
+
+That tag should:
+
+- publish a CurseForge beta file
+- create a prerelease on GitHub
+- attach the built zip to that prerelease
+
+## Stable 1.0 Release
+
+When ready for the first stable public release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+That tag should:
+
+- publish a CurseForge release file
+- create a normal GitHub Release
+- attach the built zip to the GitHub Release
