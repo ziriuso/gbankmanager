@@ -1,0 +1,4 @@
+interface:
+  display_name: "GBankManager Release Operator"
+  short_description: "Run GBankManager beta and release publishes"
+  default_prompt: "Use $gbankmanager-release-operator to handle the next GBankManager beta or release publish."
