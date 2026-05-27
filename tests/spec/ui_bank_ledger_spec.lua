@@ -90,6 +90,7 @@ end
 mainFrame:SelectView("BANK_LEDGER")
 
 assert.equal("BANK_LEDGER", mainFrame.activeView, "bank ledger view should be selectable")
+assert.equal("Review guild bank ledger history", mainFrame.viewSubtitle:GetText(), "bank ledger should use the shorter subtitle copy")
 assert.truthy(mainFrame.tableHeaderFrame:IsShown(), "bank ledger should use the shared table surface")
 assert.truthy(mainFrame.bankLedgerPanel and mainFrame.bankLedgerPanel:IsShown(), "bank ledger should expose a footer/control panel")
 assert.equal("Item Log", mainFrame.bankLedgerItemModeButton.labelText:GetText(), "bank ledger should expose an item-log mode button")

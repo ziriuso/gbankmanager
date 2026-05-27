@@ -131,7 +131,7 @@ assert.truthy((((mainFrame.tableFilterInputs[2].points[1] or {})[4] or 0) - (((m
 assert.truthy((mainFrame.tableFilterInputs[1]:GetWidth() or 0) < (mainFrame.tableColumnLayout[1].width or 0), "inventory filter inputs should inset slightly from the full column width for a softer box treatment")
 mainFrame.tableFilterInputs[1]:SetText("2001")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
-assert.equal("|A:Professions-ChatIcon-Quality-Tier2:22:22|a", mainFrame.tableRowsData[1].tier, "inventory should keep the shared visible two-rank crafted icon family in table rows")
+assert.equal("", tostring(mainFrame.tableRowsData[1].tier or ""), "inventory should keep the tier text empty when the table path is rendering crafted quality through its dedicated visual slot")
 mainFrame.tableFilterInputs[1]:SetText("")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 

@@ -17,6 +17,8 @@ assert.truthy(type(db.ui.logsHistorySettings) == "table", "database defaults sho
 assert.equal("indefinite", db.ui.logsHistorySettings.ledgerRetention, "ledger retention should default to indefinite to avoid surprise data loss")
 assert.equal("indefinite", db.ui.logsHistorySettings.historyRetention, "history retention should default to indefinite to avoid surprise data loss")
 assert.equal(300, db.ui.logsHistorySettings.ledgerScanIntervalSeconds, "ledger scan interval should default to five minutes")
+assert.equal(5000, db.ui.logsHistorySettings.repairThresholdGold, "ledger repair classification threshold should default to five thousand gold")
+assert.truthy(not db.ui.logsHistorySettings.muteSilvermoonCitizen, "Silvermoon Citizen chat mute should default off")
 
 local mergedItemCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716573600,
@@ -116,6 +118,67 @@ local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
 assert.equal(0, repeatedVisibleScanCount, "re-reading the same visible item-log window should not append duplicate rows")
 assert.equal(2, #db.bankLedger.itemLogs, "re-reading the same visible item-log window should leave stored rows unchanged")
 
+local relogStableItemDb = fresh_db()
+_G.GetServerTime = function()
+    return 1716577200
+end
+local relogStableItemInitial = bankLedger.MergeItemTransactions(relogStableItemDb, {
+    scanStartedAt = 1716577200,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            craftedQuality = 3,
+            quantity = 12,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 1,
+        },
+    },
+})
+assert.equal(1, relogStableItemInitial, "baseline relative-offset item import should persist the initial visible ledger row")
+_G.GetServerTime = function()
+    return 1716580800
+end
+local relogStableItemRepeat = bankLedger.MergeItemTransactions(relogStableItemDb, {
+    scanStartedAt = 1716580800,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "withdraw",
+            who = "RaiderOne-Stormrage",
+            itemID = 210000,
+            itemName = "Potion of Controlled Fury",
+            craftedQuality = 0,
+            quantity = 3,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 1,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            craftedQuality = 3,
+            quantity = 12,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 2,
+        },
+    },
+})
+assert.equal(1, relogStableItemRepeat, "item dedupe should still append a new leading row after a relog even when Blizzard's relative offsets have all shifted")
+assert.equal(2, #relogStableItemDb.bankLedger.itemLogs, "item dedupe should keep the old relative-offset row while appending the newly visible one after relog")
+
 local identicalLeadingItemCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716574500,
     sourceTabIndex = 1,
@@ -201,6 +264,108 @@ assert.equal(3, mergedMoneyCount, "ledger money merge should add unseen money-lo
 assert.equal("Repair", db.bankLedger.moneyLogs[1].action, "small non-round withdrawals should classify as repairs")
 assert.equal("Withdrawal", db.bankLedger.moneyLogs[2].action, "large withdrawals should stay normal withdrawals")
 assert.equal("Deposit", db.bankLedger.moneyLogs[3].action, "deposits should stay deposits")
+
+local thresholdDb = fresh_db()
+thresholdDb.ui.logsHistorySettings.repairThresholdGold = 100
+local thresholdMergeCount = bankLedger.MergeMoneyTransactions(thresholdDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 2024,
+            month = 5,
+            day = 24,
+            hour = 7,
+        },
+    },
+})
+assert.equal(1, thresholdMergeCount, "money merge should still persist withdrawals when the repair threshold is lowered")
+assert.equal("Withdrawal", thresholdDb.bankLedger.moneyLogs[1].action, "withdrawals above the configured repair threshold should stay withdrawals")
+
+local relogStableMoneyDb = fresh_db()
+_G.GetServerTime = function()
+    return 1716577200
+end
+local relogStableMoneyInitial = bankLedger.MergeMoneyTransactions(relogStableMoneyDb, {
+    scanStartedAt = 1716577200,
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 500000000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 1,
+        },
+    },
+})
+assert.equal(1, relogStableMoneyInitial, "baseline relative-offset money import should persist the initial visible ledger row")
+_G.GetServerTime = function()
+    return 1716580800
+end
+local relogStableMoneyRepeat = bankLedger.MergeMoneyTransactions(relogStableMoneyDb, {
+    scanStartedAt = 1716580800,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "OfficerTwo-Stormrage",
+            amount = 100000000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 1,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 500000000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 2,
+        },
+    },
+})
+assert.equal(1, relogStableMoneyRepeat, "money dedupe should still append a new leading row after a relog even when Blizzard's relative offsets have all shifted")
+assert.equal(2, #relogStableMoneyDb.bankLedger.moneyLogs, "money dedupe should keep the old relative-offset row while appending the newly visible one after relog")
+
+local thresholdStableFingerprintDb = fresh_db()
+local thresholdStableFingerprintInitial = bankLedger.MergeMoneyTransactions(thresholdStableFingerprintDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 7,
+        },
+    },
+})
+assert.equal(1, thresholdStableFingerprintInitial, "baseline money import should persist the original withdrawal row before threshold changes")
+thresholdStableFingerprintDb.ui.logsHistorySettings.repairThresholdGold = 100
+local thresholdStableFingerprintRepeat = bankLedger.MergeMoneyTransactions(thresholdStableFingerprintDb, {
+    scanStartedAt = 1716573900,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 7,
+        },
+    },
+})
+assert.equal(0, thresholdStableFingerprintRepeat, "money dedupe should stay stable when repairThresholdGold changes after the original import")
+assert.equal(1, #thresholdStableFingerprintDb.bankLedger.moneyLogs, "threshold changes should not duplicate previously imported money rows on rescan")
+assert.equal("Repair", thresholdStableFingerprintDb.bankLedger.moneyLogs[1].action, "threshold changes should not rewrite stored money row display classification")
 
 local repeatedVisibleMoneyCount = bankLedger.MergeMoneyTransactions(db, {
     scanStartedAt = 1716573900,
@@ -539,6 +704,259 @@ local staleOriginalRepeatCount = bankLedger.MergeItemTransactions(staleReadDb, {
 assert.equal(0, staleOriginalRepeatCount, "after ignoring stale or mismatched reads, the original ledger row should still dedupe correctly")
 assert.equal(2, #staleReadDb.bankLedger.itemLogs, "stale or mismatched reads should not poison the saved ledger snapshot for later rescans")
 
+local stalePersistedSnapshotDb = fresh_db()
+stalePersistedSnapshotDb.bankLedger.itemLogs = {
+    {
+        entryId = "item-1",
+        timestamp = 1716573600,
+        when = 1716573600,
+        who = "Gatherer-Stormrage",
+        action = "Deposit",
+        itemID = 410001,
+        qualityTier = 0,
+        item = "Persisted Herb Bundle",
+        quantity = 9,
+        tabName = "Herbs",
+        tabIndex = 5,
+        fromTabName = "-",
+    },
+}
+stalePersistedSnapshotDb.bankLedger.itemSourceSnapshots = {
+    ["item:5"] = {
+        "stale|snapshot|one",
+        "stale|snapshot|two",
+    },
+}
+local stalePersistedSnapshotCount = bankLedger.MergeItemTransactions(stalePersistedSnapshotDb, {
+    scanStartedAt = 1716574800,
+    sourceTabIndex = 5,
+    sourceTabName = "Herbs",
+    transactions = {
+        {
+            type = "deposit",
+            who = "Gatherer-Stormrage",
+            itemID = 410002,
+            itemName = "Fresh Herb Bundle",
+            quantity = 4,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 16,
+        },
+        {
+            type = "deposit",
+            who = "Gatherer-Stormrage",
+            itemID = 410001,
+            itemName = "Persisted Herb Bundle",
+            quantity = 9,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 15,
+        },
+    },
+})
+assert.equal(1, stalePersistedSnapshotCount, "stale persisted item source snapshots should not block a real new leading row after reload")
+assert.equal(2, #stalePersistedSnapshotDb.bankLedger.itemLogs, "item merges should still append the unseen row when persisted source snapshots are stale")
+
+local stalePersistedMoneySnapshotDb = fresh_db()
+stalePersistedMoneySnapshotDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-1",
+        timestamp = 1716573600,
+        when = 1716573600,
+        who = "Treasurer-Stormrage",
+        action = "Withdrawal",
+        amountCopper = 110000000,
+        amount = 110000000,
+    },
+}
+stalePersistedMoneySnapshotDb.bankLedger.moneySourceSnapshots = {
+    money = {
+        "stale|money|one",
+        "stale|money|two",
+    },
+}
+local stalePersistedMoneySnapshotCount = bankLedger.MergeMoneyTransactions(stalePersistedMoneySnapshotDb, {
+    scanStartedAt = 1716574800,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Treasurer-Stormrage",
+            amount = 120000000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 16,
+        },
+        {
+            type = "withdraw",
+            who = "Treasurer-Stormrage",
+            amount = 110000000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 15,
+        },
+    },
+})
+assert.equal(1, stalePersistedMoneySnapshotCount, "stale persisted money source snapshots should not block a real new leading row after reload")
+assert.equal(2, #stalePersistedMoneySnapshotDb.bankLedger.moneyLogs, "money merges should still append the unseen row when persisted source snapshots are stale")
+
+local legacyItemFingerprintDb = fresh_db()
+legacyItemFingerprintDb.bankLedger.itemLogs = {
+    {
+        entryId = "item-legacy-1",
+        timestamp = 1716573600,
+        when = 1716573600,
+        who = "Archivist-Stormrage",
+        action = "Deposit",
+        itemID = 420001,
+        qualityTier = 0,
+        item = "Legacy Fingerprint Flask",
+        quantity = 8,
+        tabName = "Flasks",
+        tabIndex = 1,
+        fromTabName = "-",
+    },
+}
+legacyItemFingerprintDb.bankLedger.itemFingerprints = {
+    ["item-legacy-1"] = true,
+}
+legacyItemFingerprintDb.bankLedger.itemSourceSnapshots = {}
+local legacyItemFingerprintCount = bankLedger.MergeItemTransactions(legacyItemFingerprintDb, {
+    scanStartedAt = 1716573900,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "Archivist-Stormrage",
+            itemID = 420001,
+            itemName = "Legacy Fingerprint Flask",
+            quantity = 8,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 15,
+        },
+    },
+})
+assert.equal(0, legacyItemFingerprintCount, "legacy item fingerprint maps should rebuild from persisted rows so repeat scans stay deduped")
+assert.equal(1, #legacyItemFingerprintDb.bankLedger.itemLogs, "legacy item fingerprint rebuilds should avoid duplicating persisted item rows")
+
+local legacyItemTimestampIdentityDb = fresh_db()
+legacyItemTimestampIdentityDb.bankLedger.itemLogs = {
+    {
+        entryId = "item-legacy-a",
+        timestamp = 1716562800,
+        when = 1716562800,
+        who = "Archivist-Stormrage",
+        action = "Deposit",
+        itemID = 430001,
+        qualityTier = 0,
+        item = "Repeated Historical Flask",
+        quantity = 8,
+        tabName = "Flasks",
+        tabIndex = 1,
+        fromTabName = "-",
+    },
+    {
+        entryId = "item-legacy-b",
+        timestamp = 1716566400,
+        when = 1716566400,
+        who = "Archivist-Stormrage",
+        action = "Deposit",
+        itemID = 430001,
+        qualityTier = 0,
+        item = "Repeated Historical Flask",
+        quantity = 8,
+        tabName = "Flasks",
+        tabIndex = 1,
+        fromTabName = "-",
+    },
+}
+legacyItemTimestampIdentityDb.bankLedger.itemFingerprints = {
+    ["item-legacy-a"] = true,
+    ["item-legacy-b"] = true,
+}
+legacyItemTimestampIdentityDb.bankLedger.itemSourceSnapshots = {}
+local legacyItemTimestampIdentityCount = bankLedger.MergeItemTransactions(legacyItemTimestampIdentityDb, {
+    scanStartedAt = 1716573900,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "Archivist-Stormrage",
+            itemID = 430001,
+            itemName = "Repeated Historical Flask",
+            quantity = 8,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 15,
+        },
+        {
+            type = "deposit",
+            who = "Archivist-Stormrage",
+            itemID = 430001,
+            itemName = "Repeated Historical Flask",
+            quantity = 8,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 14,
+        },
+        {
+            type = "deposit",
+            who = "Archivist-Stormrage",
+            itemID = 430001,
+            itemName = "Repeated Historical Flask",
+            quantity = 8,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 13,
+        },
+    },
+})
+assert.equal(1, legacyItemTimestampIdentityCount, "legacy item fingerprint rebuilds should preserve persisted-row time identity so a real newer transaction can still append")
+assert.equal(3, #legacyItemTimestampIdentityDb.bankLedger.itemLogs, "legacy item rows with different persisted timestamps should not collapse into interchangeable aliases")
+
+local legacyMoneyFingerprintDb = fresh_db()
+legacyMoneyFingerprintDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-legacy-1",
+        timestamp = 1716573600,
+        when = 1716573600,
+        who = "Archivist-Stormrage",
+        action = "Deposit",
+        amountCopper = 330000000,
+        amount = 330000000,
+    },
+}
+legacyMoneyFingerprintDb.bankLedger.moneyFingerprints = {
+    ["money-legacy-1"] = true,
+}
+legacyMoneyFingerprintDb.bankLedger.moneySourceSnapshots = {}
+local legacyMoneyFingerprintCount = bankLedger.MergeMoneyTransactions(legacyMoneyFingerprintDb, {
+    scanStartedAt = 1716573900,
+    transactions = {
+        {
+            type = "deposit",
+            who = "Archivist-Stormrage",
+            amount = 330000000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 15,
+        },
+    },
+})
+assert.equal(0, legacyMoneyFingerprintCount, "legacy money fingerprint maps should rebuild from persisted rows so repeat scans stay deduped")
+assert.equal(1, #legacyMoneyFingerprintDb.bankLedger.moneyLogs, "legacy money fingerprint rebuilds should avoid duplicating persisted money rows")
+
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {
     action = "withdraw",
 })
@@ -608,6 +1026,43 @@ local csvText = bankLedger.ExportRowsToCsv(db, "ITEM", {
     dateTo = 9999999999,
 })
 assert.truthy(string.find(csvText, "Date/Time,Who,Action,Item ID,Quality Tier,Item,Quantity,Tab,Moved From", 1, true) ~= nil, "ledger csv export should include both tab columns for item rows")
+
+local originalDate = _G.date
+_G.date = function(formatString, timestamp)
+    if formatString == "%Y-%m-%d %H:%M" and tonumber(timestamp) == 1779894357 then
+        return "2026-05-26 22:25"
+    end
+    if formatString == "%Z" and tonumber(timestamp) == 1779894357 then
+        return "Eastern Daylight Time"
+    end
+    if type(originalDate) == "function" then
+        return originalDate(formatString, timestamp)
+    end
+    return tostring(timestamp or 0)
+end
+
+local csvTimestampDb = fresh_db()
+csvTimestampDb.bankLedger.itemLogs = {
+    {
+        entryId = "item-export-1",
+        timestamp = 1779894357,
+        when = 1779894357,
+        who = "Zirleficent",
+        action = "Deposit",
+        itemID = 245795,
+        qualityTier = 1,
+        item = "Contract: The Hara'ti",
+        quantity = 2,
+        tabName = "Freebiez",
+        fromTabName = "-",
+    },
+}
+local timestampCsvText = bankLedger.ExportRowsToCsv(csvTimestampDb, "ITEM", {
+    dateFrom = 0,
+    dateTo = 9999999999,
+})
+assert.truthy(string.find(timestampCsvText, "2026%-05%-26 22:25 EDT,Zirleficent,Deposit,245795,1,Contract: The Hara'ti,2,Freebiez,%-") ~= nil, "ledger csv export should format timestamps as readable date time text instead of raw integers")
+_G.date = originalDate
 
 local usage = bankLedger.BuildUsageRows(db, {
     dateFrom = 0,

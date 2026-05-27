@@ -350,6 +350,12 @@ for _, item in ipairs(bundledFlaskSunResolution.matches or {}) do
     bundledFlaskSunIds[tonumber(item.itemID)] = true
 end
 assert.truthy(bundledFlaskSunIds[241326] == true and bundledFlaskSunIds[241327] == true, "bundled indexed search should include both Flask of the Shattered Sun item ids")
+assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(241326) or {}).craftedQuality or 0), "bundled item lookup should preserve the higher two-rank Shattered Sun tier")
+assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(241326) or {}).craftedQualityMax or 0), "bundled item lookup should expose the two-rank family size for Shattered Sun")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", tostring((itemCatalog.GetBundledItemByID(241326) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical gold display atlas for the higher two-rank Shattered Sun variant")
+assert.equal(1, tonumber((itemCatalog.GetBundledItemByID(241327) or {}).craftedQuality or 0), "bundled item lookup should preserve the lower two-rank Shattered Sun tier")
+assert.equal("Professions-ChatIcon-Quality-Tier1", tostring((itemCatalog.GetBundledItemByID(241327) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical silver display atlas for the lower two-rank Shattered Sun variant")
+assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(243734) or {}).craftedQualityMax or 0), "bundled item lookup should expose the two-rank family size for Phoenix Oil")
 
 local originalResolveIndexedQuery = itemCatalog.ResolveIndexedQuery
 local indexedSessionQueryCalls = 0

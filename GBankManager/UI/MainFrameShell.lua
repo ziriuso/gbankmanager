@@ -15,6 +15,81 @@ ns.ui.theme = ns.ui.theme or {}
 
 local SOLID_TEXTURE = "Interface\\Buttons\\WHITE8x8"
 
+local function current_item_catalog()
+    local itemCatalog = ns.modules.itemCatalog or {}
+    if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
+        itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+    end
+    return itemCatalog
+end
+
+local function sanitize_search_display_name(value)
+    local itemCatalog = current_item_catalog()
+    if type(itemCatalog.StripLegacyTierPrefix) == "function" then
+        return itemCatalog.StripLegacyTierPrefix(value)
+    end
+
+    return tostring(value or ""):gsub("^%s*%[[Tt]%d+%]%s*", "")
+end
+
+local function resolve_display_atlas_for_item(item)
+    item = type(item) == "table" and item or {}
+    local itemCatalog = current_item_catalog()
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+    local atlas = tostring(item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or "")
+    if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetDisplayAtlasForItem(item.itemID, atlas, item.craftedQuality, "reagent", item.craftedQualityFamilySize or item.craftedQualityMax)
+    end
+
+    return type(craftedQuality.NormalizeDisplayAtlas) == "function"
+        and craftedQuality.NormalizeDisplayAtlas(atlas, item.craftedQuality, "reagent", item.craftedQualityFamilySize or item.craftedQualityMax)
+        or atlas
+end
+
+local function resolve_display_markup_for_item(item)
+    item = type(item) == "table" and item or {}
+    local itemCatalog = current_item_catalog()
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+    local atlas = tostring(item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or "")
+    if type(craftedQuality.DisplayMarkupForItem) == "function" then
+        return craftedQuality.DisplayMarkupForItem(item.itemID, atlas, 22, "reagent", item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax)
+    end
+
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        return craftedQuality.DisplayMarkup(atlas, 22, "reagent", item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax)
+    end
+
+    return ""
+end
+
+local function set_texture_atlas(texture, atlasName)
+    if type(texture) ~= "table" then
+        return false
+    end
+
+    atlasName = tostring(atlasName or "")
+    if atlasName == "" then
+        texture.atlas = nil
+        if type(texture.Hide) == "function" then
+            texture:Hide()
+        end
+        return false
+    end
+
+    if type(texture.SetAtlas) == "function" then
+        texture:SetAtlas(atlasName, false)
+    end
+    texture.atlas = atlasName
+    if type(texture.Show) == "function" then
+        texture:Show()
+    end
+    return true
+end
+
 local backdrop = {
     bgFile = SOLID_TEXTURE,
     edgeFile = SOLID_TEXTURE,
@@ -1241,32 +1316,25 @@ local function create_virtualized_item_results_list(parent, options)
             row.resolvedItem = elementData
             row.itemText:SetText(self.formatLabel(elementData))
 
-            local craftedTier = tonumber((elementData or {}).craftedQuality)
-            if craftedTier and craftedTier > 0 then
-                row.tierText:SetText(string.format("[T%d]", craftedTier))
-                if type(row.itemText.ClearAllPoints) == "function" then
-                    row.itemText:ClearAllPoints()
-                end
-                row.itemText:SetPoint("LEFT", row.tierText, "RIGHT", 6, 0)
-            else
-                row.tierText:SetText("")
-                if type(row.itemText.ClearAllPoints) == "function" then
-                    row.itemText:ClearAllPoints()
-                end
-                row.itemText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
+            local displayMarkup = resolve_display_markup_for_item(elementData)
+            local displayAtlas = resolve_display_atlas_for_item(elementData)
+            row.tierText:SetText("")
+            row.tierText:Hide()
+            if type(row.itemText.ClearAllPoints) == "function" then
+                row.itemText:ClearAllPoints()
             end
-
-            local atlas = tostring((elementData or {}).craftedQualityIcon or "")
-            local displayAtlas = type(craftedQuality.NormalizeDisplayAtlas) == "function" and craftedQuality.NormalizeDisplayAtlas(atlas) or atlas
-            if displayAtlas ~= "" then
-                row.qualityIcon.atlas = displayAtlas
-                if type(row.qualityIcon.SetAtlas) == "function" then
-                    row.qualityIcon:SetAtlas(displayAtlas, true)
-                end
-                row.qualityIcon:Show()
+            if set_texture_atlas(row.qualityIcon, displayAtlas) then
+                row.itemText:SetPoint("LEFT", row.qualityIcon, "RIGHT", 6, 0)
             else
+                row.itemText:SetPoint("LEFT", displayMarkup ~= "" and row.tierText or row.qualityIcon, "RIGHT", 6, 0)
                 row.qualityIcon.atlas = nil
                 row.qualityIcon:Hide()
+                row.tierText:SetText(displayMarkup)
+                if displayMarkup ~= "" then
+                    row.tierText:Show()
+                else
+                    row.tierText:Hide()
+                end
             end
 
             local isSelected = item_result_key(elementData) ~= nil and item_result_key(elementData) == self.selectedKey
@@ -1369,7 +1437,7 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
     end
 
     local function match_label(item)
-        local name = tostring((item or {}).name or (item or {}).itemName or "")
+        local name = sanitize_search_display_name((item or {}).name or (item or {}).itemName or "")
         local itemID = tostring((item or {}).itemID or "")
         return string.format("%s (%s)", name, itemID)
     end
@@ -1529,23 +1597,14 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
         self.selectedItem = item
         if shouldPopulateInputs ~= false then
             self:SetProgrammaticInputValue("id", self.itemIDInput, tostring((item or {}).itemID or ""))
-            self:SetProgrammaticInputValue("name", self.itemNameInput, tostring((item or {}).name or (item or {}).itemName or ""))
+            self:SetProgrammaticInputValue("name", self.itemNameInput, sanitize_search_display_name((item or {}).name or (item or {}).itemName or ""))
         end
 
         if item then
-            self.selectedItemNameText:SetText(tostring(item.name or item.itemName or ""))
-            local atlas = tostring(item.craftedQualityIcon or "")
-            local displayAtlas = type(craftedQuality.NormalizeDisplayAtlas) == "function" and craftedQuality.NormalizeDisplayAtlas(atlas) or atlas
-            if displayAtlas ~= "" then
-                self.selectedItemQualityIcon.atlas = displayAtlas
-                if type(self.selectedItemQualityIcon.SetAtlas) == "function" then
-                self.selectedItemQualityIcon:SetAtlas(displayAtlas, true)
-                end
-                self.selectedItemQualityIcon:Show()
-            else
-                self.selectedItemQualityIcon.atlas = nil
-                self.selectedItemQualityIcon:Hide()
-            end
+            local itemName = sanitize_search_display_name(item.name or item.itemName or "")
+            local displayAtlas = resolve_display_atlas_for_item(item)
+            self.selectedItemNameText:SetText(itemName)
+            set_texture_atlas(self.selectedItemQualityIcon, displayAtlas)
             self:SetStatusMessage(nil)
         else
             self.selectedItemNameText:SetText("No item selected.")
@@ -2144,10 +2203,10 @@ function mainFrameShell.EnsureShell(mainFrame)
         MINIMUMS = "Manage Guild Bank Item Minimum Stock Levels",
         REQUESTS = "Review and manage guild member requests.",
         EXPORTS = "Prepare Auctionator and spreadsheet-ready purchase output.",
-        HISTORY = "Review procurement audit events with explicit timestamps and before or after values.",
-        BANK_LEDGER = "Review guild bank ledger history and future ledger reporting in one place.",
-        OPTIONS = "Adjust shell behavior like transparency without cluttering the main toolbar.",
-        ABOUT = "Reference addon ownership, guild identity, runtime build info, and support notes.",
+        HISTORY = "Review audit history",
+        BANK_LEDGER = "Review guild bank ledger history",
+        OPTIONS = "",
+        ABOUT = "",
     }
 
     mainFrame.sidebar = mainFrame.sidebar or _G.CreateFrame("Frame", nil, mainFrame, "BackdropTemplate")

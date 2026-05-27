@@ -1,4 +1,6 @@
 local assert = require("tests.helpers.assert")
+_G.GBankManagerItemSearchPayload = nil
+_G.GBankManagerItemCatalogData = nil
 _G.GBankManagerDB = {
     meta = {
         guildName = "Existing Guild",
@@ -6,6 +8,12 @@ _G.GBankManagerDB = {
 }
 
 local addonName, ns, loaded = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
+_G.GBankManagerItemSearchPayload = nil
+_G.GBankManagerItemCatalogData = nil
+ns.data.staticItemSearch = nil
+ns.data.staticItemCatalog = nil
+ns.modules.staticItemSearch = nil
+ns.modules.staticItemCatalog = nil
 local store = ns.modules.store
 local permissions = ns.modules.permissions
 local migrations = ns.modules.migrations

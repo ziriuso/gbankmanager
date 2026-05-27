@@ -51,6 +51,11 @@ if type(_G.CreateFrame) == "function" and type(events.RegisterEvent) ~= "functio
     events:SetScript("OnEvent", dispatch_event)
 end
 
+local scanner = ns.modules.scanner
+if type(scanner) == "table" and type(scanner.SyncGuildBankOpenState) == "function" then
+    scanner.SyncGuildBankOpenState()
+end
+
 ns.modules.events = events
 
 return events

@@ -88,6 +88,8 @@ mainFrame:SelectView("DASHBOARD")
 
 assert.equal("DASHBOARD", mainFrame.activeView, "dashboard should be the active view")
 assert.equal(4, #(mainFrame.dashboardCards or {}), "dashboard should expose four metric cards")
+assert.equal("2 unique snapshot items", (((mainFrame.dashboardCards or {})[1] or {}).noteText or {}):GetText(), "dashboard last-scan note should clarify that the count refers to unique snapshot items")
+assert.equal("", (((mainFrame.dashboardCards or {})[2] or {}).noteText or {}):GetText(), "dashboard pending-requests card should remove the retired auto-matched fulfillment note")
 assert.equal("Critical Shortages", ((mainFrame.dashboardCards or {})[4] or {}).titleText:GetText(), "dashboard should use the fourth metric card for critical shortages")
 assert.equal("1", ((mainFrame.dashboardCards or {})[4] or {}).valueText:GetText(), "dashboard critical shortages should count only items at or below the configured threshold")
 assert.equal("<= 16% of Min", (((mainFrame.dashboardCards or {})[4] or {}).noteText or {}):GetText(), "dashboard should keep the critical-threshold note short enough to avoid overflow")

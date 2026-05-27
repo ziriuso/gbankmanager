@@ -95,6 +95,8 @@ function defaults.CreateDatabase(guildName)
                 ledgerRetention = "indefinite",
                 historyRetention = "indefinite",
                 ledgerScanIntervalSeconds = 300,
+                repairThresholdGold = 5000,
+                muteSilvermoonCitizen = false,
             },
             minimumItemCatalog = {},
             exportSettings = {

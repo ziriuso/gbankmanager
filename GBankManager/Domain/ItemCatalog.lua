@@ -6,6 +6,16 @@ ns.data = ns.data or {}
 
 local itemCatalog = ns.modules.itemCatalog or {}
 local ITEM_DATA_ADDON_NAME = "GBankManager_ItemData"
+local ensure_payload_quality_families
+local hydrate_namespace_from_globals
+
+local function strip_legacy_tier_prefix(value)
+    local text = tostring(value or "")
+    text = text:gsub("^|c%x%x%x%x%x%x%x%x", "")
+    text = text:gsub("|r", "")
+    text = text:gsub("^%s*%[[Tt]%d+%]%s*", "")
+    return text
+end
 
 local function get_bundled_search_diagnostics()
     local payload = ns.data.staticItemSearch
@@ -40,7 +50,18 @@ local function get_bundled_search_diagnostics()
     }
 end
 
-local function hydrate_namespace_from_globals()
+local function get_available_bundled_payload()
+    hydrate_namespace_from_globals()
+    local diagnostics = get_bundled_search_diagnostics()
+    local payload = diagnostics.payload
+    if type((payload or {}).itemsByID) == "table" and next(payload.itemsByID) ~= nil then
+        return ensure_payload_quality_families(payload)
+    end
+
+    return nil
+end
+
+hydrate_namespace_from_globals = function()
     if type(_G.GBankManagerItemSearchPayload) == "table" then
         ns.data.staticItemSearch = ns.data.staticItemSearch or _G.GBankManagerItemSearchPayload
         ns.modules.staticItemSearch = ns.modules.staticItemSearch or _G.GBankManagerItemSearchPayload
@@ -88,22 +109,135 @@ local function append_unique_item(items, seenByItemID, item)
     end
 
     local itemID = tonumber(item.itemID)
-    local itemName = tostring(item.name or item.itemName or "")
-    if not itemID or itemName == "" or seenByItemID[itemID] then
+    local itemName = strip_legacy_tier_prefix(item.name or item.itemName or "")
+    if not itemID or itemName == "" then
         return
     end
 
-    seenByItemID[itemID] = true
-    table.insert(items, {
+    local existing = seenByItemID[itemID]
+    if existing and type(existing) == "table" then
+        existing.name = itemName ~= "" and itemName or existing.name
+        existing.quality = existing.quality or item.quality
+        existing.qualityName = existing.qualityName or item.qualityName
+        existing.craftedQuality = existing.craftedQuality or item.craftedQuality
+        existing.craftedQualityIcon = existing.craftedQualityIcon or item.craftedQualityIcon
+        existing.craftedQualityMax = existing.craftedQualityMax or item.craftedQualityMax
+        existing.craftedQualityDisplayAtlas = existing.craftedQualityDisplayAtlas or item.craftedQualityDisplayAtlas
+        existing.craftedQualityPreferredAtlas = existing.craftedQualityPreferredAtlas or item.craftedQualityPreferredAtlas
+        existing.craftedQualityFamilySize = existing.craftedQualityFamilySize or item.craftedQualityFamilySize
+        existing.totalCount = existing.totalCount or item.totalCount
+        existing.tabs = existing.tabs or item.tabs
+        return
+    end
+
+    local entry = {
         itemID = itemID,
         name = itemName,
         quality = item.quality,
         qualityName = item.qualityName,
         craftedQuality = item.craftedQuality,
         craftedQualityIcon = item.craftedQualityIcon,
+        craftedQualityMax = item.craftedQualityMax,
+        craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
+        craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas,
+        craftedQualityFamilySize = item.craftedQualityFamilySize,
         totalCount = item.totalCount,
         tabs = item.tabs,
-    })
+    }
+    seenByItemID[itemID] = entry
+    table.insert(items, entry)
+end
+
+local function normalize_family_name(value)
+    return string.lower(tostring(value or "")):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function crafted_quality_display_atlas(item)
+    item = type(item) == "table" and item or {}
+    local quality = tonumber(item.craftedQuality or 0) or 0
+    local maxQuality = tonumber(item.craftedQualityMax or 0) or 0
+    if quality < 1 then
+        return nil
+    end
+
+    if maxQuality == 2 then
+        if quality == 1 then
+            return "Professions-ChatIcon-Quality-12-Tier1"
+        end
+        if quality == 2 then
+            return "Interface-Crafting-ReagentQuality-2-Med"
+        end
+    end
+
+    if maxQuality >= 3 then
+        return string.format("Professions-ChatIcon-Quality-Tier%d", quality)
+    end
+
+    return tostring(item.craftedQualityIcon or "") ~= "" and item.craftedQualityIcon or string.format("Professions-ChatIcon-Quality-Tier%d", quality)
+end
+
+local function apply_crafted_quality_families(items)
+    local tiersByName = {}
+
+    for _, item in ipairs(items or {}) do
+        local familyName = normalize_family_name(item.name or item.itemName or "")
+        local tier = tonumber(item.craftedQuality or 0) or 0
+        if familyName ~= "" and tier >= 1 and tier <= 5 then
+            tiersByName[familyName] = tiersByName[familyName] or {}
+            tiersByName[familyName][tier] = true
+        end
+    end
+
+    for _, item in ipairs(items or {}) do
+        local familyName = normalize_family_name(item.name or item.itemName or "")
+        local familyTiers = tiersByName[familyName] or {}
+        local distinctCount = 0
+        local maxTier = 0
+        for tier = 1, 5 do
+            if familyTiers[tier] then
+                distinctCount = distinctCount + 1
+                maxTier = tier
+            end
+        end
+
+        if maxTier >= 3 then
+            item.craftedQualityMax = 5
+        elseif distinctCount == 2 and familyTiers[1] and familyTiers[2] then
+            item.craftedQualityMax = 2
+        elseif item.craftedQualityMax == nil then
+            item.craftedQualityMax = maxTier > 0 and maxTier or nil
+        end
+
+        if tostring(item.craftedQualityDisplayAtlas or "") == "" then
+            item.craftedQualityDisplayAtlas = crafted_quality_display_atlas(item)
+        end
+        if tostring(item.craftedQualityPreferredAtlas or "") == "" then
+            item.craftedQualityPreferredAtlas = tostring(item.craftedQualityDisplayAtlas or item.craftedQualityIcon or "")
+        end
+        if tonumber(item.craftedQualityFamilySize or 0) == 0 and tonumber(item.craftedQualityMax or 0) > 0 then
+            item.craftedQualityFamilySize = tonumber(item.craftedQualityMax or 0) or 0
+        end
+    end
+
+    return items
+end
+
+ensure_payload_quality_families = function(payload)
+    payload = type(payload) == "table" and payload or nil
+    if not payload or payload.craftedQualityFamiliesReady == true then
+        return payload
+    end
+
+    local indexedItems = {}
+    for _, item in pairs(payload.itemsByID or {}) do
+        if type(item) == "table" then
+            indexedItems[#indexedItems + 1] = item
+        end
+    end
+
+    apply_crafted_quality_families(indexedItems)
+    payload.craftedQualityFamiliesReady = true
+    return payload
 end
 
 function itemCatalog.GetBundledItems()
@@ -112,21 +246,92 @@ function itemCatalog.GetBundledItems()
     end
 
     local diagnostics = get_bundled_search_diagnostics()
-    return type((diagnostics.catalog or {}).items) == "table" and diagnostics.catalog.items or {}
+    local items = type((diagnostics.catalog or {}).items) == "table" and diagnostics.catalog.items or {}
+    return apply_crafted_quality_families(items)
 end
 
 function itemCatalog.GetBundledSearchPayload()
     if not itemCatalog.EnsureBundledDataLoaded() then
+        return get_available_bundled_payload()
+    end
+
+    return get_available_bundled_payload()
+end
+
+function itemCatalog.GetBundledItemByID(itemID)
+    local numericID = tonumber(itemID)
+    if not numericID then
         return nil
     end
 
-    return get_bundled_search_diagnostics().payload
+    local payload = itemCatalog.GetBundledSearchPayload() or get_available_bundled_payload()
+    return type((payload or {}).itemsByID) == "table" and payload.itemsByID[numericID] or nil
+end
+
+function itemCatalog.ApplyCanonicalCraftedQuality(item)
+    item = type(item) == "table" and item or nil
+    if not item then
+        return item
+    end
+
+    local numericID = tonumber(item.itemID)
+    if not numericID then
+        return item
+    end
+
+    local bundledItem = itemCatalog.GetBundledItemByID(numericID)
+    local bundledQualityEntry = ns.data.staticCraftedQualityByItemID
+        or ns.modules.staticCraftedQualityByItemID
+        or _G.GBankManagerItemQualityByID
+        or {}
+    bundledQualityEntry = bundledQualityEntry[numericID]
+
+    if type(bundledItem) ~= "table" and type(bundledQualityEntry) ~= "table" then
+        return item
+    end
+
+    item.craftedQuality = (bundledQualityEntry and bundledQualityEntry.craftedQuality) or (bundledItem and bundledItem.craftedQuality) or item.craftedQuality
+    item.craftedQualityIcon = (bundledQualityEntry and bundledQualityEntry.craftedQualityIcon) or (bundledItem and bundledItem.craftedQualityIcon) or item.craftedQualityIcon
+    item.craftedQualityMax = (bundledQualityEntry and bundledQualityEntry.craftedQualityMax) or (bundledItem and bundledItem.craftedQualityMax) or item.craftedQualityMax
+    item.craftedQualityDisplayAtlas = (bundledQualityEntry and bundledQualityEntry.craftedQualityDisplayAtlas) or (bundledItem and bundledItem.craftedQualityDisplayAtlas) or item.craftedQualityDisplayAtlas
+    item.craftedQualityPreferredAtlas = (bundledQualityEntry and bundledQualityEntry.craftedQualityPreferredAtlas) or (bundledItem and bundledItem.craftedQualityPreferredAtlas) or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas
+    item.craftedQualityFamilySize = (bundledQualityEntry and bundledQualityEntry.craftedQualityFamilySize) or (bundledItem and bundledItem.craftedQualityFamilySize) or item.craftedQualityFamilySize or item.craftedQualityMax
+    local canonicalDisplayAtlas = crafted_quality_display_atlas(item)
+    if tostring(canonicalDisplayAtlas or "") ~= "" then
+        item.craftedQualityDisplayAtlas = canonicalDisplayAtlas
+        item.craftedQualityPreferredAtlas = canonicalDisplayAtlas
+    end
+    item.name = strip_legacy_tier_prefix((bundledItem and bundledItem.name) or item.name or item.itemName or "")
+    item.itemName = item.name
+    return item
+end
+
+function itemCatalog.StripLegacyTierPrefix(value)
+    return strip_legacy_tier_prefix(value)
+end
+
+local function overlay_bundled_crafted_quality(items)
+    hydrate_namespace_from_globals()
+    itemCatalog.EnsureBundledDataLoaded()
+    local payload = get_available_bundled_payload()
+    local itemsByID = type((payload or {}).itemsByID) == "table" and payload.itemsByID or nil
+    if not itemsByID then
+        return items
+    end
+
+    for _, item in ipairs(items or {}) do
+        itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+
+    return items
 end
 
 function itemCatalog.BuildSearchCatalog(db, snapshot, options)
     db = db or {}
     snapshot = snapshot or {}
     options = options or {}
+
+    itemCatalog.EnsureBundledDataLoaded()
 
     local items = {}
     local seenByItemID = {}
@@ -166,7 +371,8 @@ function itemCatalog.BuildSearchCatalog(db, snapshot, options)
         return (tonumber(left.itemID or 0) or 0) < (tonumber(right.itemID or 0) or 0)
     end)
 
-    return items
+    overlay_bundled_crafted_quality(items)
+    return apply_crafted_quality_families(items)
 end
 
 local function collect_search_items(snapshot)
@@ -188,10 +394,11 @@ local function collect_search_items(snapshot)
         return (tonumber(left.itemID or 0) or 0) < (tonumber(right.itemID or 0) or 0)
     end)
 
-    return items
+    return apply_crafted_quality_families(items)
 end
 
 function itemCatalog.CreateSearchSession(snapshot)
+    itemCatalog.EnsureBundledDataLoaded()
     local payload = itemCatalog.GetBundledSearchPayload()
     return {
         payload = payload,
@@ -214,7 +421,7 @@ function itemCatalog.StoreResolvedItem(db, item)
     end
 
     local itemID = tonumber((item or {}).itemID)
-    local itemName = tostring((item or {}).name or (item or {}).itemName or "")
+    local itemName = strip_legacy_tier_prefix((item or {}).name or (item or {}).itemName or "")
     if not itemID or itemName == "" then
         return nil
     end
@@ -226,6 +433,10 @@ function itemCatalog.StoreResolvedItem(db, item)
             existing.qualityName = (item or {}).qualityName or existing.qualityName
             existing.craftedQuality = (item or {}).craftedQuality or existing.craftedQuality
             existing.craftedQualityIcon = (item or {}).craftedQualityIcon or existing.craftedQualityIcon
+            existing.craftedQualityMax = (item or {}).craftedQualityMax or existing.craftedQualityMax
+            existing.craftedQualityDisplayAtlas = (item or {}).craftedQualityDisplayAtlas or existing.craftedQualityDisplayAtlas
+            existing.craftedQualityPreferredAtlas = (item or {}).craftedQualityPreferredAtlas or existing.craftedQualityPreferredAtlas
+            existing.craftedQualityFamilySize = (item or {}).craftedQualityFamilySize or existing.craftedQualityFamilySize
             return existing
         end
     end
@@ -237,6 +448,10 @@ function itemCatalog.StoreResolvedItem(db, item)
         qualityName = (item or {}).qualityName,
         craftedQuality = (item or {}).craftedQuality,
         craftedQualityIcon = (item or {}).craftedQualityIcon,
+        craftedQualityMax = (item or {}).craftedQualityMax,
+        craftedQualityDisplayAtlas = (item or {}).craftedQualityDisplayAtlas,
+        craftedQualityPreferredAtlas = (item or {}).craftedQualityPreferredAtlas,
+        craftedQualityFamilySize = (item or {}).craftedQualityFamilySize,
     }
     table.insert(savedCatalog, entry)
     return entry
@@ -654,6 +869,7 @@ function itemCatalog.ResolveQuery(snapshot, query)
 end
 
 function itemCatalog.ResolveIndexedQuery(payload, query)
+    payload = ensure_payload_quality_families(payload)
     if not itemCatalog.IsBundledSearchReady(payload) then
         return {
             status = "missing",

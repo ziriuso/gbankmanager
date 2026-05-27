@@ -80,9 +80,33 @@ local function show_help()
     push_chat_line("/gbm ui - Open the main addon UI.")
     push_chat_line("/gbm request - Open the request workflow.")
     push_chat_line("/gbm scan - Scan the guild bank and ledger.")
+    push_chat_line("/gbm debug quality <itemID> - Print bundled and live crafted-quality resolution details.")
     push_chat_line("/gbm test smoke - Run the in-game smoke test.")
     push_chat_line("/gbm test unit - Run the in-game unit checks.")
     push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
+end
+
+local function resolve_crafted_quality_module(existing)
+    if type(existing) == "table" and type(existing.DescribeItemResolution) == "function" then
+        return existing
+    end
+
+    local namespace = _G.GBankManagerNamespace
+    local liveModule = namespace and namespace.modules and namespace.modules.craftedQuality or ns.modules.craftedQuality
+    if type(liveModule) == "table" and type(liveModule.DescribeItemResolution) == "function" then
+        ns.modules.craftedQuality = liveModule
+        return liveModule
+    end
+
+    if type(_G.dofile) == "function" then
+        local loaded = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+        if type(loaded) == "table" and type(loaded.DescribeItemResolution) == "function" then
+            ns.modules.craftedQuality = loaded
+            return loaded
+        end
+    end
+
+    return existing
 end
 
 _G.SLASH_GBANKMANAGER1 = "/gbm"
@@ -92,6 +116,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     local mainFrame = ns.modules.mainFrame
     local auth = ns.modules.auth or ns.modules.permissions
     local authPolicySource = ns.modules.authPolicySource
+    local craftedQuality = ns.modules.craftedQuality
     local liveSmoke = ns.modules.liveSmoke
     local inGameUnit = ns.modules.inGameUnit
     local store = ns.modules.store or ns.data.store
@@ -104,6 +129,27 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     if command == "help" then
         show_help()
         return "help"
+    elseif command == "debug" then
+        local subcommand, payload = split_command(remainder)
+        if subcommand == "quality" then
+            craftedQuality = resolve_crafted_quality_module(craftedQuality)
+            local itemID = tonumber(trim(payload or ""))
+            if not itemID then
+                push_chat_line("GBankManager: Usage: /gbm debug quality <itemID>")
+                return "debug_quality_usage"
+            end
+
+            if type(craftedQuality) ~= "table" or type(craftedQuality.DescribeItemResolution) ~= "function" then
+                push_chat_line("GBankManager: Crafted-quality debug is unavailable right now.")
+                return "debug_quality_unavailable"
+            end
+
+            local lines = craftedQuality.DescribeItemResolution(itemID, "", 0, 0, "reagent")
+            for _, line in ipairs(lines or {}) do
+                push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
+            end
+            return lines
+        end
     elseif command == "auth" and type(authPolicySource) == "table" then
         local subcommand, payload = split_command(remainder)
         if subcommand == "" or subcommand == "export" or subcommand == "show" then

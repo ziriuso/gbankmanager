@@ -5,17 +5,22 @@
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
-- Latest pushed branch commit before this checkpoint: `1480974` (`feat: land shell polish and theme branding checkpoint`)
-- Latest checkpoint in this phase: the shell-polish checkpoint is now extended by the first real `Bank Ledger` implementation plus the `Data` options slice. The addon now scans guild-bank item logs and money logs as a follow-up stage of the established guild-bank scan flow, uses the configurable `Scan Interval` as both the ledger throttle and the guild-bank-open auto-scan throttle, stores append-only ledger deltas locally, exposes a shared-table `Bank Ledger` surface with item-vs-money modes, action filters, a preset date-range dropdown, CSV export, and usage summaries, moves retention plus scan-interval controls into a trimmed `Data` options tab with visible save feedback plus destructive cleanup actions, and drives the dashboard `Top 10 Most Used` card from ledger-backed withdrawal totals. Repeated ledger scans over the same visible Blizzard log window now use source-based delta overlap detection plus a fast bulk-query ledger pass patterned after `GuildBankSnapshots`: query every accessible item-log tab plus the money log up front, wait once, then merge all targets without visually switching the selected guild-bank tab. The manual `Scan Bank` button now forces the ledger follow-up even when the configured `Scan Interval` would normally throttle auto scans. The implementation plan doc for the shell pass still lives at `docs/superpowers/plans/2026-05-23-gbankmanager-ui-shell-polish-implementation.md`.
+- Latest pushed branch commit: `fbab6e3` (`docs: add project license and asset notice`)
+- Latest checkpoint in this phase: the shell-polish checkpoint is now extended by a cleaner `Bank Ledger` import pass plus the richer `Data` options slice. The addon now scans guild-bank item logs and money logs as a follow-up stage of the established guild-bank scan flow, uses the configurable `Scan Interval` as both the ledger throttle and the guild-bank-open auto-scan throttle, stores append-only ledger deltas locally, exposes a shared-table `Bank Ledger` surface with item-vs-money modes, action filters, a preset date-range dropdown, CSV export, and usage summaries, and moves retention, scan-interval, repair-threshold, and ambient-chat-mute controls into the trimmed `Data` options tab with visible save feedback plus destructive cleanup actions. The ledger importer now follows the `GuildBankLedger`-style query pattern more closely: it queries all accessible item logs plus the fixed Blizzard money-log slot in one burst, debounces `GUILDBANKLOG_UPDATE`, keeps the visible guild-bank tab stable during import, and normalizes Blizzard’s relative log timestamps against server time before merge. The manual `Scan Bank` button still forces the ledger follow-up even when the configured `Scan Interval` would normally throttle auto scans. The implementation plan doc for the shell pass still lives at `docs/superpowers/plans/2026-05-23-gbankmanager-ui-shell-polish-implementation.md`.
+- There is also a newer local-only UI review checkpoint on top of `fbab6e3` that is not committed yet. That checkpoint makes bundled item-data metadata authoritative for crafted tier rendering everywhere the addon shows crafted items, uses the same semantic `craftedQualityMax` family rules across Inventory, Requests, Minimums, Exports, and request search/details, and routes non-inventory crafted-quality visuals through dedicated texture-backed atlas slots instead of inline FontString atlas markup so true two-rank items stop drifting back to stale compact chat icons, missing icons, or duplicated inline markup. Item-aware rendering now relies solely on the bundled addon data path instead of live `C_TradeSkillUI` reagent-quality responses, so icon families stay stable before and after scans. The same checkpoint also strips legacy `[Tn]` prefixes from shared search labels, keeps Minimums and Requests rows from reintroducing inline tier markup after bundled backfill, forces request officer-table rows to backfill against bundled metadata before rendering, prefers bundled crafted-quality fields over stale saved request/minimum/search-catalog data, suppresses the post-create auto-selection that was leaving a highlighted request row after creation, narrows the request reason input to avoid preview overlap, aligns the `Data` dropdown row, adds the new repair-threshold plus ambient-chatter controls to `Options -> Data`, slightly deepens the Appearance chrome for the relocated UI Scale slider column, adds responsive relayout for the Exports action cards under shell resize, and updates export rows plus the manual shopping list so `Qty To Buy` subtracts `Excess Qty`.
 - `UI Scale` now relayouts the dashboard shell as part of the same appearance refresh path instead of only resizing the frame and shared table density. The four metric cards plus the top-items, recent-activity, and quick-actions dashboard panels now grow and shrink with shell scale, and regression coverage for that behavior lives in `tests/spec/ui_options_spec.lua`.
 - The latest polish follow-up also rebalanced the options layout and dashboard actions: `UI Scale` now sits in the right-hand slider column above shell and modal opacity, `Show Minimap Button` now lives directly beneath the theme preset grid, the `Data` dropdown labels were realigned to one row inside panel chrome, and the dashboard `Quick Actions` row is now trimmed to `Add Minimum`, `Create Request`, and `Export Data`.
 - The latest command and polish follow-up also tightens the remaining shell details: `/gbm` now opens the UI the current player can access instead of starting a scan, `/gbm help` prints the supported slash-command list, request-only access now opens the request wizard immediately, Blacklist keeps extra footer padding under the parsed summary line, `Options -> Data` now uses equal-width centered clear-data buttons, and `Exports` plus `Request Details` now force the same corrected reagent-style two-rank quality icons even when the source icon was already stored as chat-markup.
+- The latest local copy/export follow-up also makes `Bank Ledger` CSV timestamps readable, adds a filtered `Inventory` CSV export entry point through the shared modal, shortens the `History` and `Bank Ledger` page subtitles, clears the old `Options` page subtitle, and trims `About` down to semantic version, guild-only identity text, and `/gbm help`.
+- The latest crafted-quality alignment follow-up confirms the user's live-product guidance that Inventory is the source of truth for bundled two-rank items. Inventory keeps its established item-aware display-atlas treatment, and the shared non-inventory surfaces now resolve bundled two-rank rows through that same bundled display-atlas family while rendering them through dedicated texture-backed atlas slots instead of inline markup, while generic non-item-aware atlas normalization remains unchanged.
+- The current local checkpoint also adds `/gbm debug quality <itemID>` so live crafted-quality mismatches can print bundled rank and atlas data, the live reagent-quality payload, the final inline text atlas chosen by the shared resolver, and the final texture-display atlas directly into chat after `/reload`.
 - The repo now also includes a first tagged-release automation path for the single-project CurseForge package: `.github/workflows/release-curseforge.yml` runs the full Lua suite on `v*` tags, builds one combined zip containing both `GBankManager/` and `GBankManager_ItemData/`, uploads it to CurseForge using protected GitHub Actions configuration (`CF_API_TOKEN`, `CF_PROJECT_ID`, optional `CF_GAME_VERSION_IDS`), and attaches the same zip to the matching GitHub Release.
 - The CurseForge publish script now also forces `gameVersions` to serialize as an array even when only one resolved version id is present, matching the current CurseForge upload API requirement and preventing single-version beta or release uploads from failing before the GitHub Release step.
 - A repo-local release skill now lives at `docs/skills/gbankmanager-release-operator/SKILL.md`; use it when asked to handle a normal GBankManager publish or to diagnose and recover from a failed release workflow.
-- Current repo status at handoff time: local working checkpoint, not yet committed or pushed. Automated tests are green via `.\tools\lua\lua.exe .\tests\run_all.lua`.
+- The first real beta release automation pass is now proven end to end. `v0.9.0-beta.2` successfully published through GitHub Actions, attached the combined package zip to the GitHub prerelease, and passed the CurseForge upload step after the `gameVersions` array serialization fix in `tools/release/Publish-CurseForgePackage.ps1`.
+- Current repo status at handoff time: `origin/codex/gbankmanager-v1` is still at the clean pushed checkpoint `fbab6e3`, but the working tree currently contains the newer local-only UI review checkpoint described above plus the local Task 4 exports follow-up. That follow-up replaces the old `Excess Qty` `view` text with a shared-table right-aligned drill-in arrow, keeps the stocked-elsewhere modal behavior, and restores the exports-specific crafted-tier treatment for the known two-rank rows. The latest local checkpoint now narrows that fallback correctly: bundled authoritative non-inventory inline rows resolve through the same bundled display-atlas family Inventory uses for those items instead of the compact `Quality-12` small-icon fallback. The same local checkpoint also stabilizes ledger dedupe across relog by fingerprinting merged rows against computed absolute timestamps instead of raw drifting relative offsets, refreshes the active `Bank Ledger` view after passive imports, listens to the newer player-interaction guild-bank open/hide events in addition to the older guild-bank frame events, and adds a reload-safe guild-bank-open sync helper so passive rescans can recover when the bank is already open after `/reload`.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
-- Latest verified result: `PASS tests/run_all.lua`
+- Latest verified result: focused crafted-quality and ledger verification is green for `crafted_quality_spec`, `ui_crafted_quality_live_regression_spec`, `ui_search_results_control_spec`, `ui_requests_spec`, `ui_minimums_spec`, `exports_spec`, `inventory_quality_spec`, `slash_commands_spec`, and `bank_ledger_scanner_spec`. `.\tools\lua\lua.exe .\tests\run_all.lua` also passes when run with normal worktree write access for the fixture-writing catalog specs.
 
 ## Read First
 
@@ -30,7 +35,9 @@
 
 ## Current Repo State
 
-- Worktree is committed and pushed through `1480974`, with the new Bank Ledger + Data slice still local-only in the worktree.
+- Worktree is committed and pushed through `fbab6e3`.
+- The branch includes the release automation slice (`12780d6`, `f44a4cb`), the repo-local release operator skill (`eab477b`), and the MPL-plus-assets licensing docs (`fbab6e3`).
+- The latest successful published beta tag is `v0.9.0-beta.2`.
 - The branch already contains the indexed item-search redesign, procurement-only catalog reduction, and the Minimums modal workflow cleanup.
 - The generated bundled item payload lives in the shipped addon `GBankManager_ItemData/`.
 - Local maintainer-only catalog assets under `tools/catalog/runtime/` remain intentionally git-ignored.
@@ -84,7 +91,7 @@
 - The auth policy string now compacts updater identity with a hash token instead of storing the full updater name in Guild Info, while still rehydrating a real updater name locally when the addon can infer it from live or previously known policy state.
 - Compact auth-policy imports no longer carry blacklist membership. Guild-shared blacklist membership now comes from appended officer-note tags, while learned reasons stay local and continue to sync through addon auth snapshots.
 - Blacklist entries now normalize to `Character-Server`, migrate legacy server-first ordering, and render in a read-only Blacklist tab that explains the `[GBMBL]` workflow instead of trying to write officer notes from inside the addon.
-- Crafted-quality rendering now keeps a split display contract on purpose: Inventory and Minimums keep the compact chat-icon family, while Exports, the manual shopping list, request review, and request details now use the brighter reagent-quality icons for the two-rank low/max pair.
+- Crafted-quality rendering now keeps one inline text contract on purpose: Inventory, Minimums, Requests, Exports, request details, and search selectors all use the stable compact chat-icon family for visible text markup, while texture-only consumers can still resolve the brighter reagent-quality atlas family separately.
 - The appearance foundation is now live through a token-backed theme manager with local-only presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), a single `UI Scale` control that drives both shell scale and shared table density across a 90%-120% range, built-in WoW `UISliderTemplate` sliders for shell and modal opacity, collapsed-nav icons, stronger active-state glow for nav plus workflow filter buttons, surface-only opacity treatment so content stays crisp, per-theme crest/logo art, a custom minimap launcher, and an appearance toggle that can hide the minimap launcher locally.
 - The 2026-05-23 shell-polish implementation pass is now layered on top of that foundation: sidebar nav buttons now expose a softer `nav-soft` family plus a stronger selected-state contract, dashboard and table surfaces now use flatter shared shell variants, primary/secondary/destructive actions expose the shared slimmer `action-slim` family, tabs expose `segmented-soft`, and key modals now use the cleaner `modal-sheet` surface variant instead of the older heavier boxed modal shell.
 - The top header now follows the cleaner toolbar-band direction more closely and renders scan timestamps with timezone abbreviations such as `EDT` or `EST` when a scan exists.
@@ -156,24 +163,82 @@
 
 Work these in the exact order below unless a new blocking regression appears:
 
-1. `UI polish`
-   - Live-review the newly landed shell-polish checkpoint in Retail against the approved browser `Target Look`.
-   - If the no-art-pack shell still feels too plain in any surface, tune within the shared shell contract first rather than adding one-off boxes back in.
-   - After that review, continue into the art-pack-assisted mockup-fidelity pass: sidebar crest treatment, panel trims, header banding, nav active rails, card plates, and subtle inset divider assets.
-   - Re-apply any more literal dashboard composition work only after those shell assets exist.
-   - Use [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md) as the refinement shelf, but treat the art pack as the next actual build step after this shell checkpoint is reviewed live.
+1. `Verify the latest UI polish pass live`
+   - Review tonight's latest polish updates in Retail before changing more code.
+   - Focus on the surfaces touched most recently: `Appearance`, `Data`, `Blacklist`, `Exports`, `Request Details`, request search selectors, `Minimums`, `History`, `/gbm` and `/gbm help`, the `About` version/help copy, and the dashboard `Quick Actions` flow where `Create Request` should open the wizard immediately.
+   - Confirm the final crafted-quality icon treatment now follows semantic family size instead of source atlas shape:
+     - true two-rank families -> silver tier 1 / gold pentagram tier 2
+     - five-rank families -> standard profession quality icons even when source icons arrive as mixed atlas or chat-markup variants
+   - Recheck the request-table striping immediately after creating a new request, without using `Refresh`, to confirm the `dataIndex` row-style fix also holds live.
 
-2. `In-game unit test lane`
-   - Live-verify the broadened `/gbm test unit` lane in retail after the automated lanes are green.
+2. `Review addon communication`
+   - Recheck addon sync and messaging behavior end to end in live guild testing.
+   - Focus on login hello, accepted sync updates, ignored forged payloads, request propagation, request approval side effects, and any guild-bank scan or ledger status noise that still feels off in chat.
+   - If communication gaps still exist, fix those next before taking on more visual polishing.
 
-3. `Dashboard follow-up only if live repro exists`
-   - Recheck the `Ready to Buy` mismatch against a real SavedVariables file or live client session.
-   - Do not change dashboard math unless the mismatch reproduces against current live data.
-   - If it does reproduce, add the dedicated `Critical Shortages` card with explicit ranking rules in that same dashboard pass.
+3. `Release/install sanity pass`
+   - Do one short smoke pass against the published beta artifact flow now that `v0.9.0-beta.2` succeeded.
+   - Confirm the GitHub prerelease zip shape is correct, the CurseForge beta package installs cleanly with both addon folders, and the About/version text lines up with the packaged build.
 
-4. `Deeper sync catch-up only if needed`
-   - If live guild testing still shows gaps, add direct minimum delta sync plus richer `SYNC_HELLO` catch-up behavior.
-   - Keep using authoritative entity mutations and locally rebuilt history rather than shipping `auditLog` wholesale.
+## Current Live Blockers
+
+- Everything except crafted-quality icons and deeper sync follow-up is now in a good state on this branch. Recent user validation marked Exports drill-in, mute-toggle persistence, ledger manual scan recovery, CSV date formatting, Inventory CSV export, and the copy polish passes as good.
+- Crafted-quality icons are still the main unresolved product issue. Inventory is the only surface behaving acceptably. The failing non-inventory surfaces remain:
+  - `Minimums`
+  - `Requests`
+  - `Request Details`
+  - request add-item search and selector rows
+  - `Exports`
+- The known live spot-check items are still:
+  - `241320` Flask of Thalassian Resistance
+  - `241322` Flask of the Magisters
+  - `241324` Flask of the Blood Knights
+  - `243734` Thalassian Phoenix Oil
+- Current resolver evidence from `/gbm debug quality 241322` shows the central path is still choosing a two-rank non-inventory display atlas that does not match the user's expected product behavior. The key takeaway is that this is no longer a good candidate for another blind atlas swap in one controller.
+- Passive ledger refresh is still not waking on its own in live WoW even though manual `Scan Bank` can now recover normally without clearing data first. The user wants this behavior aligned with the working `GuildBankLedger` reference addon under `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns\GuildBankLedger\`.
+- Deferred follow-up items, intentionally not done in this checkpoint:
+  - `About`: add `Author: Zirleficent-Stormrage` above `Guild`
+  - `About`: restore build date or timestamp beside the version in parentheses
+  - `/gbm help`: do one polish pass on the command list copy
+  - sync design and implementation follow-up
+
+## Best Next Debug Step
+
+Do not keep patching individual views. The crafted-quality problem now needs one explicit architectural decision and one implementation sweep.
+
+Two grounded fix options came out of the code-path review:
+
+1. `Recommended`: split markup-atlas and texture-atlas contracts by surface type
+   - Keep Inventory on the current texture-backed display-atlas path that the user already accepts.
+   - Introduce a dedicated non-inventory resolver for shared text-table and modal surfaces that returns only the user-approved inline family for two-rank crafted items.
+   - Update every non-inventory caller to use that one resolver instead of mixing `GetDisplayAtlasForItem`, `DisplayMarkupForItem`, canonical bundled display atlases, and per-view fallbacks.
+   - This is the cleanest option because the current bug is largely caused by treating one atlas choice as correct for both texture consumers and inline-markup consumers.
+
+2. `More invasive`: move every non-inventory crafted-quality surface to texture-only rendering
+   - Replace inline `Quality` text markup in shared tables and detail rows with explicit texture slots everywhere.
+   - Make all non-inventory views consume the same item-aware texture atlas path Inventory uses.
+   - This likely matches the user's expectation better long term, but it touches more shared table and modal layout code.
+
+Current root-cause map from the review:
+
+- `GBankManager/Domain/ItemCatalog.lua`
+  - canonical bundled crafted-quality data currently bakes in the two-rank atlas family that non-inventory surfaces inherit
+- `GBankManager/Domain/CraftedQuality.lua`
+  - shared resolver mixes bundled authority, preferred display atlases, markup atlases, and live reagent-quality fallbacks in one module
+- `GBankManager/UI/MainFrameShell.lua`
+  - shared search selector icon path resolves through the same display-atlas helper as texture consumers
+- `GBankManager/UI/RequestsView.lua`
+  - request table rows build `tierAtlas` from the display resolver and only fall back to markup when atlas resolution returns empty
+- `GBankManager/UI/MinimumsView.lua`
+  - minimum rows follow the same pattern as requests
+- `GBankManager/UI/MainRequestsController.lua`
+  - request details use an explicit texture icon slot
+- `GBankManager/UI/MainMinimumsController.lua`
+  - minimum details also use an explicit texture icon slot
+
+That combination explains the repeated circles: some surfaces are truly texture consumers, some are effectively inline consumers, and the branch has been trying to make one atlas family satisfy both.
+
+For passive ledger refresh, compare our `GBankManager/Features/GuildBankScanner.lua` timing path directly against `GuildBankLedger/src/Ledger.lua` and adopt the same self-chaining open-bank rescan rhythm after the initial scan completes, rather than relying on the current wakeup mix alone.
 
 ## Completed In Current Slice
 
@@ -217,11 +282,15 @@ Work these in the exact order below unless a new blocking regression appears:
 
 ## Immediate Engineering Focus
 
-When resuming, begin with the next roadmap item unless the user explicitly redirects:
+When resuming, treat the branch as narrowed to the remaining blockers:
 
-1. Start with the shelved UI polish pass in [docs/ui-polish-suggestions.md](../../ui-polish-suggestions.md), but begin by building the art pack needed to make the Alliance mockup achievable.
-2. Keep the dashboard `Ready to Buy` mismatch as a live-repro-only follow-up unless real current data proves it is a product bug.
-3. If more sync work is still needed after live guild testing, extend catch-up and direct minimum delta sync without abandoning the current authority-first approach.
+1. Finish the crafted-quality icon fix with one resolver strategy applied consistently across every non-inventory surface.
+2. Make passive ledger refresh behave like the working `GuildBankLedger` reference while the guild bank stays open.
+3. Resume sync planning and implementation after the two live blockers are stable.
+4. Then do the small polish follow-ups:
+   - `About` author line
+   - `About` version build timestamp
+   - `/gbm help` copy pass
 
 ## Important Constraints
 
@@ -248,11 +317,10 @@ When resuming, begin with the next roadmap item unless the user explicitly redir
 > `git status -sb`
 > `.\tools\lua\lua.exe .\tests\run_all.lua`
 >
-> Resume with the post-workflow roadmap:
-> 1. Implement the shelved UI polish pass using `docs/ui-polish-suggestions.md`, starting with an addon-local art pack for Alliance/mockup fidelity
-> 2. Live-verify the broadened `/gbm test unit` lane in retail
-> 3. Only revisit the dashboard `Ready to Buy` mismatch if a live SavedVariables repro exists
-> 4. Only broaden sync catch-up beyond the current request/history/auth slice if live guild testing still shows gaps
+> Resume with the immediate follow-up roadmap:
+> 1. Live-verify the latest UI polish changes from tonight
+> 2. Review addon communication and sync behavior in a real guild-client flow
+> 3. Do a short packaged beta sanity pass for `v0.9.0-beta.2`
 ## 2026-05-18 Runtime follow-up
 
 - SavedVariables now need to be treated as load-order sensitive on Retail/macOS as well as Windows; `GBankManager.toc` should keep `## LoadSavedVariablesFirst: 1` in place unless init is fully deferred behind `ADDON_LOADED`.

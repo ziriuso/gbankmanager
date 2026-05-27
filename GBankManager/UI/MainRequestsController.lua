@@ -5,8 +5,20 @@ ns.modules = ns.modules or {}
 
 local mainRequestsController = ns.modules.mainRequestsController or {}
 local craftedQuality = ns.modules.craftedQuality or {}
+local itemCatalog = ns.modules.itemCatalog or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
+    itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+
+local function canonical_item(item)
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        return itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+
+    return item
 end
 
 local function current_db()
@@ -64,14 +76,19 @@ local function actor_summary(context)
     return string.format("Acting As: %s", name)
 end
 
-local function crafted_quality_markup(atlasName, fallbackQuality)
+local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayMarkupForItem) == "function" then
+        local markup = craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+        return markup ~= "" and markup or "-"
+    end
+
     if type(craftedQuality.DisplayMarkup) == "function" then
-        local markup = craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality)
+        local markup = craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
         return markup ~= "" and markup or "-"
     end
 
     if type(craftedQuality.ToMarkup) == "function" then
-        local markup = craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality)
+        local markup = craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
         return markup ~= "" and markup or "-"
     end
 
@@ -80,6 +97,41 @@ local function crafted_quality_markup(atlasName, fallbackQuality)
     end
 
     return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, nil, maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlas) == "function" then
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, nil, maxQuality)
+    end
+
+    return tostring(atlasName or "")
+end
+
+local function set_quality_texture(texture, atlasName, size)
+    if type(texture) ~= "table" then
+        return false
+    end
+
+    atlasName = tostring(atlasName or "")
+    if atlasName == "" then
+        texture.atlas = nil
+        texture:Hide()
+        return false
+    end
+
+    if type(texture.SetAtlas) == "function" then
+        texture:SetAtlas(atlasName, false)
+    end
+    if tonumber(size or 0) and type(texture.SetSize) == "function" then
+        texture:SetSize(size, size)
+    end
+    texture.atlas = atlasName
+    texture:Show()
+    return true
 end
 
 local function actor_owns_request(request, actor)
@@ -339,6 +391,10 @@ function mainRequestsController.Attach(mainFrame, options)
     end
     mainFrame.requestWizardPreviewQualityText = mainFrame.requestWizardPreviewQualityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
     mainFrame.requestWizardPreviewQualityText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewItemText, "BOTTOMLEFT", 0, -10)
+    mainFrame.requestWizardPreviewQualityIcon = mainFrame.requestWizardPreviewQualityIcon or mainFrame.requestWizardPreviewPanel:CreateTexture()
+    mainFrame.requestWizardPreviewQualityIcon:SetPoint("LEFT", mainFrame.requestWizardPreviewQualityText, "LEFT", 0, 0)
+    mainFrame.requestWizardPreviewQualityIcon:SetSize(18, 18)
+    mainFrame.requestWizardPreviewQualityIcon:Hide()
     mainFrame.requestWizardPreviewRequestedQuantityLabel = mainFrame.requestWizardPreviewRequestedQuantityLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Requested Quantity", "GameFontHighlightSmall")
     mainFrame.requestWizardPreviewRequestedQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewQualityText, "BOTTOMLEFT", 0, -14)
     mainFrame.requestWizardPreviewRequestedQuantityText = mainFrame.requestWizardPreviewRequestedQuantityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
@@ -454,6 +510,10 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsQualityLabel = mainFrame.requestDetailsQualityLabel or makeLabel(mainFrame.requestDetailsModal, "Quality", "GameFontHighlightSmall")
     mainFrame.requestDetailsQualityText = mainFrame.requestDetailsQualityText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
     placeRequestDetailRow(mainFrame.requestDetailsQualityLabel, mainFrame.requestDetailsQualityText, -82)
+    mainFrame.requestDetailsQualityIcon = mainFrame.requestDetailsQualityIcon or mainFrame.requestDetailsModal:CreateTexture()
+    mainFrame.requestDetailsQualityIcon:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 160, -82)
+    mainFrame.requestDetailsQualityIcon:SetSize(18, 18)
+    mainFrame.requestDetailsQualityIcon:Hide()
 
     mainFrame.requestDetailsQuantityLabel = mainFrame.requestDetailsQuantityLabel or makeLabel(mainFrame.requestDetailsModal, "Quantity", "GameFontHighlightSmall")
     mainFrame.requestDetailsQuantityText = mainFrame.requestDetailsQuantityText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
@@ -649,7 +709,7 @@ function mainRequestsController.Attach(mainFrame, options)
     end
     mainFrame.requestCreateQuantityIncreaseButton:SetPoint("LEFT", mainFrame.requestCreateQuantityDecreaseButton, "RIGHT", 6, 0)
 
-    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardPrimaryPanel, 502, 24)
+    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardPrimaryPanel, 320, 24)
     if type(mainFrame.requestCreateNoteInput.SetParent) == "function" then
         mainFrame.requestCreateNoteInput:SetParent(mainFrame.requestWizardPrimaryPanel)
     end
@@ -784,9 +844,10 @@ function mainRequestsController.Attach(mainFrame, options)
         local item = self:GetConfirmedRequestCreateItem() or {}
         local requestedQuantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
         local note = tostring(self.requestCreateNoteInput:GetText() or "")
-
         self.requestWizardPreviewItemText:SetText(tostring(item.name or item.itemName or "No item selected."))
-        self.requestWizardPreviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon, item.craftedQuality))
+        local previewAtlas = crafted_quality_atlas(item.itemID, item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas, item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax)
+        self.requestWizardPreviewQualityText:SetText("")
+        set_quality_texture(self.requestWizardPreviewQualityIcon, previewAtlas, 18)
         self.requestWizardPreviewRequestedQuantityText:SetText(requestedQuantity and tostring(requestedQuantity) or "-")
         self.requestWizardPreviewReasonText:SetText(note ~= "" and note or "-")
     end
@@ -1026,6 +1087,7 @@ function mainRequestsController.Attach(mainFrame, options)
         if not request then
             return nil
         end
+        request = self:BackfillRequestCraftedTier(request)
 
         local db = current_db()
         local context = current_context(db)
@@ -1040,7 +1102,9 @@ function mainRequestsController.Attach(mainFrame, options)
         local canCancel = actor_owns_request(request, context) and (not canActorApply or canActorApply(request, "CANCEL", context))
 
         self.requestDetailsItemNameText:SetText(tostring(request.itemName or ""))
-        self.requestDetailsQualityText:SetText(crafted_quality_markup(request.craftedQualityIcon, request.craftedQuality))
+        local detailsAtlas = crafted_quality_atlas(request.itemID, request.craftedQualityIcon or request.craftedQualityPreferredAtlas or request.craftedQualityDisplayAtlas, request.craftedQuality, request.craftedQualityFamilySize or request.craftedQualityMax)
+        self.requestDetailsQualityText:SetText("")
+        set_quality_texture(self.requestDetailsQualityIcon, detailsAtlas, 18)
         self.requestDetailsQuantityText:SetText(tostring(request.quantity or ""))
         self.requestDetailsSubmissionNoteText:SetText(tostring(request.note or ""))
         self.requestDetailsStatusText:SetText(format_request_status(request))
@@ -1179,12 +1243,73 @@ function mainRequestsController.Attach(mainFrame, options)
         return snapshot
     end
 
+    function mainFrame:BackfillRequestCraftedTier(item)
+        if type(item) ~= "table" then
+            return item
+        end
+
+        local itemID = tonumber(item.itemID)
+        if not itemID then
+            return item
+        end
+
+        canonical_item(item)
+
+        local catalogItem = nil
+        local snapshot = self:GetRequestSearchSnapshot()
+        for _, sourceItem in pairs(snapshot.items or {}) do
+            if tonumber((sourceItem or {}).itemID) == itemID then
+                catalogItem = sourceItem
+                break
+            end
+        end
+        if not catalogItem then
+            for _, sourceItem in ipairs(snapshot.searchCatalog or {}) do
+                if tonumber((sourceItem or {}).itemID) == itemID then
+                    catalogItem = sourceItem
+                    break
+                end
+            end
+        end
+
+        local bundledItem = itemCatalog and type(itemCatalog.GetBundledItemByID) == "function" and itemCatalog.GetBundledItemByID(itemID) or nil
+        local authoritativeItem = bundledItem or catalogItem
+
+        if not authoritativeItem then
+            return item
+        end
+
+        if (tonumber(authoritativeItem.craftedQuality or 0) or 0) > 0 then
+            item.craftedQuality = authoritativeItem.craftedQuality
+        end
+        if tostring(authoritativeItem.craftedQualityIcon or "") ~= "" then
+            item.craftedQualityIcon = authoritativeItem.craftedQualityIcon
+        end
+        if (tonumber(authoritativeItem.craftedQualityMax or 0) or 0) > 0 then
+            item.craftedQualityMax = authoritativeItem.craftedQualityMax
+        end
+        if (tonumber(authoritativeItem.craftedQualityFamilySize or 0) or 0) > 0 then
+            item.craftedQualityFamilySize = authoritativeItem.craftedQualityFamilySize
+        end
+        if tostring(authoritativeItem.craftedQualityDisplayAtlas or "") ~= "" then
+            item.craftedQualityDisplayAtlas = authoritativeItem.craftedQualityDisplayAtlas
+        end
+        if tostring(authoritativeItem.craftedQualityPreferredAtlas or "") ~= "" then
+            item.craftedQualityPreferredAtlas = authoritativeItem.craftedQualityPreferredAtlas
+        end
+
+        return item
+    end
+
     function mainFrame:GetRequestSearchSession()
         local itemCatalog = ns.modules.itemCatalog
         if type(itemCatalog) ~= "table" or type(itemCatalog.CreateSearchSession) ~= "function" then
             return nil
         end
 
+        if type(itemCatalog.EnsureBundledDataLoaded) == "function" then
+            itemCatalog.EnsureBundledDataLoaded()
+        end
         local bundledReady = type(itemCatalog.IsBundledDataLoaded) == "function" and itemCatalog.IsBundledDataLoaded() or false
         local sessionIndexedReady = type(itemCatalog.IsSearchSessionIndexedReady) == "function"
             and itemCatalog.IsSearchSessionIndexedReady(self.requestSearchSession)
@@ -1384,6 +1509,7 @@ function mainRequestsController.Attach(mainFrame, options)
             itemName = itemName,
             craftedQuality = selectedItem.craftedQuality,
             craftedQualityIcon = selectedItem.craftedQualityIcon,
+            craftedQualityMax = selectedItem.craftedQualityMax,
             quantity = quantity,
             note = note,
         })
@@ -1399,7 +1525,7 @@ function mainRequestsController.Attach(mainFrame, options)
             })
         end
 
-        self.selectedRequestId = request and request.requestId or nil
+        self.selectedRequestId = nil
         self.requestCreateRequesterInput:SetText("")
         self.requestCreateRoleInput:SetText("")
         self.requestCreateSelectedCatalogItem = nil
@@ -1425,6 +1551,7 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self:UpdateRequestCreateButtonState()
         self:RefreshRequestActionButtons()
+        self.suppressNextRequestAutoSelect = true
         self:RefreshView()
         return request
     end

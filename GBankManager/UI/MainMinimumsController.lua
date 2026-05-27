@@ -387,6 +387,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             enabled = rule.enabled,
             craftedQuality = rule.craftedQuality,
             craftedQualityIcon = rule.craftedQualityIcon,
+            craftedQualityMax = rule.craftedQualityMax,
             draftKey = rule.draftKey,
             originalItemID = rule.originalItemID,
             originalScope = rule.originalScope,
@@ -439,6 +440,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             enabled = row.restock == "Yes",
             craftedQuality = row.craftedQuality,
             craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
             draftKey = row.rowKey,
             originalItemID = row.originalItemID or tonumber(row.itemID),
             originalScope = row.originalScope or row.scope,
@@ -508,6 +510,7 @@ function mainMinimumsController.Attach(mainFrame, options)
                     enabled = true,
                     craftedQuality = request.craftedQuality,
                     craftedQualityIcon = request.craftedQualityIcon,
+                    craftedQualityMax = request.craftedQualityMax,
                     draftKey = table.concat({ "request", tostring(request.requestId or request.itemID or ""), "GLOBAL" }, "|"),
                     originalItemID = request.itemID,
                     originalScope = "GLOBAL",
@@ -551,6 +554,22 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         for _, row in ipairs(rows or {}) do
             self:BackfillMinimumCraftedTier(row, snapshot)
+            row.tierValue = tonumber(row.craftedQuality or 0) or 0
+            local tierAtlas = row.craftedQualityIcon or row.craftedQualityPreferredAtlas or row.craftedQualityDisplayAtlas
+            local tierMax = row.craftedQualityFamilySize or row.craftedQualityMax
+            if type(craftedQualityUtil.GetDisplayAtlasForItem) == "function" then
+                row.tierIconAtlas = craftedQualityUtil.GetDisplayAtlasForItem(row.itemID, tierAtlas, row.craftedQuality, nil, tierMax)
+                row.tierAtlas = row.tierIconAtlas
+                if tostring(row.tierIconAtlas or "") ~= "" then
+                    row.tier = ""
+                end
+            elseif type(craftedQualityUtil.GetDisplayAtlas) == "function" then
+                row.tierIconAtlas = craftedQualityUtil.GetDisplayAtlas(tierAtlas, row.craftedQuality, nil, tierMax)
+                row.tierAtlas = row.tierIconAtlas
+                if tostring(row.tierIconAtlas or "") ~= "" then
+                    row.tier = ""
+                end
+            end
         end
 
         rows = minimumsView.SortRows(rows, self.minimumSortState)
@@ -908,7 +927,8 @@ function mainMinimumsController.Attach(mainFrame, options)
         local itemID = tonumber((row and row.itemID) or (state and state.itemID) or 0) or 0
         local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or ((row and row.needsBankTab) and "-") or (row and row.bankTab) or "-"
         local craftedQuality = tonumber((row and row.craftedQuality) or (state and state.craftedQuality) or 0) or 0
-        local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or "")
+        local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or (row and row.craftedQualityPreferredAtlas) or (state and state.craftedQualityPreferredAtlas) or (row and row.craftedQualityDisplayAtlas) or (state and state.craftedQualityDisplayAtlas) or "")
+        local craftedQualityMax = tonumber((row and row.craftedQualityFamilySize) or (state and state.craftedQualityFamilySize) or (row and row.craftedQualityMax) or (state and state.craftedQualityMax) or 0) or 0
 
         self.minimumDetailsItemNameText:SetText(itemName)
         self.minimumDetailsItemIDText:SetText(tostring(itemID > 0 and itemID or ""))
@@ -919,7 +939,9 @@ function mainMinimumsController.Attach(mainFrame, options)
         self:UpdateMinimumDetailsActionState(row, state)
 
         if craftedQualityIcon ~= "" then
-            local displayAtlas = type(craftedQualityUtil.NormalizeDisplayAtlas) == "function" and craftedQualityUtil.NormalizeDisplayAtlas(craftedQualityIcon) or craftedQualityIcon
+            local displayAtlas = type(craftedQualityUtil.GetDisplayAtlasForItem) == "function"
+                and craftedQualityUtil.GetDisplayAtlasForItem(itemID, craftedQualityIcon, craftedQuality, nil, craftedQualityMax)
+                or (type(craftedQualityUtil.NormalizeDisplayAtlas) == "function" and craftedQualityUtil.NormalizeDisplayAtlas(craftedQualityIcon, craftedQuality, nil, craftedQualityMax) or craftedQualityIcon)
             self.minimumDetailsItemQualityIcon.atlas = displayAtlas
             if type(self.minimumDetailsItemQualityIcon.SetAtlas) == "function" then
                 self.minimumDetailsItemQualityIcon:SetAtlas(displayAtlas, true)
@@ -1202,22 +1224,37 @@ function mainMinimumsController.Attach(mainFrame, options)
         end
 
         local numericID = tonumber(item.itemID)
-        local hasCraftedQuality = (tonumber(item.craftedQuality or 0) or 0) > 0
-        local hasCraftedQualityIcon = tostring(item.craftedQualityIcon or "") ~= ""
-        if not numericID or (hasCraftedQuality and hasCraftedQualityIcon) then
+        if not numericID then
             return item
         end
 
         local catalogItem = self:GetMinimumCatalogItemByID(numericID, snapshot)
-        if not catalogItem then
+        local itemCatalog = ns.modules.itemCatalog
+        local bundledItem = type(itemCatalog) == "table" and type(itemCatalog.GetBundledItemByID) == "function"
+            and itemCatalog.GetBundledItemByID(numericID)
+            or nil
+        local authoritativeItem = bundledItem or catalogItem
+        if not authoritativeItem then
             return item
         end
 
-        if not hasCraftedQuality then
-            item.craftedQuality = catalogItem.craftedQuality
+        if tonumber(authoritativeItem.craftedQuality or 0) > 0 then
+            item.craftedQuality = authoritativeItem.craftedQuality
         end
-        if not hasCraftedQualityIcon then
-            item.craftedQualityIcon = catalogItem.craftedQualityIcon
+        if tostring(authoritativeItem.craftedQualityIcon or "") ~= "" then
+            item.craftedQualityIcon = authoritativeItem.craftedQualityIcon
+        end
+        if tonumber(authoritativeItem.craftedQualityMax or 0) > 0 then
+            item.craftedQualityMax = authoritativeItem.craftedQualityMax
+        end
+        if tonumber(authoritativeItem.craftedQualityFamilySize or 0) > 0 then
+            item.craftedQualityFamilySize = authoritativeItem.craftedQualityFamilySize
+        end
+        if tostring(authoritativeItem.craftedQualityDisplayAtlas or "") ~= "" then
+            item.craftedQualityDisplayAtlas = authoritativeItem.craftedQualityDisplayAtlas
+        end
+        if tostring(authoritativeItem.craftedQualityPreferredAtlas or "") ~= "" then
+            item.craftedQualityPreferredAtlas = authoritativeItem.craftedQualityPreferredAtlas
         end
 
         return item
@@ -1229,6 +1266,9 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
+        if type(itemCatalog.EnsureBundledDataLoaded) == "function" then
+            itemCatalog.EnsureBundledDataLoaded()
+        end
         local bundledReady = type(itemCatalog.IsBundledDataLoaded) == "function" and itemCatalog.IsBundledDataLoaded() or false
         local sessionIndexedReady = type(itemCatalog.IsSearchSessionIndexedReady) == "function"
             and itemCatalog.IsSearchSessionIndexedReady(self.minimumSearchSession)
@@ -1414,6 +1454,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             enabled = true,
             craftedQuality = item.craftedQuality,
             craftedQualityIcon = item.craftedQualityIcon,
+            craftedQualityMax = item.craftedQualityMax,
             isNewlyAdded = true,
         }
 
@@ -1537,6 +1578,9 @@ function mainMinimumsController.Attach(mainFrame, options)
             scope = "TAB",
             tabName = nil,
             enabled = self.selectedMinimumEnabled ~= false,
+            craftedQuality = selectedItem.craftedQuality,
+            craftedQualityIcon = selectedItem.craftedQualityIcon,
+            craftedQualityMax = selectedItem.craftedQualityMax,
             isNewlyAdded = true,
             draftKey = draftKey,
             originalItemID = itemID,

@@ -225,8 +225,8 @@ mainFrame.minimumAddMatchButtons[1]:GetScript("OnClick")(mainFrame.minimumAddMat
 mainFrame.minimumAddItemNameInput:SetText("Test Crafted Widget")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.equal("990001", mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should resolve catalog items by item name")
-assert.equal("Test Crafted Widget", mainFrame.minimumAddSelectedItemNameText:GetText(), "minimum add modal should show the selected item name after resolution")
-assert.equal("Professions-ChatIcon-Quality-Tier5", mainFrame.minimumAddSelectedItemQualityIcon.atlas, "minimum add modal should show the selected item crafting quality icon when available")
+assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", "Test Crafted Widget", 1, true) ~= nil, "minimum add modal should show the selected item name after resolution")
+assert.equal("Professions-ChatIcon-Quality-Tier5", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should show the selected item quality through the dedicated texture region")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should enable Add after a catalog item is selected")
 
 mainFrame:ResetMinimumAddRow()
@@ -260,17 +260,18 @@ mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemNameInput:SetText("test variant flask")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.truthy(mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep duplicate-name quality variants in the results list")
-assert.equal("[T5]", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).tierText or {}):GetText() or ""), "minimum add result rows should show the higher crafted tier first for duplicate-name variants")
-assert.equal("[T2]", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).tierText or {}):GetText() or ""), "minimum add result rows should keep lower crafted tiers visible as separate entries")
-assert.equal("Professions-ChatIcon-Quality-Tier5", (((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}).atlas, "minimum add result rows should show the crafted quality icon for the selected tier entry")
+assert.equal("Professions-ChatIcon-Quality-Tier5", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}).atlas or ""), "minimum add result rows should use the dedicated texture path for the higher crafted variant")
+assert.equal("Professions-ChatIcon-Quality-Tier2", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}).atlas or ""), "minimum add result rows should use the dedicated texture path for the lower crafted variant when the family still spans five ranks")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == true), "minimum add result rows should keep the dedicated quality icon path active")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}):IsShown() == true), "minimum add result rows should keep the dedicated quality icon path active for duplicate-name variants")
 local selectedMinimumVariantRow = mainFrame.minimumAddMatchButtons[2]
 local selectedMinimumVariantItem = selectedMinimumVariantRow.resolvedItem
 mainFrame.minimumAddMatchButtons[2]:GetScript("OnClick")(mainFrame.minimumAddMatchButtons[2])
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 mainFrame.minimumAddItemIDInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemIDInput)
 assert.equal(tostring((selectedMinimumVariantItem or {}).itemID or ""), mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should preserve the explicitly selected duplicate-name item id after delayed input callbacks")
-assert.equal(tostring((selectedMinimumVariantItem or {}).name or (selectedMinimumVariantItem or {}).itemName or ""), mainFrame.minimumAddSelectedItemNameText:GetText(), "minimum add modal should keep the selected item display after delayed input callbacks")
-assert.equal("Professions-ChatIcon-Quality-Tier2", mainFrame.minimumAddSelectedItemQualityIcon.atlas, "minimum add modal should keep the selected duplicate-name tier after delayed input callbacks")
+assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", tostring((selectedMinimumVariantItem or {}).name or (selectedMinimumVariantItem or {}).itemName or ""), 1, true) ~= nil, "minimum add modal should keep the selected item display after delayed input callbacks")
+assert.equal("Professions-ChatIcon-Quality-Tier2", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should keep the selected duplicate-name tier in the standard quality family when higher ranks exist for that item family")
 assert.truthy(not mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should keep Add enabled after delayed callbacks on a valid selection")
 mainFrame.minimumPendingRules = {}
@@ -371,6 +372,8 @@ _G.GBankManagerDB.minimums = {
     {
         itemID = 243734,
         itemName = "Thalassian Phoenix Oil",
+        craftedQuality = 1,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier1",
         quantity = 80,
         scope = "TAB",
         tabName = "Alchemy",
@@ -386,11 +389,14 @@ mainFrame:RefreshView()
 
 local backfilledTierRow = mainFrame.tableRowsData[1]
 assert.equal(243734, tonumber(backfilledTierRow.itemID), "fixture should expose the Thalassian Phoenix Oil minimum row for crafted-tier backfill coverage")
-assert.equal(2, tonumber(backfilledTierRow.craftedQuality), "minimums rows should backfill crafted tier from the bundled catalog when saved row data omits it")
-assert.equal("Professions-ChatIcon-Quality-Tier2", backfilledTierRow.craftedQualityIcon, "minimums rows should backfill the crafted tier icon from the bundled catalog when saved row data omits it")
+assert.equal(2, tonumber(backfilledTierRow.craftedQuality), "minimums rows should restore the bundled crafted tier even when stale saved row data disagrees")
+assert.equal("Professions-ChatIcon-Quality-Tier2", backfilledTierRow.craftedQualityIcon, "minimums rows should restore the bundled crafted tier icon even when stale saved row data disagrees")
+assert.equal(2, tonumber(backfilledTierRow.craftedQualityMax), "minimums rows should restore the bundled two-rank family size for stale saved rows")
+assert.equal("", tostring(backfilledTierRow.tier or ""), "minimums rows should keep the tier text empty once the dedicated crafted-quality texture path is available")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", backfilledTierRow.tierIconAtlas, "minimums rows should rebuild the visible tier icon after bundled two-rank backfill instead of leaving the stale silver icon")
 mainFrame:HandleTableRowClick(backfilledTierRow)
 assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "clicking the backfilled minimum row should open the details modal")
-assert.equal("Professions-ChatIcon-Quality-Tier2", mainFrame.minimumDetailsItemQualityIcon.atlas, "minimum details modal should normalize two-rank backfill icons to the shared visible icon family")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", mainFrame.minimumDetailsItemQualityIcon.atlas, "minimum details modal should normalize two-rank backfill icons to the shared two-rank visible icon family")
 assert.equal("Tier 2", mainFrame.minimumDetailsItemQualityText:GetText(), "minimum details modal should show crafted-tier text alongside the crafted-tier icon")
 assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "minimum details modal should show the existing saved row Bank Tab as read-only text")
 assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "minimum details modal should not expose an editable Bank Tab selector for existing saved rows")

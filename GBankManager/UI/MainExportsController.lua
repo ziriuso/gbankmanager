@@ -87,6 +87,53 @@ function mainExportsController.Attach(mainFrame, options)
         mainFrame.exportActionCards[index] = card
     end
 
+    function mainFrame:RelayoutExportActionCards()
+        local cards = self.exportActionCards or {}
+        if #cards == 0 then
+            return
+        end
+
+        local availableWidth = math.max(0, (self.exportsPanel and self.exportsPanel:GetWidth() or 0))
+        local gap = 16
+        local minCardWidth = 156
+        local maxCardWidth = 176
+        local cardHeight = 108
+        local columns = 4
+        local contentWidth = math.max(0, availableWidth)
+
+        if contentWidth > 0 then
+            columns = math.max(1, math.min(4, math.floor((contentWidth + gap) / (minCardWidth + gap))))
+            local computedWidth = math.floor((contentWidth - (gap * math.max(0, columns - 1))) / columns)
+            if computedWidth < minCardWidth and columns > 1 then
+                columns = columns - 1
+                computedWidth = math.floor((contentWidth - (gap * math.max(0, columns - 1))) / columns)
+            end
+            maxCardWidth = math.max(minCardWidth, math.min(176, computedWidth))
+        end
+
+        for index, card in ipairs(cards) do
+            local columnIndex = (index - 1) % columns
+            local rowIndex = math.floor((index - 1) / columns)
+            if type(card.ClearAllPoints) == "function" then
+                card:ClearAllPoints()
+            end
+            card:SetSize(maxCardWidth, cardHeight)
+            card:SetPoint("TOPLEFT", self.exportsPanel, "TOPLEFT", columnIndex * (maxCardWidth + gap), -(rowIndex * (cardHeight + gap)))
+            if type(card.titleText.SetWidth) == "function" then
+                card.titleText:SetWidth(math.max(92, maxCardWidth - 52))
+            end
+            if type(card.descriptionText.SetWidth) == "function" then
+                card.descriptionText:SetWidth(math.min(144, math.max(110, maxCardWidth - 30)))
+            end
+        end
+
+        local rows = math.max(1, math.ceil(#cards / columns))
+        local panelHeight = (rows * cardHeight) + (math.max(0, rows - 1) * gap) + 32
+        self.exportsPanel:SetHeight(panelHeight + 26)
+        self.exportsFootnoteText:ClearAllPoints()
+        self.exportsFootnoteText:SetPoint("TOPLEFT", self.exportsPanel, "TOPLEFT", 0, -(panelHeight + 8))
+    end
+
     mainFrame.exportPresetSpreadsheetButton = mainFrame.exportPresetSpreadsheetButton or makeButton(mainFrame.exportsPanel, 84, 28, "Generate")
     mainFrame.exportPresetSpreadsheetButton:SetPoint("BOTTOMLEFT", mainFrame.exportActionCards[3], "BOTTOMLEFT", 14, 16)
     mainFrame.exportPresetSpreadsheetButton.labelText:SetText("Generate")
@@ -293,15 +340,21 @@ function mainExportsController.Attach(mainFrame, options)
 
         local atlasName = tostring(row.craftedQualityIcon or "")
         if atlasName ~= "" then
+            if type(craftedQuality.ToMarkupForItem) == "function" then
+                return craftedQuality.ToMarkupForItem(row.itemID, atlasName, 22, "reagent", row.quality or row.itemTierValue, row.craftedQualityMax)
+            end
             if type(craftedQuality.ToMarkup) == "function" then
-                return craftedQuality.ToMarkup(atlasName, 22, "reagent", row.quality or row.itemTierValue)
+                return craftedQuality.ToMarkup(atlasName, 22, "reagent", row.quality or row.itemTierValue, row.craftedQualityMax)
             end
             return string.format("|A:%s:22:22|a", atlasName)
         end
 
         local quality = tonumber(row.quality or row.itemTierValue or 0) or 0
+        if quality > 0 and type(craftedQuality.ToMarkupForItem) == "function" then
+            return craftedQuality.ToMarkupForItem(row.itemID, string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, row.craftedQualityMax)
+        end
         if quality > 0 and type(craftedQuality.ToMarkup) == "function" then
-            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality)
+            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, row.craftedQualityMax)
         end
         if quality > 0 then
             return string.format("|A:Professions-ChatIcon-Quality-Tier%d:22:22|a", quality)
@@ -353,7 +406,7 @@ function mainExportsController.Attach(mainFrame, options)
             rowFrame.checked = false
             rowFrame.checkButton:SetChecked(false)
             local qualityMarkup = manual_shopping_quality_label(row)
-            local quantityText = tostring(row.amountToStock or row.totalToBuy or 0)
+            local quantityText = tostring(row.qtyToBuy or row.totalToBuy or 0)
             if qualityMarkup ~= "" then
                 rowFrame.itemText:SetText(string.format("%s  %s  x%s", qualityMarkup, tostring(row.itemName or "Unknown"), quantityText))
             else
@@ -438,6 +491,7 @@ function mainExportsController.Attach(mainFrame, options)
         self.exportShoppingListName = normalizeShoppingListName(exportSettings.shoppingListName)
         self.exportCustomTemplate = cloneExportTemplate(exportSettings.customTemplate)
         self:RestoreManualShoppingListPosition(db)
+        self:RelayoutExportActionCards()
         return exportSettings
     end
 
@@ -569,6 +623,16 @@ function mainExportsController.Attach(mainFrame, options)
     function mainFrame:OpenExportStockedElsewhereModal(row)
         row = row or {}
         local lines = {}
+        local totalExcess = tonumber(row.excessQtyValue or row.excessQty or 0) or 0
+        local targetTab = tostring(row.bankTab or "")
+        if totalExcess > 0 then
+            if targetTab ~= "" and targetTab ~= "GLOBAL" then
+                lines[#lines + 1] = string.format("Total excess outside %s: %d", targetTab, totalExcess)
+            else
+                lines[#lines + 1] = string.format("Total excess outside the assigned minimum tab: %d", totalExcess)
+            end
+            lines[#lines + 1] = ""
+        end
         for _, tab in ipairs(row.stockedElsewhereTabs or {}) do
             table.insert(lines, string.format("%s: %s", tostring(tab.tabName or "Unknown"), tostring(tab.quantity or 0)))
         end

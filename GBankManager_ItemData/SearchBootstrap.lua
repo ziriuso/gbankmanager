@@ -19,9 +19,12 @@ local legacyCatalog = {
     items = {},
 }
 
+local qualityByItemID = {}
+
 local function publish_globals()
     _G.GBankManagerItemSearchPayload = payload
     _G.GBankManagerItemCatalogData = legacyCatalog
+    _G.GBankManagerItemQualityByID = qualityByItemID
 end
 
 local bootstrap = {}
@@ -37,6 +40,15 @@ function bootstrap.AppendItemChunk(chunk)
         if itemID then
             payload.itemsByID[itemID] = item
             legacyCatalog.items[#legacyCatalog.items + 1] = item
+            qualityByItemID[itemID] = {
+                itemID = itemID,
+                craftedQuality = item.craftedQuality,
+                craftedQualityIcon = item.craftedQualityIcon,
+                craftedQualityMax = item.craftedQualityMax,
+                craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
+                craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or item.craftedQualityIcon,
+                craftedQualityFamilySize = item.craftedQualityFamilySize or item.craftedQualityMax,
+            }
         end
     end
 end
@@ -67,6 +79,8 @@ function bootstrap.Finalize(metadata)
     ns.modules.staticItemSearch = payload
     ns.data.staticItemCatalog = legacyCatalog
     ns.modules.staticItemCatalog = legacyCatalog
+    ns.data.staticCraftedQualityByItemID = qualityByItemID
+    ns.modules.staticCraftedQualityByItemID = qualityByItemID
     publish_globals()
 
     return payload.metadata.ready
@@ -76,6 +90,8 @@ ns.data.staticItemSearch = payload
 ns.modules.staticItemSearch = payload
 ns.data.staticItemCatalog = legacyCatalog
 ns.modules.staticItemCatalog = legacyCatalog
+ns.data.staticCraftedQualityByItemID = qualityByItemID
+ns.modules.staticCraftedQualityByItemID = qualityByItemID
 ns.data.staticItemSearchBootstrap = bootstrap
 publish_globals()
 

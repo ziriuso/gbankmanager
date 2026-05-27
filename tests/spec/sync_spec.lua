@@ -132,8 +132,11 @@ assert.truthy(type(scannerEvents.HandleEvent) == "function", "scanner events mod
 
 local scannerRegisteredEvents = scannerEvents.GetRegisteredEvents()
 assert.equal("GUILDBANKFRAME_OPENED", scannerRegisteredEvents[1], "scanner event adapter should own the guild bank opened event")
-assert.equal("GUILDBANK_UPDATE_TABS", scannerRegisteredEvents[2], "scanner event adapter should own the guild bank tab update event")
-assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[3], "scanner event adapter should own the guild bank slot event")
+assert.equal("GUILDBANKFRAME_CLOSED", scannerRegisteredEvents[2], "scanner event adapter should own the guild bank closed event")
+assert.equal("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", scannerRegisteredEvents[3], "scanner event adapter should also listen for the player-interaction show event")
+assert.equal("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", scannerRegisteredEvents[4], "scanner event adapter should also listen for the player-interaction hide event")
+assert.equal("GUILDBANK_UPDATE_TABS", scannerRegisteredEvents[5], "scanner event adapter should own the guild bank tab update event")
+assert.equal("GUILDBANKBAGSLOTS_CHANGED", scannerRegisteredEvents[6], "scanner event adapter should own the guild bank slot event")
 
 local syncRegisteredEvents = syncEvents.GetRegisteredEvents()
 assert.equal("ADDON_LOADED", syncRegisteredEvents[1], "sync event adapter should own addon initialization")
@@ -701,6 +704,7 @@ scanner.OnGuildBankOpened = function(...)
 end
 scanner.scanInProgress = true
 scanner.pendingAutoScan = true
+scanner.guildBankOpen = false
 onEvent(events, "GUILDBANKFRAME_OPENED")
 onEvent(events, "GUILDBANKBAGSLOTS_CHANGED", 2)
 scanner.OnGuildBankSlotsChanged = originalOnGuildBankSlotsChanged

@@ -65,6 +65,23 @@ assert.truthy(string.find(helpText, "/gbm ui", 1, true) ~= nil, "/gbm help shoul
 assert.truthy(string.find(helpText, "/gbm request", 1, true) ~= nil, "/gbm help should include the request-only command")
 assert.truthy(string.find(helpText, "/gbm test smoke", 1, true) ~= nil, "/gbm help should include the smoke test command")
 assert.truthy(string.find(helpText, "/gbm test unit", 1, true) ~= nil, "/gbm help should include the unit test command")
+assert.truthy(string.find(helpText, "/gbm debug quality", 1, true) ~= nil, "/gbm help should include the crafted-quality debug command")
+
+_G.DEFAULT_CHAT_FRAME.messages = {}
+slash.command("debug quality 241322")
+local debugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
+assert.truthy(string.find(debugText, "Crafted quality debug for 241322", 1, true) ~= nil, "slash debug quality should label the inspected item id")
+assert.truthy(string.find(debugText, "final atlas", 1, true) ~= nil, "slash debug quality should report the final chosen atlas")
+assert.truthy(string.find(debugText, "Interface-Crafting-ReagentQuality-2-Med", 1, true) ~= nil, "slash debug quality should report the bundled two-rank inline atlas for non-inventory surfaces")
+assert.truthy(string.find(debugText, "final display atlas=Interface-Crafting-ReagentQuality-2-Med", 1, true) ~= nil, "slash debug quality should still report the separate bundled texture-display atlas")
+
+local originalCraftedQuality = env.ns.modules.craftedQuality
+env.ns.modules.craftedQuality = nil
+_G.DEFAULT_CHAT_FRAME.messages = {}
+slash.command("debug quality 241322")
+local lazyLoadedDebugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
+assert.truthy(string.find(lazyLoadedDebugText, "GBankManager: Crafted quality debug for 241322", 1, true) ~= nil, "slash debug quality should still emit chat feedback after lazily loading crafted-quality helpers")
+env.ns.modules.craftedQuality = originalCraftedQuality
 
 scanner.BeginScan = originalBeginScan
 auth.GetLivePlayerContext = originalGetLivePlayerContext

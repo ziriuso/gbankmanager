@@ -2,6 +2,7 @@ local assert = require("tests.helpers.assert")
 
 local interfaceLine
 local versionLine
+local releaseTagLine
 local categoryLine
 local entries = {}
 local seenEntries = {}
@@ -11,6 +12,8 @@ for line in io.lines("GBankManager/GBankManager.toc") do
         interfaceLine = line
     elseif string.match(line, "^## Version:") then
         versionLine = line
+    elseif string.match(line, "^## X%-Release%-Tag:") then
+        releaseTagLine = line
     elseif string.match(line, "^## Category:") then
         categoryLine = line
     else
@@ -27,6 +30,7 @@ end
 
 assert.equal("## Interface: 120005", interfaceLine, "toc should advertise the current retail interface version")
 assert.equal("## Version: 0.9.0-beta", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
+assert.equal("## X-Release-Tag: v0.9.0-beta.2", releaseTagLine, "toc should advertise the latest tagged beta for the About panel")
 assert.equal("## Category: Guild", categoryLine, "toc should place the addon under the Guild category in game")
 assert.truthy(#duplicateEntries == 0, "toc should not contain duplicate file loads")
 

@@ -405,6 +405,10 @@ local ABOUT_VERSION = (function()
     local addonName = tostring((ns and ns.addonName) or "GBankManager")
     local getMetadata = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
     if type(getMetadata) == "function" then
+        local releaseTag = getMetadata(addonName, "X-Release-Tag")
+        if tostring(releaseTag or "") ~= "" then
+            return tostring(releaseTag)
+        end
         local version = getMetadata(addonName, "Version")
         if tostring(version or "") ~= "" then
             return tostring(version)
@@ -1095,6 +1099,19 @@ if type(mainFrame.bankLedgerPanel.SetBackdrop) == "function" then
 end
 mainFrame.bankLedgerPanel:Hide()
 
+mainFrame.inventoryPanel = mainFrame.inventoryPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.inventoryPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
+mainFrame.inventoryPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
+mainFrame.inventoryPanel:SetHeight(56)
+apply_surface_variant(mainFrame.inventoryPanel, "panel-flat")
+if type(mainFrame.inventoryPanel.SetBackdrop) == "function" then
+    mainFrame.inventoryPanel:SetBackdrop(nil)
+end
+mainFrame.inventoryPanel:Hide()
+
+mainFrame.inventoryExportButton = mainFrame.inventoryExportButton or make_button(mainFrame.inventoryPanel, 88, 24, "Export CSV")
+mainFrame.inventoryExportButton:SetPoint("RIGHT", mainFrame.inventoryPanel, "RIGHT", -16, 0)
+
 mainFrame.bankLedgerItemModeButton = mainFrame.bankLedgerItemModeButton or make_button(mainFrame.bankLedgerPanel, 84, 24, "Item Log")
 mainFrame.bankLedgerItemModeButton:SetPoint("TOPLEFT", mainFrame.bankLedgerPanel, "TOPLEFT", 16, -14)
 
@@ -1285,7 +1302,7 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(268)
+mainFrame.optionsAppearancePanel:SetHeight(292)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1387,7 +1404,7 @@ mainFrame.optionsThemeFelButton = mainFrame.optionsThemeButtons.legion
 mainFrame.optionsThemePrideButton = mainFrame.optionsThemeButtons.pride
 
 mainFrame.optionsShellScaleLabel = mainFrame.optionsShellScaleLabel or make_label(mainFrame.optionsAppearancePanel, "UI Scale", "GameFontHighlightSmall")
-mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 408, -66)
+mainFrame.optionsShellScaleLabel:SetPoint("TOPLEFT", mainFrame.optionsAppearancePanel, "TOPLEFT", 408, -54)
 
 mainFrame.optionsShellScaleDecreaseButton = mainFrame.optionsShellScaleDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellScaleDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellScaleLabel, "BOTTOMLEFT", 0, -4)
@@ -1431,7 +1448,7 @@ set_frame_shown(mainFrame.optionsTableDensityIncreaseButton, false)
 set_frame_shown(mainFrame.optionsTableDensityValueText, false)
 
 mainFrame.optionsShellOpacityLabel = mainFrame.optionsShellOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Shell Opacity", "GameFontHighlightSmall")
-mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellScaleValueText, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsShellOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellScaleValueText, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsShellOpacityDecreaseButton = mainFrame.optionsShellOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsShellOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityLabel, "BOTTOMLEFT", 0, -4)
@@ -1452,7 +1469,7 @@ mainFrame.optionsShellOpacityValueText = mainFrame.optionsShellOpacityValueText 
 mainFrame.optionsShellOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityDecreaseButton, "BOTTOMLEFT", 0, -6)
 
 mainFrame.optionsModalOpacityLabel = mainFrame.optionsModalOpacityLabel or make_label(mainFrame.optionsAppearancePanel, "Modal Opacity", "GameFontHighlightSmall")
-mainFrame.optionsModalOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityValueText, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsModalOpacityLabel:SetPoint("TOPLEFT", mainFrame.optionsShellOpacityValueText, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsModalOpacityDecreaseButton = mainFrame.optionsModalOpacityDecreaseButton or make_button(mainFrame.optionsAppearancePanel, 24, 22, "-")
 mainFrame.optionsModalOpacityDecreaseButton:SetPoint("TOPLEFT", mainFrame.optionsModalOpacityLabel, "BOTTOMLEFT", 0, -4)
@@ -1519,19 +1536,31 @@ mainFrame.optionsLedgerRetentionTitle = mainFrame.optionsLedgerRetentionTitle or
 mainFrame.optionsLedgerRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -66)
 
 mainFrame.optionsLedgerRetentionButton = mainFrame.optionsLedgerRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
-mainFrame.optionsLedgerRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionTitle, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsLedgerRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -94)
 
 mainFrame.optionsHistoryRetentionTitle = mainFrame.optionsHistoryRetentionTitle or make_label(mainFrame.optionsLogsHistoryPanel, "History Retention", "GameFontHighlight")
 mainFrame.optionsHistoryRetentionTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -66)
 
 mainFrame.optionsHistoryRetentionButton = mainFrame.optionsHistoryRetentionButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "Indefinite")
-mainFrame.optionsHistoryRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsHistoryRetentionTitle, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsHistoryRetentionButton:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -94)
 
 mainFrame.optionsLedgerScanIntervalTitle = mainFrame.optionsLedgerScanIntervalTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Scan Interval", "GameFontHighlight")
 mainFrame.optionsLedgerScanIntervalTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -66)
 
 mainFrame.optionsLedgerScanIntervalButton = mainFrame.optionsLedgerScanIntervalButton or make_button(mainFrame.optionsLogsHistoryPanel, 132, 24, "5 Minutes")
-mainFrame.optionsLedgerScanIntervalButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerScanIntervalTitle, "BOTTOMLEFT", 0, -6)
+mainFrame.optionsLedgerScanIntervalButton:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -94)
+
+mainFrame.optionsRepairThresholdTitle = mainFrame.optionsRepairThresholdTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Repair Threshold", "GameFontHighlight")
+mainFrame.optionsRepairThresholdTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -132)
+
+mainFrame.optionsRepairThresholdInput = mainFrame.optionsRepairThresholdInput or make_input(mainFrame.optionsLogsHistoryPanel, 72, 22)
+mainFrame.optionsRepairThresholdInput:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -160)
+
+mainFrame.optionsRepairThresholdSuffixText = mainFrame.optionsRepairThresholdSuffixText or make_label(mainFrame.optionsLogsHistoryPanel, "gold", "GameFontNormal")
+mainFrame.optionsRepairThresholdSuffixText:SetPoint("LEFT", mainFrame.optionsRepairThresholdInput, "RIGHT", 6, 0)
+
+mainFrame.optionsMuteSilvermoonCitizenToggle = mainFrame.optionsMuteSilvermoonCitizenToggle or make_checkbox(mainFrame.optionsLogsHistoryPanel, "Mute Silvermoon Citizen")
+mainFrame.optionsMuteSilvermoonCitizenToggle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -154)
 
 mainFrame.optionsLogsHistorySaveButton = mainFrame.optionsLogsHistorySaveButton or make_button(mainFrame.optionsLogsHistoryPanel, 104, 28, "Save Settings")
 mainFrame.optionsLogsHistorySaveButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionButton, "BOTTOMLEFT", 0, -24)
@@ -1549,13 +1578,13 @@ if type(mainFrame.optionsClearDataHint.SetWidth) == "function" then
     mainFrame.optionsClearDataHint:SetWidth(640)
 end
 
-mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Guild Bank Log Data")
+mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Log Data")
 mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
 
-mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Guild Bank Inventory Data")
+mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Inventory Data")
 mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)
 
-mainFrame.optionsClearCompletedRequestsButton = mainFrame.optionsClearCompletedRequestsButton or make_button(mainFrame.optionsLogsHistoryPanel, 224, 28, "Clear Completed Request History")
+mainFrame.optionsClearCompletedRequestsButton = mainFrame.optionsClearCompletedRequestsButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Completed Request History")
 mainFrame.optionsClearCompletedRequestsButton:SetPoint("TOPLEFT", mainFrame.optionsClearInventoryDataButton, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsAuthTitle = mainFrame.optionsAuthTitle or make_label(mainFrame.optionsAuthPanel, "Guild Permissions", "GameFontHighlight")
@@ -1586,29 +1615,42 @@ mainFrame.optionsAuthRankDropdown = mainFrame.optionsAuthRankDropdown or _G.Crea
 mainFrame.optionsAuthRankDropdown:SetPoint("TOPLEFT", mainFrame.optionsAuthRankButton, "BOTTOMLEFT", 0, -4)
 mainFrame.optionsAuthRankDropdown:SetSize(196, 88)
 apply_panel_style(mainFrame.optionsAuthRankDropdown, theme.colors.panel)
+if type(mainFrame.optionsAuthRankDropdown.SetFrameStrata) == "function" then
+    mainFrame.optionsAuthRankDropdown:SetFrameStrata("TOOLTIP")
+end
+if type(mainFrame.optionsAuthRankDropdown.SetFrameLevel) == "function" then
+    mainFrame.optionsAuthRankDropdown:SetFrameLevel(80)
+end
 if type(mainFrame.optionsAuthRankDropdown.SetBackdropColor) == "function" then
     mainFrame.optionsAuthRankDropdown:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
 end
-if type(mainFrame.optionsAuthRankDropdown.SetFrameStrata) == "function" then
-    mainFrame.optionsAuthRankDropdown:SetFrameStrata("DIALOG")
-end
-if type(mainFrame.optionsAuthRankDropdown.SetFrameLevel) == "function" then
-    mainFrame.optionsAuthRankDropdown:SetFrameLevel(30)
-end
 mainFrame.optionsAuthRankDropdown:Hide()
 
-mainFrame.optionsAuthRankDropdownBackdrop = mainFrame.optionsAuthRankDropdownBackdrop or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthRankDropdown, "BackdropTemplate")
+mainFrame.optionsAuthRankDropdownBackdrop = mainFrame.optionsAuthRankDropdownBackdrop or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
 mainFrame.optionsAuthRankDropdownBackdrop:SetPoint("TOPLEFT", mainFrame.optionsAuthRankDropdown, "TOPLEFT", 0, 0)
 mainFrame.optionsAuthRankDropdownBackdrop:SetPoint("BOTTOMRIGHT", mainFrame.optionsAuthRankDropdown, "BOTTOMRIGHT", 0, 0)
 apply_panel_style(mainFrame.optionsAuthRankDropdownBackdrop, theme.colors.background)
+if type(mainFrame.optionsAuthRankDropdownBackdrop.SetFrameStrata) == "function" then
+    mainFrame.optionsAuthRankDropdownBackdrop:SetFrameStrata("TOOLTIP")
+end
+if type(mainFrame.optionsAuthRankDropdownBackdrop.SetFrameLevel) == "function" then
+    mainFrame.optionsAuthRankDropdownBackdrop:SetFrameLevel(84)
+end
 if type(mainFrame.optionsAuthRankDropdownBackdrop.SetBackdropColor) == "function" then
     mainFrame.optionsAuthRankDropdownBackdrop:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
 end
+mainFrame.optionsAuthRankDropdownBackdrop:Hide()
 
 mainFrame.optionsAuthRankButtons = mainFrame.optionsAuthRankButtons or {}
 for index = 1, 8 do
     local button = mainFrame.optionsAuthRankButtons[index] or make_button(mainFrame.optionsAuthRankDropdown, 180, 20, "")
     button:SetPoint("TOPLEFT", mainFrame.optionsAuthRankDropdown, "TOPLEFT", 6, -6 - ((index - 1) * 22))
+    if type(button.SetFrameStrata) == "function" then
+        button:SetFrameStrata("TOOLTIP")
+    end
+    if type(button.SetFrameLevel) == "function" then
+        button:SetFrameLevel(90 + index)
+    end
     mainFrame.optionsAuthRankButtons[index] = button
 end
 
@@ -1627,6 +1669,18 @@ mainFrame.optionsAvailablePermissionPanel = mainFrame.optionsAvailablePermission
 mainFrame.optionsAvailablePermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionTitle, "BOTTOMLEFT", 0, -6)
 mainFrame.optionsAvailablePermissionPanel:SetSize(250, 138)
 apply_panel_style(mainFrame.optionsAvailablePermissionPanel, theme.colors.panel)
+
+mainFrame.optionsAuthRankDropdownOccluder = mainFrame.optionsAuthRankDropdownOccluder or _G.CreateFrame("Frame", nil, mainFrame.optionsAuthPanel, "BackdropTemplate")
+mainFrame.optionsAuthRankDropdownOccluder:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPLEFT", 0, 0)
+mainFrame.optionsAuthRankDropdownOccluder:SetPoint("BOTTOMRIGHT", mainFrame.optionsAvailablePermissionPanel, "BOTTOMRIGHT", 0, 0)
+apply_panel_style(mainFrame.optionsAuthRankDropdownOccluder, theme.colors.background)
+if type(mainFrame.optionsAuthRankDropdownOccluder.SetFrameStrata) == "function" then
+    mainFrame.optionsAuthRankDropdownOccluder:SetFrameStrata("TOOLTIP")
+end
+if type(mainFrame.optionsAuthRankDropdownOccluder.SetFrameLevel) == "function" then
+    mainFrame.optionsAuthRankDropdownOccluder:SetFrameLevel(79)
+end
+mainFrame.optionsAuthRankDropdownOccluder:Hide()
 
 mainFrame.optionsAuthRemovePermissionButton = mainFrame.optionsAuthRemovePermissionButton or make_button(mainFrame.optionsAuthPanel, 92, 24, "Remove >>")
 mainFrame.optionsAuthRemovePermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 16, -36)
@@ -1757,6 +1811,9 @@ move_to_panel(mainFrame.optionsAvailablePermissionTitle, mainFrame.optionsPermis
 mainFrame.optionsAvailablePermissionTitle:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 126, 6)
 move_to_panel(mainFrame.optionsAvailablePermissionPanel, mainFrame.optionsPermissionsPanel)
 mainFrame.optionsAvailablePermissionPanel:SetPoint("TOPLEFT", mainFrame.optionsAvailablePermissionTitle, "BOTTOMLEFT", 0, -6)
+move_to_panel(mainFrame.optionsAuthRankDropdownOccluder, mainFrame.optionsPermissionsPanel)
+mainFrame.optionsAuthRankDropdownOccluder:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPLEFT", 0, 0)
+mainFrame.optionsAuthRankDropdownOccluder:SetPoint("BOTTOMRIGHT", mainFrame.optionsAvailablePermissionPanel, "BOTTOMRIGHT", 0, 0)
 move_to_panel(mainFrame.optionsAuthRemovePermissionButton, mainFrame.optionsPermissionsPanel)
 mainFrame.optionsAuthRemovePermissionButton:SetPoint("TOPLEFT", mainFrame.optionsAllowedPermissionPanel, "TOPRIGHT", 16, -36)
 move_to_panel(mainFrame.optionsAuthAddPermissionButton, mainFrame.optionsPermissionsPanel)
@@ -2164,6 +2221,12 @@ function mainFrame:RefreshLogsHistoryControls()
     if self.optionsLedgerScanIntervalButton then
         self.optionsLedgerScanIntervalButton.labelText:SetText(bankLedger.GetScanIntervalLabel(settings.ledgerScanIntervalSeconds))
     end
+    if self.optionsRepairThresholdInput and type(self.optionsRepairThresholdInput.SetText) == "function" then
+        self.optionsRepairThresholdInput:SetText(tostring(math.floor(tonumber(settings.repairThresholdGold or 5000) or 5000)))
+    end
+    if self.optionsMuteSilvermoonCitizenToggle and type(self.optionsMuteSilvermoonCitizenToggle.SetChecked) == "function" then
+        self.optionsMuteSilvermoonCitizenToggle:SetChecked(settings.muteSilvermoonCitizen == true)
+    end
     return settings
 end
 
@@ -2225,7 +2288,7 @@ function mainFrame:OpenChoiceMenu(ownerButton, choices, onSelect, fallbackCallba
         self.sharedChoiceDropdownPanel:SetFrameLevel(60)
     end
     self.sharedChoiceDropdownPanel:EnableMouse(true)
-    apply_surface_variant(self.sharedChoiceDropdownPanel, "input")
+    apply_surface_variant(self.sharedChoiceDropdownPanel, "panel")
     self.sharedChoiceDropdownOptions = self.sharedChoiceDropdownOptions or {}
 
     if self.sharedChoiceDropdownOwner == ownerButton and self.sharedChoiceDropdownPanel:IsShown() then
@@ -2246,6 +2309,7 @@ function mainFrame:OpenChoiceMenu(ownerButton, choices, onSelect, fallbackCallba
 
     for index, choice in ipairs(choices) do
         local option = self.sharedChoiceDropdownOptions[index] or make_button(self.sharedChoiceDropdownPanel, dropdownWidth - 8, 22, "")
+        apply_button_variant(option, "secondary")
         option:ClearAllPoints()
         option:SetPoint("TOPLEFT", self.sharedChoiceDropdownPanel, "TOPLEFT", 4, -4 - ((index - 1) * 24))
         option:SetWidth(dropdownWidth - 8)
@@ -2323,6 +2387,12 @@ function mainFrame:SaveLogsHistorySettings()
     settings.ledgerScanIntervalSeconds = math.max(300, tonumber(settings.ledgerScanIntervalSeconds or 300) or 300)
     settings.ledgerRetention = tostring(settings.ledgerRetention or "indefinite")
     settings.historyRetention = tostring(settings.historyRetention or "indefinite")
+    if self.optionsRepairThresholdInput and type(self.optionsRepairThresholdInput.GetText) == "function" then
+        settings.repairThresholdGold = math.max(0, math.floor(tonumber(self.optionsRepairThresholdInput:GetText() or settings.repairThresholdGold or 5000) or (tonumber(settings.repairThresholdGold or 5000) or 5000)))
+    end
+    if self.optionsMuteSilvermoonCitizenToggle and type(self.optionsMuteSilvermoonCitizenToggle.GetChecked) == "function" then
+        settings.muteSilvermoonCitizen = self.optionsMuteSilvermoonCitizenToggle:GetChecked() and true or false
+    end
     if bankLedger and type(bankLedger.PruneRetention) == "function" then
         local now = type(_G.time) == "function" and (_G.time() or 0) or 0
         bankLedger.PruneRetention(db, now)
@@ -2558,6 +2628,26 @@ function mainFrame:OpenBankLedgerExportModal()
     return self.exportModal
 end
 
+function mainFrame:OpenInventoryExportModal()
+    local inventoryView = ns.modules.inventoryView or {}
+    local csvText = type(inventoryView.BuildCsvText) == "function" and inventoryView.BuildCsvText(self.cachedInventoryRows or {}) or ""
+    self.exportModalTitle:SetText("Inventory CSV")
+    self.exportModalHint:SetText("Select all and copy the filtered inventory export.")
+    self.exportModalOutputInput:SetText(csvText or "")
+    if type(self.RefreshExportModalScrollMetrics) == "function" then
+        self:RefreshExportModalScrollMetrics()
+    end
+    if type(set_frame_shown) == "function" then
+        set_frame_shown(self.exportModalBuyAllButton, false)
+        set_frame_shown(self.exportModalMissingOnlyButton, false)
+        set_frame_shown(self.exportModalScrollFrame, true)
+        set_frame_shown(self.exportModalSelectAllButton, true)
+        set_frame_shown(self.exportModalCopyButton, false)
+    end
+    self.exportModal:Show()
+    return self.exportModal
+end
+
 mainFrame.bankLedgerItemModeButton:SetScript("OnClick", function()
     mainFrame:SetBankLedgerMode("ITEM")
 end)
@@ -2576,6 +2666,10 @@ end)
 
 mainFrame.bankLedgerExportButton:SetScript("OnClick", function()
     mainFrame:OpenBankLedgerExportModal()
+end)
+
+mainFrame.inventoryExportButton:SetScript("OnClick", function()
+    mainFrame:OpenInventoryExportModal()
 end)
 
 function mainFrame:ScrollOptionsBy(delta)
@@ -2701,9 +2795,57 @@ function mainFrame:SelectAuthRank(rankIndex)
     return self.selectedAuthRankIndex
 end
 
+function mainFrame:OpenAuthRankChoiceMenu()
+    local choices = {}
+    for _, rank in ipairs(self:GetAuthRankList() or {}) do
+        choices[#choices + 1] = {
+            value = rank.rankIndex,
+            label = rank.name,
+        }
+    end
+
+    return self:OpenChoiceMenu(self.optionsAuthRankButton, choices, function(value)
+        self:SelectAuthRank(value)
+    end)
+end
+
 function mainFrame:ToggleAuthRankDropdown()
-    self.authRankDropdownShown = not self.authRankDropdownShown
-    self:RefreshAuthOptions()
+    self.authRankDropdownShown = false
+    return self:OpenAuthRankChoiceMenu()
+end
+
+function mainFrame:SetAuthPermissionListVisibility(visible)
+    local shouldShow = visible == true
+    set_frame_shown(self.optionsAllowedPermissionTitle, shouldShow)
+    set_frame_shown(self.optionsAllowedPermissionPanel, shouldShow)
+    set_frame_shown(self.optionsAvailablePermissionTitle, shouldShow)
+    set_frame_shown(self.optionsAvailablePermissionPanel, shouldShow)
+    set_frame_shown(self.optionsAuthAddPermissionButton, shouldShow)
+    set_frame_shown(self.optionsAuthRemovePermissionButton, shouldShow)
+    set_frame_shown(self.optionsAuthRankDropdownOccluder, false)
+    set_frame_shown(self.optionsAuthRankDropdownBackdrop, false)
+
+    for _, button in ipairs(self.optionsAllowedPermissionButtons or {}) do
+        if button.labelText and type(button.labelText.SetAlpha) == "function" then
+            button.labelText:SetAlpha(shouldShow and 1 or 0)
+        end
+        if shouldShow and (button.labelText:GetText() or "") ~= "" then
+            button:Show()
+        else
+            button:Hide()
+        end
+    end
+
+    for _, button in ipairs(self.optionsAvailablePermissionButtons or {}) do
+        if button.labelText and type(button.labelText.SetAlpha) == "function" then
+            button.labelText:SetAlpha(shouldShow and 1 or 0)
+        end
+        if shouldShow and (button.labelText:GetText() or "") ~= "" then
+            button:Show()
+        else
+            button:Hide()
+        end
+    end
 end
 
 function mainFrame:SelectAuthCapability(listKind, capability)
@@ -3015,27 +3157,12 @@ function mainFrame:RefreshAuthOptions()
         self.optionsAuthStatusText:SetText(canManage and "Guildmaster and delegated auth managers can save policy changes." or "Read-only auth preview. You do not have auth-manage access.")
     end
 
-    local dropdownHeight = math.max(28, (#ranks * 22) + 12)
-    self.optionsAuthRankDropdown:SetHeight(dropdownHeight)
-
-    for index, button in ipairs(self.optionsAuthRankButtons or {}) do
-        local rank = ranks[index]
-        if rank then
-            button.labelText:SetText(rank.name)
-            button:SetEnabled(true)
-            button:Show()
-            button:SetScript("OnClick", function()
-                self:SelectAuthRank(rank.rankIndex)
-            end)
-        else
-            button:Hide()
-        end
-    end
-
-    if self.authRankDropdownShown then
-        self.optionsAuthRankDropdown:Show()
-    else
-        self.optionsAuthRankDropdown:Hide()
+    self.authRankDropdownShown = false
+    set_frame_shown(self.optionsAuthRankDropdown, false)
+    set_frame_shown(self.optionsAuthRankDropdownBackdrop, false)
+    set_frame_shown(self.optionsAuthRankDropdownOccluder, false)
+    for _, button in ipairs(self.optionsAuthRankButtons or {}) do
+        button:Hide()
     end
 
     local capabilityList = (permissions and permissions.GetCapabilityList and permissions.GetCapabilityList()) or {}
@@ -3087,6 +3214,7 @@ function mainFrame:RefreshAuthOptions()
 
     bind_permission_buttons(self.optionsAllowedPermissionButtons, self.optionsAllowedPermissionPanel, allowedCapabilities, self.selectedAllowedCapability, "allowed")
     bind_permission_buttons(self.optionsAvailablePermissionButtons, self.optionsAvailablePermissionPanel, availableCapabilities, self.selectedAvailableCapability, "available")
+    self:SetAuthPermissionListVisibility(true)
 
     local blacklistEntries = {}
     for characterKey, entry in pairs(policy.blacklist or {}) do
@@ -3116,7 +3244,7 @@ function mainFrame:RefreshAuthOptions()
 
     local blacklistPanelHeight = math.max(220, (#blacklistEntries * 22) + 16)
     self.optionsBlacklistListPanel:SetHeight(blacklistPanelHeight)
-    self.optionsBlacklistPanel:SetHeight(math.max(402, 182 + blacklistPanelHeight))
+    self.optionsBlacklistPanel:SetHeight(math.max(420, 198 + blacklistPanelHeight))
 
     self.optionsPolicyStringInput:SetText(policy.guildPolicyString or "")
 
@@ -3174,7 +3302,7 @@ mainFrame.optionsBlacklistRefreshButton:SetScript("OnClick", function()
 end)
 
 mainFrame.optionsAuthRankButton:SetScript("OnClick", function()
-    mainFrame:ToggleAuthRankDropdown()
+    mainFrame:OpenAuthRankChoiceMenu()
 end)
 
 mainFrame.optionsAuthAddPermissionButton:SetScript("OnClick", function()
@@ -3342,12 +3470,7 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.optionsRequestsPanel, "panel-alt")
     apply_panel_style(self.optionsAuthRankDropdown, theme.colors.panel)
     apply_panel_style(self.optionsAuthRankDropdownBackdrop, theme.colors.background)
-    if type(self.optionsAuthRankDropdown.SetBackdropColor) == "function" then
-        self.optionsAuthRankDropdown:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
-    end
-    if type(self.optionsAuthRankDropdownBackdrop.SetBackdropColor) == "function" then
-        self.optionsAuthRankDropdownBackdrop:SetBackdropColor(0.02, 0.03, 0.05, 1.0)
-    end
+    apply_panel_style(self.optionsAuthRankDropdownOccluder, theme.colors.background)
     apply_surface_variant(self.optionsAllowedPermissionPanel, "panel")
     apply_surface_variant(self.optionsAvailablePermissionPanel, "panel")
     apply_surface_variant(self.optionsBlacklistListPanel, "panel")
@@ -3745,8 +3868,9 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.optionsClearInventoryDataButton, "secondary")
     apply_button_variant(self.optionsClearCompletedRequestsButton, "secondary")
     apply_button_variant(self.optionsAuthRankButton, "select")
-    apply_surface_variant(self.optionsAuthRankDropdown, "input")
-    apply_surface_variant(self.optionsAuthRankDropdownBackdrop, "panel-flat")
+    apply_panel_style(self.optionsAuthRankDropdown, theme.colors.panel)
+    apply_panel_style(self.optionsAuthRankDropdownBackdrop, theme.colors.background)
+    apply_panel_style(self.optionsAuthRankDropdownOccluder, theme.colors.background)
     apply_button_variant(self.optionsAuthAddPermissionButton, "primary")
     apply_button_variant(self.optionsAuthRemovePermissionButton, "secondary")
     apply_button_variant(self.optionsBlacklistAddButton, "primary")
@@ -3778,7 +3902,7 @@ function mainFrame:ApplyTheme()
         apply_panel_style(button, theme.colors.panel)
     end
     for _, button in ipairs(self.optionsAuthRankButtons or {}) do
-        apply_panel_style(button, theme.colors.panel)
+        apply_button_variant(button, "secondary")
     end
     for _, button in ipairs(self.optionsAllowedPermissionButtons or {}) do
         if button:IsShown() then
@@ -3807,6 +3931,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.bankLedgerMoneyModeButton, self.bankLedgerMode == "MONEY" and "primary" or "tab")
     apply_button_variant(self.bankLedgerActionFilterButton, "select")
     apply_button_variant(self.bankLedgerExportButton, "secondary")
+    apply_button_variant(self.inventoryExportButton, "secondary")
     if type(self.RefreshRequestWizardProgress) == "function" then
         self:RefreshRequestWizardProgress()
     end
@@ -4074,6 +4199,7 @@ function mainFrame:RefreshView()
     self.minimumEmptyStateText:Hide()
     self.exportsPanel:Hide()
     self.bankLedgerPanel:Hide()
+    self.inventoryPanel:Hide()
     self.exportModal:Hide()
     if self.exportStockedElsewhereModal then
         self.exportStockedElsewhereModal:Hide()
@@ -4139,10 +4265,14 @@ function mainFrame:RefreshView()
         self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "REQUESTS" then
+        for _, request in ipairs(db.requests or {}) do
+            self:BackfillRequestCraftedTier(request)
+        end
         local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState(), self.requestAdminFilterMode or "ALL")
-        if not self:GetSelectedRequest() then
+        if not self:GetSelectedRequest() and self.suppressNextRequestAutoSelect ~= true then
             self:SelectFirstActionableRequest()
         end
+        self.suppressNextRequestAutoSelect = false
         if self.RefreshRequestAdminFilterButtons then
             self:RefreshRequestAdminFilterButtons()
         end
@@ -4168,9 +4298,11 @@ function mainFrame:RefreshView()
             { key = "itemID", label = "Item ID", width = 78, justifyH = "LEFT" },
             { key = "itemTier", label = "Tier", width = 56, justifyH = "CENTER" },
             { key = "itemName", label = "Item Name", width = 236, justifyH = "LEFT" },
-            { key = "bankTab", label = "Bank Tab", width = 140, justifyH = "LEFT" },
-            { key = "amountToStock", label = "Amount to Stock", width = 124, justifyH = "LEFT" },
-            { key = "excessStockIn", label = "Excess Stock", width = 128, justifyH = "LEFT" },
+            { key = "bankTab", label = "Bank Tab", width = 128, justifyH = "LEFT" },
+            { key = "minQty", label = "Min Qty", width = 88, justifyH = "LEFT" },
+            { key = "qtyInStock", label = "Qty In Stock", width = 104, justifyH = "LEFT" },
+            { key = "qtyToBuy", label = "Qty To Buy", width = 92, justifyH = "LEFT" },
+            { key = "excessQtyLabel", label = "Excess Qty", width = 112, justifyH = "LEFT" },
         }, rows)
         self:RefreshVisibleTableRows()
         self:RefreshExportOutput(rows)
@@ -4182,21 +4314,19 @@ function mainFrame:RefreshView()
         self:SetOptionsTab(self.optionsActiveTab or "APPEARANCE")
         bodyText = ""
     elseif self.activeView == "ABOUT" then
-        local characterName = type(_G.UnitName) == "function" and tostring(_G.UnitName("player") or "Unknown") or "Unknown"
-        local realmName = type(_G.GetRealmName) == "function" and tostring(_G.GetRealmName() or "Unknown") or "Unknown"
         local guildName = "No Guild"
         if type(_G.GetGuildInfo) == "function" then
-            local resolvedGuild = _G.GetGuildInfo("player") or _G.GetGuildInfo(characterName)
+            local resolvedGuild = _G.GetGuildInfo("player")
             if resolvedGuild and resolvedGuild ~= "" then
                 guildName = tostring(resolvedGuild)
             end
         end
         self.aboutNameText:SetText("Guild Bank Manager")
-        self.aboutVersionText:SetText(string.format("Version %s (%s)", ABOUT_VERSION, ABOUT_BUILD_STAMP))
-        self.aboutAuthorText:SetText("Author: Zirleficent")
-        self.aboutGuildText:SetText(string.format("%s - %s (%s)", characterName, guildName, realmName))
-        self.aboutDescriptionText:SetText("Manage your guild's stock, requests, and exports with a polished WoW-native workflow.")
-        self.aboutSlashHintText:SetText("/gbm help for slash commands")
+        self.aboutVersionText:SetText(string.format("Version %s", ABOUT_VERSION))
+        self.aboutAuthorText:SetText(string.format("Guild: %s", guildName))
+        self.aboutGuildText:SetText("")
+        self.aboutDescriptionText:SetText("")
+        self.aboutSlashHintText:SetText("/gbm help")
         bodyText = ""
     else
         bodyText = "Detailed content for this view is coming next."
@@ -4307,6 +4437,12 @@ function mainFrame:RefreshView()
         self.exportsPanel:Show()
     else
         self.exportsPanel:Hide()
+    end
+
+    if self.activeView == "INVENTORY" then
+        self.inventoryPanel:Show()
+    else
+        self.inventoryPanel:Hide()
     end
 
     if self.activeView == "BANK_LEDGER" then

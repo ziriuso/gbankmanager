@@ -5,8 +5,25 @@ ns.modules = ns.modules or {}
 
 local minimumsView = ns.modules.minimumsView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
+local itemCatalog = ns.modules.itemCatalog or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
+    itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+
+local function canonical_item(item)
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        return itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+
+    return item
+end
+
+local function preferred_quality_icon(item)
+    item = type(item) == "table" and item or {}
+    return tostring(item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or "")
 end
 
 local function copy_columns(columns)
@@ -66,6 +83,7 @@ local function normalize_rule(rule, previous)
         updatedByRankIndex = rule.updatedByRankIndex ~= nil and rule.updatedByRankIndex or previous.updatedByRankIndex,
         craftedQuality = rule.craftedQuality or previous.craftedQuality,
         craftedQualityIcon = rule.craftedQualityIcon or previous.craftedQualityIcon,
+        craftedQualityMax = rule.craftedQualityMax or previous.craftedQualityMax,
         draftKey = rule.draftKey or previous.draftKey,
         originalItemID = rule.originalItemID or previous.originalItemID,
         originalScope = rule.originalScope or previous.originalScope,
@@ -74,9 +92,21 @@ local function normalize_rule(rule, previous)
     }
 end
 
-local function crafted_quality_markup(atlasName)
+local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayMarkupForItem) == "function" then
+        return craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        return craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
+    if type(craftedQuality.ToMarkupForItem) == "function" then
+        return craftedQuality.ToMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
     if type(craftedQuality.ToMarkup) == "function" then
-        return craftedQuality.ToMarkup(atlasName, 22)
+        return craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
     end
 
     if atlasName == nil or atlasName == "" then
@@ -84,6 +114,18 @@ local function crafted_quality_markup(atlasName)
     end
 
     return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, nil, maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlas) == "function" then
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, nil, maxQuality)
+    end
+
+    return tostring(atlasName or "")
 end
 
 local function crafted_quality_rank(item)
@@ -174,6 +216,7 @@ local function snapshot_bank_rows(snapshot)
                 quality = itemRow.quality or item.quality,
                 craftedQuality = itemRow.craftedQuality or item.craftedQuality,
                 craftedQualityIcon = itemRow.craftedQualityIcon or item.craftedQualityIcon,
+                craftedQualityMax = itemRow.craftedQualityMax or item.craftedQualityMax,
                 tabName = itemRow.tabName,
                 quantity = tonumber(itemRow.quantity or 0) or 0,
                 aggregate = item,
@@ -194,6 +237,7 @@ local function snapshot_bank_rows(snapshot)
                 quality = item.quality,
                 craftedQuality = item.craftedQuality,
                 craftedQualityIcon = item.craftedQualityIcon,
+                craftedQualityMax = item.craftedQualityMax,
                 tabName = tostring(tabName),
                 quantity = tonumber(count or 0) or 0,
                 aggregate = item,
@@ -208,6 +252,7 @@ local function snapshot_bank_rows(snapshot)
                 quality = item.quality,
                 craftedQuality = item.craftedQuality,
                 craftedQualityIcon = item.craftedQualityIcon,
+                craftedQualityMax = item.craftedQualityMax,
                 tabName = primary_tab(item),
                 quantity = tonumber(item.totalCount or 0) or 0,
                 aggregate = item,
@@ -394,6 +439,7 @@ function minimumsView.SaveForApprovedRequest(db, request, bankTab, metadata)
         enabled = true,
         craftedQuality = request.craftedQuality,
         craftedQualityIcon = request.craftedQualityIcon,
+        craftedQualityMax = request.craftedQualityMax,
     }
 
     minimumsView.UpsertWithAudit(db, rule, metadata)
@@ -492,13 +538,15 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
         local minimumCount = tonumber(row.quantity or 0) or 0
         local shouldRestock = row.enabled ~= false and currentCount < minimumCount
         local source = item and "Configured" or "Manual"
-        local qualitySource = item or row
+        local qualitySource = canonical_item(item or row)
 
         table.insert(out, {
             rowKey = row.draftKey or rule_key(row),
             itemID = tostring(row.itemID or ""),
             itemName = tostring(row.itemName or "Unknown"),
-            tier = crafted_quality_markup(qualitySource.craftedQualityIcon),
+            tier = "",
+            tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(qualitySource), qualitySource.craftedQuality, qualitySource.craftedQualityFamilySize or qualitySource.craftedQualityMax),
+            tierIconAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(qualitySource), qualitySource.craftedQuality, qualitySource.craftedQualityFamilySize or qualitySource.craftedQualityMax),
             tierValue = crafted_quality_rank(qualitySource),
             quantity = tostring(minimumCount),
             quantityValue = minimumCount,
@@ -521,7 +569,11 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
             configuredSort = unresolvedGlobalTab and -1 or 0,
             configured = true,
             craftedQuality = qualitySource.craftedQuality,
+            craftedQualityDisplayAtlas = qualitySource.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = qualitySource.craftedQualityPreferredAtlas,
+            craftedQualityFamilySize = qualitySource.craftedQualityFamilySize,
             craftedQualityIcon = qualitySource.craftedQualityIcon,
+            craftedQualityMax = qualitySource.craftedQualityMax,
             isNewlyAdded = row.isNewlyAdded == true,
             needsBankTab = unresolvedGlobalTab,
             sourceRequestId = row.sourceRequestId,
@@ -534,14 +586,16 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
         local configuredTab = itemRow.tabName or "-"
         local itemID = itemRow.itemID
         if showAll and not seen[tab_row_key(itemID, configuredTab)] then
-            local item = itemRow.aggregate
+            local item = canonical_item(itemRow.aggregate)
             local currentCount = tonumber(itemRow.quantity or 0) or 0
             table.insert(out, {
                 rowKey = tab_row_key(itemID, configuredTab),
                 itemID = tostring(itemID or ""),
                 itemName = tostring(itemRow.name or "Unknown"),
-                tier = crafted_quality_markup(itemRow.craftedQualityIcon),
-                tierValue = crafted_quality_rank(itemRow),
+                tier = "",
+                tierAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+                tierIconAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+                tierValue = crafted_quality_rank(item),
                 quantity = "-",
                 quantityValue = 0,
                 scope = "TAB",
@@ -562,8 +616,12 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
                 enabledSort = 1,
                 configuredSort = 1,
                 configured = false,
-                craftedQuality = itemRow.craftedQuality,
-                craftedQualityIcon = itemRow.craftedQualityIcon,
+                craftedQuality = item.craftedQuality,
+                craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
+                craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas,
+                craftedQualityFamilySize = item.craftedQualityFamilySize,
+                craftedQualityIcon = item.craftedQualityIcon,
+                craftedQualityMax = item.craftedQualityMax,
             })
         end
     end

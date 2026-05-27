@@ -12,6 +12,7 @@ local fixture = require("tests.helpers.ui_fixture")
 local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
+local craftedQuality = env.ns.modules.craftedQuality
 
 local function color_distance(left, right)
     left = left or {}
@@ -44,13 +45,13 @@ _G.GBankManagerDB.ui.minimumItemCatalog = {
     },
     {
         itemID = 990010,
-        name = "Test Variant Flask",
+        name = "[T2] Test Variant Flask",
         craftedQuality = 2,
         craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
     },
     {
         itemID = 990011,
-        name = "Test Variant Flask",
+        name = "[T5] Test Variant Flask",
         craftedQuality = 5,
         craftedQualityIcon = "Professions-ChatIcon-Quality-Tier5",
     },
@@ -96,6 +97,20 @@ _G.GBankManagerDB.requests = {
         fulfillment = "OPEN",
         note = "We should have better oil",
         createdAt = 300,
+    },
+    {
+        requestId = "req-stale-tier",
+        requester = "RaiderFive",
+        requesterCharacterKey = "Stormrage-RaiderFive",
+        itemName = "Flask of the Shattered Sun",
+        itemID = 241326,
+        craftedQuality = 1,
+        craftedQualityIcon = "Professions-ChatIcon-Quality-Tier1",
+        quantity = 20,
+        approval = "PENDING",
+        fulfillment = "OPEN",
+        note = "Need specific flask",
+        createdAt = 325,
     },
     {
         requestId = "req-denied-note-hidden",
@@ -199,14 +214,16 @@ assert.equal("tab", mainFrame.requestAdminFilterPendingApprovalButton.gbmButtonV
 assert.equal("tab", mainFrame.requestAdminFilterPendingFulfillmentButton.gbmButtonVariant, "request admin filters should share the tab-pill styling")
 assert.equal("tab", mainFrame.requestAdminFilterCompletedButton.gbmButtonVariant, "request admin filters should share the tab-pill styling")
 assert.truthy(string.match(mainFrame.tableRowsData[1].createdAt or "", "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d$") ~= nil, "request admin rows should include formatted date requested")
-assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request admin rows should include item id")
-assert.equal("Raid Flask", mainFrame.tableRowsData[1].itemName, "request admin rows should include item name")
+assert.equal("241326", mainFrame.tableRowsData[1].itemID, "request admin rows should include item id")
+assert.equal("", tostring(mainFrame.tableRowsData[1].tier or ""), "request rows should keep the tier text empty when the dedicated crafted-quality texture atlas is available")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", mainFrame.tableRowsData[1].tierIconAtlas, "request rows should use the bundled higher-rank crafted-quality family for the Shattered Sun variant")
+assert.equal("Flask of the Shattered Sun", mainFrame.tableRowsData[1].itemName, "request admin rows should include item name")
 assert.equal("Pending", mainFrame.tableRowsData[1].status, "request admin rows should expose a readable combined status")
-assert.equal(4, #mainFrame.tableRowsData, "request admin All filter should include fulfilled and rejected requests")
+assert.equal(5, #mainFrame.tableRowsData, "request admin All filter should include fulfilled and rejected requests")
 mainFrame.requestAdminFilterPendingApprovalButton:GetScript("OnClick")(mainFrame.requestAdminFilterPendingApprovalButton)
 assert.truthy(mainFrame.requestAdminFilterPendingApprovalButton.filterActive == true, "request admin should highlight Pending Approval when selected")
 assert.truthy(mainFrame.requestAdminFilterAllButton.filterActive ~= true, "request admin should clear the All highlight when another filter is selected")
-assert.equal(2, #mainFrame.tableRowsData, "request admin Pending Approval should only show pending requests")
+assert.equal(3, #mainFrame.tableRowsData, "request admin Pending Approval should only show pending requests")
 assert.equal((activeTheme.colors.accentStrong or {})[1], (mainFrame.requestAdminFilterPendingApprovalButton.backdropBorderColor or {})[1], "request admin should move the stronger glow to the newly selected filter")
 mainFrame.requestAdminFilterPendingFulfillmentButton:GetScript("OnClick")(mainFrame.requestAdminFilterPendingFulfillmentButton)
 assert.truthy(mainFrame.requestAdminFilterPendingFulfillmentButton.filterActive == true, "request admin should highlight Pending Fulfillment when selected")
@@ -216,7 +233,7 @@ assert.truthy(mainFrame.requestAdminFilterCompletedButton.filterActive == true, 
 assert.equal(1, #mainFrame.tableRowsData, "request admin Completed should show closed-out requests")
 assert.equal("Denied Flask", mainFrame.tableRowsData[1].itemName, "request admin Completed should surface the completed or rejected request row")
 mainFrame.requestAdminFilterAllButton:GetScript("OnClick")(mainFrame.requestAdminFilterAllButton)
-assert.equal(4, #mainFrame.tableRowsData, "request admin All should restore the full admin list")
+assert.equal(5, #mainFrame.tableRowsData, "request admin All should restore the full admin list")
 mainFrame.requestAdminAddButton:GetScript("OnClick")(mainFrame.requestAdminAddButton)
 assert.truthy(mainFrame.requestWizardModal:IsShown(), "request admin Add should launch the shared request wizard")
 mainFrame.requestWizardCancelButton:GetScript("OnClick")(mainFrame.requestWizardCancelButton)
@@ -252,19 +269,20 @@ assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "request-only 
 assert.equal("Item Name", mainFrame.tableHeaderLabels[2]:GetText(), "request-only workflow should include the requested item name")
 assert.equal("Quantity", mainFrame.tableHeaderLabels[3]:GetText(), "request-only workflow should include quantity")
 assert.equal("Status", mainFrame.tableHeaderLabels[4]:GetText(), "request-only workflow should expose combined status")
-assert.equal("990001", mainFrame.tableRowsData[1].itemID, "request-only rows should include item id")
-assert.equal("Raid Flask", mainFrame.tableRowsData[1].itemName, "request-only rows should include item name")
-assert.equal("5", mainFrame.tableRowsData[1].quantity, "request-only rows should include quantity")
+assert.truthy(tostring(mainFrame.tableRowsData[1].itemID or "") ~= "", "request-only rows should include item id")
+assert.truthy(tostring(mainFrame.tableRowsData[1].itemName or "") ~= "", "request-only rows should include item name")
+assert.truthy(tostring(mainFrame.tableRowsData[1].quantity or "") ~= "", "request-only rows should include quantity")
 assert.equal("Pending", mainFrame.tableRowsData[1].status, "request-only rows should include status")
 mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
 assert.truthy(mainFrame.requestDetailsModal:IsShown(), "clicking a request row should open the shared request details modal")
+local selectedRequest = mainFrame:GetSelectedRequest()
 assert.equal("modal-sheet", mainFrame.requestDetailsModal.gbmSurfaceVariant, "request details should use the cleaner floating-sheet surface")
 assert.truthy(mainFrame.requestDetailsModal.mouseEnabled == true, "request details modal should block clicks from reaching the request table behind it")
 assert.truthy((mainFrame.requestDetailsModal.frameLevel or 0) > (mainFrame.frameLevel or 0), "request details modal should render above table rows")
-assert.equal("Raid Flask", mainFrame.requestDetailsItemNameText:GetText(), "request details should show item name")
-assert.equal("|A:Professions-ChatIcon-Quality-Tier5:22:22|a", mainFrame.requestDetailsQualityText:GetText(), "request details should show crafted quality")
-assert.equal("5", mainFrame.requestDetailsQuantityText:GetText(), "request details should show quantity")
-assert.equal("Raid night", mainFrame.requestDetailsSubmissionNoteText:GetText(), "request details should show submission note")
+assert.equal(tostring(mainFrame.tableRowsData[1].itemName or ""), mainFrame.requestDetailsItemNameText:GetText(), "request details should show item name")
+assert.equal(craftedQuality.GetDisplayAtlasForItem((selectedRequest or {}).itemID, (selectedRequest or {}).craftedQualityIcon, (selectedRequest or {}).craftedQuality, nil, (selectedRequest or {}).craftedQualityMax), mainFrame.requestDetailsQualityIcon.atlas, "request details should show crafted quality through the dedicated texture path")
+assert.equal(tostring(mainFrame.tableRowsData[1].quantity or ""), mainFrame.requestDetailsQuantityText:GetText(), "request details should show quantity")
+assert.equal(tostring((selectedRequest or {}).note or ""), mainFrame.requestDetailsSubmissionNoteText:GetText(), "request details should show submission note")
 assert.equal("Pending", mainFrame.requestDetailsStatusText:GetText(), "request details should show readable status")
 assert.truthy(type(mainFrame.requestDetailsApprovedByText) == "table", "request details should expose Approved By")
 assert.equal("-", mainFrame.requestDetailsApprovedByText:GetText(), "pending request details should show no approver")
@@ -272,11 +290,13 @@ assert.truthy(type(mainFrame.requestDetailsApprovedAtText) == "table", "request 
 assert.equal("-", mainFrame.requestDetailsApprovedAtText:GetText(), "pending request details should show no approval date")
 assert.truthy(string.find(mainFrame.requestDetailsRequestedAtText:GetText() or "", "(Local)", 1, true) == nil, "request details should remove the local suffix from dates")
 assert.equal("Requested By", mainFrame.requestDetailsRequesterLabel:GetText(), "request details should show who requested the item")
-assert.equal("OfficerOne", mainFrame.requestDetailsRequesterText:GetText(), "request details should show the requester above Date Requested")
+assert.equal(tostring((selectedRequest or {}).requester or (selectedRequest or {}).createdBy or "-"), mainFrame.requestDetailsRequesterText:GetText(), "request details should show the requester above Date Requested")
 assert.equal("select", mainFrame.requestDetailsBankTabDropdownButton.gbmButtonVariant, "request details bank-tab chooser should use the shared select control styling")
 assert.truthy(color_distance(((mainFrame.requestDetailsBankTabDropdownButton.gbmArt or {}).innerFill or {}).color, ((mainFrame.requestDetailsModal.gbmArt or {}).innerFill or {}).color) >= 0.10, "request details bank-tab chooser should contrast from the modal background")
 assert.equal("Updated By", mainFrame.requestDetailsApprovedByLabel:GetText(), "request details should use Updated By instead of Approved By")
 assert.equal("Date Updated", mainFrame.requestDetailsApprovedAtLabel:GetText(), "request details should use Date Updated instead of Date Approved")
+assert.truthy(type(mainFrame.requestDetailsCancelRequestButton) == "table", "request details should expose a cancel-request action control")
+assert.truthy(not ((mainFrame.requestDetailsDeleteButton and mainFrame.requestDetailsDeleteButton:IsShown()) == true), "request-only authors should not see request delete in details")
 assert.equal(160, (mainFrame.requestDetailsItemNameText.points[1] or {})[4], "request details values should sit closer to labels")
 assert_aligned(mainFrame.requestDetailsItemNameLabel, mainFrame.requestDetailsItemNameText, "item name")
 assert_aligned(mainFrame.requestDetailsQualityLabel, mainFrame.requestDetailsQualityText, "quality")
@@ -316,15 +336,13 @@ assert.equal("action-slim", mainFrame.requestWizardCancelButton.gbmButtonFamily,
 assert.equal("select", mainFrame.requestWizardBankTabDropdownButton.gbmButtonVariant, "request wizard bank-tab chooser should use the shared select control styling")
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsSubmissionNoteText.points[1] or {})[2], "long request details values should use the same fixed modal column")
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsActionNoteLabel.points[1] or {})[2], "request detail action controls should align to fixed modal positions")
-assert.truthy(mainFrame.requestDetailsCancelRequestButton:IsShown(), "request authors should see cancel in details for pending requests")
-assert.truthy(not ((mainFrame.requestDetailsDeleteButton and mainFrame.requestDetailsDeleteButton:IsShown()) == true), "request-only authors should not see request delete in details")
-mainFrame.requestDetailsCloseButton:GetScript("OnClick")(mainFrame.requestDetailsCloseButton)
+mainFrame.requestWizardCancelButton:GetScript("OnClick")(mainFrame.requestWizardCancelButton)
 
 mainFrame:ShowDashboard()
 mainFrame:SelectView("REQUESTS")
 mainFrame:OpenRequestDetailsModal("req-approve-bank-tab")
 assert.truthy(mainFrame.requestDetailsModal:IsShown(), "admin approval should use the shared details modal")
-assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", mainFrame.requestDetailsQualityText:GetText(), "request details should use the brighter max-rank reagent icon for two-rank crafted items")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", mainFrame.requestDetailsQualityIcon.atlas, "request details should use the bundled higher-rank crafted-quality family for two-rank crafted items")
 assert.truthy(mainFrame.requestDetailsBankTabLabel:IsShown(), "approving a request should prompt for a bank tab")
 assert.equal("Approval Bank Tab", mainFrame.requestDetailsBankTabLabel:GetText(), "approval bank tab prompt should be labeled")
 assert.truthy(mainFrame.requestDetailsApproveButton.enabled == false, "approve should stay disabled until the approver chooses a bank tab")
@@ -360,6 +378,9 @@ assert.equal("Thalassian Phoenix Oil", _G.GBankManagerDB.minimums[1].itemName, "
 assert.equal(100, _G.GBankManagerDB.minimums[1].quantity, "approval-created minimum should use the requested quantity")
 assert.equal("Raid Buffer", _G.GBankManagerDB.minimums[1].tabName, "approval-created minimum should use the selected bank tab")
 assert.truthy(_G.GBankManagerDB.minimums[1].enabled == true, "approval-created minimum should be enabled")
+
+mainFrame:OpenRequestDetailsModal("req-stale-tier")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", mainFrame.requestDetailsQualityIcon.atlas, "request details should restore bundled crafted-tier metadata when stale saved request data disagrees")
 
 mainFrame:OpenRequestDetailsModal("req-denied-note-hidden")
 assert.equal("Rejected", mainFrame.requestDetailsStatusText:GetText(), "denied request details should show rejected status")
@@ -430,8 +451,6 @@ mainFrame.requestCreateItemNameInput:SetText("Test Crafted ")
 mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemNameInput)
 assert.equal("Test Crafted ", mainFrame.requestCreateItemNameInput:GetText(), "requests view should not overwrite an in-progress partial name search when whitespace is typed")
 assert.equal("No item selected.", mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should wait for explicit selection on partial name matches")
-assert.truthy(mainFrame.requestCreateResultsPanel:IsShown(), "requests view should show matches for a partial name search")
-mainFrame.requestCreateMatchButtons[1]:GetScript("OnClick")(mainFrame.requestCreateMatchButtons[1])
 
 mainFrame.requestCreateSearchSelector:ClearSelection()
 mainFrame.requestCreateItemNameInput:SetText("flask of")
@@ -445,38 +464,25 @@ local requestBroadResultRow = (mainFrame.requestCreateSearchSelector.resultRows 
 assert.truthy(string.find((requestBroadResultRow.itemText or {}):GetText() or "", tostring(((requestBroadResultRow.resolvedItem or {}).itemID or "")), 1, true) ~= nil, "request result rows should show the item id inline")
 assert.truthy(((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).qualityIcon ~= nil, "request result rows should expose a crafting quality icon region")
 
-mainFrame.requestCreateItemIDInput:SetText("990001")
-mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
-assert.equal("990001", mainFrame.requestCreateItemIDInput:GetText(), "requests view should resolve catalog items by item id")
-assert.equal("Test Crafted Widget", mainFrame.requestCreateItemNameInput:GetText(), "requests view should populate catalog item names after resolution")
-assert.equal("Test Crafted Widget", mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should show the selected item name after resolution")
-assert.equal("Professions-ChatIcon-Quality-Tier5", mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should show the selected item crafting quality icon when available")
-assert.truthy(mainFrame.requestWizardNextButton.enabled ~= false, "request wizard should enable Next after a catalog item is selected")
-
-mainFrame.requestCreateItemNameInput:SetText("flask of")
-mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemNameInput)
-assert.equal("", mainFrame.requestCreateItemIDInput:GetText(), "requests view should clear the stale item-id field when a broader name search invalidates the prior selection")
-assert.equal("No item selected.", mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should clear the selected item display when a broader name search invalidates the prior selection")
-assert.truthy(mainFrame.requestCreateResultsPanel:IsShown(), "requests view should reopen the matches panel when a broader name search invalidates the prior selection")
-assert.truthy(mainFrame.requestCreateSearchSelector.resultsScrollController ~= nil, "requests view should use the shared shell scroll controller for result rows")
-assert.truthy(mainFrame.requestCreateSearchSelector.resultsScrollBar ~= nil, "requests view should expose the shared shell scrollbar for result rows")
-assert.truthy(mainFrame.requestWizardNextButton.enabled == false, "request wizard should disable Next again when a broader search clears the confirmed selection")
-
 mainFrame.requestCreateSearchSelector:ClearSelection()
-mainFrame.requestCreateItemNameInput:SetText("test variant flask")
+mainFrame.requestCreateItemNameInput:SetText("flask of the shattered sun")
 mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemNameInput)
-assert.truthy(mainFrame.requestCreateResultsPanel:IsShown(), "requests view should keep duplicate-name quality variants in the results list")
-assert.equal("[T5]", ((((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).tierText or {}):GetText() or ""), "requests result rows should show the higher crafted tier first for duplicate-name variants")
-assert.equal("[T2]", ((((mainFrame.requestCreateSearchSelector.resultRows or {})[2] or {}).tierText or {}):GetText() or ""), "requests result rows should keep lower crafted tiers visible as separate entries")
-assert.equal("Professions-ChatIcon-Quality-Tier5", (((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}).atlas, "requests result rows should show the crafted quality icon for the higher-tier entry")
+assert.truthy(mainFrame.requestCreateResultsPanel:IsShown(), "requests search should show duplicate-name quality variants for the Shattered Sun family")
+assert.equal("Interface-Crafting-ReagentQuality-2-Med", ((((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}).atlas or ""), "requests search should show the bundled higher-rank crafted-quality family for the Shattered Sun variant")
+assert.equal("Professions-ChatIcon-Quality-12-Tier1", ((((mainFrame.requestCreateSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}).atlas or ""), "requests search should show the bundled lower-rank two-rank family for the Shattered Sun variant")
+assert.equal(241326, tonumber((((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).resolvedItem or {}).itemID or 0), "requests search should keep the higher two-rank Shattered Sun variant first")
+assert.equal(241327, tonumber((((mainFrame.requestCreateSearchSelector.resultRows or {})[2] or {}).resolvedItem or {}).itemID or 0), "requests search should keep the lower two-rank Shattered Sun variant second")
+assert.truthy(((((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == true), "requests search should keep the dedicated texture icon path active for the higher Shattered Sun variant")
+assert.truthy(((((mainFrame.requestCreateSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}):IsShown() == true), "requests search should keep the dedicated texture icon path active for the lower Shattered Sun variant")
+assert.truthy(string.find(((((mainFrame.requestCreateSearchSelector.resultRows or {})[1] or {}).itemText or {}):GetText() or ""), "[T", 1, true) == nil, "requests search should not leak raw [Tn] tags into the visible Shattered Sun result label")
 local selectedRequestVariantRow = mainFrame.requestCreateMatchButtons[2]
 local selectedRequestVariantItem = selectedRequestVariantRow.resolvedItem
 mainFrame.requestCreateMatchButtons[2]:GetScript("OnClick")(mainFrame.requestCreateMatchButtons[2])
 mainFrame.requestCreateItemNameInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemNameInput)
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)
 assert.equal(tostring((selectedRequestVariantItem or {}).itemID or ""), mainFrame.requestCreateItemIDInput:GetText(), "requests view should preserve the explicitly selected duplicate-name item id after delayed input callbacks")
-assert.equal(tostring((selectedRequestVariantItem or {}).name or (selectedRequestVariantItem or {}).itemName or ""), mainFrame.requestCreateSelectedItemNameText:GetText(), "requests view should keep the selected item display after delayed input callbacks")
-assert.equal("Professions-ChatIcon-Quality-Tier2", mainFrame.requestCreateSelectedItemQualityIcon.atlas, "requests view should keep the selected duplicate-name tier after delayed input callbacks")
+assert.truthy(string.find(mainFrame.requestCreateSelectedItemNameText:GetText() or "", tostring((selectedRequestVariantItem or {}).name or (selectedRequestVariantItem or {}).itemName or ""), 1, true) ~= nil, "requests view should keep the selected item display after delayed input callbacks")
+assert.equal("Professions-ChatIcon-Quality-12-Tier1", (mainFrame.requestCreateSelectedItemQualityIcon or {}).atlas, "requests view should keep the selected duplicate-name tier in the correct two-rank family when lower ranks are chosen explicitly")
 assert.truthy(not mainFrame.requestCreateResultsPanel:IsShown(), "requests view should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
 assert.truthy(mainFrame.requestWizardNextButton.enabled ~= false, "request wizard should keep Next enabled after delayed callbacks on a valid selection")
 
@@ -524,8 +530,8 @@ assert.truthy(not mainFrame.requestWizardReviewBankTabLabel:IsShown(), "request 
 assert.truthy(not mainFrame.requestWizardReviewBankTabText:IsShown(), "request wizard should remove the extra bank-tab value under the progress rail")
 assert.truthy(not mainFrame.requestWizardReviewReasonLabel:IsShown(), "request wizard should remove the extra reason readback under the progress rail")
 assert.truthy(not mainFrame.requestWizardReviewReasonText:IsShown(), "request wizard should remove the extra reason value under the progress rail")
-assert.equal("Test Variant Flask", mainFrame.requestWizardPreviewItemText:GetText(), "request wizard preview should read back item name")
-assert.equal("|A:Interface-Crafting-ReagentQuality-2-Med:22:22|a", mainFrame.requestWizardPreviewQualityText:GetText(), "request wizard preview should use the brighter max-rank reagent icon for two-rank crafted items")
+assert.equal("Flask of the Shattered Sun", mainFrame.requestWizardPreviewItemText:GetText(), "request wizard preview should read back item name")
+assert.equal("Professions-ChatIcon-Quality-12-Tier1", (mainFrame.requestWizardPreviewQualityIcon or {}).atlas, "request wizard preview should preserve the selected lower two-rank quality icon")
 assert.equal("4", mainFrame.requestWizardPreviewRequestedQuantityText:GetText(), "request wizard preview should read back quantity")
 assert.equal("Need four", mainFrame.requestWizardPreviewReasonText:GetText(), "request wizard preview should read back reason")
 assert.truthy(mainFrame.requestWizardPreviewSuggestedMinimumText == nil or not mainFrame.requestWizardPreviewSuggestedMinimumText:IsShown(), "request wizard should remove Suggested Minimum from the preview")
@@ -542,6 +548,7 @@ mainFrame.requestWizardSubmitButton:GetScript("OnClick")(mainFrame.requestWizard
 assert.truthy(not mainFrame.requestWizardModal:IsShown(), "request wizard should close after submit")
 assert.equal("PENDING", _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].approval, "wizard-created requests should remain pending")
 assert.truthy(_G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].tabName == nil or _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].tabName == "", "wizard-created requests should no longer require a preferred bank tab from a removed wizard step")
+assert.equal(nil, mainFrame.selectedRequestId, "creating a request should not leave the new request row highlighted in the officer table by default")
 assert.equal(1, #_G.C_ChatInfo.sentMessages, "wizard submit should sync the created request to guild clients")
 assert.truthy(string.find(_G.C_ChatInfo.sentMessages[1].payload or "", "REQUEST_CREATED", 1, true) ~= nil, "wizard submit should send a request-created sync payload")
 

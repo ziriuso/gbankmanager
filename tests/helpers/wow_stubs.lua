@@ -21,6 +21,7 @@ _G.C_GuildInfo = _G.C_GuildInfo or {
 _G.C_Secrets = _G.C_Secrets or {
     hasSecretRestrictions = false,
 }
+_G.C_TradeSkillUI = _G.C_TradeSkillUI or {}
 _G.StaticPopupDialogs = _G.StaticPopupDialogs or {
     ["SET_GUILDOFFICERNOTE"] = {
         maxLetters = 31,
