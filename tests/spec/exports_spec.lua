@@ -68,8 +68,8 @@ local outOfStockQualityRows = exports.MaterializePlanRows({
 })
 
 assert.equal(2, outOfStockQualityRows[1].quality, "materialized rows should canonicalize missing-snapshot crafted quality from bundled item data for true two-rank items")
-assert.equal("Interface-Crafting-ReagentQuality-2-Med", outOfStockQualityRows[1].itemTierAtlas, "materialized rows should use the bundled inventory-style two-rank atlas for true crafted-quality exports")
-assert.equal("Interface-Crafting-ReagentQuality-2-Med", outOfStockQualityRows[1].itemTierIconAtlas, "materialized rows should expose the bundled two-rank atlas through the shared table icon path")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", outOfStockQualityRows[1].itemTierAtlas, "materialized rows should use the bundled higher-rank gold-pentagram atlas for true crafted-quality exports")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", outOfStockQualityRows[1].itemTierIconAtlas, "materialized rows should expose the bundled higher-rank gold-pentagram atlas through the shared non-inventory table icon path")
 
 local enrichedRows = exports.MaterializePlanRows({
     [3003] = {

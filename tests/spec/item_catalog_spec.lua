@@ -27,6 +27,7 @@ assert.truthy(type(itemCatalog.IsBundledSearchReady) == "function", "item catalo
 assert.truthy(type(itemCatalog.ResolveIndexedQuery) == "function", "item catalog should expose bundled indexed query resolution")
 assert.truthy(type(itemCatalog.ResolveSearchSessionQuery) == "function", "item catalog should expose session-based indexed query resolution")
 assert.truthy(type(itemCatalog.EnsureBundledDataLoaded) == "function", "item catalog should expose the bundled item-data loader")
+assert.truthy(type(itemCatalog.HydrateItem) == "function", "item catalog should expose a shared item hydrator")
 assert.truthy(itemCatalog.IsBundledDataLoaded() == true, "main addon should preserve preloaded bundled item data when the companion addon loads first")
 local bundledItems = itemCatalog.GetBundledItems()
 assert.truthy(#bundledItems >= 1, "bundled item catalog should seed at least one shared item")
@@ -50,6 +51,23 @@ ns.data.staticItemSearch = originalNamespaceSearch
 ns.data.staticItemCatalog = originalNamespaceCatalog
 ns.modules.staticItemSearch = originalModuleSearch
 ns.modules.staticItemCatalog = originalModuleCatalog
+
+local bootstrap = ns.data.staticItemSearchBootstrap
+assert.truthy(type(bootstrap) == "table", "item catalog spec should keep the bundled search bootstrap available")
+bootstrap.AppendItemChunk({
+    {
+        itemID = 991122,
+        name = "Synthetic Hyperlink Flask",
+        itemLink = "|cffffffff|Hitem:991122::::::::80:::::|h[Synthetic Hyperlink Flask]|h|r",
+        itemString = "item:991122::::::::80:::::",
+        craftedQuality = 2,
+        craftedQualityMax = 2,
+    },
+})
+assert.equal("|cffffffff|Hitem:991122::::::::80:::::|h[Synthetic Hyperlink Flask]|h|r", (ns.data.staticItemSearch.itemsByID[991122] or {}).itemLink, "search bootstrap should keep optional item hyperlinks in the bundled payload")
+assert.equal("item:991122::::::::80:::::", (ns.data.staticItemSearch.itemsByID[991122] or {}).itemString, "search bootstrap should keep optional item strings in the bundled payload")
+assert.equal("|cffffffff|Hitem:991122::::::::80:::::|h[Synthetic Hyperlink Flask]|h|r", (_G.GBankManagerItemQualityByID[991122] or {}).itemLink, "search bootstrap should also carry optional item hyperlinks into the quality lookup table")
+assert.equal("item:991122::::::::80:::::", (_G.GBankManagerItemQualityByID[991122] or {}).itemString, "search bootstrap should also carry optional item strings into the quality lookup table")
 
 local originalStaticItemCatalog = ns.data.staticItemCatalog
 local originalStaticItemSearch = ns.data.staticItemSearch
@@ -148,6 +166,20 @@ assert.equal("Unit Test Feast", supplementalNamesByItemID[990002], "supplemental
 assert.equal("Unit Test Saved Rune", supplementalNamesByItemID[990001], "supplemental search catalog should still include learned catalog items")
 assert.truthy(supplementalNamesByItemID[7007] == nil, "supplemental search catalog should not duplicate bundled item-data rows when indexed bundled search is already available")
 
+local hydrated = itemCatalog.HydrateItem({
+    itemID = 241322,
+    name = "Flask of the Magisters",
+    itemLink = "|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r",
+    itemString = "item:241322::::::::80:::::",
+    craftedQuality = 2,
+    craftedQualityMax = 2,
+})
+assert.equal("|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r", hydrated.itemLink, "catalog hydration should preserve trusted bundled hyperlink fields")
+assert.equal("item:241322::::::::80:::::", hydrated.itemString, "catalog hydration should preserve trusted bundled item strings")
+assert.equal("Flask of the Magisters", hydrated.name, "catalog hydration should preserve normalized plain-text names")
+assert.equal(2, hydrated.craftedQuality, "catalog hydration should preserve semantic crafted quality")
+assert.equal(2, hydrated.craftedQualityMax, "catalog hydration should preserve semantic crafted-quality family size")
+
 local stored = itemCatalog.StoreResolvedItem(db, {
     itemID = 19019,
     name = "Thunderfury, Blessed Blade of the Windseeker",
@@ -159,6 +191,17 @@ local stored = itemCatalog.StoreResolvedItem(db, {
 assert.equal("Thunderfury, Blessed Blade of the Windseeker", stored.name, "item catalog should persist newly resolved search items")
 assert.equal(4, stored.craftedQuality, "item catalog should persist crafted quality tiers for resolved items")
 assert.equal("Professions-ChatIcon-Quality-Tier4", stored.craftedQualityIcon, "item catalog should persist crafted quality icons for resolved items")
+
+local storedLinked = itemCatalog.StoreResolvedItem(db, {
+    itemID = 241322,
+    name = "Flask of the Magisters",
+    itemLink = "|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r",
+    itemString = "item:241322::::::::80:::::",
+    craftedQuality = 2,
+    craftedQualityMax = 2,
+})
+assert.equal("|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r", storedLinked.itemLink, "item catalog should persist trusted hyperlinks on learned catalog rows")
+assert.equal("item:241322::::::::80:::::", storedLinked.itemString, "item catalog should persist trusted item strings on learned catalog rows")
 
 local resolution = itemCatalog.ResolveQuery({
     items = {},
@@ -352,9 +395,9 @@ end
 assert.truthy(bundledFlaskSunIds[241326] == true and bundledFlaskSunIds[241327] == true, "bundled indexed search should include both Flask of the Shattered Sun item ids")
 assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(241326) or {}).craftedQuality or 0), "bundled item lookup should preserve the higher two-rank Shattered Sun tier")
 assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(241326) or {}).craftedQualityMax or 0), "bundled item lookup should expose the two-rank family size for Shattered Sun")
-assert.equal("Interface-Crafting-ReagentQuality-2-Med", tostring((itemCatalog.GetBundledItemByID(241326) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical gold display atlas for the higher two-rank Shattered Sun variant")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", tostring((itemCatalog.GetBundledItemByID(241326) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical gold-pentagram atlas for the higher two-rank Shattered Sun variant")
 assert.equal(1, tonumber((itemCatalog.GetBundledItemByID(241327) or {}).craftedQuality or 0), "bundled item lookup should preserve the lower two-rank Shattered Sun tier")
-assert.equal("Professions-ChatIcon-Quality-Tier1", tostring((itemCatalog.GetBundledItemByID(241327) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical silver display atlas for the lower two-rank Shattered Sun variant")
+assert.equal("Professions-Icon-Quality-12-Tier1-Inv", tostring((itemCatalog.GetBundledItemByID(241327) or {}).craftedQualityDisplayAtlas or ""), "bundled item lookup should expose the canonical silver-diamond atlas for the lower two-rank Shattered Sun variant")
 assert.equal(2, tonumber((itemCatalog.GetBundledItemByID(243734) or {}).craftedQualityMax or 0), "bundled item lookup should expose the two-rank family size for Phoenix Oil")
 
 local originalResolveIndexedQuery = itemCatalog.ResolveIndexedQuery

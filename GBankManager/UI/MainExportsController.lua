@@ -339,6 +339,25 @@ function mainExportsController.Attach(mainFrame, options)
         end
 
         local atlasName = tostring(row.craftedQualityIcon or "")
+        local resolvedQuality = tonumber(row.quality or row.itemTierValue or 0) or 0
+        local qualitySource = atlasName
+        if qualitySource == "" and resolvedQuality > 0 then
+            qualitySource = string.format("Professions-ChatIcon-Quality-Tier%d", resolvedQuality)
+        end
+        if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+            local resolvedMarkup = craftedQuality.DisplayNonInventoryMarkupForItem(
+                row.itemID,
+                qualitySource,
+                22,
+                "reagent",
+                resolvedQuality,
+                row.craftedQualityMax
+            )
+            if resolvedMarkup ~= "" then
+                return resolvedMarkup
+            end
+        end
+
         if atlasName ~= "" then
             if type(craftedQuality.ToMarkupForItem) == "function" then
                 return craftedQuality.ToMarkupForItem(row.itemID, atlasName, 22, "reagent", row.quality or row.itemTierValue, row.craftedQualityMax)

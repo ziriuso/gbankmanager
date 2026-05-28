@@ -79,9 +79,33 @@ function mainTableController.Attach(mainFrame, options)
         }
     end
 
+    local function normalize_table_icon_atlas(atlasName, row)
+        atlasName = tostring(atlasName or "")
+        if atlasName == "Professions-Icon-Quality-Tier1-Inv"
+            or atlasName == "Interface-Crafting-ReagentQuality-1-Med" then
+            return "Professions-Icon-Quality-12-Tier1-Inv"
+        end
+        if atlasName == "Professions-Icon-Quality-Tier2-Inv"
+            or atlasName == "Interface-Crafting-ReagentQuality-2-Med" then
+            return "Professions-Icon-Quality-12-Tier2-Inv"
+        end
+
+        local familySize = tonumber((row or {}).craftedQualityFamilySize or (row or {}).craftedQualityMax or 0) or 0
+        if familySize == 2 then
+            if atlasName == "Professions-ChatIcon-Quality-Tier1" then
+                return "Professions-Icon-Quality-12-Tier1-Inv"
+            end
+            if atlasName == "Professions-ChatIcon-Quality-Tier2" then
+                return "Professions-Icon-Quality-12-Tier2-Inv"
+            end
+        end
+
+        return atlasName
+    end
+
     local function emergency_min_width(column)
         local key = tostring((column or {}).key or "")
-        if key == "itemName" or key == "name" then
+        if key == "itemName" or key == "itemDisplayText" or key == "name" then
             return 132
         end
         if key == "bankTab" or key == "status" or key == "excessQty" or key == "createdAt" or key == "fulfilledAt" then
@@ -126,7 +150,7 @@ function mainTableController.Attach(mainFrame, options)
         end
 
         if remainder < 0 then
-            local shrinkOrder = { "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt", "quantity", "current", "restock", "minQty", "qtyInStock", "qtyToBuy", "itemID", "tier", "itemTier" }
+            local shrinkOrder = { "itemDisplayText", "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt", "quantity", "current", "restock", "minQty", "qtyInStock", "qtyToBuy", "itemID", "tier", "itemTier" }
             for _, key in ipairs(shrinkOrder) do
                 for _, column in ipairs(fitted) do
                     if remainder >= 0 then
@@ -142,7 +166,7 @@ function mainTableController.Attach(mainFrame, options)
                 end
             end
         elseif remainder > 0 then
-            local growOrder = { "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt" }
+            local growOrder = { "itemDisplayText", "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt" }
             while remainder > 0 do
                 local grew = false
                 for _, key in ipairs(growOrder) do
@@ -444,6 +468,7 @@ function mainTableController.Attach(mainFrame, options)
                 column:SetWidth(baseWidth)
                 column:SetText(row and key and (row[key] or "") or "")
                 if icon and row and key and iconConfig and tostring(iconConfig.atlas or "") ~= "" and baseWidth > 0 then
+                    local normalizedAtlas = normalize_table_icon_atlas(iconConfig.atlas, row)
                     local iconSize = math.max(10, math.floor(tonumber(iconConfig.size or 14) or 14))
                     local rightInset = math.max(0, math.floor(tonumber(iconConfig.rightInset or 10) or 10))
                     local textRightPadding = math.max(iconSize + rightInset + 4, math.floor(tonumber(iconConfig.textRightPadding or (iconSize + 8)) or (iconSize + 8)))
@@ -463,7 +488,7 @@ function mainTableController.Attach(mainFrame, options)
                         icon:SetHeight(iconSize)
                     end
                     if type(icon.SetAtlas) == "function" then
-                        icon:SetAtlas(iconConfig.atlas, false)
+                        icon:SetAtlas(normalizedAtlas, false)
                     end
                     if type(icon.SetWidth) == "function" then
                         icon:SetWidth(iconSize)
@@ -471,7 +496,7 @@ function mainTableController.Attach(mainFrame, options)
                     if type(icon.SetHeight) == "function" then
                         icon:SetHeight(iconSize)
                     end
-                    icon.atlas = iconConfig.atlas
+                    icon.atlas = normalizedAtlas
                     if type(icon.SetVertexColor) == "function" and type(iconConfig.tint) == "table" then
                         icon:SetVertexColor(unpack(iconConfig.tint))
                     end

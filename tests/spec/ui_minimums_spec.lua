@@ -12,6 +12,42 @@ local fixture = require("tests.helpers.ui_fixture")
 local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
+local itemCatalog = env.ns.modules.itemCatalog
+
+local TRUSTED_ITEM_LINKS = {
+    [241322] = "|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r",
+    [241323] = "|cffffffff|Hitem:241323::::::::80:::::|h[Flask of the Magisters]|h|r",
+    [241324] = "|cffffffff|Hitem:241324::::::::80:::::|h[Flask of the Blood Knights]|h|r",
+    [243734] = "|cffffffff|Hitem:243734::::::::80:::::|h[Thalassian Phoenix Oil]|h|r",
+}
+
+local function trusted_item_string(itemID)
+    return string.format("item:%d::::::::80:::::", tonumber(itemID) or 0)
+end
+
+local function apply_trusted_item_fields(item)
+    item = type(item) == "table" and item or nil
+    if not item then
+        return nil
+    end
+
+    local itemID = tonumber(item.itemID)
+    local itemLink = itemID and TRUSTED_ITEM_LINKS[itemID] or nil
+    if itemLink then
+        item.itemLink = itemLink
+        item.itemString = trusted_item_string(itemID)
+    end
+
+    return item
+end
+
+for itemID, itemLink in pairs(TRUSTED_ITEM_LINKS) do
+    local bundledItem = itemCatalog and type(itemCatalog.GetBundledItemByID) == "function" and itemCatalog.GetBundledItemByID(itemID) or nil
+    if bundledItem then
+        bundledItem.itemLink = itemLink
+        bundledItem.itemString = trusted_item_string(itemID)
+    end
+end
 
 _G.GBankManagerDB = {
     currentSnapshotId = "minimums-ui",
@@ -77,6 +113,8 @@ _G.GBankManagerDB = {
                 name = "Thalassian Phoenix Oil",
                 craftedQuality = 2,
                 craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+                itemLink = TRUSTED_ITEM_LINKS[243734],
+                itemString = trusted_item_string(243734),
             },
             {
                 itemID = 990010,
@@ -110,12 +148,12 @@ assert.equal("Alchemy", mainFrame.tableRowsData[1].bankTab, "minimums Show All s
 assert.equal("4", mainFrame.tableRowsData[1].current, "minimums Show All should preserve the first per-tab quantity")
 assert.equal("Gems and Enchants", mainFrame.tableRowsData[2].bankTab, "minimums Show All should preserve the second tab name")
 assert.equal("1", mainFrame.tableRowsData[2].current, "minimums Show All should preserve the second per-tab quantity")
-mainFrame.tableFilterInputs[4]:SetText("Reagents")
-mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+mainFrame.tableFilterInputs[3]:SetText("Reagents")
+mainFrame.tableFilterInputs[3]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[3])
 assert.equal(1, #mainFrame.tableRowsData, "minimums shared table filters should search by Bank Tab")
 assert.equal("Reagents", mainFrame.tableRowsData[1].bankTab, "minimums shared Bank Tab filter should keep the matching row")
-mainFrame.tableFilterInputs[4]:SetText("")
-mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+mainFrame.tableFilterInputs[3]:SetText("")
+mainFrame.tableFilterInputs[3]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[3])
 mainFrame.tableFilterInputs[1]:SetText("8008")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 assert.equal(1, #mainFrame.tableRowsData, "minimums shared table filters should search by Item ID")
@@ -126,15 +164,14 @@ assert.equal("No minimum rows match the current search and filters.", mainFrame.
 mainFrame.tableFilterInputs[1]:SetText("")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 assert.equal("Save All", mainFrame.minimumSaveButton.labelText:GetText(), "minimums view should keep the top-level save action label")
-assert.equal(7, #mainFrame.tableColumnLayout, "minimums view should fully remove the deprecated restock-source column")
+assert.equal(6, #mainFrame.tableColumnLayout, "minimums view should fully remove the visible tier column along with the older restock-source column")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "minimums should share the preferred table layout with inventory")
-assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should share the preferred tier column with inventory")
-assert.equal("Item", mainFrame.tableHeaderLabels[3]:GetText(), "minimums should share the preferred item column with inventory")
-assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should share the preferred bank tab column with inventory")
-assert.equal("Current", mainFrame.tableHeaderLabels[5]:GetText(), "minimums should share the preferred current column with inventory")
-assert.equal("Restock", mainFrame.tableHeaderLabels[6]:GetText(), "minimums should share the preferred restock column with inventory")
-assert.equal("Minimum", mainFrame.tableHeaderLabels[7]:GetText(), "minimums view should end the table at the minimum column")
-assert.truthy(mainFrame.tableHeaderLabels[8] == nil or mainFrame.tableHeaderLabels[8].shown == false, "minimums view should not render a ghost eighth header")
+assert.equal("Item", mainFrame.tableHeaderLabels[2]:GetText(), "minimums should collapse the old tier slot into the shared item display column")
+assert.equal("Bank Tab", mainFrame.tableHeaderLabels[3]:GetText(), "minimums should shift bank tab left after tier-column removal")
+assert.equal("Current", mainFrame.tableHeaderLabels[4]:GetText(), "minimums should keep current visible after tier-column removal")
+assert.equal("Restock", mainFrame.tableHeaderLabels[5]:GetText(), "minimums should keep restock visible after tier-column removal")
+assert.equal("Minimum", mainFrame.tableHeaderLabels[6]:GetText(), "minimums view should end the visible table at the minimum column")
+assert.truthy(mainFrame.tableHeaderLabels[7] == nil or mainFrame.tableHeaderLabels[7].shown == false, "minimums view should not render a ghost seventh header")
 assert.truthy((mainFrame.tableViewportHeight or 0) > 0, "minimums table should keep a positive shared table height")
 assert.truthy((mainFrame.tableViewportHeight or 0) <= (mainFrame.defaultTableViewportHeight or 364), "minimums table should clamp inside the shared shell instead of pushing footer actions offscreen")
 assert.truthy((mainFrame.minimumsPanel:GetHeight() or 0) <= 72, "minimums footer should be a compact action strip instead of a boxed editor panel")
@@ -174,7 +211,7 @@ assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "minimum add flow should 
 assert.equal("modal-sheet", mainFrame.minimumDetailsModal.gbmSurfaceVariant, "minimum details should use the cleaner floating-sheet surface")
 assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "minimums should not use the footer editor after add")
 assert.equal("243734", mainFrame.minimumDetailsItemIDText:GetText(), "details modal should inherit the chosen item id from the search modal")
-assert.equal("Thalassian Phoenix Oil", mainFrame.minimumDetailsItemNameText:GetText(), "details modal should inherit the chosen item name from the search modal")
+assert.equal(TRUSTED_ITEM_LINKS[243734], mainFrame.minimumDetailsItemNameText:GetText(), "details modal should inherit the chosen shared item-display text from the search modal")
 assert.truthy(mainFrame.minimumPendingRules == nil or next(mainFrame.minimumPendingRules) == nil, "minimum add handoff should not stage a draft row before later details confirmation work lands")
 assert.equal("add", mainFrame.minimumDetailsConfirmButton.iconKind, "details modal should use the shared add icon button")
 assert.equal("remove", mainFrame.minimumDetailsRemoveButton.iconKind, "details modal should use the shared remove icon button")
@@ -226,7 +263,7 @@ mainFrame.minimumAddItemNameInput:SetText("Test Crafted Widget")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.equal("990001", mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should resolve catalog items by item name")
 assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", "Test Crafted Widget", 1, true) ~= nil, "minimum add modal should show the selected item name after resolution")
-assert.equal("Professions-ChatIcon-Quality-Tier5", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should show the selected item quality through the dedicated texture region")
+assert.truthy(not (mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown()), "minimum add modal should stop depending on a separate selected-item quality icon once the shared item display owns the visible label")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should enable Add after a catalog item is selected")
 
 mainFrame:ResetMinimumAddRow()
@@ -238,8 +275,9 @@ assert.truthy(type(mainFrame.minimumAddSearchSelector.resultsDataProvider) == "t
 assert.truthy((mainFrame.minimumAddSearchSelector.resultsDataProvider:GetSize() or 0) > 0, "minimums selector should populate the results data provider for broad searches")
 assert.truthy((mainFrame.minimumAddSearchSelector.resultsScrollFrame or {}).scrollChild ~= nil, "minimum add modal should wire a scroll child for result rows")
 local minimumBroadResultRow = (mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}
-assert.truthy(string.find((minimumBroadResultRow.itemText or {}):GetText() or "", tostring(((minimumBroadResultRow.resolvedItem or {}).itemID or "")), 1, true) ~= nil, "minimum add result rows should show the item id inline")
-assert.truthy(((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon ~= nil, "minimum add result rows should expose a crafting quality icon region")
+assert.truthy(tostring((minimumBroadResultRow.itemText or {}):GetText() or "") ~= "", "minimum add result rows should render shared item-display text for broad searches")
+assert.truthy(string.find((minimumBroadResultRow.itemText or {}):GetText() or "", tostring(((minimumBroadResultRow.resolvedItem or {}).itemID or "")), 1, true) == nil, "minimum add result rows should stop showing the item id inline once the shared item display owns the visible label")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should stop depending on a separate quality icon region")
 
 mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemIDInput:SetText("241323")
@@ -260,10 +298,10 @@ mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemNameInput:SetText("test variant flask")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.truthy(mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep duplicate-name quality variants in the results list")
-assert.equal("Professions-ChatIcon-Quality-Tier5", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}).atlas or ""), "minimum add result rows should use the dedicated texture path for the higher crafted variant")
-assert.equal("Professions-ChatIcon-Quality-Tier2", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}).atlas or ""), "minimum add result rows should use the dedicated texture path for the lower crafted variant when the family still spans five ranks")
-assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == true), "minimum add result rows should keep the dedicated quality icon path active")
-assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}):IsShown() == true), "minimum add result rows should keep the dedicated quality icon path active for duplicate-name variants")
+assert.equal("Test Variant Flask", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).itemText or {}):GetText() or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the higher crafted variant")
+assert.equal("Test Variant Flask", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).itemText or {}):GetText() or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the lower crafted variant")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should not keep a dedicated quality icon path active for duplicate-name variants")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should not keep a dedicated quality icon path active for duplicate-name variants")
 local selectedMinimumVariantRow = mainFrame.minimumAddMatchButtons[2]
 local selectedMinimumVariantItem = selectedMinimumVariantRow.resolvedItem
 mainFrame.minimumAddMatchButtons[2]:GetScript("OnClick")(mainFrame.minimumAddMatchButtons[2])
@@ -271,7 +309,7 @@ mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAd
 mainFrame.minimumAddItemIDInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemIDInput)
 assert.equal(tostring((selectedMinimumVariantItem or {}).itemID or ""), mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should preserve the explicitly selected duplicate-name item id after delayed input callbacks")
 assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", tostring((selectedMinimumVariantItem or {}).name or (selectedMinimumVariantItem or {}).itemName or ""), 1, true) ~= nil, "minimum add modal should keep the selected item display after delayed input callbacks")
-assert.equal("Professions-ChatIcon-Quality-Tier2", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should keep the selected duplicate-name tier in the standard quality family when higher ranks exist for that item family")
+assert.truthy(not (mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown()), "minimum add modal should keep the selected duplicate-name item on the shared item-display contract after delayed input callbacks")
 assert.truthy(not mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should keep Add enabled after delayed callbacks on a valid selection")
 mainFrame.minimumPendingRules = {}
@@ -393,11 +431,12 @@ assert.equal(2, tonumber(backfilledTierRow.craftedQuality), "minimums rows shoul
 assert.equal("Professions-ChatIcon-Quality-Tier2", backfilledTierRow.craftedQualityIcon, "minimums rows should restore the bundled crafted tier icon even when stale saved row data disagrees")
 assert.equal(2, tonumber(backfilledTierRow.craftedQualityMax), "minimums rows should restore the bundled two-rank family size for stale saved rows")
 assert.equal("", tostring(backfilledTierRow.tier or ""), "minimums rows should keep the tier text empty once the dedicated crafted-quality texture path is available")
-assert.equal("Interface-Crafting-ReagentQuality-2-Med", backfilledTierRow.tierIconAtlas, "minimums rows should rebuild the visible tier icon after bundled two-rank backfill instead of leaving the stale silver icon")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", backfilledTierRow.tierIconAtlas, "minimums rows should rebuild the visible tier icon after bundled two-rank backfill into the canonical gold-pentagram atlas instead of leaving the stale silver icon")
 mainFrame:HandleTableRowClick(backfilledTierRow)
 assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "clicking the backfilled minimum row should open the details modal")
-assert.equal("Interface-Crafting-ReagentQuality-2-Med", mainFrame.minimumDetailsItemQualityIcon.atlas, "minimum details modal should normalize two-rank backfill icons to the shared two-rank visible icon family")
-assert.equal("Tier 2", mainFrame.minimumDetailsItemQualityText:GetText(), "minimum details modal should show crafted-tier text alongside the crafted-tier icon")
+assert.equal(TRUSTED_ITEM_LINKS[243734], mainFrame.minimumDetailsItemNameText:GetText(), "minimum details modal should render the shared hyperlink-style item display when a trusted link is available")
+assert.truthy(not (mainFrame.minimumDetailsItemQualityIcon and mainFrame.minimumDetailsItemQualityIcon:IsShown()), "minimum details modal should stop depending on a separate crafted-quality icon once the shared item-display contract is in place")
+assert.truthy(not (mainFrame.minimumDetailsItemQualityText and mainFrame.minimumDetailsItemQualityText:IsShown()), "minimum details modal should stop depending on separate crafted-tier text once the shared item-display contract is in place")
 assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "minimum details modal should show the existing saved row Bank Tab as read-only text")
 assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "minimum details modal should not expose an editable Bank Tab selector for existing saved rows")
 

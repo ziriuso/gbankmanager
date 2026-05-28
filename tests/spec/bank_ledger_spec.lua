@@ -403,6 +403,75 @@ local repeatedVisibleMoneyCount = bankLedger.MergeMoneyTransactions(db, {
 assert.equal(0, repeatedVisibleMoneyCount, "re-reading the same visible money-log window should not append duplicate rows")
 assert.equal(3, #db.bankLedger.moneyLogs, "re-reading the same visible money-log window should leave stored money rows unchanged")
 
+local rotatedWindowMoneyDb = fresh_db()
+local rotatedWindowMoneyInitial = bankLedger.MergeMoneyTransactions(rotatedWindowMoneyDb, {
+    scanStartedAt = 1716935400,
+    transactions = {
+        {
+            type = "repair",
+            who = "A",
+            amount = 10000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+        {
+            type = "repair",
+            who = "B",
+            amount = 20000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+        {
+            type = "repair",
+            who = "C",
+            amount = 30000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+    },
+})
+assert.equal(3, rotatedWindowMoneyInitial, "baseline busy money-window import should persist the initial visible rows")
+local rotatedWindowMoneyNext = bankLedger.MergeMoneyTransactions(rotatedWindowMoneyDb, {
+    scanStartedAt = 1716935700,
+    transactions = {
+        {
+            type = "repair",
+            who = "X",
+            amount = 91000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+        {
+            type = "repair",
+            who = "Y",
+            amount = 92000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+        {
+            type = "repair",
+            who = "Z",
+            amount = 93000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+    },
+})
+assert.equal(3, rotatedWindowMoneyNext, "a fully rotated busy money-log window should still append the newly visible rows instead of being discarded as suspicious")
+assert.equal(6, #rotatedWindowMoneyDb.bankLedger.moneyLogs, "busy money-log windows should stay append-only even when the full visible window changes between rescans")
+
 local oldestFirstMoneyDb = fresh_db()
 local oldestFirstInitialCount = bankLedger.MergeMoneyTransactions(oldestFirstMoneyDb, {
     scanStartedAt = 1716573600,

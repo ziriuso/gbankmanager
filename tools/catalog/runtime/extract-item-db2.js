@@ -228,6 +228,41 @@ function getCraftedQuality(row) {
     return craftedQuality;
 }
 
+function getItemLink(row) {
+    const rawValue = row.ItemLink
+        ?? row.itemLink
+        ?? row.itemlink
+        ?? row.Hyperlink
+        ?? row.hyperlink;
+
+    if (typeof rawValue !== "string") {
+        return null;
+    }
+
+    const itemLink = rawValue.trim();
+    return itemLink.length > 0 ? itemLink : null;
+}
+
+function getItemString(row) {
+    const rawValue = row.ItemString
+        ?? row.itemString
+        ?? row.itemstring;
+
+    if (typeof rawValue === "string" && rawValue.trim().length > 0) {
+        return rawValue.trim();
+    }
+
+    const itemLink = getItemLink(row);
+    if (typeof itemLink === "string") {
+        const match = itemLink.match(/\|H(item:[^|]+)\|h/i);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+
+    return null;
+}
+
 function getCraftedQualityIcon(craftedQuality, row) {
     const rawValue = row.CraftingQualityIcon
         ?? row.craftingQualityIcon
@@ -440,6 +475,8 @@ function normalizeRows(rows, options) {
         normalized.push({
             itemID,
             name,
+            itemLink: getItemLink(row),
+            itemString: getItemString(row),
             quality,
             qualityName: getQualityName(quality),
             itemLevel: getItemLevel(row),
@@ -476,6 +513,8 @@ function normalizeRow(row, options) {
     return {
         itemID,
         name,
+        itemLink: getItemLink(row),
+        itemString: getItemString(row),
         quality,
         qualityName: getQualityName(quality),
         itemLevel: getItemLevel(row),

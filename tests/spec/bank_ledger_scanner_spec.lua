@@ -1189,6 +1189,145 @@ run_all_pending(10)
 assert.equal(passiveQueryCountAfterClose, passiveQueryCount, "passive refresh should stop scheduling additional ledger queries once the guild bank closes")
 _G.C_Timer.RunPending = originalPassiveRunPending
 
+_G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
+ns.state.db = _G.GBankManagerDB
+_G.GBankManagerDB.meta.updatedAt = 1716583595
+_G.GBankManagerDB.bankLedger.lastScanAt = 1716583595
+_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+
+local moneyPassivePhase = 1
+local moneyPassiveItemLogs = {
+    [1] = {},
+    [2] = {},
+    [3] = {},
+}
+local moneyPassiveLogs = {
+    [1] = {
+        {
+            type = "repair",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+    },
+    [2] = {
+        {
+            type = "repair",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+    },
+    [3] = {
+        {
+            type = "withdraw",
+            who = "OfficerTwo-Stormrage",
+            amount = 550000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+        {
+            type = "repair",
+            who = "RepairDruid-Stormrage",
+            amount = 12345600,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 0,
+        },
+    },
+}
+local moneyPassiveQueryCount = 0
+local originalMoneyPassiveRunPending = _G.C_Timer.RunPending
+local moneyPassiveAdvancedToPhaseTwo = false
+local moneyPassiveAdvancedToPhaseThree = false
+local moneyPassiveClosedAfterImports = false
+
+_G.GetNumGuildBankTabs = function()
+    return 1
+end
+
+_G.GetGuildBankTabInfo = function()
+    return "Flasks", nil, true
+end
+
+_G.GetNumGuildBankTransactions = function(tabIndex)
+    if tabIndex ~= 1 then
+        return 0
+    end
+
+    return #(moneyPassiveItemLogs[moneyPassivePhase] or {})
+end
+
+_G.GetGuildBankTransaction = function(tabIndex, index)
+    local row = tabIndex == 1 and (moneyPassiveItemLogs[moneyPassivePhase] or {})[index] or nil
+    if not row then
+        return nil
+    end
+
+    return row.type, row.who, row.itemLink, row.count, nil, nil, row.year, row.month, row.day, row.hour
+end
+
+_G.GetNumGuildBankMoneyTransactions = function()
+    return #(moneyPassiveLogs[moneyPassivePhase] or {})
+end
+
+_G.GetGuildBankMoneyTransaction = function(index)
+    local row = (moneyPassiveLogs[moneyPassivePhase] or {})[index]
+    if not row then
+        return nil
+    end
+
+    return row.type, row.who, row.amount, row.year, row.month, row.day, row.hour
+end
+
+_G.QueryGuildBankLog = function(queryId)
+    moneyPassiveQueryCount = moneyPassiveQueryCount + 1
+    _G.C_Timer.After(0.1, function()
+        scanner.OnGuildBankLogUpdated()
+    end)
+end
+
+_G.C_Timer.RunPending = function()
+    originalMoneyPassiveRunPending()
+    local moneyLogCount = #(_G.GBankManagerDB.bankLedger.moneyLogs or {})
+    if moneyPassiveAdvancedToPhaseTwo ~= true and moneyLogCount == 1 then
+        moneyPassivePhase = 2
+        moneyPassiveAdvancedToPhaseTwo = true
+    elseif moneyPassiveAdvancedToPhaseTwo == true and moneyPassiveAdvancedToPhaseThree ~= true and moneyPassiveQueryCount >= 4 and moneyLogCount == 1 then
+        moneyPassivePhase = 3
+        moneyPassiveAdvancedToPhaseThree = true
+    elseif moneyPassiveAdvancedToPhaseThree == true and moneyPassiveClosedAfterImports ~= true and moneyLogCount == 2 and type(scanner.OnGuildBankClosed) == "function" then
+        scanner.OnGuildBankClosed()
+        moneyPassiveClosedAfterImports = true
+    end
+end
+
+scanner.guildBankOpen = false
+scanner.passiveLedgerRefreshActive = false
+scanner.passiveLedgerRefreshToken = 0
+scanner.scanInProgress = false
+scanner.ledgerScanInProgress = false
+_G.C_Timer.ClearPending()
+scanner.OnGuildBankOpened()
+run_all_pending(60)
+assert.truthy(moneyPassiveAdvancedToPhaseTwo == true, "passive refresh should observe the baseline money-log import before advancing phases")
+assert.truthy(moneyPassiveAdvancedToPhaseThree == true, "passive refresh should advance into the new-row money-log phase")
+assert.equal(2, #(_G.GBankManagerDB.bankLedger.moneyLogs or {}), "passive refresh should import newly available money-log rows without requiring a manual rescan")
+assert.truthy(moneyPassiveQueryCount >= 4, "passive refresh should continue polling while the bank stays open across money-log-only changes")
+local moneyPassiveQueryCountAfterClose = moneyPassiveQueryCount
+run_all_pending(10)
+assert.equal(moneyPassiveQueryCountAfterClose, moneyPassiveQueryCount, "passive refresh should stop scheduling additional money-log polling once the guild bank closes")
+_G.C_Timer.RunPending = originalMoneyPassiveRunPending
+
 _G.C_PlayerInteractionManager = {
     IsInteractingWithNpcOfType = function(interactionType)
         return interactionType == 10

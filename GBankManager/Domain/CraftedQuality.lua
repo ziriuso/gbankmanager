@@ -178,6 +178,15 @@ end
 
 local function display_atlas_for_tier(parsedTier, style, maxQuality)
     local resolvedMaxQuality = normalized_max_quality(maxQuality, parsedTier)
+    if resolvedMaxQuality == 2 then
+        if parsedTier == 1 then
+            return "Professions-Icon-Quality-12-Tier1-Inv"
+        end
+        if parsedTier == 2 then
+            return "Professions-Icon-Quality-12-Tier2-Inv"
+        end
+    end
+
     if resolvedMaxQuality >= 3 and parsedTier >= 1 and parsedTier <= 5 then
         return string.format("Professions-ChatIcon-Quality-Tier%d", parsedTier)
     end
@@ -190,16 +199,29 @@ local function display_atlas_for_tier(parsedTier, style, maxQuality)
 end
 
 local function item_display_atlas_for_tier(parsedTier, style, maxQuality)
+    return display_atlas_for_tier(parsedTier, style, maxQuality)
+end
+
+local function non_inventory_display_atlas_for_tier(parsedTier, maxQuality)
     local resolvedMaxQuality = normalized_max_quality(maxQuality, parsedTier)
-    if resolvedMaxQuality == 2 and parsedTier == 1 then
-        return "Professions-ChatIcon-Quality-12-Tier1"
+    if resolvedMaxQuality == 2 and parsedTier >= 1 and parsedTier <= 2 then
+        return string.format("Interface-Crafting-ReagentQuality-%d-Med", parsedTier)
     end
 
-    if resolvedMaxQuality == 2 and parsedTier == 2 then
-        return "Interface-Crafting-ReagentQuality-2-Med"
+    return nil
+end
+
+local function live_non_inventory_atlas(liveQualityInfo)
+    liveQualityInfo = type(liveQualityInfo) == "table" and liveQualityInfo or {}
+
+    for _, key in ipairs({ "iconInventory", "iconMixed", "iconSmall", "iconChat" }) do
+        local atlasName = tostring(liveQualityInfo[key] or "")
+        if atlasName ~= "" then
+            return atlasName
+        end
     end
 
-    return display_atlas_for_tier(parsedTier, style, resolvedMaxQuality)
+    return ""
 end
 
 local function normalize_preferred_item_atlas(atlasName, quality, maxQuality, style)
@@ -250,17 +272,14 @@ local function markup_atlas_for_tier(parsedTier)
     return nil
 end
 
-local function item_markup_atlas_for_tier(parsedTier, maxQuality)
-    local resolvedMaxQuality = normalized_max_quality(maxQuality, parsedTier)
-    if resolvedMaxQuality == 2 and parsedTier == 1 then
-        return "Professions-Icon-Quality-12-Tier1-Small"
+local function markup_string_for_atlas(atlasName, size)
+    atlasName = tostring(atlasName or "")
+    if atlasName == "" then
+        return ""
     end
 
-    if resolvedMaxQuality == 2 and parsedTier == 2 then
-        return "Professions-Icon-Quality-12-Tier2-Small"
-    end
-
-    return nil
+    local iconSize = math.max(1, math.floor(tonumber(size or 22) or 22))
+    return string.format("|A:%s:%d:%d|a", atlasName, iconSize, iconSize)
 end
 
 function craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style, maxQuality)
@@ -294,11 +313,21 @@ end
 
 function craftedQuality.GetDisplayAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
     local resolvedIcon, resolvedQuality, resolvedMaxQuality, resolvedDisplayAtlas, hasBundledAuthority = resolve_item_quality_fields(itemID, icon, fallbackQuality, maxQuality)
+    local liveQualityInfo = current_live_quality_info(itemID)
+    local parsedTier = craftedQuality.ParseTier(resolvedIcon, resolvedQuality or 0)
+    local resolvedFamily = normalized_max_quality(resolvedMaxQuality, parsedTier)
+
     if resolvedDisplayAtlas ~= "" then
         return normalize_preferred_item_atlas(resolvedDisplayAtlas, resolvedQuality, resolvedMaxQuality, style)
     end
 
-    local parsedTier = craftedQuality.ParseTier(resolvedIcon, resolvedQuality or 0)
+    if resolvedFamily == 2 and type(liveQualityInfo) == "table" then
+        local liveInventoryAtlas = tostring(liveQualityInfo.iconInventory or "")
+        if liveInventoryAtlas ~= "" then
+            return liveInventoryAtlas
+        end
+    end
+
     local genericInventoryAtlas = generic_reagent_inventory_atlas(parsedTier, style, resolvedMaxQuality, hasBundledAuthority)
     if genericInventoryAtlas ~= nil and genericInventoryAtlas ~= "" then
         return genericInventoryAtlas
@@ -312,9 +341,63 @@ function craftedQuality.GetDisplayAtlasForItem(itemID, icon, fallbackQuality, st
     return craftedQuality.GetDisplayAtlas(resolvedIcon, resolvedQuality, style, resolvedMaxQuality)
 end
 
+function craftedQuality.GetNonInventoryPresentationForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    local resolvedIcon, resolvedQuality, resolvedMaxQuality, resolvedDisplayAtlas = resolve_item_quality_fields(itemID, icon, fallbackQuality, maxQuality)
+    local resolvedStyle = tostring(style or "")
+    if resolvedStyle == "" then
+        resolvedStyle = "reagent"
+    end
+
+    local parsedTier = craftedQuality.ParseTier(resolvedIcon, resolvedQuality or 0)
+    local resolvedFamily = normalized_max_quality(resolvedMaxQuality, parsedTier)
+    local liveQualityInfo = current_live_quality_info(itemID)
+    local atlasName = ""
+
+    if resolvedFamily == 2 and tostring(resolvedDisplayAtlas or "") ~= "" then
+        atlasName = normalize_preferred_item_atlas(resolvedDisplayAtlas, resolvedQuality, resolvedMaxQuality, resolvedStyle)
+    end
+    if tostring(atlasName or "") == "" then
+        atlasName = craftedQuality.GetDisplayAtlasForItem(itemID, resolvedIcon, resolvedQuality, resolvedStyle, resolvedMaxQuality)
+    end
+    if tostring(atlasName or "") == "" then
+        if resolvedFamily == 2 and type(liveQualityInfo) == "table" then
+            atlasName = live_non_inventory_atlas(liveQualityInfo)
+        end
+    end
+    if tostring(atlasName or "") == "" then
+        atlasName = non_inventory_display_atlas_for_tier(parsedTier, resolvedMaxQuality)
+    end
+    if tostring(atlasName or "") == "" then
+        atlasName = craftedQuality.GetDisplayAtlas(resolvedIcon, resolvedQuality, resolvedStyle, resolvedMaxQuality)
+    end
+
+    atlasName = tostring(atlasName or "")
+    return {
+        atlas = atlasName,
+        markupAtlas = atlasName,
+        markup = markup_string_for_atlas(atlasName, 22),
+        icon = icon_text(resolvedIcon),
+        quality = tonumber(resolvedQuality or 0) or 0,
+        maxQuality = tonumber(resolvedMaxQuality or 0) or 0,
+        preferredAtlas = tostring(resolvedDisplayAtlas or ""),
+        style = resolvedStyle,
+    }
+end
+
+function craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    return tostring((craftedQuality.GetNonInventoryPresentationForItem(itemID, icon, fallbackQuality, style, maxQuality) or {}).atlas or "")
+end
+
+function craftedQuality.GetNonInventoryMarkupAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    return tostring((craftedQuality.GetNonInventoryPresentationForItem(itemID, icon, fallbackQuality, style, maxQuality) or {}).markupAtlas or "")
+end
+
 function craftedQuality.GetMarkupAtlas(icon, fallbackQuality, style, maxQuality)
     local parsedTier = craftedQuality.ParseTier(icon, fallbackQuality or 0)
-    local markupAtlas = markup_atlas_for_tier(parsedTier)
+    local markupAtlas = display_atlas_for_tier(parsedTier, style, maxQuality)
+    if markupAtlas == nil or markupAtlas == "" then
+        markupAtlas = markup_atlas_for_tier(parsedTier)
+    end
     if markupAtlas ~= nil and markupAtlas ~= "" then
         return markupAtlas
     end
@@ -346,6 +429,7 @@ function craftedQuality.DebugItemResolution(itemID, icon, fallbackQuality, maxQu
         finalDisplayAtlas = craftedQuality.GetDisplayAtlasForItem(itemID, resolvedIcon, resolvedQuality, style, resolvedMaxQuality)
     end
     local finalMarkupAtlas = craftedQuality.GetMarkupAtlasForItem(itemID, resolvedIcon, resolvedQuality, style, resolvedMaxQuality)
+    local nonInventoryPresentation = craftedQuality.GetNonInventoryPresentationForItem(itemID, resolvedIcon, resolvedQuality, style, resolvedMaxQuality)
 
     return {
         itemID = tonumber(itemID),
@@ -365,6 +449,8 @@ function craftedQuality.DebugItemResolution(itemID, icon, fallbackQuality, maxQu
         hasBundledAuthority = hasBundledAuthority,
         finalDisplayAtlas = tostring(finalDisplayAtlas or ""),
         finalMarkupAtlas = tostring(finalMarkupAtlas or ""),
+        finalNonInventoryAtlas = tostring((nonInventoryPresentation or {}).atlas or ""),
+        finalNonInventoryMarkupAtlas = tostring((nonInventoryPresentation or {}).markupAtlas or ""),
         finalAtlas = tostring(finalMarkupAtlas or finalDisplayAtlas or ""),
     }
 end
@@ -401,6 +487,7 @@ function craftedQuality.DescribeItemResolution(itemID, icon, fallbackQuality, ma
         string.format("final atlas=%s", tostring(debugInfo.finalAtlas or "")),
         string.format("final markup atlas=%s", tostring(debugInfo.finalMarkupAtlas or "")),
         string.format("final display atlas=%s", tostring(debugInfo.finalDisplayAtlas or "")),
+        string.format("final non-inventory atlas=%s", tostring(debugInfo.finalNonInventoryAtlas or "")),
     }
 end
 
@@ -416,32 +503,22 @@ end
 
 function craftedQuality.ToMarkupForItem(itemID, icon, size, style, fallbackQuality, maxQuality)
     local atlasName = craftedQuality.GetMarkupAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
-    if atlasName == "" then
-        return ""
-    end
-
-    local iconSize = math.max(1, math.floor(tonumber(size or 22) or 22))
-    return string.format("|A:%s:%d:%d|a", tostring(atlasName), iconSize, iconSize)
+    return markup_string_for_atlas(atlasName, size)
 end
 
 function craftedQuality.DisplayMarkup(icon, size, style, fallbackQuality, maxQuality)
     local atlasName = craftedQuality.GetMarkupAtlas(icon, fallbackQuality, style, maxQuality)
-    if atlasName == "" then
-        return ""
-    end
-
-    local iconSize = math.max(1, math.floor(tonumber(size or 22) or 22))
-    return string.format("|A:%s:%d:%d|a", tostring(atlasName), iconSize, iconSize)
+    return markup_string_for_atlas(atlasName, size)
 end
 
 function craftedQuality.DisplayMarkupForItem(itemID, icon, size, style, fallbackQuality, maxQuality)
     local atlasName = craftedQuality.GetMarkupAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
-    if atlasName == "" then
-        return ""
-    end
+    return markup_string_for_atlas(atlasName, size)
+end
 
-    local iconSize = math.max(1, math.floor(tonumber(size or 22) or 22))
-    return string.format("|A:%s:%d:%d|a", tostring(atlasName), iconSize, iconSize)
+function craftedQuality.DisplayNonInventoryMarkupForItem(itemID, icon, size, style, fallbackQuality, maxQuality)
+    local atlasName = craftedQuality.GetNonInventoryMarkupAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    return markup_string_for_atlas(atlasName, size)
 end
 
 function craftedQuality.ParseTier(icon, fallbackQuality)

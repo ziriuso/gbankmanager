@@ -87,26 +87,26 @@ env.ns.state.db = _G.GBankManagerDB
 
 mainFrame:SelectView("MINIMUMS")
 assert.equal(
-    "Interface-Crafting-ReagentQuality-2-Med",
+    "Professions-Icon-Quality-12-Tier2-Inv",
     (mainFrame.tableRowsData[1] or {}).tierIconAtlas,
-    "minimums rows should keep bundled crafted-quality metadata authoritative when saved rows disagree"
+    "minimums rows should keep the canonical bundled gold-pentagram atlas even when the client reports a different live reagent-quality family"
 )
 assert.equal(
-    "Interface-Crafting-ReagentQuality-2-Med",
+    "Professions-Icon-Quality-12-Tier2-Inv",
     (((((mainFrame.tableRows or {})[1] or {}).columnIcons or {})[2] or {}).atlas),
-    "minimums should render the bundled authoritative two-rank atlas through the shared texture path"
+    "minimums should render the canonical bundled gold-pentagram atlas through the shared texture path when live reagent-quality data disagrees"
 )
 assert.equal(
-    "",
+    "Flask of the Magisters",
     tostring((((mainFrame.tableRows or {})[1] or {}).columns or {})[2] and ((((mainFrame.tableRows or {})[1] or {}).columns or {})[2]:GetText()) or ""),
-    "minimums should not fall back to inline crafted-quality markup once the dedicated texture path is available"
+    "minimums should keep the shared item display text visible while the crafted-quality icon renders through the dedicated texture path"
 )
 
 mainFrame:SelectView("REQUESTS")
 assert.equal(
-    "Interface-Crafting-ReagentQuality-2-Med",
+    "Professions-Icon-Quality-12-Tier2-Inv",
     (mainFrame.tableRowsData[1] or {}).tierAtlas,
-    "requests rows should rebuild two-rank icons from bundled item data even when saved request rows omit craftedQualityMax"
+    "requests rows should rebuild two-rank icons from the canonical bundled gold-pentagram atlas when saved request rows omit craftedQualityMax"
 )
 assert.equal(
     "",
@@ -116,18 +116,18 @@ assert.equal(
 
 mainFrame:OpenRequestDetailsModal("request-live-tier")
 assert.equal(
-    "Interface-Crafting-ReagentQuality-2-Med",
-    mainFrame.requestDetailsQualityIcon.atlas,
-    "request details should use the same bundled two-rank atlas family as inventory and requests rows even when the saved request row still carries the stale silver tier icon"
+    "Flask of the Shattered Sun",
+    mainFrame.requestDetailsItemNameText:GetText(),
+    "request details should keep the item name visible after live crafted-quality backfill"
 )
 assert.truthy(
-    (mainFrame.requestDetailsQualityIcon and mainFrame.requestDetailsQualityIcon:IsShown()) == true,
-    "request details should render quality through the dedicated texture path"
+    not (mainFrame.requestDetailsQualityIcon and mainFrame.requestDetailsQualityIcon:IsShown()),
+    "request details should keep the separate quality icon hidden under the shared item-display contract"
 )
 
 mainFrame:SelectView("EXPORTS")
 assert.equal(
-    "Interface-Crafting-ReagentQuality-2-Med",
+    "Professions-Icon-Quality-12-Tier2-Inv",
     (mainFrame.tableRowsData[1] or {}).itemTierAtlas,
-    "exports rows should keep bundled crafted-quality metadata authoritative even when the live client reports a different atlas"
+    "exports rows should prefer the canonical bundled gold-pentagram atlas when the live reagent-quality payload exposes a different family"
 )

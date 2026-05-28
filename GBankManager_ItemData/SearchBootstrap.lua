@@ -42,6 +42,8 @@ function bootstrap.AppendItemChunk(chunk)
             legacyCatalog.items[#legacyCatalog.items + 1] = item
             qualityByItemID[itemID] = {
                 itemID = itemID,
+                itemLink = item.itemLink,
+                itemString = item.itemString,
                 craftedQuality = item.craftedQuality,
                 craftedQualityIcon = item.craftedQualityIcon,
                 craftedQualityMax = item.craftedQualityMax,

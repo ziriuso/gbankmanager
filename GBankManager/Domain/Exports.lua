@@ -33,11 +33,11 @@ local function normalize_export_inline_atlas(atlasName, fallbackQuality, maxQual
     local familySize = tonumber(maxQuality or 0) or 0
 
     if quality == 1 and familySize == 2 and atlasName == "Professions-ChatIcon-Quality-Tier1" then
-        return "Professions-ChatIcon-Quality-12-Tier1"
+        return "Professions-Icon-Quality-12-Tier1-Inv"
     end
 
     if quality == 2 and familySize <= 0 and atlasName == "Professions-ChatIcon-Quality-Tier2" then
-        return "Interface-Crafting-ReagentQuality-2-Med"
+        return "Professions-Icon-Quality-12-Tier2-Inv"
     end
 
     return atlasName
@@ -62,6 +62,13 @@ local function crafted_quality_markup(atlasName, fallbackQuality, maxQuality)
 end
 
 local function crafted_quality_markup_for_item(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+        local markup = craftedQuality.DisplayNonInventoryMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+        if markup ~= "" then
+            return markup
+        end
+    end
+
     if type(craftedQuality.DisplayMarkupForItem) == "function" then
         local markup = craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
         if markup ~= "" then
@@ -81,13 +88,18 @@ local function crafted_quality_markup_for_item(itemID, atlasName, fallbackQualit
 end
 
 local function crafted_quality_atlas_for_item(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function" then
+        local resolvedAtlas = craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+        return normalize_export_inline_atlas(resolvedAtlas, fallbackQuality, maxQuality)
+    end
+
     if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
-        local resolvedAtlas = craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, nil, maxQuality)
+        local resolvedAtlas = craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
         return normalize_export_inline_atlas(resolvedAtlas, fallbackQuality, maxQuality)
     end
 
     if type(craftedQuality.GetDisplayAtlas) == "function" then
-        local resolvedAtlas = craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, nil, maxQuality)
+        local resolvedAtlas = craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, "reagent", maxQuality)
         return normalize_export_inline_atlas(resolvedAtlas, fallbackQuality, maxQuality)
     end
 

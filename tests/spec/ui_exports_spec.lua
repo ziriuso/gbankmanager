@@ -104,7 +104,7 @@ assert.equal("common-icon-forwardarrow", tostring((excessCellIcon or {}).atlas o
 assert.equal("TOPRIGHT", excessIconPoint[1], "exports should right-align the drill-in icon within the excess cell")
 assert.truthy((excessIconPoint[4] or 0) >= 90, "exports should keep the drill-in icon anchored near the far-right edge of the excess cell")
 assert.equal("Professions-ChatIcon-Quality-Tier3", mainFrame.tableRowsData[1].itemTierIconAtlas, "exports rows should show the crafted-quality icon instead of a raw tier number")
-assert.equal("Professions-ChatIcon-Quality-12-Tier1", mainFrame.tableRowsData[2].itemTierIconAtlas, "exports rows should trust bundled crafted-tier metadata over stale saved row quality when a lower two-rank item has bad local data")
+assert.equal("Professions-Icon-Quality-12-Tier1-Inv", mainFrame.tableRowsData[2].itemTierIconAtlas, "exports rows should trust bundled crafted-tier metadata over stale saved row quality while rendering lower two-rank crafted items through the canonical single-silver-diamond atlas")
 assert.truthy((mainFrame.tableColumnLayout[2].width or 0) >= 42, "exports should keep the Tier column visible while making room for the extra quantity columns")
 assert.truthy(not mainFrame.exportPresetCustomButton:IsShown(), "exports should remove the custom option")
 assert.truthy(mainFrame.exportPresetTsmButton:IsShown(), "exports should expose a TSM item-id import option when supported")
@@ -161,7 +161,7 @@ assert.equal("UICheckButtonTemplate", (manualShoppingRow.checkButton or {}).temp
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "|A:", 1, true) ~= nil, "manual shopping list rows should render the crafted-quality icon inline")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "T3", 1, true) == nil, "manual shopping list rows should stop falling back to raw T-tier text")
 local missingSnapshotRow = (mainFrame.exportManualShoppingListRows or {})[2]
-assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions%-ChatIcon%-Quality%-12%-Tier1", 1) ~= nil, "manual shopping list rows should trust bundled lower-rank crafted-tier metadata over stale saved row quality when no live stock snapshot exists")
+assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions-Icon-Quality-12-Tier1-Inv", 1, true) ~= nil, "manual shopping list rows should trust bundled lower-rank crafted-tier metadata over stale saved row quality when no live stock snapshot exists")
 assert.truthy(manualShoppingRow.checkButton:GetChecked() ~= true, "manual shopping rows should start unchecked")
 manualShoppingRow.checkButton:GetScript("OnClick")(manualShoppingRow.checkButton)
 assert.truthy(manualShoppingRow.checkButton:GetChecked() == true, "checking a manual shopping row should toggle the built-in checkbox state")

@@ -714,7 +714,8 @@ local function describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     }
 end
 
-local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix)
+local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix, options)
+    options = type(options) == "table" and options or {}
     local delta = describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     local currentFingerprints = delta.currentFingerprints
     local newRowCount = delta.newRowCount
@@ -731,7 +732,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
         return mergedCount
     end
 
-    if delta.suspiciousNoOverlap and knownFingerprintCount == 0 then
+    if delta.suspiciousNoOverlap and knownFingerprintCount == 0 and options.allowSuspiciousUnknownAppend ~= true then
         return mergedCount
     end
 
@@ -898,7 +899,10 @@ function bankLedger.MergeItemTransactions(db, payload)
         sourceKey,
         normalizedRows,
         0,
-        "item"
+        "item",
+        {
+            allowSuspiciousUnknownAppend = false,
+        }
     )
     bankLedger.MarkScanned(db, scanStartedAt, "item")
     return mergedCount
@@ -920,7 +924,10 @@ function bankLedger.MergeMoneyTransactions(db, payload)
         sourceKey,
         normalizedRows,
         0,
-        "money"
+        "money",
+        {
+            allowSuspiciousUnknownAppend = true,
+        }
     )
     bankLedger.MarkScanned(db, scanStartedAt, "money")
     return mergedCount

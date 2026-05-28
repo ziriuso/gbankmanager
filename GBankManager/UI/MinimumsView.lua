@@ -6,11 +6,15 @@ ns.modules = ns.modules or {}
 local minimumsView = ns.modules.minimumsView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 local itemCatalog = ns.modules.itemCatalog or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
 if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
     itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
 end
 
 local function canonical_item(item)
@@ -74,6 +78,8 @@ local function normalize_rule(rule, previous)
     return {
         itemID = rule.itemID,
         itemName = rule.itemName,
+        itemLink = rule.itemLink or previous.itemLink,
+        itemString = rule.itemString or previous.itemString,
         quantity = rule.quantity or 0,
         scope = scope,
         tabName = tabName,
@@ -93,6 +99,10 @@ local function normalize_rule(rule, previous)
 end
 
 local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+        return craftedQuality.DisplayNonInventoryMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
     if type(craftedQuality.DisplayMarkupForItem) == "function" then
         return craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
     end
@@ -117,12 +127,16 @@ local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQua
 end
 
 local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
     if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
-        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, nil, maxQuality)
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
     end
 
     if type(craftedQuality.GetDisplayAtlas) == "function" then
-        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, nil, maxQuality)
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, "reagent", maxQuality)
     end
 
     return tostring(atlasName or "")
@@ -433,6 +447,8 @@ function minimumsView.SaveForApprovedRequest(db, request, bankTab, metadata)
     local rule = {
         itemID = itemID,
         itemName = itemName,
+        itemLink = request.itemLink,
+        itemString = request.itemString,
         quantity = quantity,
         scope = "TAB",
         tabName = bankTab,
@@ -539,11 +555,17 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
         local shouldRestock = row.enabled ~= false and currentCount < minimumCount
         local source = item and "Configured" or "Manual"
         local qualitySource = canonical_item(item or row)
+        local display = type(itemDisplay.BuildDisplayPayload) == "function" and itemDisplay.BuildDisplayPayload(qualitySource) or {
+            visibleText = tostring((row or {}).itemName or (qualitySource or {}).name or "Unknown"),
+            plainTextName = tostring((row or {}).itemName or (qualitySource or {}).name or "Unknown"),
+        }
 
         table.insert(out, {
             rowKey = row.draftKey or rule_key(row),
             itemID = tostring(row.itemID or ""),
-            itemName = tostring(row.itemName or "Unknown"),
+            itemDisplayText = tostring(display.visibleText or row.itemName or "Unknown"),
+            itemDisplayTextIconAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(qualitySource), qualitySource.craftedQuality, qualitySource.craftedQualityFamilySize or qualitySource.craftedQualityMax),
+            itemName = tostring(display.plainTextName or row.itemName or "Unknown"),
             tier = "",
             tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(qualitySource), qualitySource.craftedQuality, qualitySource.craftedQualityFamilySize or qualitySource.craftedQualityMax),
             tierIconAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(qualitySource), qualitySource.craftedQuality, qualitySource.craftedQualityFamilySize or qualitySource.craftedQualityMax),
@@ -585,16 +607,22 @@ function minimumsView.BuildTableRows(rows, snapshot, options)
     for _, itemRow in ipairs(snapshot_bank_rows(snapshot)) do
         local configuredTab = itemRow.tabName or "-"
         local itemID = itemRow.itemID
-        if showAll and not seen[tab_row_key(itemID, configuredTab)] then
-            local item = canonical_item(itemRow.aggregate)
-            local currentCount = tonumber(itemRow.quantity or 0) or 0
-            table.insert(out, {
-                rowKey = tab_row_key(itemID, configuredTab),
-                itemID = tostring(itemID or ""),
-                itemName = tostring(itemRow.name or "Unknown"),
-                tier = "",
-                tierAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
-                tierIconAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+            if showAll and not seen[tab_row_key(itemID, configuredTab)] then
+                local item = canonical_item(itemRow.aggregate)
+                local currentCount = tonumber(itemRow.quantity or 0) or 0
+                local display = type(itemDisplay.BuildDisplayPayload) == "function" and itemDisplay.BuildDisplayPayload(item) or {
+                    visibleText = tostring(itemRow.name or "Unknown"),
+                    plainTextName = tostring(itemRow.name or "Unknown"),
+                }
+                table.insert(out, {
+                    rowKey = tab_row_key(itemID, configuredTab),
+                    itemID = tostring(itemID or ""),
+                    itemDisplayText = tostring(display.visibleText or itemRow.name or "Unknown"),
+                    itemDisplayTextIconAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+                    itemName = tostring(display.plainTextName or itemRow.name or "Unknown"),
+                    tier = "",
+                    tierAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+                    tierIconAtlas = crafted_quality_atlas(itemID, preferred_quality_icon(item), item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
                 tierValue = crafted_quality_rank(item),
                 quantity = "-",
                 quantityValue = 0,
@@ -699,6 +727,7 @@ function minimumsView.SortRows(rows, sortState)
     local direction = sortState.direction or "asc"
     local valueKey = ({
         tier = "tierValue",
+        itemDisplayText = "itemName",
         current = "currentValue",
         quantity = "quantityValue",
         bankTab = "bankTabValue",

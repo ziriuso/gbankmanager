@@ -323,6 +323,16 @@ function Write-ItemChunkFile {
         $recordFields.Add("itemID = $itemID")
         $recordFields.Add("name = $(ConvertTo-LuaString $resolvedName)")
 
+        $itemLinkValue = Get-FastPropertyValue -Object $item -Name "itemLink"
+        if ($null -ne $itemLinkValue) {
+            $recordFields.Add("itemLink = $(ConvertTo-LuaString ([string]$itemLinkValue))")
+        }
+
+        $itemStringValue = Get-FastPropertyValue -Object $item -Name "itemString"
+        if ($null -ne $itemStringValue) {
+            $recordFields.Add("itemString = $(ConvertTo-LuaString ([string]$itemStringValue))")
+        }
+
         $qualityValue = Get-FastPropertyValue -Object $item -Name "quality"
         if ($null -ne $qualityValue) {
             $recordFields.Add("quality = $([int]$qualityValue)")

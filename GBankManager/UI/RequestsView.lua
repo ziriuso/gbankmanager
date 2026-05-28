@@ -6,11 +6,15 @@ ns.modules = ns.modules or {}
 local requestsView = ns.modules.requestsView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 local itemCatalog = ns.modules.itemCatalog or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
 if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
     itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
 end
 
 local function canonical_item(item)
@@ -24,6 +28,19 @@ end
 local function preferred_quality_icon(item)
     item = type(item) == "table" and item or {}
     return tostring(item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or "")
+end
+
+local function build_item_display(item)
+    if type(itemCatalog.HydrateItem) == "function" then
+        itemCatalog.HydrateItem(item)
+    end
+    if type(itemDisplay.BuildDisplayPayload) == "function" then
+        return itemDisplay.BuildDisplayPayload(item)
+    end
+
+    return {
+        visibleText = tostring((item or {}).itemName or (item or {}).name or "Unknown"),
+    }
 end
 
 local function format_timestamp(timestamp)
@@ -40,6 +57,10 @@ local function format_timestamp(timestamp)
 end
 
 local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+        return craftedQuality.DisplayNonInventoryMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
     if type(craftedQuality.DisplayMarkupForItem) == "function" then
         return craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
     end
@@ -64,12 +85,16 @@ local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQua
 end
 
 local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
     if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
-        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, nil, maxQuality)
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
     end
 
     if type(craftedQuality.GetDisplayAtlas) == "function" then
-        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, nil, maxQuality)
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, "reagent", maxQuality)
     end
 
     return tostring(atlasName or "")
@@ -219,6 +244,7 @@ function requestsView.BuildTableRows(rows)
     for _, row in ipairs(queue) do
         row = canonical_item(row)
         local tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax)
+        local display = build_item_display(row)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
@@ -226,7 +252,15 @@ function requestsView.BuildTableRows(rows)
             tier = tierAtlas ~= "" and "" or crafted_quality_markup(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax),
             tierAtlas = tierAtlas,
             tierIconAtlas = tierAtlas,
+            itemDisplayText = tostring(display.visibleText or row.itemName or "Unknown"),
+            itemDisplayTextIconAtlas = tierAtlas,
             tierValue = tonumber(row.craftedQuality or 0) or 0,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
+            craftedQualityFamilySize = row.craftedQualityFamilySize,
+            craftedQualityDisplayAtlas = row.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = row.craftedQualityPreferredAtlas,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),
@@ -272,6 +306,7 @@ function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters
     for _, row in ipairs(queue) do
         row = canonical_item(row)
         local tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax)
+        local display = build_item_display(row)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
@@ -279,7 +314,15 @@ function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters
             tier = tierAtlas ~= "" and "" or crafted_quality_markup(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax),
             tierAtlas = tierAtlas,
             tierIconAtlas = tierAtlas,
+            itemDisplayText = tostring(display.visibleText or row.itemName or "Unknown"),
+            itemDisplayTextIconAtlas = tierAtlas,
             tierValue = tonumber(row.craftedQuality or 0) or 0,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
+            craftedQualityFamilySize = row.craftedQualityFamilySize,
+            craftedQualityDisplayAtlas = row.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = row.craftedQualityPreferredAtlas,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),

@@ -88,7 +88,7 @@ local rows = inventory.BuildTableRows({
             name = "Algari Mana Oil",
             totalCount = 5,
             craftedQuality = 0,
-            craftedQualityIcon = "Professions-Icon-Quality-2-Inv",
+            craftedQualityIcon = "Professions-Icon-Quality-12-Tier2-Inv",
             craftedQualityMax = 5,
             tabs = { Potions = 5 },
         },
@@ -109,7 +109,7 @@ for _, row in ipairs(rows) do
 end
 
 assert.equal(
-    "Professions-ChatIcon-Quality-12-Tier1",
+    "Professions-Icon-Quality-12-Tier1-Inv",
     rowsByName["Potion Bomb of Speed"].tierIconAtlas,
     "inventory should normalize true two-rank tier-one items into the shared visible silver-diamond icon treatment through the texture-backed tier atlas"
 )

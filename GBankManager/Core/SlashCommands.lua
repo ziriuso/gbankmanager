@@ -35,6 +35,359 @@ local function push_chat_line(message)
     end
 end
 
+local ATLAS_SAMPLER_CANDIDATES = {
+    "Professions-Icon-Quality-12-Tier1-Inv",
+    "Professions-Icon-Quality-12-Tier2-Inv",
+    "Professions-Icon-Quality-1-Inv",
+    "Professions-Icon-Quality-2-Inv",
+    "Professions-Icon-Quality-Tier1-Inv",
+    "Professions-Icon-Quality-Tier2-Inv",
+    "Professions-Icon-Quality-1",
+    "Professions-Icon-Quality-2",
+    "Professions-ChatIcon-Quality-Tier1",
+    "Professions-ChatIcon-Quality-Tier2",
+    "Professions-ChatIcon-Quality-12-Tier1",
+    "Professions-ChatIcon-Quality-12-Tier2",
+    "Interface-Crafting-ReagentQuality-1-Med",
+    "Interface-Crafting-ReagentQuality-2-Med",
+}
+
+local function safe_set_text(region, value)
+    if region and type(region.SetText) == "function" then
+        region:SetText(tostring(value or ""))
+    end
+end
+
+local function safe_set_atlas(texture, atlasName, useAtlasSize)
+    if type(texture) ~= "table" or type(texture.SetAtlas) ~= "function" then
+        return false
+    end
+
+    local ok = pcall(function()
+        texture:SetAtlas(atlasName, useAtlasSize == true)
+    end)
+    texture.atlas = atlasName
+    texture.useAtlasSize = useAtlasSize == true
+    texture.atlasWasSet = ok == true
+    return ok == true
+end
+
+local function atlas_info_text(atlasName)
+    local textureApi = _G.C_Texture
+    if type(textureApi) ~= "table" or type(textureApi.GetAtlasInfo) ~= "function" then
+        return "metadata unavailable"
+    end
+
+    local ok, info = pcall(textureApi.GetAtlasInfo, atlasName)
+    if not ok or type(info) ~= "table" then
+        return "metadata unavailable"
+    end
+
+    local width = info.width or info.fileWidth
+    local height = info.height or info.fileHeight
+    if width and height then
+        return string.format("%sx%s", tostring(width), tostring(height))
+    end
+
+    return "metadata available"
+end
+
+local function append_line(lines, text)
+    lines[#lines + 1] = tostring(text or "")
+end
+
+local function value_text(value)
+    if value == nil then
+        return "nil"
+    end
+
+    local text = tostring(value)
+    if text == "" then
+        return "<empty>"
+    end
+
+    return text
+end
+
+local function row_matches_item(row, itemID)
+    if type(row) ~= "table" then
+        return false
+    end
+    if not itemID then
+        return true
+    end
+
+    return tonumber(row.itemID) == tonumber(itemID)
+end
+
+local function compact_row_fields(row)
+    row = type(row) == "table" and row or {}
+    local keys = {
+        "itemID",
+        "itemName",
+        "itemDisplayText",
+        "itemDisplayTextIconAtlas",
+        "tierIconAtlas",
+        "itemTierIconAtlas",
+        "craftedQuality",
+        "craftedQualityIcon",
+        "craftedQualityDisplayAtlas",
+        "craftedQualityPreferredAtlas",
+        "craftedQualityMax",
+        "craftedQualityFamilySize",
+        "quality",
+        "itemTierValue",
+    }
+    local fields = {}
+
+    for _, key in ipairs(keys) do
+        if row[key] ~= nil and tostring(row[key] or "") ~= "" then
+            fields[#fields + 1] = string.format("%s=%s", key, value_text(row[key]))
+        end
+    end
+
+    return table.concat(fields, " ")
+end
+
+local function visible_icon_lines(lines, mainFrame, itemID)
+    local visibleMatches = 0
+    for visibleIndex, rowFrame in ipairs((mainFrame or {}).tableRows or {}) do
+        local row = rowFrame and rowFrame.rowData
+        if row_matches_item(row, itemID) then
+            visibleMatches = visibleMatches + 1
+            append_line(lines, string.format("visible[%d].rowData=%s", visibleIndex, compact_row_fields(row)))
+            for colIndex, key in ipairs((mainFrame or {}).tableColumnKeys or {}) do
+                local icon = rowFrame.columnIcons and rowFrame.columnIcons[colIndex] or nil
+                local column = rowFrame.columns and rowFrame.columns[colIndex] or nil
+                local atlas = icon and icon.atlas or nil
+                local shown = icon and type(icon.IsShown) == "function" and icon:IsShown() or false
+                local text = column and type(column.GetText) == "function" and column:GetText() or ""
+                append_line(lines, string.format(
+                    "visible[%d].col%d.key=%s atlas=%s shown=%s text=%s",
+                    visibleIndex,
+                    colIndex,
+                    value_text(key),
+                    value_text(atlas),
+                    tostring(shown == true),
+                    value_text(text)
+                ))
+            end
+        end
+    end
+
+    if visibleMatches == 0 then
+        append_line(lines, "visible=<no matching visible row; scroll/filter may hide it>")
+    end
+end
+
+local function collect_render_debug(mainFrame, itemID)
+    local lines = {}
+    if type(mainFrame) ~= "table" then
+        append_line(lines, "render debug unavailable: mainFrame missing")
+        return lines
+    end
+
+    append_line(lines, string.format(
+        "render debug itemID=%s activeView=%s renderer=%s rowsData=%d visibleRows=%d",
+        value_text(itemID),
+        value_text(mainFrame.activeView),
+        type(mainFrame.RefreshVisibleTableRows) == "function" and "shared-table" or "unknown",
+        #(mainFrame.tableRowsData or {}),
+        #(mainFrame.tableRows or {})
+    ))
+
+    local columnParts = {}
+    for index, key in ipairs(mainFrame.tableColumnKeys or {}) do
+        columnParts[#columnParts + 1] = string.format("%d:%s", index, value_text(key))
+    end
+    append_line(lines, "columns=" .. table.concat(columnParts, ","))
+
+    local dataMatches = 0
+    for index, row in ipairs(mainFrame.tableRowsData or {}) do
+        if row_matches_item(row, itemID) then
+            dataMatches = dataMatches + 1
+            append_line(lines, string.format("data[%d].%s", index, compact_row_fields(row)))
+        end
+    end
+    if dataMatches == 0 then
+        append_line(lines, "data=<no matching tableRowsData row>")
+    end
+
+    visible_icon_lines(lines, mainFrame, itemID)
+    return lines
+end
+
+local function collect_request_debug(mainFrame, itemID)
+    local lines = {}
+    if type(mainFrame) ~= "table" then
+        append_line(lines, "request debug unavailable: mainFrame missing")
+        return lines
+    end
+
+    local selector = mainFrame.requestCreateSearchSelector
+    append_line(lines, string.format(
+        "request debug itemID=%s modalShown=%s selector=%s",
+        value_text(itemID),
+        tostring(mainFrame.requestWizardModal and type(mainFrame.requestWizardModal.IsShown) == "function" and mainFrame.requestWizardModal:IsShown() == true),
+        type(selector) == "table" and "requestCreateSearchSelector" or "missing"
+    ))
+
+    if type(selector) ~= "table" then
+        return lines
+    end
+
+    local selected = selector.selectedItem
+    if row_matches_item(selected, itemID) then
+        append_line(lines, "selected." .. compact_row_fields(selected))
+        local selectedIcon = selector.selectedItemQualityIcon
+        append_line(lines, string.format(
+            "selected.qualityAtlas=%s shown=%s text=%s",
+            value_text(selectedIcon and selectedIcon.atlas or nil),
+            tostring(selectedIcon and type(selectedIcon.IsShown) == "function" and selectedIcon:IsShown() == true),
+            value_text(selector.selectedItemNameText and type(selector.selectedItemNameText.GetText) == "function" and selector.selectedItemNameText:GetText() or "")
+        ))
+    elseif selected ~= nil then
+        append_line(lines, "selected=<different item>")
+    else
+        append_line(lines, "selected=nil")
+    end
+
+    local visibleMatches = 0
+    for index, row in ipairs(selector.resultRows or {}) do
+        local item = row and row.resolvedItem
+        if row_matches_item(item, itemID) then
+            visibleMatches = visibleMatches + 1
+            append_line(lines, string.format("result[%d].%s", index, compact_row_fields(item)))
+            append_line(lines, string.format(
+                "result[%d].qualityAtlas=%s shown=%s text=%s",
+                index,
+                value_text(row.qualityIcon and row.qualityIcon.atlas or nil),
+                tostring(row.qualityIcon and type(row.qualityIcon.IsShown) == "function" and row.qualityIcon:IsShown() == true),
+                value_text(row.itemText and type(row.itemText.GetText) == "function" and row.itemText:GetText() or "")
+            ))
+        end
+    end
+
+    if visibleMatches == 0 then
+        append_line(lines, "result=<no matching visible request selector row; query/scroll may hide it>")
+    end
+
+    return lines
+end
+
+local function create_or_reset_atlas_sampler()
+    if type(_G.CreateFrame) ~= "function" then
+        push_chat_line("GBankManager: Atlas sampler requires the WoW UI frame API.")
+        return nil
+    end
+
+    local frame = slash.atlasSamplerFrame
+    if type(frame) ~= "table" then
+        frame = _G.CreateFrame("Frame", "GBankManagerAtlasSamplerFrame", _G.UIParent, "BackdropTemplate")
+        slash.atlasSamplerFrame = frame
+        if type(frame.SetSize) == "function" then
+            frame:SetSize(700, 470)
+        end
+        if type(frame.SetPoint) == "function" then
+            frame:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+        end
+        if type(frame.SetFrameStrata) == "function" then
+            frame:SetFrameStrata("DIALOG")
+        end
+        if type(frame.SetToplevel) == "function" then
+            frame:SetToplevel(true)
+        end
+        if type(frame.SetMovable) == "function" then
+            frame:SetMovable(true)
+        end
+        if type(frame.EnableMouse) == "function" then
+            frame:EnableMouse(true)
+        end
+        if type(frame.RegisterForDrag) == "function" then
+            frame:RegisterForDrag("LeftButton")
+        end
+        if type(frame.SetScript) == "function" then
+            frame:SetScript("OnDragStart", frame.StartMoving)
+            frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        end
+        if type(frame.SetBackdrop) == "function" then
+            frame:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+            })
+        end
+        if type(frame.SetBackdropColor) == "function" then
+            frame:SetBackdropColor(0.04, 0.05, 0.06, 0.96)
+        end
+        if type(frame.SetBackdropBorderColor) == "function" then
+            frame:SetBackdropBorderColor(0.8, 0.62, 0.12, 0.85)
+        end
+
+        frame.titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        frame.titleText:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+        safe_set_text(frame.titleText, "GBankManager Crafted-Quality Atlas Sampler")
+
+        frame.hintText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        frame.hintText:SetPoint("TOPLEFT", frame.titleText, "BOTTOMLEFT", 0, -8)
+        frame.hintText:SetWidth(650)
+        frame.hintText:SetWordWrap(true)
+        safe_set_text(frame.hintText, "Compare the fixed-size and atlas-size previews. Tell Codex which labels show the single silver diamond and gold pentagon.")
+
+        frame.closeButton = _G.CreateFrame("Button", nil, frame, "BackdropTemplate")
+        frame.closeButton:SetSize(72, 24)
+        frame.closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -12)
+        frame.closeButton.labelText = frame.closeButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        frame.closeButton.labelText:SetPoint("CENTER", frame.closeButton, "CENTER", 0, 0)
+        safe_set_text(frame.closeButton.labelText, "Close")
+        frame.closeButton:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+
+    frame.rows = frame.rows or {}
+    for index, atlasName in ipairs(ATLAS_SAMPLER_CANDIDATES) do
+        local row = frame.rows[index]
+        if type(row) ~= "table" then
+            row = _G.CreateFrame("Frame", nil, frame, "BackdropTemplate")
+            row:SetSize(660, 24)
+            row:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -(70 + ((index - 1) * 27)))
+            row.fixedIcon = row:CreateTexture(nil, "ARTWORK")
+            row.fixedIcon:SetSize(18, 18)
+            row.fixedIcon:SetPoint("LEFT", row, "LEFT", 0, 0)
+            row.atlasSizedIcon = row:CreateTexture(nil, "ARTWORK")
+            row.atlasSizedIcon:SetSize(22, 22)
+            row.atlasSizedIcon:SetPoint("LEFT", row.fixedIcon, "RIGHT", 14, 0)
+            row.labelText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.labelText:SetPoint("LEFT", row.atlasSizedIcon, "RIGHT", 14, 0)
+            row.metadataText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.metadataText:SetPoint("LEFT", row, "LEFT", 430, 0)
+            frame.rows[index] = row
+        end
+
+        row.atlasName = atlasName
+        safe_set_atlas(row.fixedIcon, atlasName, false)
+        safe_set_atlas(row.atlasSizedIcon, atlasName, true)
+        safe_set_text(row.labelText, atlasName)
+        safe_set_text(row.metadataText, atlas_info_text(atlasName))
+        if type(row.Show) == "function" then
+            row:Show()
+        end
+    end
+
+    for index = #ATLAS_SAMPLER_CANDIDATES + 1, #frame.rows do
+        if type(frame.rows[index]) == "table" and type(frame.rows[index].Hide) == "function" then
+            frame.rows[index]:Hide()
+        end
+    end
+
+    if type(frame.Show) == "function" then
+        frame:Show()
+    end
+    push_chat_line("GBankManager: Atlas sampler opened. After /reload, run /gbm debug atlas and report the labels for the single silver diamond and gold pentagon.")
+    return frame
+end
+
 local function open_request_wizard(mainFrame)
     if not mainFrame or type(mainFrame.OpenRequestWizard) ~= "function" then
         return
@@ -81,6 +434,9 @@ local function show_help()
     push_chat_line("/gbm request - Open the request workflow.")
     push_chat_line("/gbm scan - Scan the guild bank and ledger.")
     push_chat_line("/gbm debug quality <itemID> - Print bundled and live crafted-quality resolution details.")
+    push_chat_line("/gbm debug atlas - Open a visual crafted-quality atlas sampler.")
+    push_chat_line("/gbm debug render <itemID> - Print active table row and visible texture diagnostics.")
+    push_chat_line("/gbm debug request <itemID> - Print request wizard selector icon diagnostics.")
     push_chat_line("/gbm test smoke - Run the in-game smoke test.")
     push_chat_line("/gbm test unit - Run the in-game unit checks.")
     push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
@@ -145,6 +501,32 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             end
 
             local lines = craftedQuality.DescribeItemResolution(itemID, "", 0, 0, "reagent")
+            for _, line in ipairs(lines or {}) do
+                push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
+            end
+            return lines
+        elseif subcommand == "atlas" then
+            return create_or_reset_atlas_sampler()
+        elseif subcommand == "render" then
+            local itemID = tonumber(trim(payload or ""))
+            if not itemID then
+                push_chat_line("GBankManager: Usage: /gbm debug render <itemID>")
+                return "debug_render_usage"
+            end
+
+            local lines = collect_render_debug(mainFrame, itemID)
+            for _, line in ipairs(lines or {}) do
+                push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
+            end
+            return lines
+        elseif subcommand == "request" then
+            local itemID = tonumber(trim(payload or ""))
+            if not itemID then
+                push_chat_line("GBankManager: Usage: /gbm debug request <itemID>")
+                return "debug_request_usage"
+            end
+
+            local lines = collect_request_debug(mainFrame, itemID)
             for _, line in ipairs(lines or {}) do
                 push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
             end

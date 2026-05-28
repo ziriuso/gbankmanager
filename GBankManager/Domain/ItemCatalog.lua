@@ -17,6 +17,10 @@ local function strip_legacy_tier_prefix(value)
     return text
 end
 
+local function item_id_from_link(link)
+    return tonumber(string.match(tostring(link or ""), "item:(%d+)"))
+end
+
 local function get_bundled_search_diagnostics()
     local payload = ns.data.staticItemSearch
         or ns.modules.staticItemSearch
@@ -103,47 +107,62 @@ function itemCatalog.EnsureBundledDataLoaded()
     return false
 end
 
-local function append_unique_item(items, seenByItemID, item)
-    if type(item) ~= "table" then
-        return
-    end
+function itemCatalog.HydrateItem(item)
+    item = type(item) == "table" and item or {}
 
-    local itemID = tonumber(item.itemID)
+    local itemLink = tostring(item.itemLink or "")
+    local itemString = tostring(item.itemString or "")
+    local itemID = tonumber(item.itemID) or item_id_from_link(itemLink) or item_id_from_link(itemString)
     local itemName = strip_legacy_tier_prefix(item.name or item.itemName or "")
     if not itemID or itemName == "" then
+        return nil
+    end
+
+    return {
+        itemID = itemID,
+        name = itemName,
+        itemName = itemName,
+        itemLink = itemLink ~= "" and itemLink or nil,
+        itemString = itemString ~= "" and itemString or nil,
+        quality = tonumber(item.quality) or item.quality,
+        qualityName = item.qualityName,
+        craftedQuality = tonumber(item.craftedQuality) or item.craftedQuality,
+        craftedQualityIcon = item.craftedQualityIcon,
+        craftedQualityMax = tonumber(item.craftedQualityMax) or item.craftedQualityMax,
+        craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
+        craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas,
+        craftedQualityFamilySize = tonumber(item.craftedQualityFamilySize) or item.craftedQualityFamilySize,
+        totalCount = tonumber(item.totalCount) or item.totalCount,
+        tabs = item.tabs,
+    }
+end
+
+local function append_unique_item(items, seenByItemID, item)
+    local entry = itemCatalog.HydrateItem(item)
+    if type(entry) ~= "table" then
         return
     end
+    local itemID = entry.itemID
 
     local existing = seenByItemID[itemID]
     if existing and type(existing) == "table" then
-        existing.name = itemName ~= "" and itemName or existing.name
-        existing.quality = existing.quality or item.quality
-        existing.qualityName = existing.qualityName or item.qualityName
-        existing.craftedQuality = existing.craftedQuality or item.craftedQuality
-        existing.craftedQualityIcon = existing.craftedQualityIcon or item.craftedQualityIcon
-        existing.craftedQualityMax = existing.craftedQualityMax or item.craftedQualityMax
-        existing.craftedQualityDisplayAtlas = existing.craftedQualityDisplayAtlas or item.craftedQualityDisplayAtlas
-        existing.craftedQualityPreferredAtlas = existing.craftedQualityPreferredAtlas or item.craftedQualityPreferredAtlas
-        existing.craftedQualityFamilySize = existing.craftedQualityFamilySize or item.craftedQualityFamilySize
-        existing.totalCount = existing.totalCount or item.totalCount
-        existing.tabs = existing.tabs or item.tabs
+        existing.name = entry.name ~= "" and entry.name or existing.name
+        existing.itemName = existing.itemName or entry.itemName
+        existing.itemLink = existing.itemLink or entry.itemLink
+        existing.itemString = existing.itemString or entry.itemString
+        existing.quality = existing.quality or entry.quality
+        existing.qualityName = existing.qualityName or entry.qualityName
+        existing.craftedQuality = existing.craftedQuality or entry.craftedQuality
+        existing.craftedQualityIcon = existing.craftedQualityIcon or entry.craftedQualityIcon
+        existing.craftedQualityMax = existing.craftedQualityMax or entry.craftedQualityMax
+        existing.craftedQualityDisplayAtlas = existing.craftedQualityDisplayAtlas or entry.craftedQualityDisplayAtlas
+        existing.craftedQualityPreferredAtlas = existing.craftedQualityPreferredAtlas or entry.craftedQualityPreferredAtlas
+        existing.craftedQualityFamilySize = existing.craftedQualityFamilySize or entry.craftedQualityFamilySize
+        existing.totalCount = existing.totalCount or entry.totalCount
+        existing.tabs = existing.tabs or entry.tabs
         return
     end
 
-    local entry = {
-        itemID = itemID,
-        name = itemName,
-        quality = item.quality,
-        qualityName = item.qualityName,
-        craftedQuality = item.craftedQuality,
-        craftedQualityIcon = item.craftedQualityIcon,
-        craftedQualityMax = item.craftedQualityMax,
-        craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
-        craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas,
-        craftedQualityFamilySize = item.craftedQualityFamilySize,
-        totalCount = item.totalCount,
-        tabs = item.tabs,
-    }
     seenByItemID[itemID] = entry
     table.insert(items, entry)
 end
@@ -162,10 +181,10 @@ local function crafted_quality_display_atlas(item)
 
     if maxQuality == 2 then
         if quality == 1 then
-            return "Professions-ChatIcon-Quality-12-Tier1"
+            return "Professions-Icon-Quality-12-Tier1-Inv"
         end
         if quality == 2 then
-            return "Interface-Crafting-ReagentQuality-2-Med"
+            return "Professions-Icon-Quality-12-Tier2-Inv"
         end
     end
 
@@ -208,10 +227,11 @@ local function apply_crafted_quality_families(items)
             item.craftedQualityMax = maxTier > 0 and maxTier or nil
         end
 
-        if tostring(item.craftedQualityDisplayAtlas or "") == "" then
-            item.craftedQualityDisplayAtlas = crafted_quality_display_atlas(item)
-        end
-        if tostring(item.craftedQualityPreferredAtlas or "") == "" then
+        local canonicalDisplayAtlas = crafted_quality_display_atlas(item)
+        if tostring(canonicalDisplayAtlas or "") ~= "" then
+            item.craftedQualityDisplayAtlas = canonicalDisplayAtlas
+            item.craftedQualityPreferredAtlas = canonicalDisplayAtlas
+        elseif tostring(item.craftedQualityPreferredAtlas or "") == "" then
             item.craftedQualityPreferredAtlas = tostring(item.craftedQualityDisplayAtlas or item.craftedQualityIcon or "")
         end
         if tonumber(item.craftedQualityFamilySize or 0) == 0 and tonumber(item.craftedQualityMax or 0) > 0 then
@@ -420,45 +440,33 @@ function itemCatalog.StoreResolvedItem(db, item)
         return nil
     end
 
-    local itemID = tonumber((item or {}).itemID)
-    local itemName = strip_legacy_tier_prefix((item or {}).name or (item or {}).itemName or "")
-    if not itemID or itemName == "" then
+    local entry = itemCatalog.HydrateItem(item)
+    if type(entry) ~= "table" then
         return nil
     end
+    local itemID = entry.itemID
+    local itemName = entry.name
 
     for _, existing in ipairs(savedCatalog) do
         if tonumber(existing.itemID) == itemID then
             existing.name = itemName
-            existing.quality = (item or {}).quality or existing.quality
-            existing.qualityName = (item or {}).qualityName or existing.qualityName
-            existing.craftedQuality = (item or {}).craftedQuality or existing.craftedQuality
-            existing.craftedQualityIcon = (item or {}).craftedQualityIcon or existing.craftedQualityIcon
-            existing.craftedQualityMax = (item or {}).craftedQualityMax or existing.craftedQualityMax
-            existing.craftedQualityDisplayAtlas = (item or {}).craftedQualityDisplayAtlas or existing.craftedQualityDisplayAtlas
-            existing.craftedQualityPreferredAtlas = (item or {}).craftedQualityPreferredAtlas or existing.craftedQualityPreferredAtlas
-            existing.craftedQualityFamilySize = (item or {}).craftedQualityFamilySize or existing.craftedQualityFamilySize
+            existing.itemName = existing.itemName or entry.itemName
+            existing.itemLink = entry.itemLink or existing.itemLink
+            existing.itemString = entry.itemString or existing.itemString
+            existing.quality = entry.quality or existing.quality
+            existing.qualityName = entry.qualityName or existing.qualityName
+            existing.craftedQuality = entry.craftedQuality or existing.craftedQuality
+            existing.craftedQualityIcon = entry.craftedQualityIcon or existing.craftedQualityIcon
+            existing.craftedQualityMax = entry.craftedQualityMax or existing.craftedQualityMax
+            existing.craftedQualityDisplayAtlas = entry.craftedQualityDisplayAtlas or existing.craftedQualityDisplayAtlas
+            existing.craftedQualityPreferredAtlas = entry.craftedQualityPreferredAtlas or existing.craftedQualityPreferredAtlas
+            existing.craftedQualityFamilySize = entry.craftedQualityFamilySize or existing.craftedQualityFamilySize
             return existing
         end
     end
 
-    local entry = {
-        itemID = itemID,
-        name = itemName,
-        quality = (item or {}).quality,
-        qualityName = (item or {}).qualityName,
-        craftedQuality = (item or {}).craftedQuality,
-        craftedQualityIcon = (item or {}).craftedQualityIcon,
-        craftedQualityMax = (item or {}).craftedQualityMax,
-        craftedQualityDisplayAtlas = (item or {}).craftedQualityDisplayAtlas,
-        craftedQualityPreferredAtlas = (item or {}).craftedQualityPreferredAtlas,
-        craftedQualityFamilySize = (item or {}).craftedQualityFamilySize,
-    }
     table.insert(savedCatalog, entry)
     return entry
-end
-
-local function item_id_from_link(link)
-    return tonumber(string.match(tostring(link or ""), "item:(%d+)"))
 end
 
 local function resolve_item_from_client_cache(query)
@@ -482,11 +490,12 @@ local function resolve_item_from_client_cache(query)
         return nil
     end
 
-    return {
+    return itemCatalog.HydrateItem({
         itemID = itemID,
         name = itemName,
+        itemLink = itemLink,
         quality = tonumber(itemQuality),
-    }
+    })
 end
 
 local function normalize_text(value)

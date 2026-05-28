@@ -37,6 +37,8 @@ mainFrame:SelectView("INVENTORY")
 
 assert.equal("INVENTORY", mainFrame.activeView, "inventory should be the active view")
 assert.truthy(type(mainFrame.inventoryPanel) == "table" and mainFrame.inventoryPanel:IsShown(), "inventory should expose a footer panel for csv export")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", (((((mainFrame.tableRows or {})[1] or {}).columnIcons or {})[2] or {}).atlas or ""), "inventory should keep the working crafted-quality icon visible in the shared item display column")
+assert.equal("Flask of the Blood Knights", (((((mainFrame.tableRows or {})[1] or {}).columns or {})[2] or {}):GetText() or ""), "inventory should render the item name in the same visible column as the quality icon")
 assert.equal("Export CSV", mainFrame.inventoryExportButton.labelText:GetText(), "inventory should expose a csv export button")
 assert.same(mainFrame.tableViewportFrame, (mainFrame.inventoryPanel.points[1] or {})[2], "inventory export controls should sit below the shared table viewport")
 assert.equal(nil, mainFrame.inventoryPanel.backdrop, "inventory export footer should avoid a ghost container box")

@@ -134,6 +134,8 @@ function ConvertTo-OrderedItemRecord {
     return [pscustomobject][ordered]@{
         itemID = $itemID
         name = [string](Get-FastPropertyValue -Object $Item -Name "name")
+        itemLink = Get-FastPropertyValue -Object $Item -Name "itemLink"
+        itemString = Get-FastPropertyValue -Object $Item -Name "itemString"
         quality = Get-FastPropertyValue -Object $Item -Name "quality"
         qualityName = Get-FastPropertyValue -Object $Item -Name "qualityName"
         craftedQuality = Get-FastPropertyValue -Object $Item -Name "craftedQuality"

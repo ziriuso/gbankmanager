@@ -5,8 +5,12 @@ ns.modules = ns.modules or {}
 
 local inventoryView = ns.modules.inventoryView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
 end
 
 local function crafted_quality_icon_text(icon)
@@ -131,6 +135,10 @@ local function clip_text(text, width)
     width = math.max(0, tonumber(width) or 0)
 
     if string.sub(text, 1, 3) == "|A:" then
+        return text
+    end
+
+    if string.find(text, "|Hitem:", 1, true) ~= nil then
         return text
     end
 
@@ -404,13 +412,20 @@ function inventoryView.BuildTableRows(snapshot, db, query)
         local tier = crafted_quality_markup(item.itemID, item.craftedQualityIcon, item.craftedQuality, item.craftedQualityMax)
         local tierAtlas = crafted_quality_atlas(item.itemID, item.craftedQualityIcon, item.craftedQuality, item.craftedQualityMax)
         local tierValue = crafted_quality_rank(item)
-        local itemName = tostring(item.name or "Unknown")
+        local display = type(itemDisplay.BuildDisplayPayload) == "function" and itemDisplay.BuildDisplayPayload(item) or {
+            visibleText = tostring(item.name or "Unknown"),
+            plainTextName = tostring(item.name or "Unknown"),
+            tierValue = tierValue,
+        }
+        local itemName = tostring(display.plainTextName or item.name or "Unknown")
         local bankTab = item.tabName or "-"
         local minimumText = hasMinimum and tostring(minimum) or "-"
         local restock = hasMinimum and (current < minimum and "Yes" or "No") or "No"
         table.insert(rows, {
             rowKey = item.rowKey,
             itemID = tostring(item.itemID or ""),
+            itemDisplayText = tostring(display.visibleText or itemName),
+            itemDisplayTextIconAtlas = tierAtlas,
             tier = tierAtlas ~= "" and "" or tier,
             tierIconAtlas = tierAtlas,
             tierValue = tierValue,
@@ -460,6 +475,7 @@ function inventoryView.SortRows(rows, sortState)
     local valueKey = ({
         quality = "qualityValue",
         tier = "tierValue",
+        itemDisplayText = "itemName",
         current = "currentValue",
         quantity = "quantityValue",
         tab = "tab",
@@ -491,6 +507,9 @@ function inventoryView.BuildDisplayRows(rows, columns)
 
     for _, row in ipairs(rows or {}) do
         local displayRow = {}
+        for key, value in pairs(row) do
+            displayRow[key] = value
+        end
         for _, column in ipairs(columns or {}) do
             displayRow[column.key] = clip_text(row[column.key], column.width)
         end

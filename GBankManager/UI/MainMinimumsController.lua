@@ -5,8 +5,42 @@ ns.modules = ns.modules or {}
 
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
 local craftedQualityUtil = ns.modules.craftedQuality or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
+end
+
+local function non_inventory_atlas(itemID, atlasName, craftedQuality, maxQuality)
+    if type(craftedQualityUtil.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQualityUtil.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQualityUtil.GetDisplayAtlasForItem) == "function" then
+        return craftedQualityUtil.GetDisplayAtlasForItem(itemID, atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQualityUtil.GetDisplayAtlas) == "function" then
+        return craftedQualityUtil.GetDisplayAtlas(atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    return tostring(atlasName or "")
+end
+
+local function build_item_display(item)
+    local itemCatalog = ns.modules.itemCatalog or {}
+    if type(itemCatalog.HydrateItem) == "function" then
+        itemCatalog.HydrateItem(item)
+    end
+    if type(itemDisplay.BuildDisplayPayload) == "function" then
+        return itemDisplay.BuildDisplayPayload(item)
+    end
+
+    return {
+        visibleText = tostring((item or {}).itemName or (item or {}).name or "Unknown"),
+    }
 end
 
 local function minimum_rule_key(rule)
@@ -264,7 +298,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumDetailsItemQualityIcon:Hide()
 
     mainFrame.minimumDetailsItemNameText = mainFrame.minimumDetailsItemNameText or makeLabel(mainFrame.minimumDetailsModal, "No item selected.", "GameFontNormal")
-    mainFrame.minimumDetailsItemNameText:SetPoint("LEFT", mainFrame.minimumDetailsItemQualityIcon, "RIGHT", 6, 0)
+    mainFrame.minimumDetailsItemNameText:SetPoint("TOPLEFT", mainFrame.minimumDetailsModalTitle, "BOTTOMLEFT", 0, -14)
     if type(mainFrame.minimumDetailsItemNameText.SetWidth) == "function" then
         mainFrame.minimumDetailsItemNameText:SetWidth(320)
     end
@@ -274,7 +308,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumDetailsItemQualityText:Hide()
 
     mainFrame.minimumDetailsItemIDText = mainFrame.minimumDetailsItemIDText or makeLabel(mainFrame.minimumDetailsModal, "", "GameFontHighlightSmall")
-    mainFrame.minimumDetailsItemIDText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemQualityIcon, "BOTTOMLEFT", 0, -8)
+    mainFrame.minimumDetailsItemIDText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemNameText, "BOTTOMLEFT", 0, -8)
 
     mainFrame.minimumDetailsStatusText = mainFrame.minimumDetailsStatusText or makeLabel(mainFrame.minimumDetailsModal, "Edit Minimum details here.", "GameFontHighlightSmall")
     mainFrame.minimumDetailsStatusText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemIDText, "BOTTOMLEFT", 0, -12)
@@ -557,18 +591,10 @@ function mainMinimumsController.Attach(mainFrame, options)
             row.tierValue = tonumber(row.craftedQuality or 0) or 0
             local tierAtlas = row.craftedQualityIcon or row.craftedQualityPreferredAtlas or row.craftedQualityDisplayAtlas
             local tierMax = row.craftedQualityFamilySize or row.craftedQualityMax
-            if type(craftedQualityUtil.GetDisplayAtlasForItem) == "function" then
-                row.tierIconAtlas = craftedQualityUtil.GetDisplayAtlasForItem(row.itemID, tierAtlas, row.craftedQuality, nil, tierMax)
-                row.tierAtlas = row.tierIconAtlas
-                if tostring(row.tierIconAtlas or "") ~= "" then
-                    row.tier = ""
-                end
-            elseif type(craftedQualityUtil.GetDisplayAtlas) == "function" then
-                row.tierIconAtlas = craftedQualityUtil.GetDisplayAtlas(tierAtlas, row.craftedQuality, nil, tierMax)
-                row.tierAtlas = row.tierIconAtlas
-                if tostring(row.tierIconAtlas or "") ~= "" then
-                    row.tier = ""
-                end
+            row.tierIconAtlas = non_inventory_atlas(row.itemID, tierAtlas, row.craftedQuality, tierMax)
+            row.tierAtlas = row.tierIconAtlas
+            if tostring(row.tierIconAtlas or "") ~= "" then
+                row.tier = ""
             end
         end
 
@@ -923,12 +949,10 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     function mainFrame:SyncMinimumDetailsModal(row, state)
         state = state or (row and self:GetPendingMinimumDraft(row)) or nil
-        local itemName = tostring((row and row.itemName) or (state and state.itemName) or "Unknown")
+        local display = build_item_display(state or row or {})
+        local itemName = tostring(display.visibleText or (row and row.itemName) or (state and state.itemName) or "Unknown")
         local itemID = tonumber((row and row.itemID) or (state and state.itemID) or 0) or 0
         local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or ((row and row.needsBankTab) and "-") or (row and row.bankTab) or "-"
-        local craftedQuality = tonumber((row and row.craftedQuality) or (state and state.craftedQuality) or 0) or 0
-        local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or (row and row.craftedQualityPreferredAtlas) or (state and state.craftedQualityPreferredAtlas) or (row and row.craftedQualityDisplayAtlas) or (state and state.craftedQualityDisplayAtlas) or "")
-        local craftedQualityMax = tonumber((row and row.craftedQualityFamilySize) or (state and state.craftedQualityFamilySize) or (row and row.craftedQualityMax) or (state and state.craftedQualityMax) or 0) or 0
 
         self.minimumDetailsItemNameText:SetText(itemName)
         self.minimumDetailsItemIDText:SetText(tostring(itemID > 0 and itemID or ""))
@@ -937,28 +961,10 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.minimumDetailsRestockToggleButton.labelText:SetText((state and state.enabled ~= false) and "Yes" or "No")
         self:ConfigureMinimumDetailsBankTabDropdown(row, state)
         self:UpdateMinimumDetailsActionState(row, state)
-
-        if craftedQualityIcon ~= "" then
-            local displayAtlas = type(craftedQualityUtil.GetDisplayAtlasForItem) == "function"
-                and craftedQualityUtil.GetDisplayAtlasForItem(itemID, craftedQualityIcon, craftedQuality, nil, craftedQualityMax)
-                or (type(craftedQualityUtil.NormalizeDisplayAtlas) == "function" and craftedQualityUtil.NormalizeDisplayAtlas(craftedQualityIcon, craftedQuality, nil, craftedQualityMax) or craftedQualityIcon)
-            self.minimumDetailsItemQualityIcon.atlas = displayAtlas
-            if type(self.minimumDetailsItemQualityIcon.SetAtlas) == "function" then
-                self.minimumDetailsItemQualityIcon:SetAtlas(displayAtlas, true)
-            end
-            self.minimumDetailsItemQualityIcon:Show()
-        else
-            self.minimumDetailsItemQualityIcon.atlas = nil
-            self.minimumDetailsItemQualityIcon:Hide()
-        end
-
-        if craftedQuality > 0 then
-            self.minimumDetailsItemQualityText:SetText(string.format("Tier %d", craftedQuality))
-            self.minimumDetailsItemQualityText:Show()
-        else
-            self.minimumDetailsItemQualityText:SetText("")
-            self.minimumDetailsItemQualityText:Hide()
-        end
+        self.minimumDetailsItemQualityIcon.atlas = nil
+        self.minimumDetailsItemQualityIcon:Hide()
+        self.minimumDetailsItemQualityText:SetText("")
+        self.minimumDetailsItemQualityText:Hide()
     end
 
     function mainFrame:OpenMinimumDetailsModal(row, state)
@@ -1256,6 +1262,12 @@ function mainMinimumsController.Attach(mainFrame, options)
         if tostring(authoritativeItem.craftedQualityPreferredAtlas or "") ~= "" then
             item.craftedQualityPreferredAtlas = authoritativeItem.craftedQualityPreferredAtlas
         end
+        if tostring(authoritativeItem.itemLink or "") ~= "" then
+            item.itemLink = authoritativeItem.itemLink
+        end
+        if tostring(authoritativeItem.itemString or "") ~= "" then
+            item.itemString = authoritativeItem.itemString
+        end
 
         return item
     end
@@ -1448,6 +1460,8 @@ function mainMinimumsController.Attach(mainFrame, options)
         local workingState = {
             itemID = itemID,
             itemName = itemName,
+            itemLink = item.itemLink,
+            itemString = item.itemString,
             quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100,
             scope = "TAB",
             tabName = nil,
@@ -1574,6 +1588,8 @@ function mainMinimumsController.Attach(mainFrame, options)
         local rule = {
             itemID = itemID,
             itemName = itemName,
+            itemLink = selectedItem.itemLink,
+            itemString = selectedItem.itemString,
             quantity = quantity,
             scope = "TAB",
             tabName = nil,

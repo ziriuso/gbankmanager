@@ -104,14 +104,14 @@ assert.truthy(((mainFrame.tableRows[1].gbmArt or {}).bottomLine):IsShown(), "inv
 assert.truthy(not ((mainFrame.tableRows[1].gbmArt or {}).leftLine):IsShown(), "inventory rows should not draw a boxed left edge")
 assert.truthy(not ((mainFrame.tableRows[1].gbmArt or {}).rightLine):IsShown(), "inventory rows should not draw a boxed right edge")
 assert.equal("Item ID", mainFrame.tableHeaderLabels[1]:GetText(), "inventory should use the minimums table layout starting with Item ID")
-assert.equal("Tier", mainFrame.tableHeaderLabels[2]:GetText(), "inventory should use the minimums table layout tier column")
-assert.equal("Item", mainFrame.tableHeaderLabels[3]:GetText(), "inventory should use the minimums table layout item column")
-assert.equal("Bank Tab", mainFrame.tableHeaderLabels[4]:GetText(), "inventory should use the minimums table layout bank tab column")
-assert.equal("Current", mainFrame.tableHeaderLabels[5]:GetText(), "inventory should use the minimums table layout current column")
-assert.equal("Restock", mainFrame.tableHeaderLabels[6]:GetText(), "inventory should use the minimums table layout restock column")
-assert.equal("Minimum", mainFrame.tableHeaderLabels[7]:GetText(), "inventory should use the minimums table layout minimum column")
-assert.truthy((mainFrame.tableColumnLayout[3].width or 0) >= 280, "inventory item column should still absorb most of the available width for item names")
-assert.truthy((mainFrame.tableColumnLayout[7].width or 0) >= 80, "inventory minimum column should leave enough room for the header near the right edge")
+assert.equal("Item", mainFrame.tableHeaderLabels[2]:GetText(), "inventory should collapse the old tier slot into the shared item display column")
+assert.equal("Bank Tab", mainFrame.tableHeaderLabels[3]:GetText(), "inventory should shift bank tab left after tier-column removal")
+assert.equal("Current", mainFrame.tableHeaderLabels[4]:GetText(), "inventory should keep current stock visible after tier-column removal")
+assert.equal("Restock", mainFrame.tableHeaderLabels[5]:GetText(), "inventory should keep restock visible after tier-column removal")
+assert.equal("Minimum", mainFrame.tableHeaderLabels[6]:GetText(), "inventory should end the visible table at the minimum column")
+assert.truthy(mainFrame.tableHeaderLabels[7] == nil or mainFrame.tableHeaderLabels[7].shown == false, "inventory should not render a ghost seventh header after tier-column removal")
+assert.truthy((mainFrame.tableColumnLayout[2].width or 0) >= 320, "inventory item column should absorb the removed tier width for item names")
+assert.truthy((mainFrame.tableColumnLayout[6].width or 0) >= 80, "inventory minimum column should leave enough room for the header near the right edge")
 mainFrame.tableFilterInputs[1]:SetText("1015")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
 assert.equal(1, #mainFrame.tableRowsData, "inventory shared table filters should search by Item ID")
@@ -134,6 +134,41 @@ mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterI
 assert.equal("", tostring(mainFrame.tableRowsData[1].tier or ""), "inventory should keep the tier text empty when the table path is rendering crafted quality through its dedicated visual slot")
 mainFrame.tableFilterInputs[1]:SetText("")
 mainFrame.tableFilterInputs[1]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[1])
+
+mainFrame:ConfigureTable({
+    { key = "itemDisplayText", label = "Item", width = 240 },
+}, {
+    {
+        itemDisplayText = "Stale rendered quality row",
+        itemDisplayTextIconAtlas = "Professions-Icon-Quality-Tier2-Inv",
+    },
+    {
+        itemDisplayText = "Live debug chat quality row",
+        itemDisplayTextIconAtlas = "Professions-ChatIcon-Quality-Tier2",
+        craftedQualityFamilySize = 2,
+    },
+    {
+        itemDisplayText = "Five-rank quality row",
+        itemDisplayTextIconAtlas = "Professions-ChatIcon-Quality-Tier2",
+        craftedQualityFamilySize = 5,
+    },
+})
+mainFrame:RefreshVisibleTableRows()
+assert.equal(
+    "Professions-Icon-Quality-12-Tier2-Inv",
+    mainFrame.tableRows[1].columnIcons[1].atlas,
+    "shared table rendering should normalize stale two-rank tier-two icon atlases at the final texture boundary"
+)
+assert.equal(
+    "Professions-Icon-Quality-12-Tier2-Inv",
+    mainFrame.tableRows[2].columnIcons[1].atlas,
+    "shared table rendering should normalize live two-rank chat atlas inputs when row family metadata says the item has two ranks"
+)
+assert.equal(
+    "Professions-ChatIcon-Quality-Tier2",
+    mainFrame.tableRows[3].columnIcons[1].atlas,
+    "shared table rendering should not rewrite five-rank chat atlas inputs"
+)
 
 local originalRowHeight = mainFrame.tableRowHeight
 local originalVisibleCount = mainFrame.tableVisibleCount

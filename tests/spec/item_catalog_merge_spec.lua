@@ -353,6 +353,8 @@ write_text_file(extractedPath, [[
       "name": "Arcanoweave Spellthread",
       "quality": 4,
       "qualityName": "Epic",
+      "itemLink": "|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r",
+      "itemString": "item:240154::::::::80:::::",
       "craftedQuality": 5,
       "craftedQualityIcon": "Professions-ChatIcon-Quality-Tier5",
       "status": "confirmed",
@@ -411,6 +413,8 @@ assert.equal("learned", read_item_field(mergedPath, 7007, "status"), "merge shou
 assert.equal("deprecated", read_item_field(mergedPath, 900000, "status"), "merge should intentionally retain missing confirmed rows as deprecated candidates instead of deleting them")
 assert.equal("5", read_item_field(mergedPath, 240154, "craftedQuality"), "merge should retain crafted quality data for newly added extracted rows")
 assert.equal("Professions-ChatIcon-Quality-Tier5", read_item_field(mergedPath, 240154, "craftedQualityIcon"), "merge should retain crafted quality icons for newly added extracted rows")
+assert.equal("|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r", read_item_field(mergedPath, 240154, "itemLink"), "merge should retain trusted hyperlinks for newly added extracted rows")
+assert.equal("item:240154::::::::80:::::", read_item_field(mergedPath, 240154, "itemString"), "merge should retain trusted item strings for newly added extracted rows")
 
 local staleManifestPath = join_path(fixtureDir, "stale-protection-input.json")
 write_text_file(staleManifestPath, [[
@@ -527,7 +531,7 @@ write_text_file(refreshExtractionFixturePath, [[
   ],
   "hotfixRows": [
     { "itemID": 242273, "Display_lang": "Blooming Feast", "OverallQualityID": 3 },
-    { "itemID": 240154, "Display_lang": "Arcanoweave Spellthread", "OverallQualityID": 4, "CraftingQualityID": 5 }
+    { "itemID": 240154, "Display_lang": "Arcanoweave Spellthread", "OverallQualityID": 4, "CraftingQualityID": 5, "ItemLink": "|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r", "ItemString": "item:240154::::::::80:::::" }
   ]
 }
 ]])
@@ -575,6 +579,8 @@ local rebuiltBundleText = read_bundle_text_from_toc(refreshTocPath)
 assert.truthy(rebuiltBundleText:find("Arcanoweave Spellthread", 1, true) ~= nil, "refresh command should rebuild generated addon bundle data from the merged manifest contents")
 assert.truthy(rebuiltBundleText:find("craftedQuality = 5", 1, true) ~= nil, "refresh command should rebuild generated addon bundle data with crafted quality tiers when available")
 assert.truthy(rebuiltBundleText:find("craftedQualityIcon = \"Professions-ChatIcon-Quality-Tier5\"", 1, true) ~= nil, "refresh command should rebuild generated addon bundle data with crafted quality icons when available")
+assert.truthy(rebuiltBundleText:find("itemLink = \"|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r\"", 1, true) ~= nil, "refresh command should rebuild generated addon bundle data with trusted hyperlink fields when available")
+assert.truthy(rebuiltBundleText:find("itemString = \"item:240154::::::::80:::::\"", 1, true) ~= nil, "refresh command should rebuild generated addon bundle data with trusted item-string fields when available")
 assert.truthy(rebuiltLua:find("status =", 1, true) == nil, "rebuilt addon data should stay compact instead of embedding manifest status metadata")
 assert.truthy(rebuiltLua:find("lastVerifiedAt", 1, true) == nil, "rebuilt addon data should omit raw extraction verification payload fields")
 
@@ -696,6 +702,8 @@ write_text_file(learnedRowsPath, [[
       "name": "PTR Test Potion",
       "quality": 2,
       "qualityName": "Uncommon",
+      "itemLink": "|cff1eff00|Hitem:555555::::::::80:::::|h[PTR Test Potion]|h|r",
+      "itemString": "item:555555::::::::80:::::",
       "craftedQuality": 4,
       "craftedQualityIcon": "Professions-ChatIcon-Quality-Tier4"
     }
@@ -718,6 +726,8 @@ assert.equal("learned", read_item_field(learnedMergedPath, 555555, "status"), "l
 assert.equal("PTR Test Potion", read_item_field(learnedMergedPath, 555555, "name"), "learned import should persist imported learned metadata for new rows")
 assert.equal("4", read_item_field(learnedMergedPath, 555555, "craftedQuality"), "learned import should persist crafted quality tiers for new rows")
 assert.equal("Professions-ChatIcon-Quality-Tier4", read_item_field(learnedMergedPath, 555555, "craftedQualityIcon"), "learned import should persist crafted quality icons for new rows")
+assert.equal("|cff1eff00|Hitem:555555::::::::80:::::|h[PTR Test Potion]|h|r", read_item_field(learnedMergedPath, 555555, "itemLink"), "learned import should persist trusted hyperlinks for new rows")
+assert.equal("item:555555::::::::80:::::", read_item_field(learnedMergedPath, 555555, "itemString"), "learned import should persist trusted item strings for new rows")
 assert.equal("Auto-Hammer", read_item_field(learnedMergedPath, 132514, "name"), "learned import should not overwrite existing confirmed metadata with learned rows")
 assert.equal("2", read_item_field(learnedMergedPath, 132514, "quality"), "learned import should preserve confirmed quality when a learned row collides")
 assert.equal("learned", read_item_field(learnedMergedPath, 242273, "status"), "learned import should promote unresolved or placeholder rows into learned rows")
