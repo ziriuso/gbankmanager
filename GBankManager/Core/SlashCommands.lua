@@ -275,6 +275,114 @@ local function collect_request_debug(mainFrame, itemID)
     return lines
 end
 
+local function safe_call(fn, ...)
+    if type(fn) ~= "function" then
+        return false, nil
+    end
+
+    return pcall(fn, ...)
+end
+
+local function collect_ledger_debug(scanner)
+    local lines = {}
+    scanner = type(scanner) == "table" and scanner or {}
+    append_line(lines, string.format(
+        "ledger debug state scanInProgress=%s ledgerScanInProgress=%s pendingAfterInventory=%s pendingAuto=%s guildBankOpen=%s passiveActive=%s waitingForTab=%s ledgerTargets=%d",
+        tostring(scanner.scanInProgress == true),
+        tostring(scanner.ledgerScanInProgress == true),
+        tostring(scanner.pendingLedgerScanAfterInventory == true),
+        tostring(scanner.pendingLedgerAutoScan == true),
+        tostring(scanner.guildBankOpen == true),
+        tostring(scanner.passiveLedgerRefreshActive == true),
+        value_text(scanner.waitingForTab),
+        #(scanner.ledgerTargets or {})
+    ))
+
+    local tabCount = 0
+    local okTabs, tabsResult = safe_call(_G.GetNumGuildBankTabs)
+    if okTabs then
+        tabCount = tonumber(tabsResult or 0) or 0
+    end
+
+    local moneyLogQueryId = (tonumber(_G.MAX_GUILDBANK_TABS or 8) or 8) + 1
+    append_line(lines, string.format("ledger debug tabs count=%d moneyQueryId=%d", tabCount, moneyLogQueryId))
+
+    for tabIndex = 1, tabCount do
+        local tabName = "Tab " .. tostring(tabIndex)
+        local isViewable = false
+        local okInfo, name, _, viewable = safe_call(_G.GetGuildBankTabInfo, tabIndex)
+        if okInfo then
+            tabName = tostring(name or tabName)
+            isViewable = viewable == true
+        end
+
+        local itemCount = 0
+        local okItemCount, itemCountResult = safe_call(_G.GetNumGuildBankTransactions, tabIndex)
+        if okItemCount then
+            itemCount = tonumber(itemCountResult or 0) or 0
+        end
+
+        append_line(lines, string.format(
+            "itemLog tab=%d name=%s viewable=%s count=%d",
+            tabIndex,
+            tabName,
+            tostring(isViewable),
+            itemCount
+        ))
+
+        local sampleCount = math.min(itemCount, 3)
+        for index = 1, sampleCount do
+            local okRow, actionType, who, itemLink, count, tabOne, tabTwo, year, month, day, hour =
+                safe_call(_G.GetGuildBankTransaction, tabIndex, index)
+            if okRow then
+                append_line(lines, string.format(
+                    "item[%d:%d] type=%s who=%s item=%s qty=%s tabs=%s/%s age=%s/%s/%s/%s",
+                    tabIndex,
+                    index,
+                    value_text(actionType),
+                    value_text(who),
+                    value_text(itemLink),
+                    value_text(count),
+                    value_text(tabOne),
+                    value_text(tabTwo),
+                    value_text(year),
+                    value_text(month),
+                    value_text(day),
+                    value_text(hour)
+                ))
+            end
+        end
+    end
+
+    local moneyCount = 0
+    local okMoneyCount, moneyCountResult = safe_call(_G.GetNumGuildBankMoneyTransactions)
+    if okMoneyCount then
+        moneyCount = tonumber(moneyCountResult or 0) or 0
+    end
+    append_line(lines, string.format("moneyLog queryId=%d count=%d", moneyLogQueryId, moneyCount))
+
+    local sampleMoneyCount = math.min(moneyCount, 3)
+    for index = 1, sampleMoneyCount do
+        local okMoneyRow, actionType, who, amount, year, month, day, hour =
+            safe_call(_G.GetGuildBankMoneyTransaction, index)
+        if okMoneyRow then
+            append_line(lines, string.format(
+                "money[%d] type=%s who=%s amount=%s age=%s/%s/%s/%s",
+                index,
+                value_text(actionType),
+                value_text(who),
+                value_text(amount),
+                value_text(year),
+                value_text(month),
+                value_text(day),
+                value_text(hour)
+            ))
+        end
+    end
+
+    return lines
+end
+
 local function create_or_reset_atlas_sampler()
     if type(_G.CreateFrame) ~= "function" then
         push_chat_line("GBankManager: Atlas sampler requires the WoW UI frame API.")
@@ -437,6 +545,7 @@ local function show_help()
     push_chat_line("/gbm debug atlas - Open a visual crafted-quality atlas sampler.")
     push_chat_line("/gbm debug render <itemID> - Print active table row and visible texture diagnostics.")
     push_chat_line("/gbm debug request <itemID> - Print request wizard selector icon diagnostics.")
+    push_chat_line("/gbm debug ledger - Print guild-bank ledger scanner state and raw Blizzard log samples.")
     push_chat_line("/gbm test smoke - Run the in-game smoke test.")
     push_chat_line("/gbm test unit - Run the in-game unit checks.")
     push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
@@ -527,6 +636,12 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             end
 
             local lines = collect_request_debug(mainFrame, itemID)
+            for _, line in ipairs(lines or {}) do
+                push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
+            end
+            return lines
+        elseif subcommand == "ledger" then
+            local lines = collect_ledger_debug(scanner)
             for _, line in ipairs(lines or {}) do
                 push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
             end

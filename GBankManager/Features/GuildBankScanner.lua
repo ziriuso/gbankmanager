@@ -18,6 +18,7 @@ local scanner = ns.modules.scanner or {
     completedTabs = 0,
     statusText = "No scan yet",
     pendingAutoScan = false,
+    inventoryScanAuto = false,
     autoScanRetryCount = 0,
     inventoryScanCanceled = false,
     waitToken = 0,
@@ -39,7 +40,8 @@ local scanner = ns.modules.scanner or {
 
 local AUTO_SCAN_RETRY_DELAY_SECONDS = 0.25
 local MAX_AUTO_SCAN_RETRIES = 20
-local TAB_SCAN_TIMEOUT_SECONDS = 1.5
+local TAB_SCAN_TIMEOUT_SECONDS = 3.0
+local TAB_SCAN_ADVANCE_DELAY_SECONDS = 0.5
 local LEDGER_QUERY_SETTLE_DELAY_SECONDS = 0.5
 local LEDGER_QUERY_SETTLE_PASSES = 3
 local LEDGER_TARGET_TIMEOUT_SECONDS = 2.0
@@ -53,6 +55,7 @@ local query_ledger_target
 local schedule_ledger_scan_finalize
 local schedule_passive_ledger_refresh
 local refresh_ledger_view_if_visible
+local advance_scan
 
 local function current_context(db)
     local auth = ns.modules.auth or ns.modules.permissions
@@ -246,6 +249,7 @@ local function cancel_inventory_scan()
 
     scanner.scanInProgress = false
     scanner.inventoryScanCanceled = true
+    scanner.inventoryScanAuto = false
     scanner.tabsToScan = {}
     scanner.rawTabs = {}
     scanner.totalTabs = 0
@@ -311,7 +315,11 @@ end
 
 local function finish_if_complete()
     if scanner.completedTabs >= scanner.totalTabs and scanner.totalTabs > 0 then
-        scanner.FinishScan(_G.UnitName and _G.UnitName("player") or "Unknown", "Unknown Guild")
+        local finishedSnapshot = scanner.FinishScan(_G.UnitName and _G.UnitName("player") or "Unknown", "Unknown Guild")
+        if finishedSnapshot == nil then
+            return true
+        end
+
         push_status(string.format("Scan complete: %d/%d tabs", scanner.completedTabs, scanner.totalTabs))
         report_status(string.format("Guild bank scan finished (%d/%d tabs).", scanner.completedTabs, scanner.totalTabs))
         return true
@@ -320,7 +328,13 @@ local function finish_if_complete()
     return false
 end
 
-local function advance_scan()
+local function schedule_next_inventory_tab()
+    schedule_after(TAB_SCAN_ADVANCE_DELAY_SECONDS, function()
+        advance_scan()
+    end)
+end
+
+advance_scan = function()
     if not scanner.scanInProgress or scanner.waitingForTab ~= nil then
         return
     end
@@ -337,11 +351,11 @@ local function advance_scan()
     if type(_G.QueryGuildBankTab) == "function" then
         _G.QueryGuildBankTab(nextTab)
     else
-        scanner.ReadCurrentTab(nextTab)
+        scanner.ReadCurrentTab(nextTab, "direct")
         scanner.completedTabs = scanner.completedTabs + 1
         clear_wait_state()
         if not finish_if_complete() then
-            advance_scan()
+            schedule_next_inventory_tab()
         end
     end
 end
@@ -371,6 +385,7 @@ function scanner.BeginScan(options)
 
     scanner.scanInProgress = true
     scanner.inventoryScanCanceled = false
+    scanner.inventoryScanAuto = options.auto == true
     scanner.tabsToScan = {}
     scanner.rawTabs = {}
     scanner.pendingLedgerScanAfterInventory = false
@@ -430,6 +445,24 @@ function scanner.BeginLedgerScan(options)
     options = type(options) == "table" and options or {}
     if scanner.ledgerScanInProgress then
         return false
+    end
+
+    if scanner.scanInProgress then
+        local existingOptions = scanner.pendingLedgerScanAfterInventory == true and scanner.pendingLedgerScanOptions or nil
+        local hasExistingOptions = type(existingOptions) == "table"
+        local queuedSilent = options.silent == true
+        local queuedPassive = options.passive == true
+        if hasExistingOptions then
+            queuedSilent = existingOptions.silent == true and options.silent == true
+            queuedPassive = existingOptions.passive == true and options.passive == true
+        end
+        scanner.pendingLedgerScanAfterInventory = true
+        scanner.pendingLedgerScanOptions = {
+            force = (hasExistingOptions and existingOptions.force == true) or options.force == true,
+            silent = queuedSilent,
+            passive = queuedPassive,
+        }
+        return true
     end
 
     if options.force ~= true and not ledger_scan_allowed(db) then
@@ -494,11 +527,12 @@ function scanner.OnGuildBankOpened()
         scanner.pendingAutoScan = true
         scanner.autoScanRetryCount = 0
         scanner.pendingLedgerAutoScan = false
-        scanner.BeginScan({ auto = true, manual = false })
+        scanner.BeginScan({ auto = true, manual = false, forceLedgerScan = true })
         triggered = true
-    elseif ledger_scan_allowed(db) then
+    else
         scanner.pendingLedgerAutoScan = true
         triggered = scanner.BeginLedgerScan({
+            force = true,
             passive = true,
         }) or triggered
     end
@@ -700,6 +734,7 @@ local function merge_target_transactions(db, target, transactions)
             sourceTabIndex = target.queryId,
             sourceTabName = target.label,
             transactions = transactions,
+            allowSuspiciousUnknownAppend = true,
         })
         scanner.ledgerMergedItemRows = (tonumber(scanner.ledgerMergedItemRows or 0) or 0) + (tonumber(merged or 0) or 0)
         return merged
@@ -866,18 +901,21 @@ schedule_passive_ledger_refresh = function()
             return
         end
 
+        local started = false
         if not scanner.scanInProgress and not scanner.ledgerScanInProgress then
             -- Passive refresh intentionally bypasses the usual stale-data throttle, but only
             -- through this single open-bank cadence gate so we can detect new live log rows
             -- without requiring a manual rescan while the bank remains open.
-            scanner.BeginLedgerScan({
+            started = scanner.BeginLedgerScan({
                 force = true,
                 silent = true,
                 passive = true,
             })
         end
 
-        schedule_passive_ledger_refresh()
+        if started ~= true then
+            schedule_passive_ledger_refresh()
+        end
     end)
 
     return true
@@ -896,8 +934,15 @@ function scanner.OnGuildBankTabsUpdated()
         return true
     end
 
-    if scanner.pendingLedgerAutoScan and ledger_scan_allowed(db) then
-        return scanner.BeginLedgerScan()
+    if scanner.pendingLedgerAutoScan and scanner.scanInProgress then
+        return true
+    end
+
+    if scanner.pendingLedgerAutoScan then
+        return scanner.BeginLedgerScan({
+            force = true,
+            passive = true,
+        })
     end
 
     return false
@@ -939,7 +984,7 @@ function scanner.QueueAccessibleTabs()
     return scanner.tabsToScan
 end
 
-function scanner.ReadCurrentTab(tabIndex)
+function scanner.ReadCurrentTab(tabIndex, scanSource)
     local tabName = "Tab " .. tostring(tabIndex)
     if type(_G.GetGuildBankTabInfo) == "function" then
         tabName = (_G.GetGuildBankTabInfo(tabIndex)) or tabName
@@ -948,6 +993,7 @@ function scanner.ReadCurrentTab(tabIndex)
     local tabData = {
         index = tabIndex,
         name = tabName,
+        scanSource = scanSource or "event",
         slots = {},
     }
 
@@ -986,7 +1032,7 @@ function scanner.RecordTabScan(tabData)
     table.insert(scanner.rawTabs, tabData)
 end
 
-function scanner.OnGuildBankSlotsChanged(tabIndex)
+function scanner.OnGuildBankSlotsChanged(tabIndex, scanSource)
     if not scanner.scanInProgress or scanner.waitingForTab == nil then
         if not scanner.scanInProgress and not scanner.pendingAutoScan then
             local db = current_db()
@@ -1008,7 +1054,7 @@ function scanner.OnGuildBankSlotsChanged(tabIndex)
     end
 
     local loadedTab = scanner.waitingForTab
-    scanner.ReadCurrentTab(loadedTab)
+    scanner.ReadCurrentTab(loadedTab, scanSource or "event")
     scanner.completedTabs = scanner.completedTabs + 1
     clear_wait_state()
 
@@ -1017,7 +1063,7 @@ function scanner.OnGuildBankSlotsChanged(tabIndex)
     end
 
     push_status(string.format("Scanning %d/%d tabs", scanner.completedTabs, scanner.totalTabs))
-    advance_scan()
+    schedule_next_inventory_tab()
     return loadedTab
 end
 
@@ -1051,9 +1097,53 @@ function scanner.OnGuildBankLogUpdated()
     return true
 end
 
+local function snapshot_has_items_in_tab(snapshot, tabName)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    tabName = tostring(tabName or "")
+    if tabName == "" then
+        return false
+    end
+
+    for _, row in ipairs(snapshot.itemRows or {}) do
+        if tostring(row.tabName or "") == tabName and (tonumber(row.quantity or 0) or 0) > 0 then
+            return true
+        end
+    end
+
+    for _, item in pairs(snapshot.items or {}) do
+        local tabQuantity = tonumber(((item or {}).tabs or {})[tabName] or 0) or 0
+        if tabQuantity > 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function is_suspicious_partial_auto_snapshot(baseline, currentSnapshot, rawTabs)
+    if scanner.inventoryScanAuto ~= true or type(baseline) ~= "table" then
+        return false
+    end
+
+    if type(currentSnapshot) ~= "table" then
+        return false
+    end
+
+    for _, tab in ipairs(rawTabs or {}) do
+        local slots = type(tab.slots) == "table" and tab.slots or {}
+        local tabName = tostring(tab.name or tab.index or "")
+        if #slots == 0 and snapshot_has_items_in_tab(baseline, tabName) then
+            return true
+        end
+    end
+
+    return false
+end
+
 function scanner.FinishScan(actor, guildName, previousSnapshot)
     if scanner.inventoryScanCanceled == true then
         scanner.inventoryScanCanceled = false
+        scanner.inventoryScanAuto = false
         return nil, {}
     end
 
@@ -1062,18 +1152,43 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
     local scannedAtUtc = _G.time()
 
     db.meta = db.meta or {}
+    local previousScanSequence = tonumber(db.meta.lastScanSequence or 0) or 0
 
     if baseline == nil and db.currentSnapshotId ~= nil then
         baseline = db.snapshots[db.currentSnapshotId]
     end
 
+    local scanId = next_scan_id(db, scannedAtUtc)
     local currentSnapshot = snapshots.FromTabScan({
-        scanId = next_scan_id(db, scannedAtUtc),
+        scanId = scanId,
         actor = actor,
         guildName = guildName,
         scannedTabs = scanner.rawTabs,
         scannedAt = scannedAtUtc,
     })
+    if is_suspicious_partial_auto_snapshot(baseline, currentSnapshot, scanner.rawTabs) then
+        local shouldBeginLedgerScan = scanner.pendingLedgerScanAfterInventory == true
+        local pendingLedgerScanOptions = scanner.pendingLedgerScanOptions
+
+        db.meta.lastScanSequence = previousScanSequence
+        scanner.scanInProgress = false
+        scanner.inventoryScanCanceled = false
+        scanner.inventoryScanAuto = false
+        clear_wait_state()
+        scanner.tabsToScan = {}
+        scanner.rawTabs = {}
+        scanner.totalTabs = 0
+        scanner.completedTabs = 0
+        scanner.pendingLedgerScanAfterInventory = false
+        scanner.pendingLedgerScanOptions = nil
+        finish_auto_scan_setup()
+        report_status("Guild bank auto-scan ignored a partial snapshot; run Scan Bank to refresh.")
+        if shouldBeginLedgerScan then
+            scanner.BeginLedgerScan(pendingLedgerScanOptions)
+        end
+        return nil, {}
+    end
+
     local changes = diff.BuildChangeLog(baseline, currentSnapshot)
 
     db.snapshots[currentSnapshot.scanId] = currentSnapshot
@@ -1093,6 +1208,7 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
 
     scanner.scanInProgress = false
     scanner.inventoryScanCanceled = false
+    scanner.inventoryScanAuto = false
     clear_wait_state()
     scanner.tabsToScan = {}
     finish_auto_scan_setup()

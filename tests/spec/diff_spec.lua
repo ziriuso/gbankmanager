@@ -203,8 +203,10 @@ assert.equal("Professions-ChatIcon-Quality-Tier3", tabData.slots[1].craftedQuali
 assert.equal(1, #scanner.rawTabs, "scanner should append scanned tabs to the raw scan state")
 
 scanner.OnGuildBankSlotsChanged()
-assert.equal(3, queriedTabs[2], "scanner should request the next queued tab after a tab finishes loading")
+assert.equal(nil, queriedTabs[2], "scanner should not query the next tab in the same event tick after a tab finishes loading")
 assert.equal("Scanning 1/2 tabs", scanner:GetStatusText(), "scanner should report completed tab progress")
+_G.C_Timer.RunPending()
+assert.equal(3, queriedTabs[2], "scanner should request the next queued tab after a short settle delay")
 
 local originalTime = _G.time
 local originalBeginScan = scanner.BeginScan
@@ -357,6 +359,7 @@ queriedTabs = {}
 scanner.BeginScan()
 _G.C_Timer.RunPending()
 assert.equal(1, #timedOutTabs, "scanner timeout fallback should read the waited tab when no guild bank slot event arrives")
+_G.C_Timer.RunPending()
 assert.equal(3, queriedTabs[2], "scanner timeout fallback should continue requesting queued tabs after a missed event")
 assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[2], "timeout fallback should report a chat-visible recovery message")
 
@@ -391,6 +394,71 @@ scanner.rawTabs = {
 }
 local secondSnapshot = scanner.FinishScan("OfficerOne", "My Guild")
 assert.truthy(firstSnapshot.scanId ~= secondSnapshot.scanId, "scanner should produce unique scan ids even when scans land in the same second")
+
+local guardedDb = ns.modules.store.CreateFreshDatabase("My Guild")
+guardedDb.snapshots = {
+    stable = {
+        scanId = "stable",
+        scannedAt = 1900,
+        items = {
+            [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 2, tabs = { Flasks = 2 } },
+            [3003] = { itemID = 3003, name = "Gem Gamma", totalCount = 4, tabs = { Gems = 4 } },
+        },
+        itemRows = {
+            { itemID = 1001, name = "Flask Alpha", tabName = "Flasks", quantity = 2 },
+            { itemID = 3003, name = "Gem Gamma", tabName = "Gems", quantity = 4 },
+        },
+    },
+}
+guardedDb.changeLog = {}
+guardedDb.currentSnapshotId = "stable"
+guardedDb.meta.lastScanSequence = 0
+ns.state.db = guardedDb
+_G.GBankManagerDB = guardedDb
+scanner.scanInProgress = true
+scanner.inventoryScanAuto = true
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        scanSource = "event",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 2 },
+        },
+    },
+    {
+        index = 2,
+        name = "Gems",
+        scanSource = "timeout",
+        slots = {},
+    },
+}
+local guardedSnapshot, guardedChanges = scanner.FinishScan("OfficerOne", "My Guild")
+assert.equal(nil, guardedSnapshot, "auto scans should not promote a partial timeout snapshot over a fuller saved baseline")
+assert.equal(0, #(guardedChanges or {}), "rejected partial auto scans should not emit change records")
+assert.equal("stable", guardedDb.currentSnapshotId, "rejected partial auto scans should keep the previous current snapshot")
+assert.equal(1900, guardedDb.snapshots.stable.scannedAt, "rejected partial auto scans should leave the prior snapshot untouched")
+
+guardedDb.meta.lastScanSequence = 0
+_G.DEFAULT_CHAT_FRAME.messages = {}
+scanner.scanInProgress = true
+scanner.inventoryScanAuto = true
+scanner.totalTabs = 1
+scanner.completedTabs = 0
+scanner.waitingForTab = 2
+scanner.waitToken = 20
+scanner.rawTabs = {}
+scanner.ReadCurrentTab = function(tabIndex, scanSource)
+    scanner.RecordTabScan({
+        index = tabIndex,
+        name = "Gems",
+        scanSource = scanSource or "event",
+        slots = {},
+    })
+end
+scanner.OnGuildBankSlotsChanged(2, "timeout")
+assert.equal("GBankManager: Guild bank auto-scan ignored a partial snapshot; run Scan Bank to refresh.", _G.DEFAULT_CHAT_FRAME.messages[1], "rejected partial auto scans should explain why the saved snapshot stayed unchanged")
+assert.equal(nil, _G.DEFAULT_CHAT_FRAME.messages[2], "rejected partial auto scans should not also report a misleading scan-finished message")
 
 scanner.ReadCurrentTab = originalReadCurrentTab
 scanner.RetryPendingAutoScan = originalRetryPendingAutoScan

@@ -52,6 +52,10 @@ local ABBREVIATED_TIMEZONES = {
     ["Coordinated Universal Time"] = "UTC",
 }
 
+local SESSION_BATCH_COUNTS = setmetatable({}, {
+    __mode = "k",
+})
+
 local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -159,6 +163,10 @@ local function raw_time_key(year, month, day, hour, minute)
     return "unknown"
 end
 
+local function has_time_parts(year, month, day, hour, minute)
+    return year ~= nil or month ~= nil or day ~= nil or hour ~= nil or minute ~= nil
+end
+
 local function format_export_timestamp(timestamp)
     timestamp = tonumber(timestamp or 0) or 0
     if timestamp <= 0 then
@@ -222,6 +230,37 @@ local function make_occurrence_fingerprint(base, occurrence)
     })
 end
 
+local function fingerprint_base(fingerprint)
+    fingerprint = trim(fingerprint)
+    if fingerprint == "" then
+        return ""
+    end
+
+    return string.match(fingerprint, "^(.*)|%-?%d+$") or fingerprint
+end
+
+local function session_batch_counts(ledger)
+    if type(ledger) ~= "table" then
+        return {
+            item = {},
+            money = {},
+        }
+    end
+
+    local counts = SESSION_BATCH_COUNTS[ledger]
+    if type(counts) ~= "table" then
+        counts = {
+            item = {},
+            money = {},
+        }
+        SESSION_BATCH_COUNTS[ledger] = counts
+    end
+
+    counts.item = ensure_table(counts.item)
+    counts.money = ensure_table(counts.money)
+    return counts
+end
+
 local function timestamp_time_key(timestamp)
     timestamp = tonumber(timestamp or 0) or 0
     if timestamp <= 0 then
@@ -266,8 +305,7 @@ local function stable_time_key(values, forceUnknownTimeKey)
     local minute = tonumber(values.minute)
 
     if year and year >= 1000 and month and day then
-        local timestamp = timestamp_from_parts(year, month, day, hour, minute, values.timestamp or values.when)
-        return timestamp_time_key(timestamp) or raw_time_key(year, month, day, hour, minute)
+        return raw_time_key(year, month, day, hour, minute)
     end
 
     local persistedTimeKey = timestamp_time_key(values.timestamp or values.when)
@@ -515,14 +553,10 @@ function bankLedger.EnsureState(db)
     db.bankLedger.lastMoneyScanAt = tonumber(db.bankLedger.lastMoneyScanAt or 0) or 0
     ensure_settings(db)
 
-    if legacy_index_requires_rebuild(db.bankLedger.itemLogs, db.bankLedger.itemFingerprints) then
-        rebuild_fingerprint_index(db.bankLedger.itemLogs, db.bankLedger.itemFingerprints, legacy_item_row_bases)
-    end
-    if legacy_index_requires_rebuild(db.bankLedger.moneyLogs, db.bankLedger.moneyFingerprints) then
-        rebuild_fingerprint_index(db.bankLedger.moneyLogs, db.bankLedger.moneyFingerprints, function(entry)
-            return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
-        end)
-    end
+    rebuild_fingerprint_index(db.bankLedger.itemLogs, db.bankLedger.itemFingerprints, legacy_item_row_bases)
+    rebuild_fingerprint_index(db.bankLedger.moneyLogs, db.bankLedger.moneyFingerprints, function(entry)
+        return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
+    end)
 
     return db.bankLedger
 end
@@ -718,14 +752,57 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     options = type(options) == "table" and options or {}
     local delta = describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     local currentFingerprints = delta.currentFingerprints
-    local newRowCount = delta.newRowCount
+    local currentCounts = {}
     local knownFingerprintCount = 0
+    local storedCounts = {}
+    local groups = {}
+    local groupOrder = {}
+    local previousBatchCounts = type(options.previousBatchCounts) == "table" and options.previousBatchCounts or nil
+    local nextOccurrences = {}
+
+    local function is_known_row(row, includeLegacy)
+        if fingerprintIndex[tostring((row or {}).fingerprint or "")] then
+            return true
+        end
+
+        return includeLegacy == true and fingerprintIndex[tostring((row or {}).legacyFingerprint or "")] == true
+    end
+
+    for _, entry in ipairs(entries or {}) do
+        local base = fingerprint_base(entry and entry.fingerprint)
+        if base ~= "" then
+            storedCounts[base] = (tonumber(storedCounts[base] or 0) or 0) + 1
+        end
+    end
 
     for _, row in ipairs(normalizedRows or {}) do
-        if fingerprintIndex[tostring(row.fingerprint or "")]
-            or fingerprintIndex[tostring(row.legacyFingerprint or "")] then
+        if is_known_row(row, true) then
             knownFingerprintCount = knownFingerprintCount + 1
         end
+
+        local base = tostring(row.fingerprintBase or fingerprint_base(row.fingerprint) or "")
+        if base ~= "" then
+            if not groups[base] then
+                groups[base] = {}
+                groupOrder[#groupOrder + 1] = base
+            end
+            groups[base][#groups[base] + 1] = row
+            currentCounts[base] = (tonumber(currentCounts[base] or 0) or 0) + 1
+        end
+    end
+
+    local function finish()
+        if type(options.currentBatchCounts) == "table" then
+            for key in pairs(options.currentBatchCounts) do
+                options.currentBatchCounts[key] = nil
+            end
+            for key, count in pairs(currentCounts) do
+                options.currentBatchCounts[key] = count
+            end
+        end
+
+        sourceSnapshots[sourceKey] = currentFingerprints
+        return mergedCount
     end
 
     if delta.emptyAfterKnown then
@@ -736,32 +813,55 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
         return mergedCount
     end
 
-    local startIndex = 1
-    local endIndex = #normalizedRows
-    if not delta.suspiciousNoOverlap then
-        endIndex = newRowCount
-        if delta.appendMode == "back" then
-            startIndex = math.max(1, (#normalizedRows - newRowCount) + 1)
-            endIndex = #normalizedRows
+    local function append_row(row, base, alreadyKnown)
+        local nextOccurrence = nextOccurrences[base]
+        if nextOccurrence == nil then
+            nextOccurrence = math.max(
+                tonumber(storedCounts[base] or 0) or 0,
+                tonumber(alreadyKnown or 0) or 0
+            )
+        end
+
+        row.entryId = next_entry_id(ledger, entryPrefix)
+        row.fingerprint = make_occurrence_fingerprint(base, nextOccurrence + 1)
+        row.fingerprintBase = nil
+        row.legacyFingerprintBase = nil
+        row.sourceIndex = nil
+        add_index_keys(fingerprintIndex, row)
+        entries[#entries + 1] = row
+        mergedCount = mergedCount + 1
+        nextOccurrences[base] = nextOccurrence + 1
+    end
+
+    if delta.suspiciousNoOverlap and knownFingerprintCount > 0 then
+        for _, row in ipairs(normalizedRows or {}) do
+            if not is_known_row(row, true) then
+                local base = tostring(row.fingerprintBase or fingerprint_base(row.fingerprint) or "")
+                if base ~= "" then
+                    append_row(row, base, storedCounts[base])
+                end
+            end
+        end
+        return finish()
+    end
+
+    for _, base in ipairs(groupOrder) do
+        local group = groups[base] or {}
+        local alreadyKnown = 0
+        if previousBatchCounts ~= nil and previousBatchCounts[base] ~= nil then
+            alreadyKnown = tonumber(previousBatchCounts[base] or 0) or 0
+        else
+            alreadyKnown = tonumber(storedCounts[base] or 0) or 0
+        end
+        local newCount = math.max(0, #group - alreadyKnown)
+
+        for index = 1, newCount do
+            local row = group[index]
+            append_row(row, base, alreadyKnown)
         end
     end
 
-    for index = startIndex, endIndex do
-        local row = normalizedRows[index]
-        if not fingerprintIndex[tostring(row.fingerprint or "")]
-            and not fingerprintIndex[tostring(row.legacyFingerprint or "")] then
-            row.entryId = next_entry_id(ledger, entryPrefix)
-            row.fingerprintBase = nil
-            row.legacyFingerprintBase = nil
-            row.sourceIndex = nil
-            add_index_keys(fingerprintIndex, row)
-            entries[#entries + 1] = row
-            mergedCount = mergedCount + 1
-        end
-    end
-
-    sourceSnapshots[sourceKey] = currentFingerprints
-    return mergedCount
+    return finish()
 end
 
 local function normalize_item_rows(payload)
@@ -778,6 +878,30 @@ local function normalize_item_rows(payload)
         local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
         local action = item_action_label(raw.type)
         local fromTabName = trim(raw.fromTabName)
+        local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
+        local fingerprintBase = item_fingerprint_bases({
+            timestamp = timestamp,
+            year = raw.year,
+            month = raw.month,
+            day = raw.day,
+            hour = raw.hour,
+            minute = raw.minute,
+            who = raw.who,
+            action = action,
+            itemID = itemID,
+            quantity = raw.quantity or raw.count,
+            tabName = sourceTabName,
+            fromTabName = fromTabName,
+        }, not rowHasTimeParts)
+        local legacyFingerprintBase = item_fingerprint_bases({
+            timestamp = timestamp,
+            who = raw.who,
+            action = action,
+            itemID = itemID,
+            quantity = raw.quantity or raw.count,
+            tabName = sourceTabName,
+            fromTabName = fromTabName,
+        }, true)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
@@ -792,29 +916,8 @@ local function normalize_item_rows(payload)
             fromTabName = fromTabName ~= "" and fromTabName or "-",
             craftedQuality = tonumber(raw.craftedQuality or raw.qualityTier or 0) or 0,
             craftedQualityIcon = raw.craftedQualityIcon or raw.qualityTierIcon,
-            fingerprintBase = item_fingerprint_bases({
-                timestamp = timestamp,
-                year = raw.year,
-                month = raw.month,
-                day = raw.day,
-                hour = raw.hour,
-                minute = raw.minute,
-                who = raw.who,
-                action = action,
-                itemID = itemID,
-                quantity = raw.quantity or raw.count,
-                tabName = sourceTabName,
-                fromTabName = fromTabName,
-            }, false),
-            legacyFingerprintBase = item_fingerprint_bases({
-                timestamp = timestamp,
-                who = raw.who,
-                action = action,
-                itemID = itemID,
-                quantity = raw.quantity or raw.count,
-                tabName = sourceTabName,
-                fromTabName = fromTabName,
-            }, true),
+            fingerprintBase = fingerprintBase,
+            legacyFingerprintBase = legacyFingerprintBase,
             sourceIndex = index,
         }
     end
@@ -835,6 +938,24 @@ local function normalize_money_rows(payload)
         local amountCopper = tonumber(raw.amountCopper or raw.amount or 0) or 0
         local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
         local action = money_action_label(raw.type, amountCopper, repairThresholdGold)
+        local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
+        local fingerprintBase = money_fingerprint_bases({
+            timestamp = timestamp,
+            year = raw.year,
+            month = raw.month,
+            day = raw.day,
+            hour = raw.hour,
+            minute = raw.minute,
+            who = raw.who,
+            action = action,
+            amountCopper = amountCopper,
+        }, repairThresholdGold, not rowHasTimeParts)
+        local legacyFingerprintBase = money_fingerprint_bases({
+            timestamp = timestamp,
+            who = raw.who,
+            action = action,
+            amountCopper = amountCopper,
+        }, repairThresholdGold, true)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
@@ -842,23 +963,8 @@ local function normalize_money_rows(payload)
             action = action,
             amountCopper = amountCopper,
             amount = amountCopper,
-            fingerprintBase = money_fingerprint_bases({
-                timestamp = timestamp,
-                year = raw.year,
-                month = raw.month,
-                day = raw.day,
-                hour = raw.hour,
-                minute = raw.minute,
-                who = raw.who,
-                action = action,
-                amountCopper = amountCopper,
-            }, repairThresholdGold, false),
-            legacyFingerprintBase = money_fingerprint_bases({
-                timestamp = timestamp,
-                who = raw.who,
-                action = action,
-                amountCopper = amountCopper,
-            }, repairThresholdGold, true),
+            fingerprintBase = fingerprintBase,
+            legacyFingerprintBase = legacyFingerprintBase,
             sourceIndex = index,
         }
     end
@@ -890,6 +996,8 @@ function bankLedger.MergeItemTransactions(db, payload)
     local ledger = bankLedger.EnsureState(db)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     local sourceKey, normalizedRows = normalize_item_rows(payload)
+    local batchCounts = session_batch_counts(ledger).item
+    local currentBatchCounts = {}
 
     local mergedCount = append_delta_rows(
         ledger,
@@ -901,9 +1009,12 @@ function bankLedger.MergeItemTransactions(db, payload)
         0,
         "item",
         {
-            allowSuspiciousUnknownAppend = false,
+            allowSuspiciousUnknownAppend = payload.allowSuspiciousUnknownAppend == true,
+            previousBatchCounts = batchCounts[sourceKey],
+            currentBatchCounts = currentBatchCounts,
         }
     )
+    batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "item")
     return mergedCount
 end
@@ -915,6 +1026,8 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
     local sourceKey, normalizedRows = normalize_money_rows(payload)
+    local batchCounts = session_batch_counts(ledger).money
+    local currentBatchCounts = {}
 
     local mergedCount = append_delta_rows(
         ledger,
@@ -927,8 +1040,11 @@ function bankLedger.MergeMoneyTransactions(db, payload)
         "money",
         {
             allowSuspiciousUnknownAppend = true,
+            previousBatchCounts = batchCounts[sourceKey],
+            currentBatchCounts = currentBatchCounts,
         }
     )
+    batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "money")
     return mergedCount
 end

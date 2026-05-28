@@ -69,6 +69,7 @@ assert.truthy(string.find(helpText, "/gbm debug quality", 1, true) ~= nil, "/gbm
 assert.truthy(string.find(helpText, "/gbm debug atlas", 1, true) ~= nil, "/gbm help should include the crafted-quality atlas sampler command")
 assert.truthy(string.find(helpText, "/gbm debug render", 1, true) ~= nil, "/gbm help should include the table render diagnostics command")
 assert.truthy(string.find(helpText, "/gbm debug request", 1, true) ~= nil, "/gbm help should include the request wizard diagnostics command")
+assert.truthy(string.find(helpText, "/gbm debug ledger", 1, true) ~= nil, "/gbm help should include the guild-bank ledger diagnostics command")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 local atlasSampler = slash.command("debug atlas")
@@ -126,6 +127,45 @@ assert.truthy(type(requestDebugLines) == "table", "/gbm debug request should ret
 assert.truthy(string.find(requestDebugText, "request debug itemID=241326", 1, true) ~= nil, "/gbm debug request should report the inspected item id")
 assert.truthy(string.find(requestDebugText, "result[1].itemID=241326", 1, true) ~= nil, "/gbm debug request should report visible request selector rows")
 assert.truthy(string.find(requestDebugText, "qualityAtlas=Professions-Icon-Quality-12-Tier2-Inv shown=true", 1, true) ~= nil, "/gbm debug request should report the icon painted in the request wizard result row")
+
+_G.GetNumGuildBankTabs = function()
+    return 1
+end
+_G.GetGuildBankTabInfo = function()
+    return "Donations", nil, true
+end
+_G.GetNumGuildBankTransactions = function(tabIndex)
+    if tabIndex == 1 then
+        return 1
+    end
+    return 0
+end
+_G.GetGuildBankTransaction = function(tabIndex, index)
+    if tabIndex == 1 and index == 1 then
+        return "deposit", "GuildLead-Stormrage", "item:211878:0:0:0", 12, nil, nil, 0, 0, 0, 1
+    end
+end
+_G.GetNumGuildBankMoneyTransactions = function()
+    return 1
+end
+_G.GetGuildBankMoneyTransaction = function(index)
+    if index == 1 then
+        return "deposit", "GuildLead-Stormrage", 500000000, 0, 0, 0, 1
+    end
+end
+scanner.scanInProgress = true
+scanner.ledgerScanInProgress = false
+scanner.pendingLedgerScanAfterInventory = true
+scanner.pendingLedgerAutoScan = false
+_G.DEFAULT_CHAT_FRAME.messages = {}
+local ledgerDebugLines = slash.command("debug ledger")
+local ledgerDebugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
+assert.truthy(type(ledgerDebugLines) == "table", "/gbm debug ledger should return copy-friendly diagnostic lines")
+assert.truthy(string.find(ledgerDebugText, "ledger debug state scanInProgress=true ledgerScanInProgress=false pendingAfterInventory=true", 1, true) ~= nil, "/gbm debug ledger should report scanner state flags")
+assert.truthy(string.find(ledgerDebugText, "ledger debug tabs count=1", 1, true) ~= nil, "/gbm debug ledger should report guild-bank tab count")
+assert.truthy(string.find(ledgerDebugText, "itemLog tab=1 name=Donations viewable=true count=1", 1, true) ~= nil, "/gbm debug ledger should report raw visible item-log counts")
+assert.truthy(string.find(ledgerDebugText, "moneyLog queryId=9 count=1", 1, true) ~= nil, "/gbm debug ledger should report raw money-log counts")
+assert.truthy(string.find(ledgerDebugText, "money[1] type=deposit who=GuildLead-Stormrage amount=500000000 age=0/0/0/1", 1, true) ~= nil, "/gbm debug ledger should include a raw money-log sample row")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 slash.command("debug quality 241322")

@@ -6,6 +6,8 @@
 
 **Architecture:** Introduce one shared item-display helper that prefers trusted bundled or learned item hyperlinks when available and falls back to semantic item-name rendering when not. Visible UI surfaces collapse quality into the item display itself, but structured row metadata keeps numeric crafted-quality values for sorting, filtering, and CSV export, and the item-data pipeline is extended with optional hyperlink fields without abandoning the current semantic crafted-quality fallback model.
 
+**Execution status:** Implemented and pushed in `6debadd` (`feat: migrate item display and crafted quality rendering`). The user completed a full live regression pass after `/reload` on 2026-05-28 for the migrated surfaces, including Minimums, Requests, Request Details, New Request, Exports, CSV numeric `Tier` preservation, and required anchor item `244559`.
+
 **Tech Stack:** WoW Lua addon runtime, bundled `GBankManager_ItemData` payload, maintainer catalog PowerShell and Node pipeline under `tools/catalog/`, focused Lua specs in `tests/spec/*.lua`, local Lua runner `.\tools\lua\lua.exe`, live Retail verification after deploy
 
 ---

@@ -100,6 +100,7 @@ local originalBeginScan = scanner.BeginScan
 local originalBeginLedgerScan = scanner.BeginLedgerScan
 local beginScanCalls = 0
 local beginLedgerCalls = 0
+local beginLedgerOptions = {}
 
 scanner.BeginScan = function()
     beginScanCalls = beginScanCalls + 1
@@ -107,8 +108,9 @@ scanner.BeginScan = function()
     return "Scanning 0/2 tabs"
 end
 
-scanner.BeginLedgerScan = function()
+scanner.BeginLedgerScan = function(options)
     beginLedgerCalls = beginLedgerCalls + 1
+    beginLedgerOptions[beginLedgerCalls] = options or {}
     return true
 end
 
@@ -128,11 +130,44 @@ scanner.guildBankOpen = false
 scanner.OnGuildBankOpened()
 assert.equal(1, beginScanCalls, "guild bank open should skip a second inventory scan when the main snapshot is still inside the scan interval")
 assert.equal(1, beginLedgerCalls, "guild bank open should still trigger a direct ledger scan when ledger data is stale but the main snapshot is still fresh")
+assert.truthy(beginLedgerOptions[1] and beginLedgerOptions[1].force == true, "bank-open ledger scans should force one ledger pass instead of depending on the stale-data throttle")
+
+_G.GBankManagerDB.meta.updatedAt = 1716577200
+_G.GBankManagerDB.bankLedger.lastScanAt = 1716577200
+scanner.scanInProgress = false
+scanner.pendingAutoScan = false
+scanner.guildBankOpen = false
+scanner.OnGuildBankOpened()
+assert.equal(1, beginScanCalls, "guild bank open should still skip inventory when the main snapshot is fresh")
+assert.equal(2, beginLedgerCalls, "guild bank open should still kick off a ledger scan even when the previous ledger scan is inside the interval")
+assert.truthy(beginLedgerOptions[2] and beginLedgerOptions[2].force == true, "fresh bank-open ledger scans should use the same forced follow-up behavior as the scan button")
 
 scanner.BeginScan = originalBeginScan
 scanner.BeginLedgerScan = originalBeginLedgerScan
 scanner.pendingLedgerScanAfterInventory = false
+_G.GBankManagerDB.bankLedger.lastScanAt = 0
 _G.C_Timer.ClearPending()
+
+local queuedAutoLedgerDb = store.CreateFreshDatabase("Guild Testers")
+_G.GBankManagerDB = queuedAutoLedgerDb
+ns.state.db = queuedAutoLedgerDb
+_G.GBankManagerDB.meta.updatedAt = 0
+_G.GBankManagerDB.bankLedger.lastScanAt = 1716577200
+_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+scanner.scanInProgress = false
+scanner.pendingAutoScan = false
+scanner.pendingLedgerScanAfterInventory = false
+scanner.pendingLedgerScanOptions = nil
+scanner.guildBankOpen = false
+_G.QueryGuildBankTab = function()
+    return true
+end
+scanner.OnGuildBankOpened()
+assert.truthy(scanner.scanInProgress == true, "fresh guild-bank open should start the inventory auto-scan when the main snapshot is stale")
+assert.truthy(scanner.pendingLedgerScanAfterInventory == true, "fresh guild-bank inventory auto-scans should still queue a ledger follow-up even when ledger freshness is inside the interval")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.force == true, "fresh guild-bank inventory auto-scans should force the queued ledger follow-up")
+scanner.OnGuildBankClosed()
+_G.GBankManagerDB.bankLedger.lastScanAt = 0
 
 assert.truthy(scanner.BeginLedgerScan(), "ledger scan should start when guild bank logs are available")
 run_all_pending()
@@ -257,6 +292,53 @@ scanner.FinishScan("OfficerOne", "Guild Testers")
 assert.equal(1, ledgerStartCalls, "completing the main guild-bank scan should kick off the queued ledger scan")
 assert.truthy(scanner.pendingLedgerScanAfterInventory ~= true, "ledger follow-up should clear once the main scan hands off into the ledger scan")
 assert.truthy(scanner.pendingLedgerScanOptions == nil, "ledger follow-up options should clear once the handoff completes")
+
+local rejectedAutoLedgerStartCalls = 0
+scanner.BeginLedgerScan = function(options)
+    rejectedAutoLedgerStartCalls = rejectedAutoLedgerStartCalls + 1
+    assert.truthy(options and options.force ~= true, "rejected bank-open auto scans should preserve the normal stale-ledger handoff options")
+    return true
+end
+
+local partialAutoDb = store.CreateFreshDatabase("Guild Testers")
+partialAutoDb.snapshots = {
+    stable = {
+        scanId = "stable",
+        scannedAt = 1716577200,
+        items = {
+            [211878] = { itemID = 211878, name = "Flask of Tempered Swiftness", totalCount = 12, tabs = { Flasks = 12 } },
+        },
+        itemRows = {
+            { itemID = 211878, name = "Flask of Tempered Swiftness", tabName = "Flasks", quantity = 12 },
+        },
+    },
+}
+partialAutoDb.currentSnapshotId = "stable"
+partialAutoDb.bankLedger.lastScanAt = 0
+partialAutoDb.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+_G.GBankManagerDB = partialAutoDb
+ns.state.db = partialAutoDb
+
+scanner.pendingLedgerScanAfterInventory = true
+scanner.pendingLedgerScanOptions = {
+    force = false,
+}
+scanner.scanInProgress = true
+scanner.inventoryScanAuto = true
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        scanSource = "timeout",
+        slots = {},
+    },
+}
+
+local rejectedAutoSnapshot = scanner.FinishScan("OfficerOne", "Guild Testers")
+assert.equal(nil, rejectedAutoSnapshot, "partial bank-open auto scans should still be rejected before replacing the snapshot")
+assert.equal(1, rejectedAutoLedgerStartCalls, "rejecting a partial bank-open auto scan should not squash the queued ledger scan")
+assert.truthy(scanner.pendingLedgerScanAfterInventory ~= true, "rejected partial auto scans should clear the queued ledger handoff after attempting it")
+assert.truthy(scanner.pendingLedgerScanOptions == nil, "rejected partial auto scans should clear queued ledger options after attempting the handoff")
 
 local closedLedgerStartCalls = 0
 scanner.BeginLedgerScan = function()
@@ -412,6 +494,164 @@ assert.equal(1, moneyQueryCount, "fast ledger scans should query the money log o
 assert.equal(2, #(_G.GBankManagerDB.bankLedger.itemLogs or {}), "the bulk-query path should append the genuinely new item row")
 assert.equal(2, #(_G.GBankManagerDB.bankLedger.moneyLogs or {}), "the bulk-query path should append the genuinely new money row")
 assert.equal("Guild bank ledger scan finished (1 item rows, 1 money rows).", scanner:GetStatusText(), "the bulk-query path should report only the genuinely new ledger rows")
+
+_G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
+ns.state.db = _G.GBankManagerDB
+_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+_G.GBankManagerDB.bankLedger.lastScanAt = 0
+
+ns.modules.bankLedger.MergeItemTransactions(_G.GBankManagerDB, {
+    scanStartedAt = 1716579000,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "OfficerOne-Stormrage",
+            itemID = 310001,
+            itemName = "Older Ledger Flask",
+            quantity = 4,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 8,
+        },
+        {
+            type = "withdraw",
+            who = "OfficerTwo-Stormrage",
+            itemID = 310002,
+            itemName = "Older Ledger Potion",
+            quantity = 2,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 7,
+        },
+    },
+})
+
+ns.modules.bankLedger.MergeMoneyTransactions(_G.GBankManagerDB, {
+    scanStartedAt = 1716579000,
+    transactions = {
+        {
+            type = "deposit",
+            who = "OfficerOne-Stormrage",
+            amount = 100000000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 8,
+        },
+        {
+            type = "withdraw",
+            who = "OfficerTwo-Stormrage",
+            amount = 200000000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 7,
+        },
+    },
+})
+
+local rotatedScannerItemRows = {
+    {
+        type = "deposit",
+        who = "GuildLead-Stormrage",
+        itemLink = "item:310003:0:0:0",
+        count = 8,
+        year = 2026,
+        month = 5,
+        day = 24,
+        hour = 10,
+    },
+    {
+        type = "withdraw",
+        who = "RaiderOne-Stormrage",
+        itemLink = "item:310004:0:0:0",
+        count = 3,
+        year = 2026,
+        month = 5,
+        day = 24,
+        hour = 9,
+    },
+}
+local rotatedScannerMoneyRows = {
+    {
+        type = "deposit",
+        who = "GuildLead-Stormrage",
+        amount = 300000000,
+        year = 2026,
+        month = 5,
+        day = 24,
+        hour = 10,
+    },
+    {
+        type = "withdraw",
+        who = "RaiderOne-Stormrage",
+        amount = 400000000,
+        year = 2026,
+        month = 5,
+        day = 24,
+        hour = 9,
+    },
+}
+
+_G.GetNumGuildBankTabs = function()
+    return 1
+end
+
+_G.GetGuildBankTabInfo = function()
+    return "Flasks", nil, true
+end
+
+_G.GetNumGuildBankTransactions = function(tabIndex)
+    if tabIndex == 1 then
+        return #rotatedScannerItemRows
+    end
+    return 0
+end
+
+_G.GetGuildBankTransaction = function(tabIndex, index)
+    local row = tabIndex == 1 and rotatedScannerItemRows[index] or nil
+    if not row then
+        return nil
+    end
+    return row.type, row.who, row.itemLink, row.count, nil, nil, row.year, row.month, row.day, row.hour
+end
+
+_G.GetNumGuildBankMoneyTransactions = function()
+    return #rotatedScannerMoneyRows
+end
+
+_G.GetGuildBankMoneyTransaction = function(index)
+    local row = rotatedScannerMoneyRows[index]
+    if not row then
+        return nil
+    end
+    return row.type, row.who, row.amount, row.year, row.month, row.day, row.hour
+end
+
+_G.time = function()
+    return 1716580300
+end
+
+scanner.ledgerScanInProgress = false
+scanner.ledgerTargets = {}
+scanner.ledgerWaitingTarget = nil
+_G.C_Timer.ClearPending()
+
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "ledger scan should start for a fully rotated live item and money log window")
+run_all_pending(10)
+assert.equal(4, #(_G.GBankManagerDB.bankLedger.itemLogs or {}), "scanner-driven item log reads should append a fully rotated visible window instead of leaving the item log stuck")
+assert.equal(4, #(_G.GBankManagerDB.bankLedger.moneyLogs or {}), "scanner-driven money log reads should append a fully rotated visible window instead of leaving the money log stuck")
+assert.equal("Guild bank ledger scan finished (2 item rows, 2 money rows).", scanner:GetStatusText(), "fully rotated live ledger windows should report the appended item and money rows")
+
+_G.time = function()
+    return 1716580000
+end
 
 _G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
 ns.state.db = _G.GBankManagerDB
@@ -1367,6 +1607,105 @@ scanner.guildBankOpen = false
 scanner.OnGuildBankLogUpdated()
 assert.equal(1, #passiveEventScanCalls, "guild-bank log updates should not trigger passive scans after the bank closes")
 scanner.BeginLedgerScan = originalPassiveEventBeginLedgerScan
+
+local midInventoryLedgerCalls = 0
+local originalMidInventoryBeginLedgerScan = scanner.BeginLedgerScan
+scanner.BeginLedgerScan = function()
+    midInventoryLedgerCalls = midInventoryLedgerCalls + 1
+    return true
+end
+_G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
+ns.state.db = _G.GBankManagerDB
+_G.GBankManagerDB.meta.updatedAt = 1716582995
+_G.GBankManagerDB.bankLedger.lastScanAt = 1716582995
+scanner.guildBankOpen = true
+scanner.scanInProgress = true
+scanner.ledgerScanInProgress = false
+scanner.pendingLedgerAutoScan = true
+scanner.OnGuildBankTabsUpdated()
+assert.equal(0, midInventoryLedgerCalls, "guild-bank tab updates should not start the pending ledger scan while the main bank scan is still running")
+scanner.scanInProgress = false
+scanner.OnGuildBankTabsUpdated()
+assert.equal(1, midInventoryLedgerCalls, "the pending ledger scan should start once the main bank scan is no longer running")
+scanner.BeginLedgerScan = originalMidInventoryBeginLedgerScan
+
+local passiveChainStartCalls = 0
+local passiveChainTimerDelays = {}
+local originalPassiveChainBeginLedgerScan = scanner.BeginLedgerScan
+local originalPassiveChainTimerAfter = _G.C_Timer.After
+scanner.BeginLedgerScan = function(options)
+    passiveChainStartCalls = passiveChainStartCalls + 1
+    scanner.ledgerScanInProgress = true
+    return true
+end
+_G.C_Timer.After = function(delaySeconds, callback)
+    passiveChainTimerDelays[#passiveChainTimerDelays + 1] = delaySeconds
+    if #passiveChainTimerDelays == 1 and type(callback) == "function" then
+        callback()
+    end
+end
+scanner.guildBankOpen = true
+scanner.scanInProgress = false
+scanner.ledgerScanInProgress = false
+scanner.passiveLedgerRefreshActive = false
+scanner.passiveLedgerRefreshToken = 0
+scanner.SyncGuildBankOpenState()
+assert.equal(1, passiveChainStartCalls, "passive refresh should start one ledger scan when its cadence fires")
+assert.equal(1, #passiveChainTimerDelays, "passive refresh should not arm the next cadence timer until the active ledger scan finishes")
+scanner.BeginLedgerScan = originalPassiveChainBeginLedgerScan
+_G.C_Timer.After = originalPassiveChainTimerAfter
+scanner.ledgerScanInProgress = false
+scanner.passiveLedgerRefreshActive = false
+
+_G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
+ns.state.db = _G.GBankManagerDB
+_G.GBankManagerDB.meta.updatedAt = 1716583600
+_G.GBankManagerDB.bankLedger.lastScanAt = 1716583600
+_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+
+local deferredDirectLedgerQueryIds = {}
+_G.GetNumGuildBankTabs = function()
+    return 1
+end
+_G.GetGuildBankTabInfo = function()
+    return "Flasks", nil, true
+end
+_G.QueryGuildBankLog = function(queryId)
+    deferredDirectLedgerQueryIds[#deferredDirectLedgerQueryIds + 1] = queryId
+end
+
+scanner.guildBankOpen = true
+scanner.scanInProgress = true
+scanner.ledgerScanInProgress = false
+scanner.pendingLedgerScanAfterInventory = false
+scanner.pendingLedgerScanOptions = nil
+scanner.ledgerTargets = {}
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+    silent = true,
+    passive = true,
+}) == true, "ledger requests made during inventory scans should be accepted for deferred handoff")
+assert.equal(0, #deferredDirectLedgerQueryIds, "direct ledger requests should not query Blizzard logs while the inventory scan is still running")
+assert.truthy(scanner.ledgerScanInProgress ~= true, "direct ledger requests should not mark the ledger scan active while inventory is still scanning")
+assert.truthy(scanner.pendingLedgerScanAfterInventory == true, "direct ledger requests during inventory scans should queue the inventory-to-ledger handoff")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.force == true, "deferred direct ledger requests should preserve force semantics")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.silent == true, "deferred direct ledger requests should preserve silent semantics")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.passive == true, "deferred direct ledger requests should preserve passive semantics")
+
+scanner.pendingLedgerScanAfterInventory = true
+scanner.pendingLedgerScanOptions = {
+    force = true,
+    silent = false,
+    passive = false,
+}
+scanner.BeginLedgerScan({
+    force = true,
+    silent = true,
+    passive = true,
+})
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.force == true, "a later passive ledger request should not remove the already queued forced follow-up")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.silent ~= true, "a later passive ledger request should not turn a visible manual follow-up into a silent scan")
+assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.passive ~= true, "a later passive ledger request should not turn a manual follow-up into a passive-only scan")
 
 local scannerEvents = ns.modules.guildBankScannerEvents
 local interactionOpens = 0

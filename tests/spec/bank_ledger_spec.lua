@@ -332,6 +332,241 @@ local relogStableMoneyRepeat = bankLedger.MergeMoneyTransactions(relogStableMone
 assert.equal(1, relogStableMoneyRepeat, "money dedupe should still append a new leading row after a relog even when Blizzard's relative offsets have all shifted")
 assert.equal(2, #relogStableMoneyDb.bankLedger.moneyLogs, "money dedupe should keep the old relative-offset row while appending the newly visible one after relog")
 
+local repeatedRealMoneyDb = fresh_db()
+_G.GetServerTime = function()
+    return 1779998400
+end
+local repeatedRealMoneyInitial = bankLedger.MergeMoneyTransactions(repeatedRealMoneyDb, {
+    scanStartedAt = 1779998400,
+    transactions = {
+        {
+            type = "deposit",
+            who = "Zirleficent",
+            amount = 100 * 10000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 19,
+        },
+    },
+})
+assert.equal(1, repeatedRealMoneyInitial, "baseline repeated-real money import should persist the first matching transaction")
+_G.GetServerTime = function()
+    return 1780002000
+end
+local repeatedRealMoneyNext = bankLedger.MergeMoneyTransactions(repeatedRealMoneyDb, {
+    scanStartedAt = 1780002000,
+    transactions = {
+        {
+            type = "deposit",
+            who = "Zirleficent",
+            amount = 100 * 10000,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 2,
+        },
+    },
+})
+assert.equal(1, repeatedRealMoneyNext, "a real later money transaction with the same actor/action/amount should append instead of being hidden by timeless legacy dedupe")
+assert.equal(2, #repeatedRealMoneyDb.bankLedger.moneyLogs, "repeated real money activity should keep both distinct timestamps")
+
+local repeatedRealItemDb = fresh_db()
+_G.GetServerTime = function()
+    return 1779998400
+end
+local repeatedRealItemInitial = bankLedger.MergeItemTransactions(repeatedRealItemDb, {
+    scanStartedAt = 1779998400,
+    sourceTabIndex = 8,
+    sourceTabName = "Donations",
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            itemID = 82800,
+            itemName = "Pet Cage",
+            quantity = 1,
+            year = 0,
+            month = 0,
+            day = 1,
+            hour = 13,
+        },
+    },
+})
+assert.equal(1, repeatedRealItemInitial, "baseline repeated-real item import should persist the first matching transaction")
+_G.GetServerTime = function()
+    return 1780002000
+end
+local repeatedRealItemNext = bankLedger.MergeItemTransactions(repeatedRealItemDb, {
+    scanStartedAt = 1780002000,
+    sourceTabIndex = 8,
+    sourceTabName = "Donations",
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            itemID = 82800,
+            itemName = "Pet Cage",
+            quantity = 1,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 13,
+        },
+    },
+    allowSuspiciousUnknownAppend = true,
+})
+assert.equal(1, repeatedRealItemNext, "a real later item transaction with the same actor/action/item/quantity/tab should append instead of being hidden by timeless legacy dedupe")
+assert.equal(2, #repeatedRealItemDb.bankLedger.itemLogs, "repeated real item activity should keep both distinct timestamps")
+
+local regrownBatchMoneyDb = fresh_db()
+local regrownBatchMoneyInitial = bankLedger.MergeMoneyTransactions(regrownBatchMoneyDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 100 * 10000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 100 * 10000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(2, regrownBatchMoneyInitial, "baseline same-identity money import should store both visible occurrences")
+local regrownBatchMoneyShrunk = bankLedger.MergeMoneyTransactions(regrownBatchMoneyDb, {
+    scanStartedAt = 1716573900,
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 100 * 10000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(0, regrownBatchMoneyShrunk, "shrinking visible money batches should not duplicate stored history")
+local regrownBatchMoneyNext = bankLedger.MergeMoneyTransactions(regrownBatchMoneyDb, {
+    scanStartedAt = 1716574200,
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 100 * 10000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amount = 100 * 10000,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(1, regrownBatchMoneyNext, "GBL-style session batch counts should append a same-identity money row when the visible batch regrows")
+assert.equal(3, #regrownBatchMoneyDb.bankLedger.moneyLogs, "regrown same-identity money batches should preserve every distinct event")
+
+local regrownBatchItemDb = fresh_db()
+local regrownBatchItemInitial = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
+    scanStartedAt = 1716573600,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            quantity = 12,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            quantity = 12,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(2, regrownBatchItemInitial, "baseline same-identity item import should store both visible occurrences")
+local regrownBatchItemShrunk = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
+    scanStartedAt = 1716573900,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            quantity = 12,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(0, regrownBatchItemShrunk, "shrinking visible item batches should not duplicate stored history")
+local regrownBatchItemNext = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
+    scanStartedAt = 1716574200,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            quantity = 12,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            quantity = 12,
+            year = 2026,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(1, regrownBatchItemNext, "GBL-style session batch counts should append a same-identity item row when the visible batch regrows")
+assert.equal(3, #regrownBatchItemDb.bankLedger.itemLogs, "regrown same-identity item batches should preserve every distinct event")
+
 local thresholdStableFingerprintDb = fresh_db()
 local thresholdStableFingerprintInitial = bankLedger.MergeMoneyTransactions(thresholdStableFingerprintDb, {
     scanStartedAt = 1716573600,
@@ -871,160 +1106,6 @@ local stalePersistedMoneySnapshotCount = bankLedger.MergeMoneyTransactions(stale
 })
 assert.equal(1, stalePersistedMoneySnapshotCount, "stale persisted money source snapshots should not block a real new leading row after reload")
 assert.equal(2, #stalePersistedMoneySnapshotDb.bankLedger.moneyLogs, "money merges should still append the unseen row when persisted source snapshots are stale")
-
-local legacyItemFingerprintDb = fresh_db()
-legacyItemFingerprintDb.bankLedger.itemLogs = {
-    {
-        entryId = "item-legacy-1",
-        timestamp = 1716573600,
-        when = 1716573600,
-        who = "Archivist-Stormrage",
-        action = "Deposit",
-        itemID = 420001,
-        qualityTier = 0,
-        item = "Legacy Fingerprint Flask",
-        quantity = 8,
-        tabName = "Flasks",
-        tabIndex = 1,
-        fromTabName = "-",
-    },
-}
-legacyItemFingerprintDb.bankLedger.itemFingerprints = {
-    ["item-legacy-1"] = true,
-}
-legacyItemFingerprintDb.bankLedger.itemSourceSnapshots = {}
-local legacyItemFingerprintCount = bankLedger.MergeItemTransactions(legacyItemFingerprintDb, {
-    scanStartedAt = 1716573900,
-    sourceTabIndex = 1,
-    sourceTabName = "Flasks",
-    transactions = {
-        {
-            type = "deposit",
-            who = "Archivist-Stormrage",
-            itemID = 420001,
-            itemName = "Legacy Fingerprint Flask",
-            quantity = 8,
-            year = 2026,
-            month = 5,
-            day = 24,
-            hour = 15,
-        },
-    },
-})
-assert.equal(0, legacyItemFingerprintCount, "legacy item fingerprint maps should rebuild from persisted rows so repeat scans stay deduped")
-assert.equal(1, #legacyItemFingerprintDb.bankLedger.itemLogs, "legacy item fingerprint rebuilds should avoid duplicating persisted item rows")
-
-local legacyItemTimestampIdentityDb = fresh_db()
-legacyItemTimestampIdentityDb.bankLedger.itemLogs = {
-    {
-        entryId = "item-legacy-a",
-        timestamp = 1716562800,
-        when = 1716562800,
-        who = "Archivist-Stormrage",
-        action = "Deposit",
-        itemID = 430001,
-        qualityTier = 0,
-        item = "Repeated Historical Flask",
-        quantity = 8,
-        tabName = "Flasks",
-        tabIndex = 1,
-        fromTabName = "-",
-    },
-    {
-        entryId = "item-legacy-b",
-        timestamp = 1716566400,
-        when = 1716566400,
-        who = "Archivist-Stormrage",
-        action = "Deposit",
-        itemID = 430001,
-        qualityTier = 0,
-        item = "Repeated Historical Flask",
-        quantity = 8,
-        tabName = "Flasks",
-        tabIndex = 1,
-        fromTabName = "-",
-    },
-}
-legacyItemTimestampIdentityDb.bankLedger.itemFingerprints = {
-    ["item-legacy-a"] = true,
-    ["item-legacy-b"] = true,
-}
-legacyItemTimestampIdentityDb.bankLedger.itemSourceSnapshots = {}
-local legacyItemTimestampIdentityCount = bankLedger.MergeItemTransactions(legacyItemTimestampIdentityDb, {
-    scanStartedAt = 1716573900,
-    sourceTabIndex = 1,
-    sourceTabName = "Flasks",
-    transactions = {
-        {
-            type = "deposit",
-            who = "Archivist-Stormrage",
-            itemID = 430001,
-            itemName = "Repeated Historical Flask",
-            quantity = 8,
-            year = 2026,
-            month = 5,
-            day = 24,
-            hour = 15,
-        },
-        {
-            type = "deposit",
-            who = "Archivist-Stormrage",
-            itemID = 430001,
-            itemName = "Repeated Historical Flask",
-            quantity = 8,
-            year = 2026,
-            month = 5,
-            day = 24,
-            hour = 14,
-        },
-        {
-            type = "deposit",
-            who = "Archivist-Stormrage",
-            itemID = 430001,
-            itemName = "Repeated Historical Flask",
-            quantity = 8,
-            year = 2026,
-            month = 5,
-            day = 24,
-            hour = 13,
-        },
-    },
-})
-assert.equal(1, legacyItemTimestampIdentityCount, "legacy item fingerprint rebuilds should preserve persisted-row time identity so a real newer transaction can still append")
-assert.equal(3, #legacyItemTimestampIdentityDb.bankLedger.itemLogs, "legacy item rows with different persisted timestamps should not collapse into interchangeable aliases")
-
-local legacyMoneyFingerprintDb = fresh_db()
-legacyMoneyFingerprintDb.bankLedger.moneyLogs = {
-    {
-        entryId = "money-legacy-1",
-        timestamp = 1716573600,
-        when = 1716573600,
-        who = "Archivist-Stormrage",
-        action = "Deposit",
-        amountCopper = 330000000,
-        amount = 330000000,
-    },
-}
-legacyMoneyFingerprintDb.bankLedger.moneyFingerprints = {
-    ["money-legacy-1"] = true,
-}
-legacyMoneyFingerprintDb.bankLedger.moneySourceSnapshots = {}
-local legacyMoneyFingerprintCount = bankLedger.MergeMoneyTransactions(legacyMoneyFingerprintDb, {
-    scanStartedAt = 1716573900,
-    transactions = {
-        {
-            type = "deposit",
-            who = "Archivist-Stormrage",
-            amount = 330000000,
-            year = 2026,
-            month = 5,
-            day = 24,
-            hour = 15,
-        },
-    },
-})
-assert.equal(0, legacyMoneyFingerprintCount, "legacy money fingerprint maps should rebuild from persisted rows so repeat scans stay deduped")
-assert.equal(1, #legacyMoneyFingerprintDb.bankLedger.moneyLogs, "legacy money fingerprint rebuilds should avoid duplicating persisted money rows")
 
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {
     action = "withdraw",
