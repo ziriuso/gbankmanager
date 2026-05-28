@@ -23,7 +23,7 @@ assert.truthy(type(mainFrame.aboutCrestTexture) == "table", "about should expose
 assert.truthy((mainFrame.aboutCrestTexture.texture or "") ~= "", "about should assign a crest texture")
 assert.equal("Guild Bank Manager", mainFrame.aboutNameText:GetText(), "about should show the addon name")
 assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "Version", 1, true) ~= nil, "about should show a version line")
-assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "v0.9.0-beta.2", 1, true) ~= nil, "about should show the latest tagged release identifier")
+assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "v0.9.0-beta.3", 1, true) ~= nil, "about should show the latest tagged release identifier")
 assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "(", 1, true) == nil, "about should drop the runtime build stamp from the visible version line")
 assert.equal("Guild: Guild Testers", mainFrame.aboutAuthorText:GetText(), "about should replace the ownership line with the guild only")
 assert.equal("", mainFrame.aboutGuildText:GetText() or "", "about should remove the extra character and realm identity line")
