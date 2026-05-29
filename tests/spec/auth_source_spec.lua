@@ -144,11 +144,13 @@ assert.truthy(db.auth.capabilities.full_ui[1] == true, "guild-info pull should r
 assert.equal(250, db.ui.minimumSettings.defaultQuantity, "guild-info pull should restore the shared restock default into options settings")
 assert.equal(40, db.ui.minimumSettings.criticalThresholdPercent, "guild-info pull should restore the shared critical shortage threshold into options settings")
 
-local slashExport = slash.command("auth export")
-assert.truthy(type(slashExport) == "string" and string.find(slashExport, "[GBMAUTH:", 1, true) ~= nil, "slash auth export should return the durable guild-info snippet")
+local exportedPolicyString = source.ExportPolicyString(db)
+assert.truthy(type(exportedPolicyString) == "string" and string.find(exportedPolicyString, "[GBMAUTH:", 1, true) ~= nil, "auth policy export should return the durable guild-info snippet")
 
-local pushed = slash.command("auth push")
-assert.truthy(type(pushed) == "string" and string.find(_G.guildInfoText, pushed, 1, true) ~= nil, "slash auth push should write or refresh the durable snippet in guild info text")
+local pushedOk, pushedReason, pushedSnippet = source.PushPolicyToGuildInfo(db)
+assert.truthy(pushedOk, "auth policy push should succeed through the policy source module")
+assert.equal("written", pushedReason, "auth policy push should report a written guild-info update")
+assert.truthy(type(pushedSnippet) == "string" and string.find(_G.guildInfoText, pushedSnippet, 1, true) ~= nil, "auth policy push should write or refresh the durable snippet in guild info text")
 
 local originalCGuildInfo = _G.C_GuildInfo
 local originalSetGuildInfoText = _G.SetGuildInfoText
@@ -188,6 +190,7 @@ db.auth.capabilities.full_ui[1] = nil
 db.auth.blacklist = {}
 db.auth.blacklistHashes = {}
 
-local slashApplied = slash.command("auth apply " .. exportString)
-assert.equal("applied", slashApplied, "slash auth apply should report success for a newer durable snippet")
-assert.truthy(db.auth.capabilities.full_ui[1] == true, "slash auth apply should update the local auth policy")
+local appliedOk, appliedReason = source.ApplyPolicyString(db, exportString)
+assert.truthy(appliedOk, "auth policy apply should report success for a newer durable snippet")
+assert.equal("applied", appliedReason, "auth policy apply should report success for a newer durable snippet")
+assert.truthy(db.auth.capabilities.full_ui[1] == true, "auth policy apply should update the local auth policy")

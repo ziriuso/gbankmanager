@@ -284,6 +284,16 @@ db.auth.capabilities.minimum_edit = { [1] = true }
 db.auth.capabilities.minimum_delete = { [1] = true }
 db.auth.capabilities.auth_manage = { [1] = true }
 
+local remoteHelloPayload = codec.EncodeTable({
+    type = "SYNC_HELLO",
+    updatedAt = 90,
+    payload = "Stormrage-MemberOne",
+})
+_G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "MemberOne")
+local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
+assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic alone should not mark the peer as synchronized")
+
 _G.C_ChatInfo.sentMessages = {}
 db.requests = {}
 db.auditLog = {}
@@ -369,6 +379,8 @@ assert.equal(1, #db.requests, "sync events should accept guild request-created p
 assert.equal("req-remote-1", db.requests[1].requestId, "sync events should persist synced request ids")
 assert.equal("REQUEST_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "accepted synced request creation should append local history")
 assert.equal("GBankManager: Synced request req-remote-1 from MemberOne.", last_chat_message(), "accepted synced request creation should report chat feedback")
+local syncedPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+assert.truthy(tonumber(syncedPeerEntry.lastSynchronizedAt or 0) >= 91, "accepted sync payloads should mark the peer as synchronized")
 
 local forgedRequestPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
@@ -835,6 +847,37 @@ local wrongGuildAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongG
 assert.truthy(not wrongGuildAccepted, "sync events should reject request traffic for a different active guild")
 assert.equal(requestCountBeforeForgedSender, #db.requests, "mismatched-guild request traffic should not append requests")
 
+local requestCountBeforeWrongDistribution = #db.requests
+local wrongDistributionRequestPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 152,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-wrong-distribution-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2015,
+            itemName = "Whisper Flask",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 152,
+        },
+    },
+})
+local wrongDistributionRequestAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongDistributionRequestPayload, "WHISPER", "MemberOne")
+assert.truthy(not wrongDistributionRequestAccepted, "sync events should reject non-guild request traffic even when the guild key matches")
+assert.equal(requestCountBeforeWrongDistribution, #db.requests, "wrong-distribution request traffic should not append requests")
+
 local remoteAuthPayload = codec.EncodeTable({
     type = "AUTH_POLICY_SNAPSHOT",
     updatedAt = 101,
@@ -944,6 +987,72 @@ local memberMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", mem
 assert.truthy(not memberMinimumAccepted, "sync events should reject member-authored minimum snapshots")
 assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "rejected minimum snapshots should leave the local minimum cache unchanged")
 
+local wrongDistributionMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 206,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 8888,
+                itemName = "Whisper Minimum",
+                quantity = 10,
+                scope = "TAB",
+                tabName = "Alchemy",
+                enabled = true,
+                updatedAt = 206,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local wrongDistributionMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongDistributionMinimumPayload, "WHISPER", "OfficerOne")
+assert.truthy(not wrongDistributionMinimumAccepted, "sync events should reject minimum snapshots delivered outside the guild channel")
+assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "wrong-distribution minimum snapshots should leave the local minimum cache unchanged")
+
+local requestSnapshotCountBeforeWrongDistribution = #(db.requests or {})
+local wrongDistributionRequestsSnapshotPayload = codec.EncodeTable({
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 206,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        requests = {
+            {
+                requestId = "req-wrong-distribution-snapshot-1",
+                requester = "MemberOne",
+                requesterCharacterKey = "Stormrage-MemberOne",
+                itemID = 243734,
+                itemName = "Snapshot Whisper Oil",
+                quantity = 2,
+                approval = "PENDING",
+                fulfillment = "OPEN",
+                updatedAt = 206,
+                createdAt = 206,
+            },
+        },
+    },
+})
+local wrongDistributionRequestsSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongDistributionRequestsSnapshotPayload, "WHISPER", "OfficerOne")
+assert.truthy(not wrongDistributionRequestsSnapshotAccepted, "sync events should reject request snapshots delivered outside the guild channel")
+assert.equal(requestSnapshotCountBeforeWrongDistribution, #(db.requests or {}), "wrong-distribution request snapshots should not mutate the local request cache")
+
 db.bankLedger = db.bankLedger or {}
 db.bankLedger.itemLogs = {}
 db.bankLedger.moneyLogs = {}
@@ -984,6 +1093,80 @@ local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDelt
 assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
 assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
+
+local wrongDistributionLedgerPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        kind = "item",
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "MemberOne-Stormrage",
+                itemID = 243734,
+                itemName = "Whisper Ledger Oil",
+                quantity = 1,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local wrongDistributionLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongDistributionLedgerPayload, "WHISPER", "MemberOne")
+assert.truthy(not wrongDistributionLedgerAccepted, "sync events should reject ledger deltas delivered outside the guild channel")
+assert.equal(1, #(db.bankLedger.itemLogs or {}), "wrong-distribution ledger deltas should not append remote item-log rows")
+
+local localLedgerPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 208,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "SyncTester-Stormrage",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "SyncTester",
+        },
+        kind = "item",
+        scanStartedAt = 1716573610,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "SyncTester-Stormrage",
+                itemID = 243734,
+                itemName = "Thalassian Phoenix Oil",
+                quantity = 1,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local selfLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", localLedgerPayload, "GUILD", "SyncTester")
+assert.truthy(selfLedgerAccepted == false, "sync events should ignore self-origin ledger deltas")
+assert.equal(1, #(db.bankLedger.itemLogs or {}), "ignored self-origin ledger deltas should not append duplicate local item-log rows")
+assert.equal(nil, (((db.syncState or {}).peers or {})["Guild Testers"] or {})["SyncTester-Stormrage"], "ignored self-origin sync payloads should not be recorded in peer history")
+assert.truthy(string.find(last_chat_message() or "", "Synced ledger delta from SyncTester", 1, true) == nil, "ignored self-origin ledger deltas should not report accepted-sync chat noise")
 
 local scanner = ns.modules.scanner
 local scannerCalls = 0

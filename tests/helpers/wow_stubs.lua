@@ -679,8 +679,12 @@ if _G.CreateFrame == nil then
             return region
         end
 
-        function frame:CreateTexture()
+        function frame:CreateTexture(name, layer, inherits, subLevel)
             local region = make_region()
+            region.name = name
+            region.layer = layer
+            region.inherits = inherits
+            region.subLevel = subLevel
             region.parent = self
             region.SetColorTexture = function() end
             region.SetAllPoints = function() end

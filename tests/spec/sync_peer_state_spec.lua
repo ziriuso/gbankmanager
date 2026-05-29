@@ -29,6 +29,16 @@ local peers = (((db.syncState or {}).peers or {})["Guild Testers"] or {})
 assert.equal(1717000000, tonumber(((peers["Stormrage-OfficerOne"] or {}).lastSeen) or 0), "peer state should persist the last seen timestamp by guild key")
 assert.equal("SYNC_HELLO", ((peers["Stormrage-OfficerOne"] or {}).lastMessageType), "peer state should persist the last message type")
 assert.equal("0.9.0-beta.3", ((peers["Stormrage-OfficerOne"] or {}).version), "peer state should persist the last reported addon version")
+assert.equal(0, tonumber(((peers["Stormrage-OfficerOne"] or {}).lastSynchronizedAt) or 0), "peer state should not mark hello traffic as a successful sync")
+
+peerState.MarkSynchronized(db, {
+    guildKey = "Guild Testers",
+    characterKey = "Stormrage-OfficerOne",
+    synchronizedAt = 1717000300,
+})
+
+assert.equal(1717000000, tonumber(((peers["Stormrage-OfficerOne"] or {}).lastSeen) or 0), "peer state should keep last seen separate from sync success timestamps")
+assert.equal(1717000300, tonumber(((peers["Stormrage-OfficerOne"] or {}).lastSynchronizedAt) or 0), "peer state should persist the last successful sync timestamp")
 
 peerState.TouchPeer(db, {
     guildKey = "Bank Alts",
@@ -40,3 +50,4 @@ peerState.TouchPeer(db, {
 
 assert.equal(1717000000, tonumber((((db.syncState or {}).peers or {})["Guild Testers"]["Stormrage-OfficerOne"] or {}).lastSeen or 0), "touching a peer in another guild should not bleed over the active guild peer history")
 assert.equal(1717001111, tonumber((((db.syncState or {}).peers or {})["Bank Alts"]["Stormrage-OfficerOne"] or {}).lastSeen or 0), "peer state should keep independent per-guild peer history buckets")
+assert.equal(0, tonumber((((db.syncState or {}).peers or {})["Bank Alts"]["Stormrage-OfficerOne"] or {}).lastSynchronizedAt or 0), "other guild peer history should keep sync timestamps isolated as well")

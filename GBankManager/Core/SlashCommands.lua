@@ -589,7 +589,7 @@ local function show_help()
     push_chat_line("/gbm ui - Open the main addon UI.")
     push_chat_line("/gbm request - Open the request workflow.")
     push_chat_line("/gbm scan - Scan the guild bank and ledger.")
-    push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
+    push_chat_line("/gbm sync [requests/minimums/ledger/all] - Trigger manual sync actions.")
 end
 
 local function resolve_crafted_quality_module(existing)
@@ -621,10 +621,10 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     local scanner = ns.modules.scanner
     local mainFrame = ns.modules.mainFrame
     local auth = ns.modules.auth or ns.modules.permissions
-    local authPolicySource = ns.modules.authPolicySource
     local craftedQuality = ns.modules.craftedQuality
     local liveSmoke = ns.modules.liveSmoke
     local inGameUnit = ns.modules.inGameUnit
+    local manualActions = ns.modules.syncManualActions
     local store = ns.modules.store or ns.data.store
     local command, remainder = split_command(msg)
     local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
@@ -688,28 +688,6 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             end
             return lines
         end
-    elseif command == "auth" and type(authPolicySource) == "table" then
-        local subcommand, payload = split_command(remainder)
-        if subcommand == "" or subcommand == "export" or subcommand == "show" then
-            local exportString = authPolicySource.ExportPolicyString(policy)
-            ns.state.lastAuthExportString = exportString
-            return exportString
-        elseif subcommand == "apply" then
-            local _, reason = authPolicySource.ApplyPolicyString(db, payload)
-            if mainFrame and type(mainFrame.RefreshView) == "function" then
-                mainFrame:RefreshView()
-            end
-            return reason
-        elseif subcommand == "pull" then
-            local _, reason = authPolicySource.PullPolicyFromGuildInfo(db)
-            if mainFrame and type(mainFrame.RefreshView) == "function" then
-                mainFrame:RefreshView()
-            end
-            return reason
-        elseif subcommand == "push" then
-            local _, _, snippet = authPolicySource.PushPolicyToGuildInfo(db)
-            return snippet
-        end
     elseif command == "test" then
         local subcommand = split_command(remainder)
         if subcommand == "smoke" then
@@ -730,6 +708,25 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
 
         push_chat_line("GBankManager unknown test command.")
         return "unknown_test_command"
+    elseif command == "sync" then
+        local action = trim(remainder or "")
+        if action == "" and type(manualActions) == "table" and type(manualActions.ResolveDefaultAction) == "function" then
+            action = manualActions.ResolveDefaultAction(accessProfile)
+        end
+
+        if type(manualActions) ~= "table" or type(manualActions.Run) ~= "function" then
+            push_chat_line("GBankManager: Manual sync is unavailable right now.")
+            return "sync_unavailable"
+        end
+
+        local result = manualActions.Run(db, {
+            action = action,
+            accessProfile = accessProfile,
+        })
+        if type(result) == "table" and tostring(result.message or "") ~= "" then
+            push_chat_line(string.format("GBankManager: %s", tostring(result.message)))
+        end
+        return result
     elseif command == "ui" and mainFrame then
         open_accessible_ui("slash_ui", false)
     elseif command == "request" and mainFrame then

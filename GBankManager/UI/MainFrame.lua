@@ -521,27 +521,24 @@ local function current_sync_guild_key(db)
     return tostring(context.guildName or "Unknown")
 end
 
-local function build_sync_peer_lines(db)
+local function build_sync_peer_rows(db)
     local syncPeerState = ns.modules.syncPeerState or {}
     if type(syncPeerState.GetPeers) ~= "function" then
-        return "No peers seen yet."
+        return {}
     end
 
-    local lines = {}
+    local rows = {}
     for _, entry in ipairs(syncPeerState.GetPeers(db, current_sync_guild_key(db)) or {}) do
-        lines[#lines + 1] = string.format(
-            "%s | Last Alive %s | %s",
-            tostring(entry.characterKey or "Unknown"),
-            format_timestamp(entry.lastSeen),
-            tostring(entry.lastMessageType or "")
-        )
+        rows[#rows + 1] = {
+            character = display_character_key(entry.characterKey or "Unknown"),
+            lastSeen = format_timestamp(entry.lastSeen),
+            lastSynchronized = format_timestamp(entry.lastSynchronizedAt),
+            lastMessageType = tostring(entry.lastMessageType or ""),
+            version = tostring(entry.version or ""),
+        }
     end
 
-    if #lines == 0 then
-        return "No peers seen yet."
-    end
-
-    return table.concat(lines, "\n")
+    return rows
 end
 
 local function can_access(context, capability, policy)
@@ -1342,7 +1339,7 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(320)
+mainFrame.optionsAppearancePanel:SetHeight(352)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1372,13 +1369,13 @@ apply_surface_variant(mainFrame.optionsBlacklistPanel, "panel-alt")
 mainFrame.optionsLogsHistoryPanel = mainFrame.optionsLogsHistoryPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsLogsHistoryPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsLogsHistoryPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsLogsHistoryPanel:SetHeight(360)
+mainFrame.optionsLogsHistoryPanel:SetHeight(452)
 apply_surface_variant(mainFrame.optionsLogsHistoryPanel, "panel-alt")
 
 mainFrame.optionsSyncPanel = mainFrame.optionsSyncPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsSyncPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsSyncPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsSyncPanel:SetHeight(220)
+mainFrame.optionsSyncPanel:SetHeight(360)
 apply_surface_variant(mainFrame.optionsSyncPanel, "panel-alt")
 
 mainFrame.optionsAutomationPanel = mainFrame.optionsAutomationPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1590,17 +1587,80 @@ mainFrame.optionsLogsHistoryTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHisto
 mainFrame.optionsSyncTitle = mainFrame.optionsSyncTitle or make_label(mainFrame.optionsSyncPanel, "Sync", "GameFontHighlight")
 mainFrame.optionsSyncTitle:SetPoint("TOPLEFT", mainFrame.optionsSyncPanel, "TOPLEFT", 16, -16)
 
-mainFrame.optionsSyncHint = mainFrame.optionsSyncHint or make_label(mainFrame.optionsSyncPanel, "Known peers update whenever sync traffic or hello messages are seen for this guild.", "GameFontHighlightSmall")
+mainFrame.optionsSyncHint = mainFrame.optionsSyncHint or make_label(mainFrame.optionsSyncPanel, "Known peers update whenever sync traffic or hello messages are seen for this guild. Use the actions below to manually request sync from online guild peers with the addon.", "GameFontHighlightSmall")
 mainFrame.optionsSyncHint:SetPoint("TOPLEFT", mainFrame.optionsSyncTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsSyncHint.SetWidth) == "function" then
+    mainFrame.optionsSyncHint:SetWidth(620)
+end
 
-mainFrame.optionsSyncPeersText = mainFrame.optionsSyncPeersText or make_label(mainFrame.optionsSyncPanel, "No peers seen yet.", "GameFontNormal")
-mainFrame.optionsSyncPeersText:SetPoint("TOPLEFT", mainFrame.optionsSyncHint, "BOTTOMLEFT", 0, -14)
-if type(mainFrame.optionsSyncPeersText.SetJustifyH) == "function" then
-    mainFrame.optionsSyncPeersText:SetJustifyH("LEFT")
+mainFrame.optionsSyncRequestsButton = mainFrame.optionsSyncRequestsButton or make_button(mainFrame.optionsSyncPanel, 108, 24, "Sync Requests")
+mainFrame.optionsSyncRequestsButton:SetPoint("TOPLEFT", mainFrame.optionsSyncHint, "BOTTOMLEFT", 0, -16)
+
+mainFrame.optionsSyncMinimumsButton = mainFrame.optionsSyncMinimumsButton or make_button(mainFrame.optionsSyncPanel, 112, 24, "Sync Minimums")
+mainFrame.optionsSyncMinimumsButton:SetPoint("LEFT", mainFrame.optionsSyncRequestsButton, "RIGHT", 8, 0)
+
+mainFrame.optionsSyncLedgerButton = mainFrame.optionsSyncLedgerButton or make_button(mainFrame.optionsSyncPanel, 96, 24, "Sync Ledger")
+mainFrame.optionsSyncLedgerButton:SetPoint("LEFT", mainFrame.optionsSyncMinimumsButton, "RIGHT", 8, 0)
+
+mainFrame.optionsSyncAllButton = mainFrame.optionsSyncAllButton or make_button(mainFrame.optionsSyncPanel, 88, 24, "Sync All")
+mainFrame.optionsSyncAllButton:SetPoint("LEFT", mainFrame.optionsSyncLedgerButton, "RIGHT", 8, 0)
+
+mainFrame.optionsSyncStatusText = mainFrame.optionsSyncStatusText or make_label(mainFrame.optionsSyncPanel, "", "GameFontHighlightSmall")
+mainFrame.optionsSyncStatusText:SetPoint("TOPLEFT", mainFrame.optionsSyncRequestsButton, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsSyncStatusText.SetWidth) == "function" then
+    mainFrame.optionsSyncStatusText:SetWidth(620)
 end
-if type(mainFrame.optionsSyncPeersText.SetWidth) == "function" then
-    mainFrame.optionsSyncPeersText:SetWidth(560)
+
+mainFrame.optionsSyncTable = mainFrame.optionsSyncTable or _G.CreateFrame("Frame", nil, mainFrame.optionsSyncPanel, "BackdropTemplate")
+mainFrame.optionsSyncTable:SetPoint("TOPLEFT", mainFrame.optionsSyncStatusText, "BOTTOMLEFT", 0, -12)
+mainFrame.optionsSyncTable:SetPoint("TOPRIGHT", mainFrame.optionsSyncPanel, "TOPRIGHT", -16, 0)
+mainFrame.optionsSyncTable:SetHeight(200)
+apply_surface_variant(mainFrame.optionsSyncTable, "table-viewport-structured")
+
+mainFrame.optionsSyncColumnHeaders = mainFrame.optionsSyncColumnHeaders or {}
+local syncHeaderTitles = { "Character", "Last Time Seen", "Last Time Synchronized" }
+local syncHeaderWidths = { 200, 160, 200 }
+local previousSyncHeader = nil
+for index, title in ipairs(syncHeaderTitles) do
+    local header = mainFrame.optionsSyncColumnHeaders[index] or {}
+    header.frame = header.frame or _G.CreateFrame("Frame", nil, mainFrame.optionsSyncTable, "BackdropTemplate")
+    header.frame:SetHeight(22)
+    header.frame:SetWidth(syncHeaderWidths[index])
+    header.frame:ClearAllPoints()
+    if previousSyncHeader == nil then
+        header.frame:SetPoint("TOPLEFT", mainFrame.optionsSyncTable, "TOPLEFT", 8, -8)
+    else
+        header.frame:SetPoint("LEFT", previousSyncHeader.frame, "RIGHT", 8, 0)
+    end
+    apply_surface_variant(header.frame, "table-header")
+    header.label = header.label or make_label(header.frame, title, "GameFontHighlightSmall")
+    header.label:SetPoint("LEFT", header.frame, "LEFT", 8, 0)
+    header.text = title
+    mainFrame.optionsSyncColumnHeaders[index] = header
+    previousSyncHeader = header
 end
+
+mainFrame.optionsSyncTableScrollFrame = mainFrame.optionsSyncTableScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.optionsSyncTable, "BackdropTemplate")
+mainFrame.optionsSyncTableScrollFrame:SetPoint("TOPLEFT", mainFrame.optionsSyncTable, "TOPLEFT", 8, -36)
+mainFrame.optionsSyncTableScrollFrame:SetPoint("BOTTOMRIGHT", mainFrame.optionsSyncTable, "BOTTOMRIGHT", -8, 8)
+if type(mainFrame.optionsSyncTableScrollFrame.SetBackdrop) == "function" then
+    mainFrame.optionsSyncTableScrollFrame:SetBackdrop(nil)
+end
+
+mainFrame.optionsSyncTableScrollChild = mainFrame.optionsSyncTableScrollChild or _G.CreateFrame("Frame", nil, mainFrame.optionsSyncTableScrollFrame, "BackdropTemplate")
+mainFrame.optionsSyncTableScrollChild:SetPoint("TOPLEFT", mainFrame.optionsSyncTableScrollFrame, "TOPLEFT", 0, 0)
+mainFrame.optionsSyncTableScrollChild:SetPoint("TOPRIGHT", mainFrame.optionsSyncTableScrollFrame, "TOPRIGHT", 0, 0)
+mainFrame.optionsSyncTableScrollChild:SetHeight(24)
+mainFrame.optionsSyncTableScrollFrame:SetScrollChild(mainFrame.optionsSyncTableScrollChild)
+
+mainFrame.optionsSyncEmptyStateText = mainFrame.optionsSyncEmptyStateText or make_label(mainFrame.optionsSyncTableScrollChild, "No peers seen yet.", "GameFontNormal")
+mainFrame.optionsSyncEmptyStateText:SetPoint("TOPLEFT", mainFrame.optionsSyncTableScrollChild, "TOPLEFT", 0, 0)
+if type(mainFrame.optionsSyncEmptyStateText.SetWidth) == "function" then
+    mainFrame.optionsSyncEmptyStateText:SetWidth(560)
+end
+
+mainFrame.optionsSyncTableRows = mainFrame.optionsSyncTableRows or {}
+mainFrame.optionsSyncTableRowsData = mainFrame.optionsSyncTableRowsData or {}
 
 mainFrame.optionsLogsHistoryHint = mainFrame.optionsLogsHistoryHint or make_label(mainFrame.optionsLogsHistoryPanel, "Control how long local guild-bank logs and audit history are retained, and how often guild-bank scans and ledger rescans can run.", "GameFontHighlightSmall")
 mainFrame.optionsLogsHistoryHint:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryTitle, "BOTTOMLEFT", 0, -8)
@@ -1627,23 +1687,29 @@ mainFrame.optionsLedgerScanIntervalButton = mainFrame.optionsLedgerScanIntervalB
 mainFrame.optionsLedgerScanIntervalButton:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -94)
 
 mainFrame.optionsRepairThresholdTitle = mainFrame.optionsRepairThresholdTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Repair Threshold", "GameFontHighlight")
-mainFrame.optionsRepairThresholdTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -132)
+mainFrame.optionsRepairThresholdTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -132)
 
 mainFrame.optionsRepairThresholdInput = mainFrame.optionsRepairThresholdInput or make_input(mainFrame.optionsLogsHistoryPanel, 72, 22)
-mainFrame.optionsRepairThresholdInput:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 300, -160)
+mainFrame.optionsRepairThresholdInput:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -160)
 
 mainFrame.optionsRepairThresholdSuffixText = mainFrame.optionsRepairThresholdSuffixText or make_label(mainFrame.optionsLogsHistoryPanel, "gold", "GameFontNormal")
 mainFrame.optionsRepairThresholdSuffixText:SetPoint("LEFT", mainFrame.optionsRepairThresholdInput, "RIGHT", 6, 0)
 
+mainFrame.optionsRepairThresholdHint = mainFrame.optionsRepairThresholdHint or make_label(mainFrame.optionsLogsHistoryPanel, "Withdrawals equal to or under this amount count as repairs instead of normal withdrawals.", "GameFontHighlightSmall")
+mainFrame.optionsRepairThresholdHint:SetPoint("TOPLEFT", mainFrame.optionsRepairThresholdInput, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsRepairThresholdHint.SetWidth) == "function" then
+    mainFrame.optionsRepairThresholdHint:SetWidth(300)
+end
+
 mainFrame.optionsLogsHistorySaveButton = mainFrame.optionsLogsHistorySaveButton or make_button(mainFrame.optionsLogsHistoryPanel, 104, 28, "Save Settings")
-mainFrame.optionsLogsHistorySaveButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionButton, "BOTTOMLEFT", 0, -24)
+mainFrame.optionsLogsHistorySaveButton:SetPoint("TOPLEFT", mainFrame.optionsRepairThresholdHint, "BOTTOMLEFT", 0, -18)
 
 mainFrame.optionsLogsHistoryStatusText = mainFrame.optionsLogsHistoryStatusText or make_label(mainFrame.optionsLogsHistoryPanel, "", "GameFontHighlightSmall")
 mainFrame.optionsLogsHistoryStatusText:SetPoint("TOPLEFT", mainFrame.optionsLogsHistorySaveButton, "BOTTOMLEFT", 0, -8)
 mainFrame.optionsLogsHistoryStatusText:SetWidth(360)
 
 mainFrame.optionsClearDataTitle = mainFrame.optionsClearDataTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Clear Data", "GameFontHighlight")
-mainFrame.optionsClearDataTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryStatusText, "BOTTOMLEFT", 0, -18)
+mainFrame.optionsClearDataTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryStatusText, "BOTTOMLEFT", 0, -26)
 
 mainFrame.optionsClearDataHint = mainFrame.optionsClearDataHint or make_label(mainFrame.optionsLogsHistoryPanel, "These actions are irreversible. Use them only when you want to remove saved local data on purpose.", "GameFontHighlightSmall")
 mainFrame.optionsClearDataHint:SetPoint("TOPLEFT", mainFrame.optionsClearDataTitle, "BOTTOMLEFT", 0, -8)
@@ -2338,6 +2404,119 @@ function mainFrame:RefreshLogsHistoryControls()
     return settings
 end
 
+function mainFrame:SetOptionsSyncStatus(message)
+    if self.optionsSyncStatusText and type(self.optionsSyncStatusText.SetText) == "function" then
+        self.optionsSyncStatusText:SetText(tostring(message or ""))
+    end
+end
+
+function mainFrame:RefreshSyncControls()
+    local db = current_db()
+    local rows = build_sync_peer_rows(db)
+    self.optionsSyncTableRowsData = rows
+
+    if self.optionsSyncTableRows == nil then
+        self.optionsSyncTableRows = {}
+    end
+
+    for index, row in ipairs(rows) do
+        local rowFrame = self.optionsSyncTableRows[index]
+        if rowFrame == nil then
+            rowFrame = _G.CreateFrame("Frame", nil, self.optionsSyncTableScrollChild, "BackdropTemplate")
+            rowFrame:SetHeight(24)
+            rowFrame.characterText = make_label(rowFrame, "", "GameFontNormal")
+            rowFrame.characterText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -4)
+            rowFrame.lastSeenText = make_label(rowFrame, "", "GameFontNormal")
+            rowFrame.lastSeenText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 216, -4)
+            rowFrame.lastSynchronizedText = make_label(rowFrame, "", "GameFontNormal")
+            rowFrame.lastSynchronizedText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 384, -4)
+            self.optionsSyncTableRows[index] = rowFrame
+        end
+
+        rowFrame:ClearAllPoints()
+        rowFrame:SetPoint("TOPLEFT", self.optionsSyncTableScrollChild, "TOPLEFT", 0, -((index - 1) * 26))
+        rowFrame:SetPoint("TOPRIGHT", self.optionsSyncTableScrollChild, "TOPRIGHT", 0, -((index - 1) * 26))
+        apply_surface_variant(rowFrame, index % 2 == 1 and "row" or "row-alt")
+        rowFrame.rowData = row
+        rowFrame.characterText:SetText(tostring(row.character or ""))
+        rowFrame.lastSeenText:SetText(tostring(row.lastSeen or ""))
+        rowFrame.lastSynchronizedText:SetText(tostring(row.lastSynchronized or ""))
+        rowFrame:Show()
+    end
+
+    for index = #rows + 1, #(self.optionsSyncTableRows or {}) do
+        local rowFrame = self.optionsSyncTableRows[index]
+        if rowFrame then
+            rowFrame.rowData = nil
+            rowFrame:Hide()
+        end
+    end
+
+    if self.optionsSyncTableScrollChild then
+        self.optionsSyncTableScrollChild:SetHeight(math.max(24, #rows * 26))
+    end
+
+    set_frame_shown(self.optionsSyncEmptyStateText, #rows == 0)
+
+    local manualActions = ns.modules.syncManualActions or {}
+    local accessProfile = current_access_profile(db)
+    local requestOnly = accessProfile == "request_only"
+
+    if self.optionsSyncRequestsButton then
+        self.optionsSyncRequestsButton:SetEnabled(true)
+    end
+    if self.optionsSyncMinimumsButton then
+        self.optionsSyncMinimumsButton:SetEnabled(not requestOnly)
+    end
+    if self.optionsSyncLedgerButton then
+        self.optionsSyncLedgerButton:SetEnabled(not requestOnly)
+    end
+    if self.optionsSyncAllButton then
+        self.optionsSyncAllButton:SetEnabled(not requestOnly)
+    end
+
+    if requestOnly then
+        self:SetOptionsSyncStatus("Only request sync is available with request-only access. Minimums and ledger sync require broader guild-management access.")
+    elseif type(self.optionsSyncStatusText.GetText) == "function" and self.optionsSyncStatusText:GetText() == "" then
+        self:SetOptionsSyncStatus("Use these actions to request sync from online guild peers with the addon.")
+    end
+
+    local function run_sync_action(action)
+        if type(manualActions.Run) ~= "function" then
+            self:SetOptionsSyncStatus("Manual sync is unavailable right now.")
+            return nil
+        end
+
+        local result = manualActions.Run(db, {
+            action = action,
+            accessProfile = accessProfile,
+        })
+        self:SetOptionsSyncStatus(type(result) == "table" and result.message or "")
+        return result
+    end
+
+    if self.optionsSyncRequestsButton then
+        self.optionsSyncRequestsButton:SetScript("OnClick", function()
+            run_sync_action("requests")
+        end)
+    end
+    if self.optionsSyncMinimumsButton then
+        self.optionsSyncMinimumsButton:SetScript("OnClick", function()
+            run_sync_action("minimums")
+        end)
+    end
+    if self.optionsSyncLedgerButton then
+        self.optionsSyncLedgerButton:SetScript("OnClick", function()
+            run_sync_action("ledger")
+        end)
+    end
+    if self.optionsSyncAllButton then
+        self.optionsSyncAllButton:SetScript("OnClick", function()
+            run_sync_action("all")
+        end)
+    end
+end
+
 function mainFrame:ApplyLogsHistoryChoice(fieldName, value)
     local db = current_db()
     local settings = bankLedger.GetSettings(db)
@@ -2662,8 +2841,8 @@ function mainFrame:SetOptionsTab(tabKey)
         self.optionsScrollFrame:SetVerticalScroll(0)
     end
 
-    if nextTab == "SYNC" and self.optionsSyncPeersText then
-        self.optionsSyncPeersText:SetText(build_sync_peer_lines(current_db()))
+    if nextTab == "SYNC" and type(self.RefreshSyncControls) == "function" then
+        self:RefreshSyncControls()
     end
 
     self:UpdateOptionsCanvasHeight()
@@ -2686,10 +2865,28 @@ function mainFrame:EnsureOnboardingModal()
     local modal = _G.CreateFrame("Frame", nil, self.content, "BackdropTemplate")
     modal:SetSize(548, 360)
     modal:SetPoint("CENTER", self.content, "CENTER", 0, 0)
+    if type(modal.SetMovable) == "function" then
+        modal:SetMovable(true)
+    end
     modal:EnableMouse(true)
+    if type(modal.RegisterForDrag) == "function" then
+        modal:RegisterForDrag("LeftButton")
+    end
     apply_surface_variant(modal, "modal-sheet")
     modal:Hide()
     self:RegisterModalFrame(modal, 24, "FULLSCREEN_DIALOG")
+    if type(modal.SetScript) == "function" then
+        modal:SetScript("OnDragStart", function(frame)
+            if type(frame.StartMoving) == "function" then
+                frame:StartMoving()
+            end
+        end)
+        modal:SetScript("OnDragStop", function(frame)
+            if type(frame.StopMovingOrSizing) == "function" then
+                frame:StopMovingOrSizing()
+            end
+        end)
+    end
 
     modal.titleText = make_label(modal, "First-Run Onboarding", "GameFontHighlight")
     modal.titleText:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
@@ -2713,25 +2910,22 @@ function mainFrame:EnsureOnboardingModal()
     end
 
     modal.primaryActionButton = make_button(modal, 164, 24, "")
-    modal.primaryActionButton:SetPoint("BOTTOMLEFT", modal, "BOTTOMLEFT", 18, 18)
 
-    modal.backButton = make_button(modal, 80, 24, "Back")
-    modal.backButton:SetPoint("LEFT", modal.primaryActionButton, "RIGHT", 8, 0)
+    modal.backButton = make_button(modal, 88, 24, "Back")
 
     modal.nextButton = make_button(modal, 96, 24, "Next")
-    modal.nextButton:SetPoint("LEFT", modal.backButton, "RIGHT", 8, 0)
 
-    modal.skipButton = make_button(modal, 80, 24, "Skip")
-    modal.skipButton:SetPoint("RIGHT", modal, "RIGHT", -106, 0)
+    modal.doNotShowAgainButton = make_button(modal, 188, 24, "Do Not Show Again")
 
-    modal.doNotShowAgainButton = make_button(modal, 164, 24, "Do Not Show Again")
-    modal.doNotShowAgainButton:SetPoint("RIGHT", modal, "RIGHT", -18, 0)
+    modal.nextButton:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -18, 18)
+    modal.doNotShowAgainButton:SetPoint("RIGHT", modal.nextButton, "LEFT", -12, 0)
+    modal.primaryActionButton:SetPoint("RIGHT", modal.doNotShowAgainButton, "LEFT", -12, 0)
+    modal.backButton:SetPoint("RIGHT", modal.primaryActionButton, "LEFT", -12, 0)
 
     apply_surface_variant(modal, "modal-sheet")
     apply_button_variant(modal.primaryActionButton, "primary")
     apply_button_variant(modal.backButton, "secondary")
     apply_button_variant(modal.nextButton, "primary")
-    apply_button_variant(modal.skipButton, "secondary")
     apply_button_variant(modal.doNotShowAgainButton, "secondary")
 
     if themeState and themeState.tokens then
@@ -2748,9 +2942,6 @@ function mainFrame:EnsureOnboardingModal()
     end)
     modal.nextButton:SetScript("OnClick", function()
         self:AdvanceOnboardingStep()
-    end)
-    modal.skipButton:SetScript("OnClick", function()
-        self:CloseOnboarding()
     end)
     modal.doNotShowAgainButton:SetScript("OnClick", function()
         local onboarding = ns.modules.onboarding
@@ -2784,11 +2975,36 @@ function mainFrame:RenderOnboardingStep()
     modal.primaryActionButton.labelText:SetText(step.primaryActionLabel or "Open")
     modal.nextButton.labelText:SetText(stepIndex >= stepCount and "Finish" or "Next")
 
-    set_frame_shown(modal.primaryActionButton, tostring(step.primaryActionLabel or "") ~= "")
+    local showPrimaryAction = tostring(step.primaryActionLabel or "") ~= ""
+    set_frame_shown(modal.primaryActionButton, showPrimaryAction)
     set_frame_shown(modal.backButton, stepIndex > 1)
     set_frame_shown(modal.nextButton, stepCount > 0)
-    set_frame_shown(modal.skipButton, true)
-    set_frame_shown(modal.doNotShowAgainButton, true)
+    set_frame_shown(modal.doNotShowAgainButton, stepIndex == 1)
+
+    if type(modal.nextButton.ClearAllPoints) == "function" then
+        modal.nextButton:ClearAllPoints()
+    end
+    if type(modal.primaryActionButton.ClearAllPoints) == "function" then
+        modal.primaryActionButton:ClearAllPoints()
+    end
+    if type(modal.backButton.ClearAllPoints) == "function" then
+        modal.backButton:ClearAllPoints()
+    end
+    if type(modal.doNotShowAgainButton.ClearAllPoints) == "function" then
+        modal.doNotShowAgainButton:ClearAllPoints()
+    end
+
+    if stepIndex == 1 then
+        modal.nextButton:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -18, 18)
+        modal.doNotShowAgainButton:SetPoint("RIGHT", modal.nextButton, "LEFT", -12, 0)
+        modal.primaryActionButton:SetPoint("RIGHT", modal.doNotShowAgainButton, "LEFT", -12, 0)
+        modal.backButton:SetPoint("RIGHT", modal.primaryActionButton, "LEFT", -12, 0)
+    else
+        modal.nextButton:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -18, 18)
+        modal.doNotShowAgainButton:SetPoint("RIGHT", modal.nextButton, "LEFT", -12, 0)
+        modal.backButton:SetPoint("RIGHT", modal.nextButton, "LEFT", -12, 0)
+        modal.primaryActionButton:SetPoint("RIGHT", modal.backButton, "LEFT", -12, 0)
+    end
 end
 
 function mainFrame:OpenOnboarding(flowKey, options)
@@ -2805,6 +3021,8 @@ function mainFrame:OpenOnboarding(flowKey, options)
     end
 
     local modal = self:EnsureOnboardingModal()
+    modal:ClearAllPoints()
+    modal:SetPoint("CENTER", self.content, "CENTER", 0, 0)
     self.onboardingFlowKey = flowKey
     self.onboardingSteps = steps
     self.onboardingStepIndex = 1
@@ -4143,7 +4361,6 @@ function mainFrame:ApplyTheme()
         apply_button_variant(self.onboardingModal.primaryActionButton, "primary")
         apply_button_variant(self.onboardingModal.backButton, "secondary")
         apply_button_variant(self.onboardingModal.nextButton, "primary")
-        apply_button_variant(self.onboardingModal.skipButton, "secondary")
         apply_button_variant(self.onboardingModal.doNotShowAgainButton, "secondary")
     end
     apply_button_variant(self.requestWizardBackButton, "secondary")

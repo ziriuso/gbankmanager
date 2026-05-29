@@ -105,10 +105,63 @@ local helpText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(string.find(helpText, "/gbm", 1, true) ~= nil, "/gbm help should describe the base slash command")
 assert.truthy(string.find(helpText, "/gbm help", 1, true) ~= nil, "/gbm help should include the help command")
 assert.truthy(string.find(helpText, "/gbm scan", 1, true) ~= nil, "/gbm help should include the scan command")
+assert.truthy(string.find(helpText, "/gbm sync", 1, true) ~= nil, "/gbm help should include the sync command")
+assert.truthy(string.find(helpText, "[requests/minimums/ledger/all]", 1, true) ~= nil, "/gbm help should render sync actions without WoW chat escape collisions")
 assert.truthy(string.find(helpText, "/gbm ui", 1, true) ~= nil, "/gbm help should include the full-shell command")
 assert.truthy(string.find(helpText, "/gbm request", 1, true) ~= nil, "/gbm help should include the request-only command")
+assert.truthy(string.find(helpText, "/gbm auth", 1, true) == nil, "/gbm help should stop exposing the retired auth policy slash command")
 assert.truthy(string.find(helpText, "/gbm test", 1, true) == nil, "/gbm help should not expose internal test commands")
 assert.truthy(string.find(helpText, "/gbm debug", 1, true) == nil, "/gbm help should not expose internal debug commands")
+
+local originalSyncManualActions = env.ns.modules.syncManualActions
+local capturedSyncCalls = {}
+env.ns.modules.syncManualActions = {
+    ResolveDefaultAction = function(profile)
+        if profile == "request_only" then
+            return "requests"
+        end
+
+        return "all"
+    end,
+    Run = function(_, options)
+        capturedSyncCalls[#capturedSyncCalls + 1] = {
+            action = options.action,
+            accessProfile = options.accessProfile,
+        }
+        return {
+            ok = true,
+            message = "Triggered sync.",
+        }
+    end,
+}
+
+auth.GetEffectiveAccessProfile = function()
+    return "full_shell"
+end
+
+capturedSyncCalls = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+slash.command("sync")
+slash.command("sync requests")
+slash.command("sync ledger")
+assert.equal("all", (capturedSyncCalls[1] or {}).action, "bare /gbm sync should default to all for full-shell access")
+assert.equal("requests", (capturedSyncCalls[2] or {}).action, "explicit /gbm sync requests should route to requests")
+assert.equal("ledger", (capturedSyncCalls[3] or {}).action, "explicit /gbm sync ledger should route to ledger")
+
+auth.GetEffectiveAccessProfile = function()
+    return "request_only"
+end
+
+capturedSyncCalls = {}
+slash.command("sync")
+assert.equal("requests", (capturedSyncCalls[1] or {}).action, "bare /gbm sync should default to requests for request-only access")
+assert.equal("request_only", (capturedSyncCalls[1] or {}).accessProfile, "slash sync should forward the active access profile")
+env.ns.modules.syncManualActions = originalSyncManualActions
+
+_G.DEFAULT_CHAT_FRAME.messages = {}
+local retiredAuthResult = slash.command("auth")
+assert.equal("unknown_command", retiredAuthResult, "/gbm auth should be treated as a retired slash command")
+assert.truthy(string.find(table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n"), "/gbm auth", 1, true) == nil, "retired /gbm auth should not come back through fallback help output")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 local atlasSampler = slash.command("debug atlas")

@@ -48,6 +48,7 @@ _G.GBankManagerDB = {
     },
     minimums = {
         { itemID = 1001, itemName = "Flask Alpha", quantity = 5, scope = "TAB", tabName = "Raid Buffer", enabled = true },
+        { itemID = 241322, itemName = "Flask of the Blood Knights", quantity = 4, scope = "TAB", tabName = "Raid Buffer", enabled = true, craftedQuality = 2, craftedQualityIcon = "|A:Professions-ChatIcon-Quality-Tier2:22:22|a" },
         { itemID = 241323, itemName = "Flask of the Magisters", quantity = 3, scope = "TAB", tabName = "Raid Buffer", enabled = true, craftedQuality = 2, craftedQualityIcon = "|A:Professions-ChatIcon-Quality-Tier2:22:22|a" },
     },
     requests = {},
@@ -118,11 +119,10 @@ mainFrame.exportStockedElsewhereCloseButton:GetScript("OnClick")(mainFrame.expor
 mainFrame.exportPresetAuctionatorButton:GetScript("OnClick")(mainFrame.exportPresetAuctionatorButton)
 assert.truthy(mainFrame.exportModal:IsShown(), "auctionator export should open a modal")
 assert.equal("modal-sheet", mainFrame.exportModal.gbmSurfaceVariant, "exports should use the cleaner floating-sheet modal surface")
-assert.truthy(mainFrame.exportModalBuyAllButton:IsShown(), "auctionator export should ask whether to buy all")
-assert.truthy(mainFrame.exportModalMissingOnlyButton:IsShown(), "auctionator export should offer skipping items available in another tab")
-assert.equal("Not In Guild Bank", mainFrame.exportModalMissingOnlyButton.labelText:GetText(), "auctionator export should label the missing-only path the same way as the exports table")
-mainFrame.exportModalMissingOnlyButton:GetScript("OnClick")(mainFrame.exportModalMissingOnlyButton)
-assert.equal("GBankManager^Flask of the Magisters", mainFrame.exportModalOutputInput:GetText(), "auctionator missing-only output should use the current import format and exclude stocked-elsewhere rows")
+assert.truthy(not mainFrame.exportModalBuyAllButton:IsShown(), "auctionator export should stop prompting for a buy-all filter choice")
+assert.truthy(not mainFrame.exportModalMissingOnlyButton:IsShown(), "auctionator export should stop prompting for a missing-only filter choice")
+assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "GBankManager^", 1, true) ~= nil, "auctionator export should go straight to the current caret-delimited output")
+assert.truthy(string.find(mainFrame.exportModalOutputInput:GetText() or "", "Flask of the Magisters", 1, true) ~= nil, "auctionator export should include the visible demand rows in the direct output")
 
 mainFrame.exportPresetSpreadsheetButton:GetScript("OnClick")(mainFrame.exportPresetSpreadsheetButton)
 assert.truthy(mainFrame.exportModalOutputInput:IsShown(), "csv export should show the output box immediately")
@@ -140,9 +140,9 @@ assert.equal(-1, mainFrame.exportModalOutputInput.highlightEnd, "select all shou
 assert.equal("Selected all output. Press Ctrl+C to copy.", mainFrame.exportModalStatusText:GetText(), "select all should give the user visible copy guidance")
 
 mainFrame.exportPresetTsmButton:GetScript("OnClick")(mainFrame.exportPresetTsmButton)
-assert.truthy(mainFrame.exportModalBuyAllButton:IsShown(), "tsm export should use the same all-or-missing choice modal")
-mainFrame.exportModalBuyAllButton:GetScript("OnClick")(mainFrame.exportModalBuyAllButton)
-assert.equal("1001,241323", mainFrame.exportModalOutputInput:GetText(), "tsm export should build a comma-delimited item id import string")
+assert.truthy(not mainFrame.exportModalBuyAllButton:IsShown(), "tsm export should stop prompting for a buy-all filter choice")
+assert.truthy(not mainFrame.exportModalMissingOnlyButton:IsShown(), "tsm export should stop prompting for a missing-only filter choice")
+assert.equal("1001,241322,241323", mainFrame.exportModalOutputInput:GetText(), "tsm export should build a comma-delimited item id import string")
 assert.truthy(type(mainFrame.exportModalScrollFrame) == "table", "export modal should expose a scroll frame for long output")
 assert.equal(mainFrame.exportModalOutputInput.EditBox, mainFrame.exportModalScrollFrame.scrollChild, "export modal should attach its edit box as the scroll child")
 assert.equal(mainFrame.exportModalOutputInput.EditBox, mainFrame.exportModalScrollChild, "export modal should expose the edit box as the scroll child reference")
@@ -155,13 +155,15 @@ assert.truthy(mainFrame.exportManualShoppingListModal.mouseEnabled == true, "man
 assert.equal("LeftButton", (mainFrame.exportManualShoppingListModal.dragButtons or {})[1], "manual shopping list modal should register left-button dragging")
 assert.equal(_G.UIParent, mainFrame.exportManualShoppingListModal.parent, "manual shopping list should live on UIParent so it can stay open independently of the shell")
 assert.equal("Check off purchases as you work through the list.\nDoes not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should line-break the local-only note for readability")
-assert.truthy(#(mainFrame.exportManualShoppingListRows or {}) >= 2, "manual shopping list should build one checklist row per purchase row")
+assert.truthy(#(mainFrame.exportManualShoppingListRows or {}) >= 3, "manual shopping list should build one checklist row per purchase row")
 local manualShoppingRow = (mainFrame.exportManualShoppingListRows or {})[1]
 assert.equal("UICheckButtonTemplate", (manualShoppingRow.checkButton or {}).template, "manual shopping list should use a clearer built-in checkbox control")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "|A:", 1, true) ~= nil, "manual shopping list rows should render the crafted-quality icon inline")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "T3", 1, true) == nil, "manual shopping list rows should stop falling back to raw T-tier text")
 local missingSnapshotRow = (mainFrame.exportManualShoppingListRows or {})[2]
 assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions-Icon-Quality-12-Tier1-Inv", 1, true) ~= nil, "manual shopping list rows should trust bundled lower-rank crafted-tier metadata over stale saved row quality when no live stock snapshot exists")
+local higherTwoRankRow = (mainFrame.exportManualShoppingListRows or {})[3]
+assert.truthy(string.find(higherTwoRankRow.itemText:GetText() or "", "Professions-Icon-Quality-12-Tier2-Inv", 1, true) ~= nil, "manual shopping list rows should prefer the canonical higher two-rank crafted-quality atlas")
 assert.truthy(manualShoppingRow.checkButton:GetChecked() ~= true, "manual shopping rows should start unchecked")
 manualShoppingRow.checkButton:GetScript("OnClick")(manualShoppingRow.checkButton)
 assert.truthy(manualShoppingRow.checkButton:GetChecked() == true, "checking a manual shopping row should toggle the built-in checkbox state")

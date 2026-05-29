@@ -191,6 +191,59 @@ local function normalize_actor_context(actorContext)
     return actorContext
 end
 
+local function sender_matches_context(context, sender)
+    context = type(context) == "table" and context or {}
+    sender = tostring(sender or "")
+    if sender == "" then
+        return false
+    end
+
+    local contextName = tostring(context.name or "")
+    local contextCharacterKey = tostring(context.characterKey or "")
+    if sender == contextName or sender == contextCharacterKey then
+        return true
+    end
+
+    local senderName = sender:match("^([^%-]+)") or sender
+    if senderName ~= "" and senderName == contextName then
+        return true
+    end
+
+    return false
+end
+
+local function message_is_from_local_player(db, message, sender)
+    local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    if sender_matches_context(liveContext, sender) then
+        return true
+    end
+
+    message = type(message) == "table" and message or {}
+    local payload = type(message.payload) == "table" and message.payload or {}
+    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local localCharacterKey = tostring(liveContext.characterKey or "")
+    local localName = tostring(liveContext.name or "")
+    local actorCharacterKey = tostring(actorContext.characterKey or "")
+    local actorName = tostring(actorContext.name or "")
+
+    if actorCharacterKey ~= "" and actorCharacterKey == localCharacterKey then
+        return true
+    end
+
+    if actorName ~= "" and actorName == localName then
+        return true
+    end
+
+    if message.type == "SYNC_HELLO" and type(message.payload) == "string" then
+        local helloPayload = tostring(message.payload or "")
+        if helloPayload ~= "" and (helloPayload == localCharacterKey or helloPayload == localName) then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function request_targets_active_guild(db, guildKey)
     guildKey = tostring(guildKey or "")
     if guildKey == "" then
@@ -293,6 +346,30 @@ local function touch_sync_peer(db, message, sender)
         characterKey = characterKey,
         messageType = tostring(message.type or ""),
         seenAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+        version = payload_version(message),
+    })
+end
+
+local function mark_sync_peer_synchronized(db, message, sender)
+    if type(peerState.MarkSynchronized) ~= "function" then
+        return nil
+    end
+
+    message = type(message) == "table" and message or {}
+    local payload = type(message.payload) == "table" and message.payload or {}
+    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local characterKey = tostring(actorContext.characterKey or "")
+    if characterKey == "" then
+        characterKey = tostring(sender or "")
+    end
+
+    local guildKey = tostring(payload.guildKey or active_guild_key(db))
+    return peerState.MarkSynchronized(db, {
+        guildKey = guildKey,
+        characterKey = characterKey,
+        messageType = tostring(message.type or ""),
+        seenAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+        synchronizedAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
         version = payload_version(message),
     })
 end
@@ -462,6 +539,7 @@ local function handle_request_created(db, payload, sender)
     local previousRequest = existing and find_request(db, request.requestId) or nil
     upsert_request(db, request)
     append_request_sync_audit(db, "CREATE", previousRequest, request, actorContext, request.note)
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     report_request_sync_applied("CREATE", request, sender)
     return true
 end
@@ -537,6 +615,7 @@ local function handle_request_updated(db, payload, sender)
         local deleted = delete_request(db, request.requestId)
         if deleted then
             append_request_sync_audit(db, action, previousRequest, request, actorContext, payload.note)
+            mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
             report_request_sync_applied(action, request, sender)
         end
         return deleted
@@ -545,6 +624,7 @@ local function handle_request_updated(db, payload, sender)
     upsert_request(db, request)
     append_request_sync_audit(db, action, previousRequest, request, actorContext, payload.note)
     sync_request_minimum_side_effect(db, action, request, actorContext)
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     report_request_sync_applied(action, request, sender)
     return true
 end
@@ -576,7 +656,59 @@ local function handle_minimums_snapshot(db, payload, sender)
     end
 
     db.minimums = clone_array_records(minimums)
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    return true
+end
+
+local function handle_requests_snapshot(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local requests = type(payload.requests) == "table" and payload.requests or nil
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if requests == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_can(actorContext, "request_submit", localPolicy)
+        and not actor_can(actorContext, "request_approve", localPolicy)
+        and not actor_can(actorContext, "full_ui", localPolicy)
+    then
+        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    local mergedCount = 0
+    for _, request in ipairs(requests) do
+        if type(request) == "table" and tostring(request.requestId or "") ~= "" then
+            local existing = find_request(db, request.requestId)
+            if not existing then
+                upsert_request(db, request)
+                mergedCount = mergedCount + 1
+            elseif immutable_request_fields_match(existing, request) then
+                local resolved = type(coordinator.ResolveRequestConflict) == "function" and coordinator.ResolveRequestConflict(existing, request) or request
+                if resolved == request then
+                    upsert_request(db, request)
+                    mergedCount = mergedCount + 1
+                end
+            end
+        end
+    end
+
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
     return true
 end
 
@@ -605,6 +737,7 @@ local function handle_ledger_delta(db, payload, sender)
     end
 
     bankLedger.MergeRemoteDelta(db, payload)
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
     return true
 end
@@ -682,6 +815,9 @@ function syncEvents.HandleEvent(event, ...)
         if prefix ~= "GBankManager" then
             return false
         end
+        if tostring(distribution or "") ~= "GUILD" then
+            return false
+        end
 
         local payloadPrefix = tostring(payload or ""):sub(1, 1)
         local isChunkPayload = payloadPrefix == string.char(1)
@@ -714,6 +850,9 @@ function syncEvents.HandleEvent(event, ...)
         ns.state.lastSyncMessage.distribution = distribution
         ns.state.lastSyncMessage.sender = sender
         local db = current_db()
+        if message_is_from_local_player(db, ns.state.lastSyncMessage, sender) then
+            return false
+        end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
             report_sync_status("Ignored retired auth policy snapshot message.")
@@ -730,6 +869,10 @@ function syncEvents.HandleEvent(event, ...)
 
         if ns.state.lastSyncMessage.type == "MINIMUMS_SNAPSHOT" then
             return handle_minimums_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+        end
+
+        if ns.state.lastSyncMessage.type == "REQUESTS_SNAPSHOT" then
+            return handle_requests_snapshot(db, ns.state.lastSyncMessage.payload, sender)
         end
 
         if ns.state.lastSyncMessage.type == "LEDGER_DELTA" then

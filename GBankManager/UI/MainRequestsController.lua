@@ -7,7 +7,6 @@ local mainRequestsController = ns.modules.mainRequestsController or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 local itemCatalog = ns.modules.itemCatalog or {}
 local itemDisplay = ns.modules.itemDisplay or {}
-local coordinator = ns.modules.syncCoordinator or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
@@ -91,20 +90,8 @@ local function send_request_sync_message(db, transport, request, message)
         return 0
     end
 
-    local recipients = type(coordinator.ResolveRequestRecipients) == "function"
-        and coordinator.ResolveRequestRecipients(db, request, ((message.payload or {}).actorContext), current_policy(db))
-        or {}
-
-    local sentCount = 0
-    for _, recipient in ipairs(recipients or {}) do
-        local target = tostring(recipient.target or recipient.name or "")
-        if target ~= "" then
-            transport.Send("WHISPER", target, message)
-            sentCount = sentCount + 1
-        end
-    end
-
-    return sentCount
+    transport.Send("GUILD", "GUILD", message)
+    return 1
 end
 
 local function actor_summary(context)

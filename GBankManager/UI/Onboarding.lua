@@ -15,7 +15,7 @@ local MANAGER_STEPS = {
     {
         id = "permissions",
         title = "Permissions and Guild Info",
-        description = "Guild access comes from the Guild Info policy. Use Options -> Permissions to review and manage rank access.",
+        description = "Guild Info is the source of truth for permissions. The addon reads that guild policy to decide who can manage requests, minimums, and broader guild actions. Use Refresh Guild Policy after guild-maintained changes.",
         targetView = "OPTIONS",
         optionsTab = "PERMISSIONS",
         primaryActionLabel = "Open Permissions",
@@ -23,7 +23,7 @@ local MANAGER_STEPS = {
     {
         id = "blacklist",
         title = "Blacklist",
-        description = "Blacklist membership blocks request-system usage for tagged players. The addon reads [GBMBL] from officer notes and shows the result read-only.",
+        description = "Blacklist blocks request-system usage for tagged players. The addon reads guild-backed blacklist tags and shows the parsed result read-only, so officers update the guild source and then use Refresh Guild Policy when changes are needed.",
         targetView = "OPTIONS",
         optionsTab = "BLACKLIST",
         primaryActionLabel = "Open Blacklist",
@@ -31,7 +31,7 @@ local MANAGER_STEPS = {
     {
         id = "requests",
         title = "Request System",
-        description = "Members create requests and review status. Managers review, approve or deny, and choose bank tabs when approving.",
+        description = "Members create requests and review status. Managers review, approve or deny, and choose bank tabs when approving. Request updates synchronize between online addon users.",
         targetView = "REQUESTS",
         primaryActionLabel = "Open Requests",
     },
@@ -45,7 +45,7 @@ local MANAGER_STEPS = {
     {
         id = "finish",
         title = "You're Ready",
-        description = "Choose the next area you want to open, or close the walkthrough and continue later.",
+        description = "Replay this guide from Options if you need it again.",
     },
 }
 
@@ -58,7 +58,7 @@ local REQUEST_ONLY_STEPS = {
     {
         id = "request_flow",
         title = "How Requests Work",
-        description = "Create requests, review their status, and let guild managers handle approvals.",
+        description = "Create requests, review their status, and let guild managers handle approvals. Request updates synchronize between online addon users.",
         targetView = "REQUESTS",
         primaryAction = "open_request_wizard",
         primaryActionLabel = "Open New Request",
@@ -66,7 +66,7 @@ local REQUEST_ONLY_STEPS = {
     {
         id = "blacklist",
         title = "Blacklist",
-        description = "If guild leadership marks a player as blocked for requests, new request submission will be denied.",
+        description = "If guild leadership marks a player as blocked for requests, new request submission will be denied. The blacklist result is read-only here because it reflects guild-backed policy parsing rather than a local editable list.",
     },
     {
         id = "finish",

@@ -53,6 +53,11 @@ peerState.TouchPeer(current_db(), {
     messageType = "SYNC_HELLO",
     seenAt = 1717000000,
 })
+peerState.MarkSynchronized(current_db(), {
+    guildKey = "Guild Testers",
+    characterKey = "Stormrage-OfficerOne",
+    synchronizedAt = 1717000300,
+})
 mainFrame:SelectView("OPTIONS")
 
 assert.equal("OPTIONS", mainFrame.activeView, "options tab should be selectable")
@@ -115,7 +120,23 @@ assert.equal("Save", mainFrame.optionsAuthSaveButton.labelText:GetText(), "optio
 mainFrame:SetOptionsTab("SYNC")
 assert.equal("SYNC", mainFrame.optionsActiveTab, "options should switch to the Sync tab when clicked")
 assert.truthy(mainFrame.optionsSyncPanel:IsShown(), "options should show the Sync panel after tab switch")
-assert.truthy(string.find(mainFrame.optionsSyncPeersText:GetText() or "", "Stormrage-OfficerOne", 1, true) ~= nil, "options Sync tab should list persisted peers")
+assert.truthy(type(mainFrame.optionsSyncTable) == "table", "options Sync should expose a reusable scrollable table")
+assert.equal("Character", (((mainFrame.optionsSyncColumnHeaders or {})[1] or {}).text), "options Sync should show a Character column")
+assert.equal("Last Time Seen", (((mainFrame.optionsSyncColumnHeaders or {})[2] or {}).text), "options Sync should show a Last Time Seen column")
+assert.equal("Last Time Synchronized", (((mainFrame.optionsSyncColumnHeaders or {})[3] or {}).text), "options Sync should show a Last Time Synchronized column")
+assert.truthy(type(mainFrame.optionsSyncTableRowsData) == "table" and #mainFrame.optionsSyncTableRowsData >= 1, "options Sync should populate at least one peer row from persisted history")
+local firstSyncRow = (mainFrame.optionsSyncTableRowsData or {})[1] or {}
+assert.equal("OfficerOne-Stormrage", tostring(firstSyncRow.character or ""), "sync rows should render Name-Realm values")
+assert.truthy(string.find(tostring(firstSyncRow.lastSeen or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSeen or "") ~= "", "sync rows should show a formatted last-seen timestamp")
+assert.truthy(string.find(tostring(firstSyncRow.lastSynchronized or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSynchronized or "") ~= "", "sync rows should show a formatted last-synchronized timestamp")
+assert.equal("Sync Requests", mainFrame.optionsSyncRequestsButton.labelText:GetText(), "sync tab should expose a request sync action")
+assert.equal("Sync Minimums", mainFrame.optionsSyncMinimumsButton.labelText:GetText(), "sync tab should expose a minimums sync action")
+assert.equal("Sync Ledger", mainFrame.optionsSyncLedgerButton.labelText:GetText(), "sync tab should expose a ledger sync action")
+assert.equal("Sync All", mainFrame.optionsSyncAllButton.labelText:GetText(), "sync tab should expose a Sync All action")
+assert.truthy(mainFrame.optionsSyncRequestsButton:IsEnabled(), "full-shell users should be able to trigger request sync from the Sync tab")
+assert.truthy(mainFrame.optionsSyncMinimumsButton:IsEnabled(), "full-shell users should be able to trigger minimums sync from the Sync tab")
+assert.truthy(mainFrame.optionsSyncLedgerButton:IsEnabled(), "full-shell users should be able to trigger ledger sync from the Sync tab")
+assert.truthy(mainFrame.optionsSyncAllButton:IsEnabled(), "full-shell users should be able to trigger Sync All from the Sync tab")
 mainFrame:SetOptionsTab("STOCK")
 assert.equal("STOCK", mainFrame.optionsActiveTab, "options should switch to the Stock Settings tab when clicked")
 assert.truthy(mainFrame.optionsStockSettingsPanel:IsShown(), "options should show the Stock Settings panel after tab switch")
@@ -176,8 +197,12 @@ assert.equal("1_week", (((current_db() or {}).ui or {}).logsHistorySettings or {
 assert.equal(250, (((current_db() or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold, "logs/history settings should persist the configured repair threshold")
 assert.truthy(((((current_db() or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen) ~= true, "logs/history settings save should no longer be responsible for the Silvermoon Citizen mute toggle")
 assert.equal("Saved logs/history settings.", mainFrame.optionsLogsHistoryStatusText:GetText(), "logs/history settings should report visible save feedback after saving")
-assert.same(mainFrame.optionsLedgerRetentionButton, (mainFrame.optionsLogsHistorySaveButton.points[1] or {})[2], "data save should sit up near the retention controls")
-assert.truthy((mainFrame.optionsLogsHistoryPanel:GetHeight() or 0) >= 320, "data panel should stay tall enough to keep save and clear-data controls inside the chrome")
+assert.same(mainFrame.optionsRepairThresholdHint, (mainFrame.optionsLogsHistorySaveButton.points[1] or {})[2], "data save should sit beneath the repair-threshold helper text")
+assert.truthy((mainFrame.optionsLogsHistoryPanel:GetHeight() or 0) >= 430, "data panel should stay tall enough to keep the full clear-data stack inside the chrome")
+assert.same(mainFrame.optionsLogsHistoryPanel, (mainFrame.optionsRepairThresholdTitle.points[1] or {})[2], "repair threshold should anchor directly from the data panel")
+assert.equal(16, (mainFrame.optionsRepairThresholdTitle.points[1] or {})[4], "repair threshold should move into the left-side data control column")
+assert.truthy(type(mainFrame.optionsRepairThresholdHint) == "table", "data settings should expose helper text for repair threshold classification")
+assert.truthy(string.find(mainFrame.optionsRepairThresholdHint:GetText() or "", "equal to or under", 1, true) ~= nil, "repair threshold helper text should explain repair-vs-withdrawal classification")
 assert.equal("Clear Data", mainFrame.optionsClearDataTitle:GetText(), "data settings should expose a clear-data section")
 assert.equal("Clear Guild Bank Log Data", mainFrame.optionsClearBankLedgerButton.labelText:GetText(), "data settings should expose a clear guild-bank log action")
 assert.equal(mainFrame.optionsClearInventoryDataButton:GetWidth(), mainFrame.optionsClearBankLedgerButton:GetWidth(), "data settings should size the clear guild-bank log action like the sibling destructive controls so its text stays centered")
@@ -218,7 +243,7 @@ assert.equal("Nature", ((mainFrame.optionsThemeButtons or {}).nature or {}).labe
 assert.equal("Legion", ((mainFrame.optionsThemeButtons or {}).legion or {}).labelText:GetText(), "options appearance should label the fel preset as Legion")
 assert.equal("Pride", ((mainFrame.optionsThemeButtons or {}).pride or {}).labelText:GetText(), "options appearance should label the pride preset as Pride")
 assert.truthy((mainFrame.optionsAppearancePanel:GetHeight() or 0) >= 220, "appearance panel should stay tall enough to keep the minimap toggle and sliders inside the chrome")
-assert.truthy((mainFrame.optionsAppearancePanel:GetHeight() or 0) <= 320, "appearance panel should leave modest breathing room under the opacity controls without reopening a giant ghost box")
+assert.truthy((mainFrame.optionsAppearancePanel:GetHeight() or 0) <= 360, "appearance panel should leave modest breathing room under the opacity controls without reopening a giant ghost box")
 assert.truthy(type(mainFrame.optionsShellScaleSlider) == "table", "options appearance should expose a shell scale slider")
 assert.truthy(type(mainFrame.optionsShellOpacitySlider) == "table", "options appearance should expose a shell opacity slider")
 assert.truthy(type(mainFrame.optionsModalOpacitySlider) == "table", "options appearance should expose a modal opacity slider")
@@ -417,6 +442,7 @@ assert.equal(true, (((current_db() or {}).ui or {}).logsHistorySettings or {}).m
 mainFrame.optionsMuteSilvermoonCitizenToggle:SetChecked(false)
 mainFrame.optionsMuteSilvermoonCitizenToggle:GetScript("OnClick")(mainFrame.optionsMuteSilvermoonCitizenToggle)
 assert.equal(false, (((current_db() or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen, "appearance mute toggle should persist immediately when disabled")
+assert.truthy((mainFrame.optionsAppearancePanel:GetHeight() or 0) >= 340, "appearance panel should stay tall enough to keep the replay onboarding area inside the chrome")
 mainFrame.optionsReplayOnboardingButton:GetScript("OnClick")(mainFrame.optionsReplayOnboardingButton)
 assert.truthy(mainFrame.onboardingModal and mainFrame.onboardingModal:IsShown(), "options replay should reopen onboarding on demand")
 assert.equal("manager", mainFrame.onboardingFlowKey, "options replay should reopen the manager flow for full-shell users")

@@ -51,7 +51,6 @@ Behavior requirements:
 - the modal is draggable while open
 - the modal recenters every time it opens
 - the modal can remain open while the user changes shell tabs underneath it
-- `Skip` dismisses the current walkthrough without setting suppression
 - `Do Not Show Again` dismisses the walkthrough and suppresses future auto-open behavior
 - replayed onboarding from `Options -> Appearance` always starts at the first step of the relevant flow
 
@@ -62,8 +61,9 @@ The modal should still visually read as a guided overlay, but its footer and spa
 The onboarding footer becomes an intentionally structured action row:
 
 - primary progression action stays visually dominant
-- `Skip` is a secondary action
 - `Do Not Show Again` is a distinct suppression action with enough width, padding, and text legibility to avoid the current cramped appearance
+- `Do Not Show Again` only appears on step 1
+- later steps should use a tighter right-aligned footer row without a separate `Skip` action
 
 All three controls should use the shared button styling system where possible, with only the minimum onboarding-specific sizing and spacing needed.
 

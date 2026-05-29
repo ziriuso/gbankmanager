@@ -506,10 +506,11 @@ local requestDeleteCalls = capture_request_sync_calls(function()
 end)
 assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "deleting a request should close the request details modal")
 assert.equal(nil, mainFrame:SelectRequestById("req-delete-target"), "deleting a request should remove it from the saved request list")
-assert.truthy(#requestDeleteCalls >= 1, "deleting a request should sync the request update to guild clients")
+assert.equal(1, #requestDeleteCalls, "deleting a request should publish one guild-scoped request update")
 assert.equal("REQUEST_UPDATED", ((((requestDeleteCalls[1] or {}).message) or {}).type), "request delete sync should keep the request-updated message type")
 assert.equal("DELETE", (((((requestDeleteCalls[1] or {}).message) or {}).payload or {}).action), "request delete sync should send a delete action payload")
-assert.equal("WHISPER", (requestDeleteCalls[1] or {}).distribution, "request delete sync should use targeted whisper delivery")
+assert.equal("GUILD", (requestDeleteCalls[1] or {}).distribution, "request delete sync should publish once to the guild addon audience")
+assert.equal("GUILD", (requestDeleteCalls[1] or {}).target, "request delete sync should route through the guild addon audience target")
 assert.equal("Guild Testers", (((((requestDeleteCalls[1] or {}).message) or {}).payload or {}).guildKey), "request delete sync should carry the active guild identity inside the payload envelope")
 
 assert.equal("New Request", mainFrame.requestWorkflowCreateButton.labelText:GetText(), "request-only workflow should expose a wizard launch button")
@@ -677,18 +678,11 @@ assert.equal(2, tonumber(createdRequest.craftedQualityFamilySize or 0), "wizard-
 assert.equal("Professions-Icon-Quality-12-Tier1-Inv", createdRequest.craftedQualityDisplayAtlas, "wizard-created requests should persist the canonical single-silver display atlas for lower two-rank variants")
 assert.truthy(createdRequest.tabName == nil or createdRequest.tabName == "", "wizard-created requests should no longer require a preferred bank tab from a removed wizard step")
 assert.equal(nil, mainFrame.selectedRequestId, "creating a request should not leave the new request row highlighted in the officer table by default")
-assert.truthy(#requestCreateCalls >= 1, "wizard submit should sync the created request to guild clients")
+assert.equal(1, #requestCreateCalls, "wizard submit should publish one guild-scoped request sync")
 assert.equal("REQUEST_CREATED", (((requestCreateCalls[1] or {}).message) or {}).type, "wizard submit should send a request-created sync payload")
-assert.equal(2, #requestCreateCalls, "wizard submit should sync only to the submitter plus current policy-qualified viewers")
-assert.equal("WHISPER", (requestCreateCalls[1] or {}).distribution, "wizard submit should use targeted whisper request sync")
+assert.equal("GUILD", (requestCreateCalls[1] or {}).distribution, "wizard submit should publish once to the guild addon audience")
+assert.equal("GUILD", (requestCreateCalls[1] or {}).target, "wizard submit should route through the guild addon audience target")
 assert.equal("Guild Testers", (((((requestCreateCalls[1] or {}).message) or {}).payload or {}).guildKey), "wizard submit should stamp outbound request sync with the active guild key")
-local routedCreateTargets = {}
-for _, call in ipairs(requestCreateCalls) do
-    routedCreateTargets[call.target] = true
-end
-assert.truthy(routedCreateTargets["GuildLead-Stormrage"] == true, "wizard submit should sync to guildmaster viewers")
-assert.truthy(routedCreateTargets["OfficerOne-Stormrage"] == true, "wizard submit should sync back to the submitting full-shell player")
-assert.truthy(routedCreateTargets["MemberOne-Stormrage"] ~= true, "wizard submit should not sync to non-viewer guild members")
 
 mainFrame.requestCreateItemIDInput:SetText("990001")
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)

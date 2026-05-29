@@ -54,6 +54,23 @@ function peerState.TouchPeer(db, details)
     return entry
 end
 
+function peerState.MarkSynchronized(db, details)
+    details = type(details) == "table" and details or {}
+    local entry = peerState.TouchPeer(db, details)
+    if type(entry) ~= "table" then
+        return nil
+    end
+
+    local synchronizedAt = tonumber(details.synchronizedAt or 0) or 0
+    if synchronizedAt > 0 then
+        entry.lastSynchronizedAt = math.max(tonumber(entry.lastSynchronizedAt or 0) or 0, synchronizedAt)
+    else
+        entry.lastSynchronizedAt = tonumber(entry.lastSynchronizedAt or 0) or 0
+    end
+
+    return entry
+end
+
 function peerState.GetPeers(db, guildKey)
     db = type(db) == "table" and db or {}
     local syncState = peerState.EnsureState(db)

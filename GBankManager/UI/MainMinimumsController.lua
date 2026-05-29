@@ -131,7 +131,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.minimumsPanel:SetHeight(64)
+    mainFrame.minimumsPanel:SetHeight(72)
     applyPanelStyle(mainFrame.minimumsPanel, theme.colors.panel)
     mainFrame.minimumsPanel.transparentActions = true
     if type(mainFrame.minimumsPanel.SetBackdrop) == "function" then
@@ -148,7 +148,10 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumsHint:Hide()
 
     mainFrame.minimumEditorStateText = mainFrame.minimumEditorStateText or makeLabel(mainFrame.minimumsPanel, "No draft minimum changes yet.", "GameFontHighlightSmall")
-    mainFrame.minimumEditorStateText:SetPoint("TOPLEFT", mainFrame.minimumsHint, "BOTTOMLEFT", 0, -14)
+    if type(mainFrame.minimumEditorStateText.ClearAllPoints) == "function" then
+        mainFrame.minimumEditorStateText:ClearAllPoints()
+    end
+    mainFrame.minimumEditorStateText:SetPoint("BOTTOMLEFT", mainFrame.minimumsPanel, "BOTTOMLEFT", 16, 8)
     mainFrame.minimumEditorStateText:Hide()
 
     mainFrame.minimumEnabledOnlyButton = mainFrame.minimumEnabledOnlyButton or makeButton(mainFrame.minimumsPanel, 110, 28, "Enabled Only")
@@ -1121,7 +1124,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         rowFrame.minimumDraftState = draftState
         rowFrame.minimumDraftTint = tintByState[draftState]
-        rowFrame.minimumDraftBackground = rowFrame.minimumDraftBackground or rowFrame:CreateTexture(nil, "BACKGROUND")
+        rowFrame.minimumDraftBackground = rowFrame.minimumDraftBackground or rowFrame:CreateTexture(nil, "ARTWORK", nil, 1)
         if type(rowFrame.minimumDraftBackground.SetAllPoints) == "function" then
             rowFrame.minimumDraftBackground:SetAllPoints(rowFrame)
         end

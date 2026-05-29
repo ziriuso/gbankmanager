@@ -338,8 +338,16 @@ function mainExportsController.Attach(mainFrame, options)
             return markup
         end
 
-        local atlasName = tostring(row.craftedQualityIcon or "")
-        local resolvedQuality = tonumber(row.quality or row.itemTierValue or 0) or 0
+        local atlasName = tostring(
+            row.craftedQualityDisplayAtlas
+            or row.craftedQualityPreferredAtlas
+            or row.itemDisplayTextIconAtlas
+            or row.itemTierIconAtlas
+            or row.craftedQualityIcon
+            or ""
+        )
+        local resolvedQuality = tonumber(row.craftedQuality or row.quality or row.itemTierValue or 0) or 0
+        local resolvedMaxQuality = tonumber(row.craftedQualityFamilySize or row.craftedQualityMax or 0) or 0
         local qualitySource = atlasName
         if qualitySource == "" and resolvedQuality > 0 then
             qualitySource = string.format("Professions-ChatIcon-Quality-Tier%d", resolvedQuality)
@@ -351,7 +359,7 @@ function mainExportsController.Attach(mainFrame, options)
                 22,
                 "reagent",
                 resolvedQuality,
-                row.craftedQualityMax
+                resolvedMaxQuality
             )
             if resolvedMarkup ~= "" then
                 return resolvedMarkup
@@ -360,20 +368,20 @@ function mainExportsController.Attach(mainFrame, options)
 
         if atlasName ~= "" then
             if type(craftedQuality.ToMarkupForItem) == "function" then
-                return craftedQuality.ToMarkupForItem(row.itemID, atlasName, 22, "reagent", row.quality or row.itemTierValue, row.craftedQualityMax)
+                return craftedQuality.ToMarkupForItem(row.itemID, atlasName, 22, "reagent", resolvedQuality, resolvedMaxQuality)
             end
             if type(craftedQuality.ToMarkup) == "function" then
-                return craftedQuality.ToMarkup(atlasName, 22, "reagent", row.quality or row.itemTierValue, row.craftedQualityMax)
+                return craftedQuality.ToMarkup(atlasName, 22, "reagent", resolvedQuality, resolvedMaxQuality)
             end
             return string.format("|A:%s:22:22|a", atlasName)
         end
 
-        local quality = tonumber(row.quality or row.itemTierValue or 0) or 0
+        local quality = resolvedQuality
         if quality > 0 and type(craftedQuality.ToMarkupForItem) == "function" then
-            return craftedQuality.ToMarkupForItem(row.itemID, string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, row.craftedQualityMax)
+            return craftedQuality.ToMarkupForItem(row.itemID, string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, resolvedMaxQuality)
         end
         if quality > 0 and type(craftedQuality.ToMarkup) == "function" then
-            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, row.craftedQualityMax)
+            return craftedQuality.ToMarkup(string.format("Professions-ChatIcon-Quality-Tier%d", quality), 22, "reagent", quality, resolvedMaxQuality)
         end
         if quality > 0 then
             return string.format("|A:Professions-ChatIcon-Quality-Tier%d:22:22|a", quality)
@@ -588,22 +596,6 @@ function mainExportsController.Attach(mainFrame, options)
         return state
     end
 
-    function mainFrame:ShowExportChoiceModal(presetName)
-        self.exportSelectedPreset = normalizeExportPresetName(presetName)
-        self.exportPendingRows = self.tableRowsData or {}
-        self.exportModalTitle:SetText(string.format("%s Export", self.exportSelectedPreset))
-        self.exportModalHint:SetText("Choose whether to include every shortage or skip items stocked in another tab.")
-        set_export_modal_status("")
-        self.exportModalOutputInput:SetText("")
-        setFrameShown(self.exportModalBuyAllButton, true)
-        setFrameShown(self.exportModalMissingOnlyButton, true)
-        setFrameShown(self.exportModalScrollFrame, false)
-        setFrameShown(self.exportModalSelectAllButton, false)
-        setFrameShown(self.exportModalCopyButton, false)
-        self.exportModal:Show()
-        return self.exportModal
-    end
-
     function mainFrame:ShowExportOutput(presetName, rows)
         local exportDialog = ns.modules.exportDialog
         local state = exportDialog and type(exportDialog.BuildPresetState) == "function"
@@ -683,11 +675,7 @@ function mainExportsController.Attach(mainFrame, options)
         self:PersistExportSettings(ns.state.db or {})
         if self.activeView == "EXPORTS" then
             local rows = self.tableRowsData or {}
-            if self.exportSelectedPreset == "Auctionator" or self.exportSelectedPreset == "TSM" then
-                self:ShowExportChoiceModal(self.exportSelectedPreset)
-            else
-                self:ShowExportOutput(self.exportSelectedPreset, rows)
-            end
+            self:ShowExportOutput(self.exportSelectedPreset, rows)
         end
         return self.exportSelectedPreset
     end
