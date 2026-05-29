@@ -11,6 +11,9 @@ end
 codec = codec or {}
 local transport = ns.modules.syncTransport or {}
 local SYNC_PREFIX = "GBankManager"
+local CHUNK_START = string.char(1)
+local CHUNK_CONTINUE = string.char(2)
+local CHUNK_END = string.char(3)
 
 local function current_ace_comm()
     local libStub = _G.LibStub
@@ -50,6 +53,44 @@ local function pop_received_message()
     end
 
     return table.remove(transport.pendingReceivedMessages, 1)
+end
+
+local function chunk_buffer_key(distribution, sender)
+    return table.concat({
+        tostring(distribution or ""),
+        tostring(sender or ""),
+    }, "|")
+end
+
+local function receive_chunked_payload(payload, distribution, sender)
+    payload = tostring(payload or "")
+    local marker = payload:sub(1, 1)
+    if marker ~= CHUNK_START and marker ~= CHUNK_CONTINUE and marker ~= CHUNK_END then
+        return nil, nil
+    end
+
+    transport.chunkBuffers = transport.chunkBuffers or {}
+    local key = chunk_buffer_key(distribution, sender)
+    local body = payload:sub(2)
+    if marker == CHUNK_START then
+        transport.chunkBuffers[key] = body
+        return nil, "partial"
+    end
+
+    local buffer = tostring(transport.chunkBuffers[key] or "")
+    if buffer == "" then
+        transport.chunkBuffers[key] = nil
+        return nil, "invalid"
+    end
+
+    buffer = buffer .. body
+    if marker == CHUNK_CONTINUE then
+        transport.chunkBuffers[key] = buffer
+        return nil, "partial"
+    end
+
+    transport.chunkBuffers[key] = nil
+    return codec.DecodeTable(buffer), "complete"
 end
 
 local function normalize_target(distribution, target)
@@ -113,16 +154,25 @@ function transport.Send(distribution, target, message)
 end
 
 function transport.Receive(payload, distribution, sender)
-    if transport.Initialize() then
-        local received = pop_received_message()
-        if received == nil then
-            return nil, "partial"
-        end
-
-        return codec.DecodeTable(received.message), "complete"
+    local chunkedMessage, chunkedState = receive_chunked_payload(payload, distribution, sender)
+    if chunkedState ~= nil then
+        return chunkedMessage, chunkedState
     end
 
-    return codec.DecodeTable(payload), "complete"
+    local decodedPayload = codec.DecodeTable(payload)
+    if decodedPayload then
+        return decodedPayload, "complete"
+    end
+
+    if transport.Initialize() then
+        local received = pop_received_message()
+        if received ~= nil then
+            return codec.DecodeTable(received.message), "complete"
+        end
+        return nil, "partial"
+    end
+
+    return nil, "invalid"
 end
 
 function transport.ReportStatus(message)

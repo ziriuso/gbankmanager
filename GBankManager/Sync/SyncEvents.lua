@@ -12,6 +12,7 @@ local coordinator = ns.modules.syncCoordinator or {}
 local authPolicySource = ns.modules.authPolicySource or {}
 local authPolicyCodec = ns.modules.authPolicyCodec or {}
 local requestsModule = ns.modules.requests or {}
+local bankLedger = ns.modules.bankLedger or {}
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -181,6 +182,14 @@ local function actor_matches_sender(actorContext, sender)
     return true
 end
 
+local function normalize_actor_context(actorContext)
+    actorContext = type(actorContext) == "table" and actorContext or {}
+    if actorContext.inGuild == nil then
+        actorContext.inGuild = true
+    end
+    return actorContext
+end
+
 local function request_targets_active_guild(db, guildKey)
     guildKey = tostring(guildKey or "")
     if guildKey == "" then
@@ -222,7 +231,29 @@ local function immutable_request_fields_match(existing, incoming)
 end
 
 local function actor_can(context, capability, policy)
-    return type(permissions.Can) == "function" and permissions.Can(context or {}, capability, policy) or true
+    if type(permissions.Can) == "function" then
+        return permissions.Can(context or {}, capability, policy)
+    end
+
+    return true
+end
+
+local function actor_can_manage_minimums(context, policy)
+    return actor_can(context, "minimum_add", policy)
+        or actor_can(context, "minimum_edit", policy)
+        or actor_can(context, "minimum_delete", policy)
+end
+
+local function clone_array_records(records)
+    local out = {}
+    for _, record in ipairs(records or {}) do
+        local copy = {}
+        for key, value in pairs(record or {}) do
+            copy[key] = value
+        end
+        out[#out + 1] = copy
+    end
+    return out
 end
 
 local function append_audit_entry(db, entry)
@@ -353,7 +384,7 @@ end
 
 local function handle_request_created(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
-    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
     local request = type(payload.request) == "table" and payload.request or nil
     local localPolicy = current_policy(db)
 
@@ -396,7 +427,7 @@ end
 
 local function handle_request_updated(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
-    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
     local request = type(payload.request) == "table" and payload.request or nil
     local action = tostring(payload.action or "")
     local localPolicy = current_policy(db)
@@ -477,6 +508,66 @@ local function handle_request_updated(db, payload, sender)
     return true
 end
 
+local function handle_minimums_snapshot(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local minimums = type(payload.minimums) == "table" and payload.minimums or nil
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if minimums == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_can_manage_minimums(actorContext, localPolicy) then
+        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    db.minimums = clone_array_records(minimums)
+    report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    return true
+end
+
+local function handle_ledger_delta(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if type(bankLedger.MergeRemoteDelta) ~= "function" then
+        return false
+    end
+
+    bankLedger.MergeRemoteDelta(db, payload)
+    report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
+    return true
+end
+
 function syncEvents.HandleEvent(event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddonName = ...
@@ -551,12 +642,27 @@ function syncEvents.HandleEvent(event, ...)
             return false
         end
 
-        local decodedMessage, receiveState
+        local payloadPrefix = tostring(payload or ""):sub(1, 1)
+        local isChunkPayload = payloadPrefix == string.char(1)
+            or payloadPrefix == string.char(2)
+            or payloadPrefix == string.char(3)
+        local rawDecodedMessage = not isChunkPayload and codec.DecodeTable(payload) or nil
+        local decodedMessage = rawDecodedMessage
+        local receiveState = rawDecodedMessage and "complete" or nil
         if type(transport.Receive) == "function" then
-            decodedMessage, receiveState = transport.Receive(payload, distribution, sender)
-        else
-            decodedMessage = codec.DecodeTable(payload)
-            receiveState = "complete"
+            local queuedDecodedMessage, queuedReceiveState = transport.Receive(payload, distribution, sender)
+            if rawDecodedMessage and queuedDecodedMessage then
+                local rawEncoded = codec.EncodeTable(rawDecodedMessage)
+                local queuedEncoded = codec.EncodeTable(queuedDecodedMessage)
+                decodedMessage = rawEncoded == queuedEncoded and queuedDecodedMessage or rawDecodedMessage
+                receiveState = "complete"
+            elseif rawDecodedMessage then
+                decodedMessage = rawDecodedMessage
+                receiveState = "complete"
+            else
+                decodedMessage = queuedDecodedMessage
+                receiveState = queuedReceiveState
+            end
         end
 
         if not decodedMessage then
@@ -578,6 +684,14 @@ function syncEvents.HandleEvent(event, ...)
 
         if ns.state.lastSyncMessage.type == "REQUEST_UPDATED" then
             return handle_request_updated(db, ns.state.lastSyncMessage.payload, sender)
+        end
+
+        if ns.state.lastSyncMessage.type == "MINIMUMS_SNAPSHOT" then
+            return handle_minimums_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_DELTA" then
+            return handle_ledger_delta(db, ns.state.lastSyncMessage.payload, sender)
         end
 
         return true

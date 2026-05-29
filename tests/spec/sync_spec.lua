@@ -877,6 +877,114 @@ assert.truthy(
 assert.equal(previousDefaultQuantity, (((db.ui or {}).minimumSettings or {}).defaultQuantity), "ignored auth policy snapshots should not mutate shared restock defaults")
 assert.equal(authAuditCountBefore, #(db.auditLog or {}), "ignored auth policy snapshots should not append auth-policy history")
 
+db.minimums = {}
+db.auditLog = {}
+local remoteMinimumSnapshotPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 205,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 243734,
+                itemName = "Thalassian Phoenix Oil",
+                quantity = 100,
+                scope = "TAB",
+                tabName = "Alchemy",
+                enabled = true,
+                updatedAt = 205,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local officerMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumSnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(officerMinimumAccepted, "sync events should accept officer-authored minimum snapshots")
+assert.equal(1, #(db.minimums or {}), "accepted minimum snapshots should replace the local minimum cache")
+assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "accepted minimum snapshots should persist shared minimum item ids")
+
+local memberMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 206,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        minimums = {
+            {
+                itemID = 7007,
+                itemName = "Algari Mana Oil",
+                quantity = 250,
+                scope = "TAB",
+                tabName = "Reagents",
+                enabled = true,
+                updatedAt = 206,
+                updatedBy = "Stormrage-MemberOne",
+                updatedByRankIndex = 2,
+            },
+        },
+    },
+})
+local memberMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", memberMinimumPayload, "GUILD", "MemberOne")
+assert.truthy(not memberMinimumAccepted, "sync events should reject member-authored minimum snapshots")
+assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "rejected minimum snapshots should leave the local minimum cache unchanged")
+
+db.bankLedger = db.bankLedger or {}
+db.bankLedger.itemLogs = {}
+db.bankLedger.moneyLogs = {}
+db.bankLedger.lastScanAt = 999
+local ledgerDeltaPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        kind = "item",
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "MemberOne-Stormrage",
+                itemID = 243734,
+                itemName = "Thalassian Phoenix Oil",
+                quantity = 4,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
+assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
+assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
+
 local scanner = ns.modules.scanner
 local scannerCalls = 0
 local originalOnGuildBankSlotsChanged = scanner.OnGuildBankSlotsChanged

@@ -801,7 +801,9 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             end
         end
 
-        sourceSnapshots[sourceKey] = currentFingerprints
+        if options.skipSourceSnapshotUpdate ~= true then
+            sourceSnapshots[sourceKey] = currentFingerprints
+        end
         return mergedCount
     end
 
@@ -1047,6 +1049,52 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "money")
     return mergedCount
+end
+
+function bankLedger.MergeRemoteDelta(db, payload)
+    db = db or {}
+    payload = type(payload) == "table" and payload or {}
+
+    local ledger = bankLedger.EnsureState(db)
+    local kind = tostring(payload.kind or "")
+    if kind == "item" then
+        local sourceKey, normalizedRows = normalize_item_rows(payload)
+        return append_delta_rows(
+            ledger,
+            ledger.itemLogs,
+            ledger.itemFingerprints,
+            ledger.itemSourceSnapshots,
+            sourceKey,
+            normalizedRows,
+            0,
+            "item",
+            {
+                allowSuspiciousUnknownAppend = true,
+                skipSourceSnapshotUpdate = true,
+            }
+        )
+    end
+
+    if kind == "money" then
+        payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
+        local sourceKey, normalizedRows = normalize_money_rows(payload)
+        return append_delta_rows(
+            ledger,
+            ledger.moneyLogs,
+            ledger.moneyFingerprints,
+            ledger.moneySourceSnapshots,
+            sourceKey,
+            normalizedRows,
+            0,
+            "money",
+            {
+                allowSuspiciousUnknownAppend = true,
+                skipSourceSnapshotUpdate = true,
+            }
+        )
+    end
+
+    return 0
 end
 
 local function filtered_item_logs(db, filters)

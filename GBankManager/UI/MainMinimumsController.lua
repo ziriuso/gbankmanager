@@ -6,6 +6,8 @@ ns.modules = ns.modules or {}
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
 local craftedQualityUtil = ns.modules.craftedQuality or {}
 local itemDisplay = ns.modules.itemDisplay or {}
+local transport = ns.modules.syncTransport or {}
+local permissions = ns.modules.permissions or ns.modules.auth or {}
 if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
@@ -49,6 +51,41 @@ local function minimum_rule_key(rule)
         tostring((rule or {}).scope or "GLOBAL"),
         tostring((rule or {}).tabName or ""),
     }, "|")
+end
+
+local function current_policy(db)
+    local store = ns.data.store or ns.modules.store
+    return store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or (db or {}).auth or {}
+end
+
+local function active_guild_key(db)
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+        return dbGuildKey
+    end
+
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    return tostring(context.guildName or "Unknown")
+end
+
+local function actor_can_manage_minimums(db)
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    local can = type(permissions.Can) == "function" and permissions.Can or nil
+    if type(can) ~= "function" then
+        return true, context
+    end
+
+    local policy = current_policy(db)
+    return can(context, "minimum_add", policy)
+        or can(context, "minimum_edit", policy)
+        or can(context, "minimum_delete", policy),
+        context
 end
 
 local function minimum_dropdown_width(tabOptions, minimumWidth, maximumWidth)
@@ -1679,6 +1716,23 @@ function mainMinimumsController.Attach(mainFrame, options)
                 table.insert(self.minimumSessionBaseline, self:CloneMinimumRule(rule))
             end
             self.selectedMinimumKey = nil
+
+            local canPublish, actorContext = actor_can_manage_minimums(db)
+            if canPublish and type(transport.Send) == "function" then
+                local minimumSnapshot = {}
+                for _, rule in ipairs(db.minimums or {}) do
+                    minimumSnapshot[#minimumSnapshot + 1] = self:CloneMinimumRule(rule)
+                end
+                transport.Send("GUILD", "GUILD", {
+                    type = "MINIMUMS_SNAPSHOT",
+                    updatedAt = _G.time and _G.time() or 0,
+                    payload = {
+                        guildKey = active_guild_key(db),
+                        actorContext = actorContext,
+                        minimums = minimumSnapshot,
+                    },
+                })
+            end
         end
 
         self:RefreshView()

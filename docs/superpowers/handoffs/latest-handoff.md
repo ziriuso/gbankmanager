@@ -2,10 +2,31 @@
 
 ## Resume Here
 
+### 2026-05-28 Sync Rollout Update
+
+- AceComm sync rollout is now partially implemented on top of the published `v0.9.0-beta.3` checkpoint.
+- Landed commits in this phase:
+  - `ea8cfd2` `feat:add-guild-root-and-acecomm-transport`
+  - `56302f2` `feat:target-request-sync-by-guild-policy`
+- Current uncommitted checkpoint adds:
+  - officer-authoritative `MINIMUMS_SNAPSHOT` publish on `Minimums -> Save All`
+  - inbound minimum snapshot acceptance or rejection by Guild Info policy
+  - `bankLedger.MergeRemoteDelta(...)` so incoming `LEDGER_DELTA` traffic merges without advancing local scan freshness
+  - raw chunk-piece handling in `Sync/Transport.lua` so oversized AceComm payloads still resolve deterministically through `CHAT_MSG_ADDON`
+- Focused verification currently passing on this local checkpoint:
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_requests_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_sync_spec.lua`
+- Next implementation target remains Task 5 from `docs/superpowers/plans/2026-05-28-gbankmanager-acecomm-sync-implementation.md`:
+  - persisted peer history
+  - new `Options -> Sync` tab
+  - docs and full-suite verification
+
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
 - Remote tracking: `origin/codex/gbankmanager-v1`
-- Latest pushed branch commit: `19ce18e` (`fix: stabilize guild bank ledger imports`)
+- Latest pushed branch commit: `2199c4c` (`chore: bump beta release tag`)
 - Latest checkpoint in this phase: the shell-polish checkpoint is now extended by a cleaner `Bank Ledger` import pass plus the richer `Data` options slice. The addon now scans guild-bank item logs and money logs as a follow-up stage of the established guild-bank scan flow, uses the configurable `Scan Interval` as both the ledger throttle and the guild-bank-open auto-scan throttle, stores append-only ledger deltas locally, exposes a shared-table `Bank Ledger` surface with item-vs-money modes, action filters, a preset date-range dropdown, CSV export, and usage summaries, and moves retention, scan-interval, repair-threshold, and ambient-chat-mute controls into the trimmed `Data` options tab with visible save feedback plus destructive cleanup actions. The ledger importer now follows the `GuildBankLedger`-style query and merge pattern more closely: it queries all accessible item logs plus the fixed Blizzard money-log slot in one burst, debounces `GUILDBANKLOG_UPDATE`, keeps the visible guild-bank tab stable during import, normalizes Blizzard’s relative log timestamps against server time, and uses session batch counts so same-identity visible batches can shrink and regrow without dropping new rows. If older local ledger data was polluted by the previous scanner/cache behavior, `Options -> Data -> Clear Guild Bank Log Data` is the supported one-time recovery path. The manual `Scan Bank` button still forces the ledger follow-up even when the configured `Scan Interval` would normally throttle auto scans. The implementation plan doc for the shell pass still lives at `docs/superpowers/plans/2026-05-23-gbankmanager-ui-shell-polish-implementation.md`.
 - The pushed UI review and item-display checkpoint makes bundled item-data metadata authoritative for crafted tier rendering everywhere the addon shows crafted items, uses the same semantic `craftedQualityMax` family rules across Inventory, Requests, Minimums, Exports, and request search/details, and routes non-inventory crafted-quality visuals through dedicated texture-backed atlas slots instead of inline FontString atlas markup so true two-rank items stop drifting back to stale compact chat icons, missing icons, or duplicated inline markup. Item-aware rendering now relies on the bundled addon data path before live `C_TradeSkillUI` reagent-quality responses, so icon families stay stable before and after scans. The same checkpoint also strips legacy `[Tn]` prefixes from shared search labels, keeps Minimums and Requests rows from reintroducing inline tier markup after bundled backfill, forces request officer-table rows to backfill against bundled metadata before rendering, prefers bundled crafted-quality fields over stale saved request/minimum/search-catalog data, suppresses the post-create auto-selection that was leaving a highlighted request row after creation, narrows the request reason input to avoid preview overlap, aligns the `Data` dropdown row, adds the new repair-threshold plus ambient-chatter controls to `Options -> Data`, slightly deepens the Appearance chrome for the relocated UI Scale slider column, adds responsive relayout for the Exports action cards under shell resize, and updates export rows plus the manual shopping list so `Qty To Buy` subtracts `Excess Qty`.
 - `UI Scale` now relayouts the dashboard shell as part of the same appearance refresh path instead of only resizing the frame and shared table density. The four metric cards plus the top-items, recent-activity, and quick-actions dashboard panels now grow and shrink with shell scale, and regression coverage for that behavior lives in `tests/spec/ui_options_spec.lua`.
@@ -21,10 +42,11 @@
 - The repo now also includes a first tagged-release automation path for the single-project CurseForge package: `.github/workflows/release-curseforge.yml` runs the full Lua suite on `v*` tags, builds one combined zip containing both `GBankManager/` and `GBankManager_ItemData/`, uploads it to CurseForge using protected GitHub Actions configuration (`CF_API_TOKEN`, `CF_PROJECT_ID`, optional `CF_GAME_VERSION_IDS`), and attaches the same zip to the matching GitHub Release.
 - The CurseForge publish script now also forces `gameVersions` to serialize as an array even when only one resolved version id is present, matching the current CurseForge upload API requirement and preventing single-version beta or release uploads from failing before the GitHub Release step.
 - A repo-local release skill now lives at `docs/skills/gbankmanager-release-operator/SKILL.md`; use it when asked to handle a normal GBankManager publish or to diagnose and recover from a failed release workflow.
-- The first real beta release automation pass is now proven end to end. `v0.9.0-beta.2` successfully published through GitHub Actions, attached the combined package zip to the GitHub prerelease, and passed the CurseForge upload step after the `gameVersions` array serialization fix in `tools/release/Publish-CurseForgePackage.ps1`. The next beta metadata is prepared for `v0.9.0-beta.3`.
-- Current repo status at handoff time: `origin/codex/gbankmanager-v1` is at the pushed checkpoint `19ce18e`, and the item-hyperlink/crafted-quality migration plus ledger import stabilization have passed live validation after `/reload`.
+- The beta release automation path is now proven through `v0.9.0-beta.3`. The tag ran `.github/workflows/release-curseforge.yml` successfully, published the CurseForge beta upload step, and attached `GBankManager-0.9.0-beta.3.zip` to the GitHub prerelease at `https://github.com/ziriuso/gbankmanager/releases/tag/v0.9.0-beta.3`.
+- The addon communication review now includes a transport-safety fix for oversized sync tables: request/auth sync payloads are chunked before `C_ChatInfo.SendAddonMessage` and reassembled before the existing `CHAT_MSG_ADDON` handlers run, so they stay within WoW's base addon-message payload limit without changing the normal small-message hello path.
+- Current repo status at handoff time: `origin/codex/gbankmanager-v1` is at the pushed checkpoint `2199c4c`, and the item-hyperlink/crafted-quality migration plus ledger import stabilization have passed live validation after `/reload`.
 - Current test command: `.\tools\lua\lua.exe .\tests\run_all.lua`
-- Latest verified result: on 2026-05-28, `.\tools\lua\lua.exe .\tests\spec\ui_search_results_control_spec.lua`, `.\tools\lua\lua.exe .\tests\spec\ui_requests_spec.lua`, `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`, and `.\tools\lua\lua.exe .\tests\run_all.lua` all pass in this worktree after the Task 4 request/search/details hyperlink-display slice landed. The older `item_catalog_target_spec.lua` fixture-writer blocker described in the previous handoff snapshot is still no longer reproducing here.
+- Latest verified result: on 2026-05-28, `.\tools\lua\lua.exe .\tests\run_all.lua` passes in this worktree after the ledger import stabilization and `v0.9.0-beta.3` release metadata bump. The older `item_catalog_target_spec.lua` fixture-writer blocker described in the previous handoff snapshot is still no longer reproducing here.
 
 ## Read First
 
@@ -39,9 +61,9 @@
 
 ## Current Repo State
 
-- Worktree is committed and pushed through `19ce18e`.
-- The branch includes the release automation slice (`12780d6`, `f44a4cb`), the repo-local release operator skill (`eab477b`), the MPL-plus-assets licensing docs (`fbab6e3`), the item-display/crafted-quality migration checkpoint (`6debadd`), and the ledger import stabilization checkpoint (`19ce18e`).
-- The latest successful published beta tag is `v0.9.0-beta.2`; the next beta tag is `v0.9.0-beta.3`.
+- Branch is committed and pushed through the functional release checkpoint `2199c4c`; current local status also includes this handoff refresh in `docs/superpowers/handoffs/latest-handoff.md` plus an untracked `.vscode/` folder that was not touched by the release or handoff refresh.
+- The branch includes the release automation slice (`12780d6`, `f44a4cb`), the repo-local release operator skill (`eab477b`), the MPL-plus-assets licensing docs (`fbab6e3`), the item-display/crafted-quality migration checkpoint (`6debadd`), the ledger import stabilization checkpoint (`19ce18e`), and the beta release metadata checkpoint (`2199c4c`).
+- The latest successful published beta tag is `v0.9.0-beta.3`.
 - The branch already contains the indexed item-search redesign, procurement-only catalog reduction, and the Minimums modal workflow cleanup.
 - The generated bundled item payload lives in the shipped addon `GBankManager_ItemData/`.
 - Local maintainer-only catalog assets under `tools/catalog/runtime/` remain intentionally git-ignored.
@@ -176,8 +198,8 @@ Work these in the exact order below unless a new blocking regression appears:
    - If communication gaps still exist, fix those next before taking on more visual polishing.
 
 2. `Release/install sanity pass`
-   - Do one short smoke pass against the published beta artifact flow once `v0.9.0-beta.3` succeeds.
-   - Confirm the GitHub prerelease zip shape is correct, the CurseForge beta package installs cleanly with both addon folders, and the About/version text lines up with the packaged build.
+   - `v0.9.0-beta.3` succeeded through GitHub Actions and produced the GitHub prerelease zip.
+   - Next live/manual check: confirm the CurseForge beta package installs cleanly with both addon folders and the About/version text lines up with the packaged build.
 
 3. `Small release-polish follow-ups`
    - Restore the `About` author and build timestamp details.

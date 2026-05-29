@@ -28,6 +28,8 @@
 
 - `unit`
   - domain rules for auth, requests, exports, planning, sync, store, and scan persistence
+  - sync transport chunking/reassembly coverage for oversized addon-message payloads so request/auth snapshots stay within WoW's base addon-message size limit
+  - guild-scoped request routing, officer-authoritative minimum snapshot acceptance or rejection, and remote ledger-delta merge coverage that preserves local scan freshness
   - dashboard ranking and ledger-withdrawal-only coverage for the `Top 10 Most Used` card
   - migration/default-shape coverage, including the persisted live-smoke result container
 - `ui`
@@ -165,8 +167,9 @@ Completed on 2026-05-28: the item-hyperlink and crafted-quality live regression 
 - `tests/spec/ui_options_spec.lua` also covers the extra Blacklist footer padding, the aligned `Data` dropdown headings, the equal-width centered clear-data buttons, and the matched `UI Scale` / opacity slider widths.
 - `tests/spec/ui_requests_spec.lua` verifies request creation reparses guild-backed blacklist state before submit and denies newly blacklisted actors.
 - `tests/spec/diff_spec.lua`, `tests/spec/bank_ledger_scanner_spec.lua`, and `tests/spec/sync_spec.lua` verify opening the guild bank auto-scans only after the 10-minute throttle window, retries long enough for delayed tab metadata on reopen, waits briefly between queried tabs, ignores suspicious partial auto-scan snapshots when a previously populated tab reads empty, still forces one bank-open ledger scan when the main snapshot or ledger freshness interval would otherwise skip it, prevents pending ledger scans from starting during the main inventory scan, hard-defers direct ledger scan requests until inventory scanning finishes without letting passive requests hide a visible manual follow-up, self-chains passive ledger refresh only after the active scan finishes, while manual scan remains unaffected and the scanner event adapter now owns `GUILDBANKFRAME_OPENED`.
-- `tests/spec/sync_spec.lua` verifies synced request creation writes local history, higher-authority request updates win conflict resolution, synced approvals recreate the matching Minimums rule plus history rows on receiving clients, and sync milestone chat feedback is emitted for hello, accepted sync, and ignored forged payloads.
+- `tests/spec/sync_spec.lua` verifies synced request creation writes local history, higher-authority request updates win conflict resolution, synced approvals recreate the matching Minimums rule plus history rows on receiving clients, officer-authored minimum snapshots are accepted while member-authored snapshots are rejected, remote ledger deltas merge without advancing the local scan timer, and sync milestone chat feedback is emitted for hello, accepted sync, and ignored forged payloads.
 - `tests/spec/sync_spec.lua` also verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
+- `tests/spec/ui_minimums_sync_spec.lua` verifies `Minimums -> Save All` now publishes the guild-scoped `MINIMUMS_SNAPSHOT` message family through addon communication.
 - `tests/spec/planning_spec.lua` verifies approved requests converted into Minimums rules do not double-count demand as both request demand and restock demand.
 - `tests/spec/dashboard_spec.lua` verifies the dashboard ignores zero-shortage demand rows for `Ready to Buy` counting and now ranks the `Top 10 Most Used` card by ledger-backed withdrawals before falling back to older shortage-history behavior.
 - `tests/spec/ui_shell_spec.lua` verifies the shell opts into top-level ordering, raises on click, and keeps registered modals layered above the shell when focus changes.

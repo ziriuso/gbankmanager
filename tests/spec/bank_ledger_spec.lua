@@ -7,7 +7,12 @@ local defaults = dofile("GBankManager/Data/Defaults.lua")
 local migrations = dofile("GBankManager/Data/Migrations.lua")
 
 local function fresh_db()
-    return migrations.Apply(defaults.CreateDatabase("Guild Testers"))
+    local root = migrations.Apply(defaults.CreateDatabase("Guild Testers"), "Guild Testers")
+    if type(root.guilds) == "table" then
+        return root.guilds[root.activeGuildKey or "Guild Testers"] or root.guilds["Guild Testers"] or {}
+    end
+
+    return root
 end
 
 local db = fresh_db()
@@ -117,6 +122,32 @@ local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
 
 assert.equal(0, repeatedVisibleScanCount, "re-reading the same visible item-log window should not append duplicate rows")
 assert.equal(2, #db.bankLedger.itemLogs, "re-reading the same visible item-log window should leave stored rows unchanged")
+
+local remoteLedgerDb = fresh_db()
+remoteLedgerDb.bankLedger.lastScanAt = 1716570000
+local remoteMergedCount = bankLedger.MergeRemoteDelta(remoteLedgerDb, {
+    kind = "item",
+    scanStartedAt = 1716573600,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            craftedQuality = 3,
+            quantity = 12,
+            year = 2024,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(1, remoteMergedCount, "remote ledger deltas should append unseen rows into the local ledger")
+assert.equal(1, #remoteLedgerDb.bankLedger.itemLogs, "remote ledger deltas should persist their rows in the item ledger")
+assert.equal(1716570000, tonumber(remoteLedgerDb.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local ledger scan freshness")
 
 local relogStableItemDb = fresh_db()
 _G.GetServerTime = function()
