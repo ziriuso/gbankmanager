@@ -50,6 +50,7 @@ UI/MainRequestsController.lua
 UI/MainExportsController.lua
 UI/MainMinimumsController.lua
 UI/MinimapButton.lua
+UI/Onboarding.lua
 UI/MainFrame.lua
 UI/DashboardView.lua
 UI/InventoryView.lua

@@ -116,6 +116,17 @@ function defaults.CreateDatabase(guildName)
                 customTemplate = defaults.CreateDefaultExportTemplate(),
                 manualShoppingListPosition = nil,
             },
+            onboarding = {
+                completed = {
+                    manager = false,
+                    requestOnly = false,
+                },
+                doNotShowAgain = {
+                    manager = false,
+                    requestOnly = false,
+                },
+                lastShownVersion = nil,
+            },
         },
         syncState = {
             lastSyncAt = 0,

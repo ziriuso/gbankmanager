@@ -130,6 +130,14 @@ local function ensure_v1_shape(db, guildName)
         }
         db.ui.exportSettings.customTemplate.fields = template.fields
     end
+    db.ui.onboarding = ensure_table(db.ui.onboarding)
+    db.ui.onboarding.completed = ensure_table(db.ui.onboarding.completed)
+    db.ui.onboarding.completed.manager = db.ui.onboarding.completed.manager == true
+    db.ui.onboarding.completed.requestOnly = db.ui.onboarding.completed.requestOnly == true
+    db.ui.onboarding.doNotShowAgain = ensure_table(db.ui.onboarding.doNotShowAgain)
+    db.ui.onboarding.doNotShowAgain.manager = db.ui.onboarding.doNotShowAgain.manager == true
+    db.ui.onboarding.doNotShowAgain.requestOnly = db.ui.onboarding.doNotShowAgain.requestOnly == true
+    db.ui.onboarding.lastShownVersion = db.ui.onboarding.lastShownVersion or nil
     db.syncState = ensure_table(db.syncState)
     db.syncState.lastSyncAt = db.syncState.lastSyncAt or 0
     db.testing = ensure_table(db.testing)
