@@ -499,7 +499,11 @@ function mainMinimumsController.Attach(mainFrame, options)
         if row.configured ~= true then
             quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100
             scope = "TAB"
-            tabName = nil
+            if row.needsBankTab == true then
+                tabName = nil
+            else
+                tabName = row.tabKey or row.tabName or row.bankTab
+            end
         end
 
         return {
@@ -551,11 +555,39 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
+        if self:IsSnapshotBackedMinimumRow(row) then
+            return "changed"
+        end
+
         if self:GetMinimumBaselineRule(row) then
             return "changed"
         end
 
         return "added"
+    end
+
+    function mainFrame:IsSnapshotBackedMinimumRow(row)
+        if type(row) ~= "table" then
+            return false
+        end
+
+        local rowKey = tostring(row.rowKey or "")
+        if rowKey == "" then
+            return false
+        end
+
+        for _, itemRow in ipairs((self:GetCurrentSnapshot() or {}).itemRows or {}) do
+            local snapshotKey = tostring(itemRow.rowKey or table.concat({
+                tostring(itemRow.itemID or ""),
+                "TAB",
+                tostring(itemRow.tabName or "-"),
+            }, "|"))
+            if snapshotKey == rowKey then
+                return true
+            end
+        end
+
+        return false
     end
 
     function mainFrame:GetMergedMinimumRules(db)
@@ -922,7 +954,12 @@ function mainMinimumsController.Attach(mainFrame, options)
             return false
         end
 
-        return self:GetMinimumBaselineRule(row) ~= nil
+        local draftState = self:GetMinimumDraftState(row)
+        if draftState == "added" or draftState == "changed" then
+            return false
+        end
+
+        return tostring(row.bankTab or row.tabName or "") ~= ""
     end
 
     function mainFrame:ConfigureMinimumDetailsBankTabDropdown(row, state)
@@ -1147,11 +1184,20 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.minimumPendingRules = self.minimumPendingRules or {}
         self.minimumPendingDirty = self.minimumPendingDirty or {}
         self.minimumPendingDeleted = self.minimumPendingDeleted or {}
-        self.minimumPendingRules[row.rowKey] = nil
+        local hasBaseline = self:GetMinimumBaselineRule(row) ~= nil
+        local snapshotBacked = self:IsSnapshotBackedMinimumRow(row)
+
+        if snapshotBacked and not hasBaseline then
+            local restored = self:BuildMinimumRuleFromRow(row)
+            restored.draftKey = row.rowKey
+            self.minimumPendingRules[row.rowKey] = restored
+        else
+            self.minimumPendingRules[row.rowKey] = nil
+        end
         self.minimumPendingDirty[row.rowKey] = nil
         self.minimumPendingDeleted[row.rowKey] = nil
 
-        if self.selectedMinimumKey == row.rowKey and not self:GetMinimumBaselineRule(row) then
+        if self.selectedMinimumKey == row.rowKey and not hasBaseline then
             self.selectedMinimumKey = nil
         end
 
@@ -1164,7 +1210,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
-        if not self:GetMinimumBaselineRule(row) then
+        if not self:GetMinimumBaselineRule(row) and not self:IsSnapshotBackedMinimumRow(row) then
             return self:UndoMinimumRow(row)
         end
 

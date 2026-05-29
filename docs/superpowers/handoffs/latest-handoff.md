@@ -4,7 +4,7 @@
 
 ### 2026-05-28 Sync Rollout Update
 
-- AceComm sync rollout is now partially implemented on top of the published `v0.9.0-beta.3` checkpoint.
+- AceComm sync rollout is now through Task 5 on top of the published `v0.9.0-beta.3` checkpoint.
 - Landed commits in this phase:
   - `ea8cfd2` `feat:add-guild-root-and-acecomm-transport`
   - `56302f2` `feat:target-request-sync-by-guild-policy`
@@ -13,15 +13,24 @@
   - inbound minimum snapshot acceptance or rejection by Guild Info policy
   - `bankLedger.MergeRemoteDelta(...)` so incoming `LEDGER_DELTA` traffic merges without advancing local scan freshness
   - raw chunk-piece handling in `Sync/Transport.lua` so oversized AceComm payloads still resolve deterministically through `CHAT_MSG_ADDON`
-- Focused verification currently passing on this local checkpoint:
+  - persisted sync-peer history in new `GBankManager/Sync/PeerState.lua`, keyed by guild so cross-guild data cannot bleed between characters
+  - new persisted `Options -> Sync` tab that shows known peers, last-alive timestamps, and last message type for the active guild
+  - removal of the retired outbound `AUTH_POLICY_SNAPSHOT` send path so guild policy remains Guild-Info-only
+  - deterministic live-smoke seeding for request sync even when the ambient auth policy denies raider request submission
+- Verification currently passing on this local checkpoint:
+  - `.\tools\lua\lua.exe .\tests\spec\sync_peer_state_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\ui_requests_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_sync_spec.lua`
-- Next implementation target remains Task 5 from `docs/superpowers/plans/2026-05-28-gbankmanager-acecomm-sync-implementation.md`:
-  - persisted peer history
-  - new `Options -> Sync` tab
-  - docs and full-suite verification
+  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\auth_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\live_smoke_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Next implementation target after this checkpoint:
+  - continue the sync rollout with release or install sanity against the published beta package
+  - then review small polish follow-ups for `About` and `/gbm help`
 
 - Repo root: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`

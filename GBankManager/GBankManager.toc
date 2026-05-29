@@ -39,6 +39,7 @@ Features/ChatFilters.lua
 Sync/Codec.lua
 Sync/Coordinator.lua
 Sync/Transport.lua
+Sync/PeerState.lua
 Sync/SyncEvents.lua
 UI/StyleTokens.lua
 UI/ThemeManager.lua

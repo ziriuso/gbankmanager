@@ -20,6 +20,16 @@ local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
 local syncEvents = env.ns.modules.syncEvents
+local peerState = env.ns.modules.syncPeerState or dofile("GBankManager/Sync/PeerState.lua")
+local store = env.ns.modules.store or {}
+
+local function current_db()
+    if type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
+    end
+
+    return _G.GBankManagerDB
+end
 
 local function color_distance(left, right)
     left = left or {}
@@ -31,29 +41,38 @@ local function color_distance(left, right)
     return total
 end
 
-_G.GBankManagerDB.auth.capabilities.auth_manage[0] = true
-_G.GBankManagerDB.auth.capabilities.auth_manage[1] = true
+current_db().auth.capabilities.auth_manage[0] = true
+current_db().auth.capabilities.auth_manage[1] = true
 
-_G.GBankManagerDB.auth.updatedAt = 0
-_G.GBankManagerDB.auth.updatedBy = "Stormrage-OfficerOne"
+current_db().auth.updatedAt = 0
+current_db().auth.updatedBy = "Stormrage-OfficerOne"
+peerState.TouchPeer(current_db(), {
+    guildKey = "Guild Testers",
+    characterKey = "Stormrage-OfficerOne",
+    version = "0.9.0-beta.3",
+    messageType = "SYNC_HELLO",
+    seenAt = 1717000000,
+})
 mainFrame:SelectView("OPTIONS")
 
 assert.equal("OPTIONS", mainFrame.activeView, "options tab should be selectable")
 assert.equal("", mainFrame.viewSubtitle:GetText() or "", "options should remove the old subtitle copy under the page header")
 assert.truthy(mainFrame.optionsPanel:IsShown(), "options panel should show in the options view")
 assert.truthy(mainFrame.optionsAppearancePanel:IsShown(), "options view should open on the appearance panel")
-assert.equal(5, #(mainFrame.optionsTabButtons or {}), "options should expose five top-level tab buttons after trimming the unused placeholders")
+assert.equal(6, #(mainFrame.optionsTabButtons or {}), "options should expose six top-level tab buttons after adding the Sync tab")
 assert.equal("Appearance", ((mainFrame.optionsTabButtons or {})[1] or {}).labelText:GetText(), "options should expose an Appearance tab")
 assert.equal("Stock Settings", ((mainFrame.optionsTabButtons or {})[2] or {}).labelText:GetText(), "options should expose a Stock Settings tab")
 assert.equal("Permissions", ((mainFrame.optionsTabButtons or {})[3] or {}).labelText:GetText(), "options should expose a Permissions tab")
 assert.equal("Blacklist", ((mainFrame.optionsTabButtons or {})[4] or {}).labelText:GetText(), "options should expose a Blacklist tab")
-assert.equal("Data", ((mainFrame.optionsTabButtons or {})[5] or {}).labelText:GetText(), "options should expose a Data tab")
+assert.equal("Sync", ((mainFrame.optionsTabButtons or {})[5] or {}).labelText:GetText(), "options should expose a Sync tab")
+assert.equal("Data", ((mainFrame.optionsTabButtons or {})[6] or {}).labelText:GetText(), "options should expose a Data tab")
 assert.equal("segmented-soft", ((mainFrame.optionsTabButtons or {})[1] or {}).gbmTabStyle, "options tabs should use the softer segmented-tab treatment")
 assert.equal("APPEARANCE", mainFrame.optionsActiveTab, "options should default to the Appearance tab")
 assert.truthy(mainFrame.optionsAppearancePanel:IsShown(), "options should show the Appearance content by default")
 assert.truthy(not mainFrame.optionsStockSettingsPanel:IsShown(), "options should hide the Stock Settings content by default")
 assert.truthy(not mainFrame.optionsPermissionsPanel:IsShown(), "options should hide the Permissions content by default")
 assert.truthy(not mainFrame.optionsBlacklistPanel:IsShown(), "options should hide the Blacklist content by default")
+assert.truthy(not (mainFrame.optionsSyncPanel and mainFrame.optionsSyncPanel:IsShown()), "options should hide the Sync content by default")
 assert.truthy(not mainFrame.optionsLogsHistoryPanel:IsShown(), "options should hide the Data content by default")
 assert.truthy(mainFrame.optionsViewportFrame:IsShown(), "options view should show its dedicated viewport frame")
 assert.equal(mainFrame.optionsViewportFrame, mainFrame.optionsScrollFrame.parent, "options scroll frame should live inside the dedicated viewport")
@@ -93,6 +112,10 @@ assert.truthy(mainFrame.optionsAvailablePermissionPanel:IsShown(), "options auth
 assert.truthy((mainFrame.optionsAvailablePermissionPanel:GetHeight() or 0) >= 132, "options auth should give available permissions enough height to avoid clipping the last row")
 assert.truthy((mainFrame.optionsAuthPanel:GetHeight() or 0) < 800, "options auth should size to its actual content instead of leaving a giant dead zone")
 assert.equal("Save", mainFrame.optionsAuthSaveButton.labelText:GetText(), "options auth should expose a dedicated local save button")
+mainFrame:SetOptionsTab("SYNC")
+assert.equal("SYNC", mainFrame.optionsActiveTab, "options should switch to the Sync tab when clicked")
+assert.truthy(mainFrame.optionsSyncPanel:IsShown(), "options should show the Sync panel after tab switch")
+assert.truthy(string.find(mainFrame.optionsSyncPeersText:GetText() or "", "Stormrage-OfficerOne", 1, true) ~= nil, "options Sync tab should list persisted peers")
 mainFrame:SetOptionsTab("STOCK")
 assert.equal("STOCK", mainFrame.optionsActiveTab, "options should switch to the Stock Settings tab when clicked")
 assert.truthy(mainFrame.optionsStockSettingsPanel:IsShown(), "options should show the Stock Settings panel after tab switch")
@@ -109,9 +132,9 @@ assert.truthy(color_distance(((mainFrame.optionsStockSettingsSaveButton.gbmArt o
 mainFrame.defaultMinimumInput:SetText("250")
 mainFrame.optionsCriticalThresholdInput:SetText("40")
 mainFrame.optionsStockSettingsSaveButton:GetScript("OnClick")(mainFrame.optionsStockSettingsSaveButton)
-assert.equal(250, (((_G.GBankManagerDB or {}).ui or {}).minimumSettings or {}).defaultQuantity, "stock settings should persist the restock default")
-assert.equal(40, (((_G.GBankManagerDB or {}).ui or {}).minimumSettings or {}).criticalThresholdPercent, "stock settings should persist the critical shortage threshold")
-assert.equal(250, ((_G.GBankManagerDB or {}).auth or {}).restockDefault, "stock settings should continue mirroring restock default into auth metadata")
+assert.equal(250, (((current_db() or {}).ui or {}).minimumSettings or {}).defaultQuantity, "stock settings should persist the restock default")
+assert.equal(40, (((current_db() or {}).ui or {}).minimumSettings or {}).criticalThresholdPercent, "stock settings should persist the critical shortage threshold")
+assert.equal(250, ((current_db() or {}).auth or {}).restockDefault, "stock settings should continue mirroring restock default into auth metadata")
 mainFrame:SetOptionsTab("LOGS_HISTORY")
 assert.equal("LOGS_HISTORY", mainFrame.optionsActiveTab, "options should switch to the Data tab when clicked")
 assert.truthy(mainFrame.optionsLogsHistoryPanel:IsShown(), "options should show the Data panel after tab switch")
@@ -149,16 +172,16 @@ mainFrame.sharedChoiceDropdownOptions[1]:GetScript("OnClick")(mainFrame.sharedCh
 mainFrame.optionsRepairThresholdInput:SetText("250")
 mainFrame.optionsMuteSilvermoonCitizenToggle:SetChecked(true)
 mainFrame.optionsLogsHistorySaveButton:GetScript("OnClick")(mainFrame.optionsLogsHistorySaveButton)
-assert.equal(600, (((_G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).ledgerScanIntervalSeconds, "logs/history settings should persist the selected ledger scan interval")
-assert.equal("1_week", (((_G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).ledgerRetention, "logs/history settings should persist the selected ledger retention")
-assert.equal("1_week", (((_G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).historyRetention, "logs/history settings should persist the selected history retention")
-assert.equal(250, (((_G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold, "logs/history settings should persist the configured repair threshold")
-assert.truthy((((( _G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen) == true, "logs/history settings should persist the Silvermoon Citizen mute toggle")
+assert.equal(600, (((current_db() or {}).ui or {}).logsHistorySettings or {}).ledgerScanIntervalSeconds, "logs/history settings should persist the selected ledger scan interval")
+assert.equal("1_week", (((current_db() or {}).ui or {}).logsHistorySettings or {}).ledgerRetention, "logs/history settings should persist the selected ledger retention")
+assert.equal("1_week", (((current_db() or {}).ui or {}).logsHistorySettings or {}).historyRetention, "logs/history settings should persist the selected history retention")
+assert.equal(250, (((current_db() or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold, "logs/history settings should persist the configured repair threshold")
+assert.truthy(((((current_db() or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen) == true, "logs/history settings should persist the Silvermoon Citizen mute toggle")
 mainFrame.optionsMuteSilvermoonCitizenToggle.GetChecked = function()
     return 1
 end
 mainFrame.optionsLogsHistorySaveButton:GetScript("OnClick")(mainFrame.optionsLogsHistorySaveButton)
-assert.truthy((((( _G.GBankManagerDB or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen) == true, "logs/history settings should treat truthy live checkbox states as enabled when saving")
+assert.truthy(((((current_db() or {}).ui or {}).logsHistorySettings or {}).muteSilvermoonCitizen) == true, "logs/history settings should treat truthy live checkbox states as enabled when saving")
 assert.equal("Mute Silvermoon Citizen", (mainFrame.optionsMuteSilvermoonCitizenToggle.labelText or {}):GetText(), "data settings should shorten the Silvermoon Citizen mute label")
 assert.equal("Saved logs/history settings.", mainFrame.optionsLogsHistoryStatusText:GetText(), "logs/history settings should report visible save feedback after saving")
 assert.same(mainFrame.optionsLedgerRetentionButton, (mainFrame.optionsLogsHistorySaveButton.points[1] or {})[2], "data save should sit up near the retention controls")
@@ -173,17 +196,17 @@ mainFrame.optionsClearBankLedgerButton:GetScript("OnClick")(mainFrame.optionsCle
 assert.equal("GBM_CONFIRM_CLEAR_BANK_LEDGER", (_G.LastStaticPopup or {}).which, "clearing guild-bank log data should require confirmation")
 assert.truthy(string.find((((_G.StaticPopupCalls or {})[#(_G.StaticPopupCalls or {})] or {}).text_arg1 or ""), "irreversible", 1, true) ~= nil, "clear-data confirmation should warn that the action is irreversible")
 _G.StaticPopupDialogs["GBM_CONFIRM_CLEAR_BANK_LEDGER"].OnAccept((_G.LastStaticPopup or {}), (_G.LastStaticPopup or {}).data)
-assert.equal(0, #((((_G.GBankManagerDB or {}).bankLedger or {}).itemLogs or {})), "confirmed clear-data should remove saved bank-ledger item rows")
-assert.equal(0, #((((_G.GBankManagerDB or {}).bankLedger or {}).moneyLogs or {})), "confirmed clear-data should remove saved bank-ledger money rows")
+assert.equal(0, #((((current_db() or {}).bankLedger or {}).itemLogs or {})), "confirmed clear-data should remove saved bank-ledger item rows")
+assert.equal(0, #((((current_db() or {}).bankLedger or {}).moneyLogs or {})), "confirmed clear-data should remove saved bank-ledger money rows")
 mainFrame.optionsClearInventoryDataButton:GetScript("OnClick")(mainFrame.optionsClearInventoryDataButton)
 assert.equal("GBM_CONFIRM_CLEAR_INVENTORY", (_G.LastStaticPopup or {}).which, "clearing inventory data should require confirmation")
 _G.StaticPopupDialogs["GBM_CONFIRM_CLEAR_INVENTORY"].OnAccept((_G.LastStaticPopup or {}), (_G.LastStaticPopup or {}).data)
-assert.equal(nil, (_G.GBankManagerDB or {}).currentSnapshotId, "confirmed inventory clear should remove the active snapshot pointer")
-assert.equal(0, #((((_G.GBankManagerDB or {}).changeLog or {}))), "confirmed inventory clear should remove saved diff history")
+assert.equal(nil, (current_db() or {}).currentSnapshotId, "confirmed inventory clear should remove the active snapshot pointer")
+assert.equal(0, #((((current_db() or {}).changeLog or {}))), "confirmed inventory clear should remove saved diff history")
 mainFrame.optionsClearCompletedRequestsButton:GetScript("OnClick")(mainFrame.optionsClearCompletedRequestsButton)
 assert.equal("GBM_CONFIRM_CLEAR_COMPLETED_REQUESTS", (_G.LastStaticPopup or {}).which, "clearing completed request history should require confirmation")
 _G.StaticPopupDialogs["GBM_CONFIRM_CLEAR_COMPLETED_REQUESTS"].OnAccept((_G.LastStaticPopup or {}), (_G.LastStaticPopup or {}).data)
-for _, request in ipairs((_G.GBankManagerDB or {}).requests or {}) do
+for _, request in ipairs((current_db() or {}).requests or {}) do
     assert.truthy(not (request.approval == "REJECTED" or request.approval == "CANCELED" or (request.approval == "APPROVED" and request.fulfillment == "FULFILLED")), "confirmed request-history clear should remove completed request rows")
 end
 mainFrame:SetOptionsTab("APPEARANCE")
@@ -243,7 +266,7 @@ assert.equal(nil, mainFrame.optionsAuthWriteButton, "options auth should remove 
 assert.equal("<< Add", mainFrame.optionsAuthAddPermissionButton.labelText:GetText(), "options auth add button should point toward the allowed-permissions list")
 assert.equal("Remove >>", mainFrame.optionsAuthRemovePermissionButton.labelText:GetText(), "options auth remove button should point toward the available-permissions list")
 
-_G.GBankManagerDB.auth.blacklist = {
+current_db().auth.blacklist = {
     ["Stormrage-Ziriously"] = {
         name = "Ziriously",
         reason = "Abused System",
@@ -317,32 +340,32 @@ local originalDashboardCardWidth = ((mainFrame.dashboardCards or {})[1] or {}):G
 local originalDashboardCardHeight = ((mainFrame.dashboardCards or {})[1] or {}):GetHeight() or 0
 local originalDashboardPanelHeight = (mainFrame.dashboardTopItemsPanel and mainFrame.dashboardTopItemsPanel:GetHeight()) or 0
 mainFrame:SetThemePreset("horde")
-assert.equal("horde", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should persist in local appearance settings")
+assert.equal("horde", current_db().ui.appearance.themePreset, "theme preset changes should persist in local appearance settings")
 assert.truthy((mainFrame.sidebar.backdropColor or {})[1] ~= 0.10, "theme preset changes should update visible shell colors")
 mainFrame:SetThemePreset("nature")
-assert.equal("nature", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should support the expanded preset list")
+assert.equal("nature", current_db().ui.appearance.themePreset, "theme preset changes should support the expanded preset list")
 mainFrame:SetThemePreset("legion")
-assert.equal("legion", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should support the Legion preset")
+assert.equal("legion", current_db().ui.appearance.themePreset, "theme preset changes should support the Legion preset")
 mainFrame:SetThemePreset("pride")
-assert.equal("pride", _G.GBankManagerDB.ui.appearance.themePreset, "theme preset changes should support the Pride preset")
+assert.equal("pride", current_db().ui.appearance.themePreset, "theme preset changes should support the Pride preset")
 mainFrame:SetShellScale(1.1)
 assert.truthy(mainFrame:GetWidth() > originalWidth, "shell scale should grow the main shell width")
-assert.equal(1.1, _G.GBankManagerDB.ui.appearance.shellScale, "shell scale changes should persist in local appearance settings")
-assert.equal(1.1, _G.GBankManagerDB.ui.appearance.tableDensity, "shell scale should keep persisted table density linked to the same scale")
+assert.equal(1.1, current_db().ui.appearance.shellScale, "shell scale changes should persist in local appearance settings")
+assert.equal(1.1, current_db().ui.appearance.tableDensity, "shell scale should keep persisted table density linked to the same scale")
 assert.equal("110%", mainFrame.optionsShellScaleValueText:GetText(), "shell scale changes should refresh the visible percentage label")
 mainFrame:SetShellScale(1.15)
 assert.truthy(mainFrame.tableRowHeight > originalRowHeight, "UI Scale should still grow shared table row height through the linked table-density behavior")
 assert.truthy((((mainFrame.dashboardCards or {})[1] or {}):GetWidth() or 0) > originalDashboardCardWidth, "UI Scale should also grow dashboard card width")
 assert.truthy((((mainFrame.dashboardCards or {})[1] or {}):GetHeight() or 0) > originalDashboardCardHeight, "UI Scale should also grow dashboard card height")
 assert.truthy((mainFrame.dashboardTopItemsPanel and mainFrame.dashboardTopItemsPanel:GetHeight() or 0) > originalDashboardPanelHeight, "UI Scale should resize dashboard support panels with the same shell scale pass")
-assert.equal(1.15, _G.GBankManagerDB.ui.appearance.shellScale, "UI Scale adjustments should persist through the shell scale setting")
-assert.equal(1.15, _G.GBankManagerDB.ui.appearance.tableDensity, "UI Scale should keep the linked table density persisted to the same value")
+assert.equal(1.15, current_db().ui.appearance.shellScale, "UI Scale adjustments should persist through the shell scale setting")
+assert.equal(1.15, current_db().ui.appearance.tableDensity, "UI Scale should keep the linked table density persisted to the same value")
 mainFrame:SetShellOpacity(0.95)
 assert.equal(0.95, mainFrame.currentAlpha, "shell opacity should persist the current shell opacity setting")
 assert.truthy(mainFrame.alpha == nil or mainFrame.alpha == 1, "shell opacity should not dim the entire main shell frame")
 assert.equal("95%", mainFrame.optionsShellOpacityValueText:GetText(), "shell opacity changes should refresh the visible percentage label")
 mainFrame:SetModalOpacity(0.88)
-assert.equal(0.88, _G.GBankManagerDB.ui.appearance.modalOpacity, "modal opacity changes should persist in local appearance settings")
+assert.equal(0.88, current_db().ui.appearance.modalOpacity, "modal opacity changes should persist in local appearance settings")
 assert.truthy(mainFrame.requestDetailsModal.alpha == nil or mainFrame.requestDetailsModal.alpha == 1, "modal opacity should not dim the entire request-details modal frame")
 assert.truthy(mainFrame.minimumAddModal.alpha == nil or mainFrame.minimumAddModal.alpha == 1, "modal opacity should not dim the entire minimum-add modal frame")
 assert.truthy(mainFrame.minimumDetailsModal.alpha == nil or mainFrame.minimumDetailsModal.alpha == 1, "modal opacity should not dim the entire minimum-details modal frame")
@@ -355,46 +378,57 @@ mainFrame:SetModalOpacity(0.99)
 assert.truthy((((mainFrame.minimumAddModal.backdropColor or {})[4] or 0) > loweredBackdropAlpha), "raising modal opacity should restore modal backdrop alpha instead of getting stuck at the lower setting")
 mainFrame:SetModalOpacity(0.88)
 
-local scaleBeforeButtons = _G.GBankManagerDB.ui.appearance.shellScale
+local scaleBeforeButtons = current_db().ui.appearance.shellScale
 mainFrame.optionsShellScaleIncreaseButton:GetScript("OnClick")(mainFrame.optionsShellScaleIncreaseButton)
-assert.truthy(_G.GBankManagerDB.ui.appearance.shellScale > scaleBeforeButtons, "shell-scale plus should step the slider value upward")
+assert.truthy(current_db().ui.appearance.shellScale > scaleBeforeButtons, "shell-scale plus should step the slider value upward")
 mainFrame.optionsShellScaleDecreaseButton:GetScript("OnClick")(mainFrame.optionsShellScaleDecreaseButton)
-assert.equal(scaleBeforeButtons, _G.GBankManagerDB.ui.appearance.shellScale, "shell-scale minus should step the slider value back down")
+assert.equal(scaleBeforeButtons, current_db().ui.appearance.shellScale, "shell-scale minus should step the slider value back down")
 assert.truthy(mainFrame.optionsShellScaleSlider.mouseEnabled == true, "UI Scale slider should allow direct mouse interaction")
 assert.equal(true, mainFrame.optionsShellScaleSlider.obeyStepOnDrag, "UI Scale slider should obey step increments while dragging")
 mainFrame.optionsShellScaleSlider:SetValue(1.2)
-assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.shellScale or 0) - 1.2) < 0.0001, "dragging the shell-scale slider should persist the new shell scale")
+assert.truthy(math.abs((current_db().ui.appearance.shellScale or 0) - 1.2) < 0.0001, "dragging the shell-scale slider should persist the new shell scale")
 mainFrame.optionsShellScaleSlider:SetValue(0.95)
-assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.tableDensity or 0) - 0.95) < 0.0001, "dragging the UI Scale slider should keep the linked table density in sync")
+assert.truthy(math.abs((current_db().ui.appearance.tableDensity or 0) - 0.95) < 0.0001, "dragging the UI Scale slider should keep the linked table density in sync")
 
-local shellOpacityBeforeButtons = _G.GBankManagerDB.ui.appearance.shellOpacity
+local shellOpacityBeforeButtons = current_db().ui.appearance.shellOpacity
 mainFrame.optionsShellOpacityIncreaseButton:GetScript("OnClick")(mainFrame.optionsShellOpacityIncreaseButton)
-assert.truthy(_G.GBankManagerDB.ui.appearance.shellOpacity > shellOpacityBeforeButtons, "shell-opacity plus should step the slider value upward")
+assert.truthy(current_db().ui.appearance.shellOpacity > shellOpacityBeforeButtons, "shell-opacity plus should step the slider value upward")
 mainFrame.optionsShellOpacityDecreaseButton:GetScript("OnClick")(mainFrame.optionsShellOpacityDecreaseButton)
-assert.equal(shellOpacityBeforeButtons, _G.GBankManagerDB.ui.appearance.shellOpacity, "shell-opacity minus should step the slider value back down")
+assert.equal(shellOpacityBeforeButtons, current_db().ui.appearance.shellOpacity, "shell-opacity minus should step the slider value back down")
 assert.equal(true, mainFrame.optionsShellOpacitySlider.obeyStepOnDrag, "shell opacity slider should obey step increments while dragging")
 mainFrame.optionsShellOpacitySlider:SetValue(0.9)
-assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.shellOpacity or 0) - 0.9) < 0.0001, "dragging the shell-opacity slider should persist the new opacity")
+assert.truthy(math.abs((current_db().ui.appearance.shellOpacity or 0) - 0.9) < 0.0001, "dragging the shell-opacity slider should persist the new opacity")
 
-local modalOpacityBeforeButtons = _G.GBankManagerDB.ui.appearance.modalOpacity
+local modalOpacityBeforeButtons = current_db().ui.appearance.modalOpacity
 mainFrame.optionsModalOpacityIncreaseButton:GetScript("OnClick")(mainFrame.optionsModalOpacityIncreaseButton)
-assert.truthy(_G.GBankManagerDB.ui.appearance.modalOpacity > modalOpacityBeforeButtons, "modal-opacity plus should step the slider value upward")
+assert.truthy(current_db().ui.appearance.modalOpacity > modalOpacityBeforeButtons, "modal-opacity plus should step the slider value upward")
 mainFrame.optionsModalOpacityDecreaseButton:GetScript("OnClick")(mainFrame.optionsModalOpacityDecreaseButton)
-assert.equal(modalOpacityBeforeButtons, _G.GBankManagerDB.ui.appearance.modalOpacity, "modal-opacity minus should step the slider value back down")
+assert.equal(modalOpacityBeforeButtons, current_db().ui.appearance.modalOpacity, "modal-opacity minus should step the slider value back down")
 assert.equal(true, mainFrame.optionsModalOpacitySlider.obeyStepOnDrag, "modal opacity slider should obey step increments while dragging")
 mainFrame.optionsModalOpacitySlider:SetValue(0.93)
-assert.truthy(math.abs((_G.GBankManagerDB.ui.appearance.modalOpacity or 0) - 0.93) < 0.0001, "dragging the modal-opacity slider should persist the new opacity")
+assert.truthy(math.abs((current_db().ui.appearance.modalOpacity or 0) - 0.93) < 0.0001, "dragging the modal-opacity slider should persist the new opacity")
 mainFrame.optionsMinimapToggle:SetChecked(false)
 mainFrame.optionsMinimapToggle:GetScript("OnClick")(mainFrame.optionsMinimapToggle)
-assert.equal(false, _G.GBankManagerDB.ui.appearance.showMinimapButton, "appearance minimap toggle should persist the hidden state")
+assert.equal(false, current_db().ui.appearance.showMinimapButton, "appearance minimap toggle should persist the hidden state")
 mainFrame.optionsMinimapToggle:SetChecked(true)
 mainFrame.optionsMinimapToggle:GetScript("OnClick")(mainFrame.optionsMinimapToggle)
-assert.equal(true, _G.GBankManagerDB.ui.appearance.showMinimapButton, "appearance minimap toggle should persist the shown state")
+assert.equal(true, current_db().ui.appearance.showMinimapButton, "appearance minimap toggle should persist the shown state")
 
+local transport = env.ns.modules.syncTransport or {}
+local authBroadcastCount = 0
+local originalTransportSend = transport.Send
+transport.Send = function(...)
+    authBroadcastCount = authBroadcastCount + 1
+    if type(originalTransportSend) == "function" then
+        return originalTransportSend(...)
+    end
+end
 mainFrame:SaveAuthPolicy()
+transport.Send = originalTransportSend
 assert.truthy(string.find(mainFrame.optionsAuthStatusText:GetText() or "", "Copy the policy string", 1, true) ~= nil, "options auth save should remind the user to copy the policy string into Guild Information manually")
-assert.equal("AUTH_POLICY_UPDATED", ((_G.GBankManagerDB.auditLog or {})[1] or {}).type, "options auth save should append an auth-policy history entry")
+assert.equal("AUTH_POLICY_UPDATED", ((current_db().auditLog or {})[1] or {}).type, "options auth save should append an auth-policy history entry")
 assert.truthy(string.find(mainFrame.optionsPolicyStringInput:GetText() or "", "#", 1, true) ~= nil, "options auth save should persist the compact updater hash into the visible policy string")
+assert.equal(0, authBroadcastCount, "options auth save should not broadcast retired auth policy snapshots over addon comms")
 
 local authPolicySource = env.ns.modules.authPolicySource
 local pullCalled
@@ -451,7 +485,7 @@ mainFrame.optionsTabButtons[4]:GetScript("OnClick")(mainFrame.optionsTabButtons[
 assert.equal("BLACKLIST", mainFrame.optionsActiveTab, "options should switch to the Blacklist tab when clicked")
 assert.truthy(mainFrame.optionsBlacklistPanel:IsShown(), "options should show the Blacklist panel after tab switch")
 assert.truthy(not mainFrame.optionsPermissionsPanel:IsShown(), "options should hide the Permissions panel after switching away")
-mainFrame.optionsTabButtons[5]:GetScript("OnClick")(mainFrame.optionsTabButtons[5])
+mainFrame.optionsTabButtons[6]:GetScript("OnClick")(mainFrame.optionsTabButtons[6])
 assert.equal("LOGS_HISTORY", mainFrame.optionsActiveTab, "options should switch to the Data tab when clicked")
 assert.truthy(mainFrame.optionsLogsHistoryPanel:IsShown(), "options should show the Data panel after tab switch")
 authPolicySource.PullPolicyFromGuildInfo = originalPullPolicyFromGuildInfo

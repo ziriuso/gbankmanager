@@ -374,7 +374,7 @@ local function seed_request_sync_smoke_db(db)
     db.auth.capabilities = db.auth.capabilities or {}
     db.auth.blacklist = db.auth.blacklist or {}
     db.auth.blacklistHashes = db.auth.blacklistHashes or {}
-    db.auth.capabilities.request_submit = db.auth.capabilities.request_submit or {}
+    db.auth.capabilities.request_submit = {}
     db.auth.capabilities.request_approve = { [0] = true, [1] = true }
     db.auth.capabilities.request_reject = { [0] = true, [1] = true }
     db.auth.capabilities.request_edit = { [0] = true, [1] = true }

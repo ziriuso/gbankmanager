@@ -505,6 +505,45 @@ local function current_policy(db)
     return (db or {}).auth or {}
 end
 
+local function current_sync_guild_key(db)
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+        return dbGuildKey
+    end
+
+    local context = current_auth_context(db)
+    return tostring(context.guildName or "Unknown")
+end
+
+local function build_sync_peer_lines(db)
+    local syncPeerState = ns.modules.syncPeerState or {}
+    if type(syncPeerState.GetPeers) ~= "function" then
+        return "No peers seen yet."
+    end
+
+    local lines = {}
+    for _, entry in ipairs(syncPeerState.GetPeers(db, current_sync_guild_key(db)) or {}) do
+        lines[#lines + 1] = string.format(
+            "%s | Last Alive %s | %s",
+            tostring(entry.characterKey or "Unknown"),
+            format_timestamp(entry.lastSeen),
+            tostring(entry.lastMessageType or "")
+        )
+    end
+
+    if #lines == 0 then
+        return "No peers seen yet."
+    end
+
+    return table.concat(lines, "\n")
+end
+
 local function can_access(context, capability, policy)
     local auth = ns.modules.auth or ns.modules.permissions
     if auth and type(auth.Can) == "function" then
@@ -1272,10 +1311,11 @@ mainFrame.optionsTabOrder = {
     { key = "STOCK", label = "Stock Settings" },
     { key = "PERMISSIONS", label = "Permissions" },
     { key = "BLACKLIST", label = "Blacklist" },
+    { key = "SYNC", label = "Sync" },
     { key = "LOGS_HISTORY", label = "Data" },
 }
 for index, item in ipairs(mainFrame.optionsTabOrder) do
-    local buttonWidth = item.key == "STOCK" and 118 or (item.key == "LOGS_HISTORY" and 108 or 94)
+    local buttonWidth = item.key == "STOCK" and 118 or (item.key == "LOGS_HISTORY" and 108 or (item.key == "SYNC" and 88 or 94))
     local button = mainFrame.optionsTabButtons[index] or make_button(mainFrame.optionsTabBar, buttonWidth, 24, item.label)
     button:SetWidth(buttonWidth)
     button.key = item.key
@@ -1334,6 +1374,12 @@ mainFrame.optionsLogsHistoryPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChi
 mainFrame.optionsLogsHistoryPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
 mainFrame.optionsLogsHistoryPanel:SetHeight(360)
 apply_surface_variant(mainFrame.optionsLogsHistoryPanel, "panel-alt")
+
+mainFrame.optionsSyncPanel = mainFrame.optionsSyncPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
+mainFrame.optionsSyncPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
+mainFrame.optionsSyncPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
+mainFrame.optionsSyncPanel:SetHeight(220)
+apply_surface_variant(mainFrame.optionsSyncPanel, "panel-alt")
 
 mainFrame.optionsAutomationPanel = mainFrame.optionsAutomationPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAutomationPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
@@ -1525,6 +1571,21 @@ mainFrame.defaultMinimumSaveButton = mainFrame.optionsStockSettingsSaveButton
 
 mainFrame.optionsLogsHistoryTitle = mainFrame.optionsLogsHistoryTitle or make_label(mainFrame.optionsLogsHistoryPanel, "Data", "GameFontHighlight")
 mainFrame.optionsLogsHistoryTitle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 16, -16)
+
+mainFrame.optionsSyncTitle = mainFrame.optionsSyncTitle or make_label(mainFrame.optionsSyncPanel, "Sync", "GameFontHighlight")
+mainFrame.optionsSyncTitle:SetPoint("TOPLEFT", mainFrame.optionsSyncPanel, "TOPLEFT", 16, -16)
+
+mainFrame.optionsSyncHint = mainFrame.optionsSyncHint or make_label(mainFrame.optionsSyncPanel, "Known peers update whenever sync traffic or hello messages are seen for this guild.", "GameFontHighlightSmall")
+mainFrame.optionsSyncHint:SetPoint("TOPLEFT", mainFrame.optionsSyncTitle, "BOTTOMLEFT", 0, -8)
+
+mainFrame.optionsSyncPeersText = mainFrame.optionsSyncPeersText or make_label(mainFrame.optionsSyncPanel, "No peers seen yet.", "GameFontNormal")
+mainFrame.optionsSyncPeersText:SetPoint("TOPLEFT", mainFrame.optionsSyncHint, "BOTTOMLEFT", 0, -14)
+if type(mainFrame.optionsSyncPeersText.SetJustifyH) == "function" then
+    mainFrame.optionsSyncPeersText:SetJustifyH("LEFT")
+end
+if type(mainFrame.optionsSyncPeersText.SetWidth) == "function" then
+    mainFrame.optionsSyncPeersText:SetWidth(560)
+end
 
 mainFrame.optionsLogsHistoryHint = mainFrame.optionsLogsHistoryHint or make_label(mainFrame.optionsLogsHistoryPanel, "Control how long local guild-bank logs and audit history are retained, and how often guild-bank scans and ledger rescans can run.", "GameFontHighlightSmall")
 mainFrame.optionsLogsHistoryHint:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryTitle, "BOTTOMLEFT", 0, -8)
@@ -2518,6 +2579,9 @@ function mainFrame:GetOptionsCanvasPanel()
     if activeTab == "PERMISSIONS" or activeTab == "BLACKLIST" then
         return self.optionsAuthPanel
     end
+    if activeTab == "SYNC" then
+        return self.optionsSyncPanel
+    end
     if activeTab == "LOGS_HISTORY" then
         return self.optionsLogsHistoryPanel
     end
@@ -2533,6 +2597,7 @@ function mainFrame:SetOptionsTab(tabKey)
     set_frame_shown(self.optionsStockSettingsPanel, nextTab == "STOCK")
     set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
     set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")
+    set_frame_shown(self.optionsSyncPanel, nextTab == "SYNC")
     set_frame_shown(self.optionsLogsHistoryPanel, nextTab == "LOGS_HISTORY")
     set_frame_shown(self.optionsAuthPanel, nextTab == "PERMISSIONS" or nextTab == "BLACKLIST")
     set_frame_shown(self.optionsAutomationPanel, false)
@@ -2547,6 +2612,10 @@ function mainFrame:SetOptionsTab(tabKey)
     if self.optionsScrollFrame then
         self.optionsScrollFrame.verticalScroll = 0
         self.optionsScrollFrame:SetVerticalScroll(0)
+    end
+
+    if nextTab == "SYNC" and self.optionsSyncPeersText then
+        self.optionsSyncPeersText:SetText(build_sync_peer_lines(current_db()))
     end
 
     self:UpdateOptionsCanvasHeight()
@@ -3069,17 +3138,6 @@ function mainFrame:SaveAuthPolicy(options)
         self.optionsPolicyStringInput:SetText(draft.guildPolicyString or "")
     end
     self.optionsAuthStatusText:SetText("Saved guild auth policy locally and refreshed the policy string. Copy the policy string into Guild Information and press Accept.")
-
-    if transport and type(transport.Send) == "function" then
-        transport.Send("GUILD", "GUILD", {
-            type = "AUTH_POLICY_SNAPSHOT",
-            updatedAt = draft.updatedAt or (_G.time and _G.time() or 0),
-            payload = {
-                actorContext = context,
-                policy = draft,
-            },
-        })
-    end
 
     self:RefreshAuthOptions()
     return draft

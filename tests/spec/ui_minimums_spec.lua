@@ -13,6 +13,15 @@ local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
 local itemCatalog = env.ns.modules.itemCatalog
+local store = env.ns.modules.store or {}
+
+local function current_db()
+    if type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
+    end
+
+    return _G.GBankManagerDB
+end
 
 local TRUSTED_ITEM_LINKS = {
     [241322] = "|cffffffff|Hitem:241322::::::::80:::::|h[Flask of the Magisters]|h|r",
@@ -334,7 +343,7 @@ assert.equal("7007", mainFrame.minimumDetailsItemIDText:GetText(), "minimum add 
 assert.equal("Algari Mana Oil", mainFrame.minimumDetailsItemNameText:GetText(), "minimum add handoff should keep the selected item name visible in the details modal")
 assert.truthy(mainFrame.minimumPendingRules == nil or next(mainFrame.minimumPendingRules) == nil, "minimum add handoff should still avoid staging draft rows before details confirmation exists")
 
-_G.GBankManagerDB.minimums = {
+current_db().minimums = {
     {
         itemID = 7007,
         itemName = "Algari Mana Oil",
@@ -406,7 +415,7 @@ assert.truthy(mainFrame:GetMinimumDraftState(restoredExistingRow) == nil, "undoi
 assert.equal(250, restoredExistingRow.quantityValue, "undoing an existing minimum through the details modal should restore the baseline quantity")
 assert.truthy(mainFrame.tableRows[1].minimumDraftTint == nil, "undoing an existing minimum through the details modal should clear draft row styling")
 
-_G.GBankManagerDB.minimums = {
+current_db().minimums = {
     {
         itemID = 243734,
         itemName = "Thalassian Phoenix Oil",
@@ -440,7 +449,7 @@ assert.truthy(not (mainFrame.minimumDetailsItemQualityText and mainFrame.minimum
 assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "minimum details modal should show the existing saved row Bank Tab as read-only text")
 assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "minimum details modal should not expose an editable Bank Tab selector for existing saved rows")
 
-_G.GBankManagerDB.minimums = {
+current_db().minimums = {
     {
         itemID = 7007,
         itemName = "Algari Mana Oil",
@@ -462,7 +471,7 @@ assert.truthy(mainFrame.minimumDetailsBankTabValueText:IsShown(), "legacy existi
 assert.equal("Alchemy", mainFrame.minimumDetailsBankTabValueText:GetText(), "legacy existing minimum edit should auto-populate Bank Tab from the table row")
 assert.truthy(not mainFrame.minimumDetailsBankTabDropdownButton:IsShown(), "legacy existing minimum edit should not allow Bank Tab edits")
 
-_G.GBankManagerDB.minimums = {
+current_db().minimums = {
     {
         itemID = 8008,
         itemName = "Leyline Residue",
@@ -501,7 +510,7 @@ mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
 assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "saving with unresolved global minimum rows should reopen the details modal")
 assert.equal("Bank Tab must be set on Orange Rows.", mainFrame.minimumDetailsStatusText:GetText(), "saving with unresolved global minimum rows should show the required error message")
 
-_G.GBankManagerDB.minimums = {
+current_db().minimums = {
     {
         itemID = 8008,
         itemName = "Leyline Residue",
@@ -521,7 +530,7 @@ _G.GBankManagerDB.minimums = {
         craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
     },
 }
-_G.GBankManagerDB.requests = {
+current_db().requests = {
     {
         requestId = "auto-heal-approved-request",
         requester = "Zirleficent",
@@ -567,10 +576,10 @@ mainFrame.minimumPendingDirty = {}
 mainFrame.minimumPendingDeleted = {}
 mainFrame.selectedMinimumKey = nil
 mainFrame:RefreshView()
-assert.equal("243734|TAB|Alchemy", _G.GBankManagerDB.requests[1].minimumRuleKey, "approved requests with a bank tab should self-heal their missing minimum binding automatically")
-assert.equal("Alchemy", _G.GBankManagerDB.requests[1].tabName, "approved requests that self-heal should preserve their chosen bank tab")
-assert.equal("241322|TAB|Reagents", _G.GBankManagerDB.requests[2].minimumRuleKey, "approved requests with exactly one matching existing minimum should self-heal to that minimum even if the request lost its bank tab")
-assert.equal("Reagents", _G.GBankManagerDB.requests[2].tabName, "approved requests that self-heal from an existing minimum should inherit the existing minimum bank tab")
+assert.equal("243734|TAB|Alchemy", current_db().requests[1].minimumRuleKey, "approved requests with a bank tab should self-heal their missing minimum binding automatically")
+assert.equal("Alchemy", current_db().requests[1].tabName, "approved requests that self-heal should preserve their chosen bank tab")
+assert.equal("241322|TAB|Reagents", current_db().requests[2].minimumRuleKey, "approved requests with exactly one matching existing minimum should self-heal to that minimum even if the request lost its bank tab")
+assert.equal("Reagents", current_db().requests[2].tabName, "approved requests that self-heal from an existing minimum should inherit the existing minimum bank tab")
 local magistersGlobalCount = 0
 for _, row in ipairs(mainFrame.tableRowsData or {}) do
     if tonumber(row.itemID) == 241322 and tostring(row.bankTab or "") == "GLOBAL" then
@@ -601,13 +610,13 @@ end
 assert.equal(1, repairedLegacyDraftCount, "repairing a legacy approved request should stage exactly one resolved draft row")
 assert.equal(0, repairedLegacyGlobalCount, "repairing a legacy approved request should hide the orphan GLOBAL row while the repair draft is staged")
 mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
-assert.equal("TAB", _G.GBankManagerDB.minimums[4].scope, "saving a repaired legacy approved request should create a tab-scoped minimum")
-assert.equal("Alchemy", _G.GBankManagerDB.minimums[4].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the minimum")
-assert.equal("241324|TAB|Alchemy", _G.GBankManagerDB.requests[3].minimumRuleKey, "saving a repaired legacy approved request should bind the request back to its minimum rule")
-assert.equal("Alchemy", _G.GBankManagerDB.requests[3].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the request")
+assert.equal("TAB", current_db().minimums[4].scope, "saving a repaired legacy approved request should create a tab-scoped minimum")
+assert.equal("Alchemy", current_db().minimums[4].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the minimum")
+assert.equal("241324|TAB|Alchemy", current_db().requests[3].minimumRuleKey, "saving a repaired legacy approved request should bind the request back to its minimum rule")
+assert.equal("Alchemy", current_db().requests[3].tabName, "saving a repaired legacy approved request should persist the chosen bank tab on the request")
 
-_G.GBankManagerDB.minimums = {}
-_G.GBankManagerDB.requests = {}
+current_db().minimums = {}
+current_db().requests = {}
 mainFrame.minimumPendingDb = nil
 mainFrame.minimumPendingRules = {}
 mainFrame.minimumPendingDirty = {}

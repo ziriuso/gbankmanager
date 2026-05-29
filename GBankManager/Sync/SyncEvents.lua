@@ -13,6 +13,7 @@ local authPolicySource = ns.modules.authPolicySource or {}
 local authPolicyCodec = ns.modules.authPolicyCodec or {}
 local requestsModule = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
+local peerState = ns.modules.syncPeerState or {}
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -254,6 +255,46 @@ local function clone_array_records(records)
         out[#out + 1] = copy
     end
     return out
+end
+
+local function payload_version(payload)
+    payload = type(payload) == "table" and payload or {}
+    if type(payload.version) == "string" and payload.version ~= "" then
+        return payload.version
+    end
+
+    if type(payload.payload) == "table" and type(payload.payload.version) == "string" and payload.payload.version ~= "" then
+        return payload.payload.version
+    end
+
+    return ""
+end
+
+local function touch_sync_peer(db, message, sender)
+    if type(peerState.TouchPeer) ~= "function" then
+        return nil
+    end
+
+    message = type(message) == "table" and message or {}
+    local payload = type(message.payload) == "table" and message.payload or {}
+    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local characterKey = tostring(actorContext.characterKey or "")
+    if characterKey == "" and message.type == "SYNC_HELLO" and type(message.payload) == "string" then
+        characterKey = tostring(message.payload or "")
+    end
+    if characterKey == "" then
+        local senderName = tostring(sender or "")
+        characterKey = senderName
+    end
+
+    local guildKey = tostring(payload.guildKey or active_guild_key(db))
+    return peerState.TouchPeer(db, {
+        guildKey = guildKey,
+        characterKey = characterKey,
+        messageType = tostring(message.type or ""),
+        seenAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+        version = payload_version(message),
+    })
 end
 
 local function append_audit_entry(db, entry)
@@ -673,6 +714,7 @@ function syncEvents.HandleEvent(event, ...)
         ns.state.lastSyncMessage.distribution = distribution
         ns.state.lastSyncMessage.sender = sender
         local db = current_db()
+        touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
             report_sync_status("Ignored retired auth policy snapshot message.")
             return false
