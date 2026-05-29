@@ -9,6 +9,7 @@ Replace the current ad hoc addon communication layer with a vendored AceComm-bas
 3. Guild bank ledger history can sync between everyone running the addon.
 4. Guild policy no longer syncs over addon messages and instead comes only from Guild Info.
 5. Options gets a new `Sync` tab that shows persisted known peers and their last alive timestamp.
+6. Sync data stays isolated per guild so a character in one guild never bleeds requests, minimums, ledger history, or peer state into a different guild on the same account.
 
 ## Status
 
@@ -36,6 +37,10 @@ Minimums are shared state, but the authority model is different from requests. O
 
 The addon sends a hello today, but there is no persisted peer history, no user-facing Sync tab, and no reliable operator view showing who the addon has communicated with and when they were last seen alive.
 
+### Guild isolation is not explicit enough
+
+The current runtime database already carries guild metadata, but the sync design needs to state this boundary directly. A player using multiple characters in different guilds must not have one guild's synced requests, minimums, ledger history, or peer history show up in another guild's dataset.
+
 ### Guild bank ledger sync is not yet part of the main sync contract
 
 Guild bank ledger data needs an everyone-to-everyone sync model more like `GuildBankLedger`, with append-only merge behavior and peer visibility, but the current GBankManager sync scope is centered on requests and policy snapshots.
@@ -59,6 +64,13 @@ Keep the existing domain rules and UI shell where they already fit, but replace 
 - add dedicated minimums sync messages
 - add dedicated ledger sync messages
 - add persisted peer tracking and Sync status UI
+
+### Isolation boundary
+
+- all synced datasets and peer history are partitioned by guild identity
+- local persistence should continue to anchor to the current guild database rather than a cross-character global sync cache
+- inbound sync messages should carry enough guild identity to be ignored when they do not belong to the active guild context
+- changing to a character in a different guild should surface that guild's own sync state only
 
 ## Design
 
@@ -93,6 +105,7 @@ Rules:
 - request create and request update messages should be sent only to:
   - the original submitter
   - players who currently qualify to view or manage requests through Guild Info policy
+- request routing should be computed from the active guild's roster and policy only
 - officer or policy-qualified actions such as approve, reject, fulfill, reopen, cancel, and delete should round-trip back to the submitter
 - non-qualified guild members should not receive request payloads
 - inbound request messages still go through the existing coordinator and validation rules before mutating local state
@@ -109,6 +122,7 @@ Rules:
 - minimum datasets may be received by everyone
 - only officers or other policy-qualified managers may publish authoritative minimum changes
 - inbound minimum messages from non-authoritative senders should be rejected
+- minimum traffic from a different guild scope should be ignored
 - minimum sync should use its own message family rather than piggybacking on request side effects
 
 Consequence:
@@ -122,6 +136,7 @@ Rules:
 - guild bank ledger updates may sync between everyone running the addon
 - ledger sync stays append-only and merge-safe
 - duplicate prevention should rely on stable entry identity or stable transaction fingerprints already used by the ledger domain
+- ledger entries from a different guild scope should never merge into the active guild ledger
 - sync should never delete or rewrite ledger history based only on remote traffic
 
 Consequence:
@@ -153,13 +168,28 @@ Rules:
 - persist known peers across reloads and relogs
 - track at minimum:
   - character key
+  - guild identity
   - version when available
   - last alive timestamp
   - last message type
   - capability summary if cheap to compute
 - stale peers remain visible in history, but the UI should distinguish stale from currently alive
 
-### 4. Sync startup timing
+The persisted peer list belongs to the active guild scope only. A peer discovered while logged into one guild must never appear in another guild's Sync tab unless that same character is also a valid peer in that second guild context.
+
+### 4. Guild scoping and message acceptance
+
+Guild isolation must be enforced both in storage and on the wire.
+
+Rules:
+
+- every sync message family should include a normalized guild identity envelope
+- the local sync layer should compare the incoming guild identity against the active database guild metadata before decoding the payload into domain state
+- mismatched guild traffic should be ignored and optionally surfaced as debug status, but never merged
+- peer history should be recorded under the matching guild scope only
+- if a player changes guilds, the new guild starts with its own clean sync namespace except for whatever data already belongs to that guild's saved database
+
+### 5. Sync startup timing
 
 Borrow only the light startup lessons from `Guild_Roster_Manager`.
 
@@ -170,7 +200,7 @@ Rules:
 - avoid leader election, heavy queue orchestration, or large sync-network construction phases
 - if AceComm send callbacks indicate throttling, record that in debug or status state instead of building a large custom scheduler up front
 
-### 5. Sync tab in Options
+### 6. Sync tab in Options
 
 Add a new `Sync` tab inside the existing Options surface.
 
@@ -186,7 +216,7 @@ The tab should show:
 
 The tab should persist peer history between sessions and should fit the current reusable options-panel pattern already used by the existing tabs.
 
-### 6. Transition strategy
+### 7. Transition strategy
 
 The redesign should intentionally separate transport migration from domain rewrites.
 
@@ -291,7 +321,11 @@ Run focused specs first, then:
 4. Policy
 - Guild Info changes update permissions without relying on addon comms
 
-5. Sync tab
+5. Guild isolation
+- sync data from one guild does not appear when logging into a different guild character on the same account
+- cross-guild traffic is ignored rather than merged
+
+6. Sync tab
 - peer list persists across `/reload`
 - last alive timestamps update after hello or real sync traffic
 
@@ -325,6 +359,14 @@ Mitigation:
 - persist known peers, but visually separate active and stale peers
 - keep the stored peer shape intentionally small
 
+### Risk: cross-guild bleed creates privacy or data-integrity issues
+
+Mitigation:
+
+- include guild identity in every sync envelope
+- key persisted peer and sync state by guild scope
+- add regression tests that simulate one account using two characters in different guilds
+
 ## Out of Scope
 
 - switching the whole addon to the wider AceAddon or AceDB architecture
@@ -339,4 +381,5 @@ Mitigation:
 - minimums sync is officer-authoritative and everyone-readable
 - ledger sync can replicate append-only history between addon users
 - policy no longer syncs over addon messages
+- one guild's synced state does not bleed into another guild's database or Sync tab
 - Options includes a persisted Sync tab with known peers and last alive timestamps
