@@ -721,3 +721,30 @@ local blacklistedRequest = mainFrame:CreateRequestFromEditor()
 assert.truthy(blacklistedRequest == nil, "requests view should reparse guild blacklist state before creating a request")
 assert.equal("You do not have permission to submit requests.", mainFrame.requestCreateStatusText:GetText(), "requests view should deny request creation when the refreshed guild policy marks the actor as blacklisted")
 permissions.RefreshPolicyFromGuild = originalRefreshPolicyFromGuild
+
+local onboardingEnv = fixture.load()
+local onboardingMainFrame = onboardingEnv.mainFrame
+
+assert.truthy(type(onboardingMainFrame.OpenOnboarding) == "function", "main frame should expose onboarding open behavior for request-only users")
+assert.truthy(type(onboardingMainFrame.RunOnboardingPrimaryAction) == "function", "main frame should expose onboarding primary actions for request-only users")
+assert.truthy(type(onboardingMainFrame.AdvanceOnboardingStep) == "function", "main frame should expose onboarding advance behavior for request-only users")
+
+local onboardingModal = onboardingMainFrame:OpenOnboarding("requestOnly", {
+    auto = false,
+    reason = "spec_request_only",
+})
+
+assert.same(onboardingMainFrame.onboardingModal, onboardingModal, "request-only onboarding should reuse the shared onboarding modal")
+assert.truthy(onboardingMainFrame.onboardingModal and onboardingMainFrame.onboardingModal:IsShown(), "request-only onboarding should show its modal shell")
+assert.equal("REQUESTS", onboardingMainFrame.activeView, "request-only onboarding should stay on the requests view")
+assert.equal(true, onboardingMainFrame.requestOnlyMode == true, "request-only onboarding should keep the compact request surface active")
+assert.truthy(onboardingMainFrame.requestWorkflowPanel and onboardingMainFrame.requestWorkflowPanel:IsShown(), "request-only onboarding should keep the compact request workflow panel visible")
+assert.truthy(not (onboardingMainFrame.requestAdminFilterPanel and onboardingMainFrame.requestAdminFilterPanel:IsShown()), "request-only onboarding should not promote the user into the manager request surface")
+
+onboardingMainFrame:AdvanceOnboardingStep()
+assert.equal("request_flow", (onboardingMainFrame.onboardingCurrentStep or {}).id, "request-only onboarding should advance to the request flow step")
+onboardingMainFrame:RunOnboardingPrimaryAction()
+
+assert.equal("REQUESTS", onboardingMainFrame.activeView, "request flow onboarding should remain on the requests view")
+assert.equal(true, onboardingMainFrame.requestOnlyMode == true, "request flow onboarding should preserve request-only mode")
+assert.truthy(onboardingMainFrame.requestWizardModal and onboardingMainFrame.requestWizardModal:IsShown(), "request flow onboarding should launch the request wizard from the compact request surface")

@@ -12,6 +12,7 @@ local fixture = require("tests.helpers.ui_fixture")
 local env = fixture.load()
 local onboarding = env.ns.modules.onboarding
 local migrations = env.ns.modules.migrations
+local mainFrame = env.mainFrame
 local db = env.ns.state.db or _G.GBankManagerDB or {}
 local addonName = tostring((env.ns and env.ns.addonName) or "GBankManager")
 local getMetadata = (_G.C_AddOns and _G.C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
@@ -96,3 +97,50 @@ assert.equal("finish", requestSteps[4].id, "request onboarding should end with f
 assert.equal("REQUESTS", requestSteps[2].targetView, "request flow step should route to requests")
 assert.equal("open_request_wizard", requestSteps[2].primaryAction, "request flow step should expose the request wizard action")
 assert.equal("Open New Request", requestSteps[2].primaryActionLabel, "request flow step should expose the expected action label")
+
+assert.truthy(type(mainFrame.OpenOnboarding) == "function", "main frame should expose onboarding open behavior")
+assert.truthy(type(mainFrame.AdvanceOnboardingStep) == "function", "main frame should expose onboarding advance behavior")
+assert.truthy(type(mainFrame.RunOnboardingPrimaryAction) == "function", "main frame should expose onboarding primary action behavior")
+assert.truthy(type(mainFrame.CloseOnboarding) == "function", "main frame should expose onboarding close behavior")
+
+local openedModal = mainFrame:OpenOnboarding("manager", {
+    auto = false,
+    reason = "spec_manager",
+})
+
+assert.same(mainFrame.onboardingModal, openedModal, "opening onboarding should return the shared onboarding modal")
+assert.truthy(mainFrame.onboardingModal and mainFrame.onboardingModal:IsShown(), "manager onboarding should show its modal shell")
+assert.equal("manager", mainFrame.onboardingFlowKey, "manager onboarding should track its active flow key")
+assert.equal(1, mainFrame.onboardingStepIndex, "manager onboarding should start at the first step")
+assert.equal("welcome", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should start on the welcome step")
+
+mainFrame:AdvanceOnboardingStep()
+assert.equal("permissions", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should advance to permissions after welcome")
+mainFrame:RunOnboardingPrimaryAction()
+assert.equal("OPTIONS", mainFrame.activeView, "manager permissions onboarding should route to options")
+assert.equal("PERMISSIONS", mainFrame.optionsActiveTab, "manager permissions onboarding should open the permissions tab")
+
+mainFrame:AdvanceOnboardingStep()
+assert.equal("blacklist", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should advance to blacklist after permissions")
+mainFrame:RunOnboardingPrimaryAction()
+assert.equal("BLACKLIST", mainFrame.optionsActiveTab, "manager blacklist onboarding should open the blacklist tab")
+
+mainFrame:AdvanceOnboardingStep()
+assert.equal("requests", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should advance to requests after blacklist")
+mainFrame:RunOnboardingPrimaryAction()
+assert.equal("REQUESTS", mainFrame.activeView, "manager requests onboarding should route to requests")
+assert.equal(false, mainFrame.requestOnlyMode == true, "manager onboarding should keep the full shell routing")
+
+mainFrame:AdvanceOnboardingStep()
+assert.equal("setup_order", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should advance to setup order before finish")
+mainFrame:RunOnboardingPrimaryAction()
+assert.equal("DASHBOARD", mainFrame.activeView, "setup order onboarding should route back to dashboard")
+
+mainFrame:AdvanceOnboardingStep()
+assert.equal("finish", (mainFrame.onboardingCurrentStep or {}).id, "manager onboarding should end on the finish step")
+mainFrame:AdvanceOnboardingStep()
+assert.truthy(mainFrame.onboardingModal and not mainFrame.onboardingModal:IsShown(), "completing manager onboarding should hide the modal")
+assert.equal(nil, mainFrame.onboardingFlowKey, "completing manager onboarding should clear the active flow key")
+assert.equal(nil, mainFrame.onboardingCurrentStep, "completing manager onboarding should clear the current step state")
+assert.equal(true, (((db.ui or {}).onboarding or {}).completed or {}).manager, "completing manager onboarding should persist completion")
+assert.equal(false, onboarding.ShouldAutoOpen(db, "manager"), "completed manager onboarding should not auto-open again")

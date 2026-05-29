@@ -1038,7 +1038,7 @@ mainFrame.aboutAuthorText = mainFrame.aboutAuthorText or make_label(mainFrame.ab
 mainFrame.aboutAuthorText:SetPoint("TOP", mainFrame.aboutVersionText, "BOTTOM", 0, -8)
 
 mainFrame.aboutGuildText = mainFrame.aboutGuildText or make_label(mainFrame.aboutPanel, "", "GameFontNormal")
-mainFrame.aboutGuildText:SetPoint("TOP", mainFrame.aboutAuthorText, "BOTTOM", 0, -8)
+mainFrame.aboutGuildText:SetPoint("TOP", mainFrame.aboutAuthorText, "BOTTOM", 0, -18)
 
 mainFrame.aboutDescriptionText = mainFrame.aboutDescriptionText or make_label(mainFrame.aboutPanel, "Manage your guild's stock, requests, and exports with a polished WoW-native workflow.", "GameFontHighlightSmall")
 mainFrame.aboutDescriptionText:SetPoint("TOP", mainFrame.aboutGuildText, "BOTTOM", 0, -18)
@@ -1342,7 +1342,7 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(292)
+mainFrame.optionsAppearancePanel:SetHeight(320)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1538,6 +1538,21 @@ mainFrame.optionsModalOpacityValueText:SetPoint("TOPLEFT", mainFrame.optionsModa
 mainFrame.optionsMinimapToggle = mainFrame.optionsMinimapToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Show Minimap Button")
 mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or themeButtonRowAnchors[2] or themeButtonRowAnchors[1], "BOTTOMLEFT", 0, -18)
 
+mainFrame.optionsMuteSilvermoonCitizenToggle = mainFrame.optionsMuteSilvermoonCitizenToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Mute Silvermoon Citizen")
+mainFrame.optionsMuteSilvermoonCitizenToggle:SetPoint("TOPLEFT", mainFrame.optionsMinimapToggle, "BOTTOMLEFT", 0, -12)
+
+mainFrame.optionsOnboardingTitle = mainFrame.optionsOnboardingTitle or make_label(mainFrame.optionsAppearancePanel, "First-Run Walkthrough", "GameFontHighlightSmall")
+mainFrame.optionsOnboardingTitle:SetPoint("TOPLEFT", mainFrame.optionsMuteSilvermoonCitizenToggle, "BOTTOMLEFT", 0, -18)
+
+mainFrame.optionsOnboardingHint = mainFrame.optionsOnboardingHint or make_label(mainFrame.optionsAppearancePanel, "Replay the manager walkthrough for permissions, blacklist guidance, and the request workflow at any time.", "GameFontHighlightSmall")
+mainFrame.optionsOnboardingHint:SetPoint("TOPLEFT", mainFrame.optionsOnboardingTitle, "BOTTOMLEFT", 0, -8)
+if type(mainFrame.optionsOnboardingHint.SetWidth) == "function" then
+    mainFrame.optionsOnboardingHint:SetWidth(280)
+end
+
+mainFrame.optionsReplayOnboardingButton = mainFrame.optionsReplayOnboardingButton or make_button(mainFrame.optionsAppearancePanel, 156, 24, "Replay Onboarding")
+mainFrame.optionsReplayOnboardingButton:SetPoint("TOPLEFT", mainFrame.optionsOnboardingHint, "BOTTOMLEFT", 0, -10)
+
 mainFrame.optionsRestockTitle = mainFrame.optionsRestockTitle or make_label(mainFrame.optionsStockSettingsPanel, "Restock Default", "GameFontHighlight")
 mainFrame.optionsRestockTitle:SetPoint("TOPLEFT", mainFrame.optionsStockSettingsPanel, "TOPLEFT", 16, -16)
 
@@ -1619,9 +1634,6 @@ mainFrame.optionsRepairThresholdInput:SetPoint("TOPLEFT", mainFrame.optionsLogsH
 
 mainFrame.optionsRepairThresholdSuffixText = mainFrame.optionsRepairThresholdSuffixText or make_label(mainFrame.optionsLogsHistoryPanel, "gold", "GameFontNormal")
 mainFrame.optionsRepairThresholdSuffixText:SetPoint("LEFT", mainFrame.optionsRepairThresholdInput, "RIGHT", 6, 0)
-
-mainFrame.optionsMuteSilvermoonCitizenToggle = mainFrame.optionsMuteSilvermoonCitizenToggle or make_checkbox(mainFrame.optionsLogsHistoryPanel, "Mute Silvermoon Citizen")
-mainFrame.optionsMuteSilvermoonCitizenToggle:SetPoint("TOPLEFT", mainFrame.optionsLogsHistoryPanel, "TOPLEFT", 560, -154)
 
 mainFrame.optionsLogsHistorySaveButton = mainFrame.optionsLogsHistorySaveButton or make_button(mainFrame.optionsLogsHistoryPanel, 104, 28, "Save Settings")
 mainFrame.optionsLogsHistorySaveButton:SetPoint("TOPLEFT", mainFrame.optionsLedgerRetentionButton, "BOTTOMLEFT", 0, -24)
@@ -2058,6 +2070,12 @@ function mainFrame:RefreshAppearanceControls()
     if self.optionsMinimapToggle and type(self.optionsMinimapToggle.SetChecked) == "function" then
         self.optionsMinimapToggle:SetChecked(self.appearanceShowMinimapButton ~= false)
     end
+    if self.optionsMuteSilvermoonCitizenToggle and type(self.optionsMuteSilvermoonCitizenToggle.SetChecked) == "function" then
+        local logsHistorySettings = bankLedger and type(bankLedger.GetSettings) == "function"
+            and bankLedger.GetSettings(current_db())
+            or (((current_db() or {}).ui or {}).logsHistorySettings or {})
+        self.optionsMuteSilvermoonCitizenToggle:SetChecked(logsHistorySettings.muteSilvermoonCitizen == true)
+    end
     self.isRefreshingAppearanceControls = false
 end
 
@@ -2169,6 +2187,17 @@ function mainFrame:SetShowMinimapButton(isShown)
     refresh_after_appearance_change()
 end
 
+function mainFrame:SetMuteSilvermoonCitizen(isMuted)
+    local db = current_db()
+    local settings = bankLedger and type(bankLedger.GetSettings) == "function"
+        and bankLedger.GetSettings(db)
+        or (((db or {}).ui or {}).logsHistorySettings or {})
+    settings.muteSilvermoonCitizen = isMuted == true
+    self:RefreshLogsHistoryControls()
+    self:RefreshAppearanceControls()
+    return settings.muteSilvermoonCitizen
+end
+
 local function adjust_appearance_value(getter, setter, delta)
     local currentValue = getter()
     setter(currentValue + delta)
@@ -2261,6 +2290,24 @@ if mainFrame.optionsMinimapToggle then
             return
         end
         mainFrame:SetShowMinimapButton(toggle:GetChecked() == true)
+    end)
+end
+
+if mainFrame.optionsMuteSilvermoonCitizenToggle then
+    mainFrame.optionsMuteSilvermoonCitizenToggle:SetScript("OnClick", function(toggle)
+        if mainFrame.isRefreshingAppearanceControls then
+            return
+        end
+        mainFrame:SetMuteSilvermoonCitizen(toggle:GetChecked() == true)
+    end)
+end
+
+if mainFrame.optionsReplayOnboardingButton then
+    mainFrame.optionsReplayOnboardingButton:SetScript("OnClick", function()
+        mainFrame:OpenOnboarding("manager", {
+            auto = false,
+            reason = "options_replay",
+        })
     end)
 end
 
@@ -2594,6 +2641,7 @@ function mainFrame:SetOptionsTab(tabKey)
     self.optionsActiveTab = nextTab
 
     set_frame_shown(self.optionsAppearancePanel, nextTab == "APPEARANCE")
+    set_frame_shown(self.optionsMuteSilvermoonCitizenToggle, nextTab == "APPEARANCE")
     set_frame_shown(self.optionsStockSettingsPanel, nextTab == "STOCK")
     set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
     set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")
@@ -2627,6 +2675,215 @@ for _, button in ipairs(mainFrame.optionsTabButtons or {}) do
     button:SetScript("OnClick", function(selfButton)
         mainFrame:SetOptionsTab(selfButton.key)
     end)
+end
+
+function mainFrame:EnsureOnboardingModal()
+    if self.onboardingModal then
+        return self.onboardingModal
+    end
+
+    local themeState = mainFrameShell.GetTheme()
+    local modal = _G.CreateFrame("Frame", nil, self.content, "BackdropTemplate")
+    modal:SetSize(548, 360)
+    modal:SetPoint("CENTER", self.content, "CENTER", 0, 0)
+    modal:EnableMouse(true)
+    apply_surface_variant(modal, "modal-sheet")
+    modal:Hide()
+    self:RegisterModalFrame(modal, 24, "FULLSCREEN_DIALOG")
+
+    modal.titleText = make_label(modal, "First-Run Onboarding", "GameFontHighlight")
+    modal.titleText:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
+
+    modal.progressText = make_label(modal, "", "GameFontHighlightSmall")
+    modal.progressText:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -18, -18)
+
+    modal.stepTitleText = make_label(modal, "", "GameFontHighlightLarge")
+    modal.stepTitleText:SetPoint("TOPLEFT", modal.titleText, "BOTTOMLEFT", 0, -18)
+
+    modal.stepDescriptionText = make_label(modal, "", "GameFontHighlightSmall")
+    modal.stepDescriptionText:SetPoint("TOPLEFT", modal.stepTitleText, "BOTTOMLEFT", 0, -14)
+    if type(modal.stepDescriptionText.SetWidth) == "function" then
+        modal.stepDescriptionText:SetWidth(512)
+    end
+    if type(modal.stepDescriptionText.SetJustifyH) == "function" then
+        modal.stepDescriptionText:SetJustifyH("LEFT")
+    end
+    if type(modal.stepDescriptionText.SetWordWrap) == "function" then
+        modal.stepDescriptionText:SetWordWrap(true)
+    end
+
+    modal.primaryActionButton = make_button(modal, 164, 24, "")
+    modal.primaryActionButton:SetPoint("BOTTOMLEFT", modal, "BOTTOMLEFT", 18, 18)
+
+    modal.backButton = make_button(modal, 80, 24, "Back")
+    modal.backButton:SetPoint("LEFT", modal.primaryActionButton, "RIGHT", 8, 0)
+
+    modal.nextButton = make_button(modal, 96, 24, "Next")
+    modal.nextButton:SetPoint("LEFT", modal.backButton, "RIGHT", 8, 0)
+
+    modal.skipButton = make_button(modal, 80, 24, "Skip")
+    modal.skipButton:SetPoint("RIGHT", modal, "RIGHT", -106, 0)
+
+    modal.doNotShowAgainButton = make_button(modal, 164, 24, "Do Not Show Again")
+    modal.doNotShowAgainButton:SetPoint("RIGHT", modal, "RIGHT", -18, 0)
+
+    apply_surface_variant(modal, "modal-sheet")
+    apply_button_variant(modal.primaryActionButton, "primary")
+    apply_button_variant(modal.backButton, "secondary")
+    apply_button_variant(modal.nextButton, "primary")
+    apply_button_variant(modal.skipButton, "secondary")
+    apply_button_variant(modal.doNotShowAgainButton, "secondary")
+
+    if themeState and themeState.tokens then
+        set_label_color(modal.titleText, themeState.tokens.header)
+        set_label_color(modal.progressText, themeState.tokens.textMuted)
+        set_label_color(modal.stepTitleText, themeState.tokens.header)
+        set_label_color(modal.stepDescriptionText, themeState.tokens.text)
+    end
+
+    modal.backButton:SetScript("OnClick", function()
+        self.onboardingStepIndex = math.max(1, (self.onboardingStepIndex or 1) - 1)
+        self.onboardingCurrentStep = (self.onboardingSteps or {})[self.onboardingStepIndex]
+        self:RenderOnboardingStep()
+    end)
+    modal.nextButton:SetScript("OnClick", function()
+        self:AdvanceOnboardingStep()
+    end)
+    modal.skipButton:SetScript("OnClick", function()
+        self:CloseOnboarding()
+    end)
+    modal.doNotShowAgainButton:SetScript("OnClick", function()
+        local onboarding = ns.modules.onboarding
+        if onboarding and type(onboarding.MarkDoNotShowAgain) == "function" then
+            onboarding.MarkDoNotShowAgain(current_db(), self.onboardingFlowKey)
+        end
+        self:CloseOnboarding()
+    end)
+    modal.primaryActionButton:SetScript("OnClick", function()
+        self:RunOnboardingPrimaryAction()
+    end)
+
+    self.onboardingModal = modal
+    return self.onboardingModal
+end
+
+function mainFrame:RenderOnboardingStep()
+    local modal = self:EnsureOnboardingModal()
+    local steps = self.onboardingSteps or {}
+    local stepCount = #steps
+    local stepIndex = math.max(1, math.min(tonumber(self.onboardingStepIndex or 1) or 1, math.max(stepCount, 1)))
+    local step = steps[stepIndex] or {}
+
+    self.onboardingStepIndex = stepIndex
+    self.onboardingCurrentStep = step
+
+    modal.titleText:SetText("First-Run Onboarding")
+    modal.progressText:SetText(string.format("Step %d of %d", stepIndex, math.max(stepCount, 1)))
+    modal.stepTitleText:SetText(step.title or "Welcome")
+    modal.stepDescriptionText:SetText(step.description or "")
+    modal.primaryActionButton.labelText:SetText(step.primaryActionLabel or "Open")
+    modal.nextButton.labelText:SetText(stepIndex >= stepCount and "Finish" or "Next")
+
+    set_frame_shown(modal.primaryActionButton, tostring(step.primaryActionLabel or "") ~= "")
+    set_frame_shown(modal.backButton, stepIndex > 1)
+    set_frame_shown(modal.nextButton, stepCount > 0)
+    set_frame_shown(modal.skipButton, true)
+    set_frame_shown(modal.doNotShowAgainButton, true)
+end
+
+function mainFrame:OpenOnboarding(flowKey, options)
+    local onboarding = ns.modules.onboarding
+    local steps = onboarding and type(onboarding.GetSteps) == "function" and onboarding.GetSteps(flowKey) or {}
+    if type(steps) ~= "table" or #steps == 0 then
+        return nil
+    end
+
+    if flowKey == "requestOnly" then
+        self:ShowRequestOnly()
+    else
+        self:ShowDashboard()
+    end
+
+    local modal = self:EnsureOnboardingModal()
+    self.onboardingFlowKey = flowKey
+    self.onboardingSteps = steps
+    self.onboardingStepIndex = 1
+    self.onboardingCurrentStep = steps[1]
+    self.onboardingOpenOptions = type(options) == "table" and options or {}
+
+    self:RenderOnboardingStep()
+    modal:Show()
+    self:BringToFront(modal)
+    return modal
+end
+
+function mainFrame:AdvanceOnboardingStep()
+    local steps = self.onboardingSteps or {}
+    local stepCount = #steps
+    if stepCount == 0 then
+        self:CloseOnboarding()
+        return nil
+    end
+
+    if (self.onboardingStepIndex or 1) >= stepCount then
+        local onboarding = ns.modules.onboarding
+        if onboarding and type(onboarding.MarkCompleted) == "function" then
+            onboarding.MarkCompleted(current_db(), self.onboardingFlowKey)
+        end
+        self:CloseOnboarding()
+        return nil
+    end
+
+    self.onboardingStepIndex = (self.onboardingStepIndex or 1) + 1
+    self.onboardingCurrentStep = steps[self.onboardingStepIndex]
+    self:RenderOnboardingStep()
+    return self.onboardingStepIndex
+end
+
+function mainFrame:CloseOnboarding()
+    if self.onboardingModal then
+        self.onboardingModal:Hide()
+    end
+
+    self.onboardingFlowKey = nil
+    self.onboardingSteps = nil
+    self.onboardingStepIndex = nil
+    self.onboardingCurrentStep = nil
+    self.onboardingOpenOptions = nil
+    return self.onboardingModal
+end
+
+function mainFrame:RunOnboardingPrimaryAction()
+    local step = self.onboardingCurrentStep or {}
+    if step.targetView == "OPTIONS" then
+        self:ShowDashboard()
+        self:SelectView("OPTIONS")
+        if step.optionsTab then
+            self:SetOptionsTab(step.optionsTab)
+        end
+        return self.activeView
+    end
+
+    if step.targetView == "REQUESTS" and self.onboardingFlowKey == "requestOnly" then
+        self:ShowRequestOnly()
+        if step.primaryAction == "open_request_wizard" and type(self.OpenRequestWizard) == "function" then
+            self:OpenRequestWizard()
+        end
+        return self.activeView
+    end
+
+    if step.targetView == "REQUESTS" then
+        self:ShowDashboard()
+        self:SelectView("REQUESTS")
+        return self.activeView
+    end
+
+    if step.targetView == "DASHBOARD" then
+        self:ShowDashboard()
+        return self.activeView
+    end
+
+    return nil
 end
 
 function mainFrame:GetBankLedgerFilters()
@@ -3541,6 +3798,9 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.requestWizardModal, "modal-sheet")
     apply_surface_variant(self.requestDetailsModal, "modal-sheet")
     apply_surface_variant(self.historyDetailsModal, "modal-sheet")
+    if self.onboardingModal then
+        apply_surface_variant(self.onboardingModal, "modal-sheet")
+    end
     apply_surface_variant(self.requestCreatePanel, "panel")
     apply_surface_variant(self.minimumsPanel, "panel-flat")
     if self.minimumsPanel.transparentActions == true and type(self.minimumsPanel.SetBackdrop) == "function" then
@@ -3585,6 +3845,12 @@ function mainFrame:ApplyTheme()
     set_label_color(self.minimumEmptyStateText, theme.tokens.textMuted)
     set_label_color(self.sidebarIdentityNameText, theme.tokens.header)
     set_label_color(self.sidebarIdentityGuildText, theme.tokens.textMuted)
+    if self.onboardingModal then
+        set_label_color(self.onboardingModal.titleText, theme.tokens.header)
+        set_label_color(self.onboardingModal.progressText, theme.tokens.textMuted)
+        set_label_color(self.onboardingModal.stepTitleText, theme.tokens.header)
+        set_label_color(self.onboardingModal.stepDescriptionText, theme.tokens.text)
+    end
 
     for _, card in ipairs(self.dashboardCards) do
         apply_surface_variant(card, "metric-card-flat")
@@ -3835,6 +4101,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.optionsShellOpacityIncreaseButton, "icon")
     apply_button_variant(self.optionsModalOpacityDecreaseButton, "icon")
     apply_button_variant(self.optionsModalOpacityIncreaseButton, "icon")
+    apply_button_variant(self.optionsReplayOnboardingButton, "secondary")
     for _, button in ipairs(self.optionsTabButtons or {}) do
         apply_button_variant(button, button.key == self.optionsActiveTab and "primary" or "tab")
         button.gbmTabStyle = "segmented-soft"
@@ -3872,6 +4139,13 @@ function mainFrame:ApplyTheme()
     apply_surface_variant(self.requestWizardPrimaryPanel, "panel")
     apply_surface_variant(self.requestWizardPreviewPanel, "panel-alt")
     apply_surface_variant(self.bankLedgerPanel, "panel-flat")
+    if self.onboardingModal then
+        apply_button_variant(self.onboardingModal.primaryActionButton, "primary")
+        apply_button_variant(self.onboardingModal.backButton, "secondary")
+        apply_button_variant(self.onboardingModal.nextButton, "primary")
+        apply_button_variant(self.onboardingModal.skipButton, "secondary")
+        apply_button_variant(self.onboardingModal.doNotShowAgainButton, "secondary")
+    end
     apply_button_variant(self.requestWizardBackButton, "secondary")
     apply_button_variant(self.requestWizardNextButton, "primary")
     apply_button_variant(self.requestWizardSubmitButton, "primary")
@@ -4380,9 +4654,9 @@ function mainFrame:RefreshView()
             end
         end
         self.aboutNameText:SetText("Guild Bank Manager")
-        self.aboutVersionText:SetText(string.format("Version %s", ABOUT_VERSION))
-        self.aboutAuthorText:SetText(string.format("Guild: %s", guildName))
-        self.aboutGuildText:SetText("")
+        self.aboutVersionText:SetText(string.format("Version %s (%s)", ABOUT_VERSION, ABOUT_BUILD_STAMP))
+        self.aboutAuthorText:SetText("Author: Zirleficent-Stormrage")
+        self.aboutGuildText:SetText(string.format("Guild: %s", guildName))
         self.aboutDescriptionText:SetText("")
         self.aboutSlashHintText:SetText("/gbm help")
         bodyText = ""

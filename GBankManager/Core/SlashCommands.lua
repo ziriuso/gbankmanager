@@ -511,13 +511,45 @@ local function open_request_wizard(mainFrame)
     end
 end
 
-local function open_access_ui(mainFrame, accessProfile, requestOnlyOpensWizard)
+local function maybe_open_onboarding(mainFrame, accessProfile, reason)
+    if type(mainFrame) ~= "table" or type(mainFrame.OpenOnboarding) ~= "function" then
+        return false
+    end
+
+    local onboarding = ns.modules.onboarding
+    if type(onboarding) ~= "table" or type(onboarding.GetFlowForAccessProfile) ~= "function" then
+        return false
+    end
+
+    local flowKey = onboarding.GetFlowForAccessProfile(accessProfile)
+    if flowKey == nil or type(onboarding.ShouldAutoOpen) ~= "function" then
+        return false
+    end
+
+    local store = ns.modules.store or ns.data.store
+    local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
+    if onboarding.ShouldAutoOpen(db, flowKey) ~= true then
+        return false
+    end
+
+    mainFrame:OpenOnboarding(flowKey, {
+        auto = true,
+        reason = reason,
+    })
+    return true
+end
+
+local function open_access_ui(mainFrame, accessProfile, requestOnlyOpensWizard, reason)
     if not mainFrame then
         return
     end
 
     if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
         mainFrame:ShowBlockedAccess("Access blocked")
+        return
+    end
+
+    if maybe_open_onboarding(mainFrame, accessProfile, reason) then
         return
     end
 
@@ -534,20 +566,29 @@ local function open_access_ui(mainFrame, accessProfile, requestOnlyOpensWizard)
     end
 end
 
+local function open_accessible_ui(reason, requestOnlyOpensWizard)
+    local mainFrame = ns.modules.mainFrame
+    if type(mainFrame) ~= "table" then
+        return
+    end
+
+    local auth = ns.modules.auth or ns.modules.permissions
+    local store = ns.modules.store or ns.data.store
+    local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
+    local context = auth and type(auth.GetLivePlayerContext) == "function" and auth.GetLivePlayerContext(db) or {}
+    local policy = store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or db.auth
+    local accessProfile = auth and type(auth.GetEffectiveAccessProfile) == "function" and auth.GetEffectiveAccessProfile(context, policy) or "full_shell"
+
+    open_access_ui(mainFrame, accessProfile, requestOnlyOpensWizard == true, reason)
+end
+
 local function show_help()
     push_chat_line("GBankManager commands:")
     push_chat_line("/gbm - Open the UI you have access to.")
-    push_chat_line("/gbm help - Show all available commands.")
+    push_chat_line("/gbm help - Show player-facing commands.")
     push_chat_line("/gbm ui - Open the main addon UI.")
     push_chat_line("/gbm request - Open the request workflow.")
     push_chat_line("/gbm scan - Scan the guild bank and ledger.")
-    push_chat_line("/gbm debug quality <itemID> - Print bundled and live crafted-quality resolution details.")
-    push_chat_line("/gbm debug atlas - Open a visual crafted-quality atlas sampler.")
-    push_chat_line("/gbm debug render <itemID> - Print active table row and visible texture diagnostics.")
-    push_chat_line("/gbm debug request <itemID> - Print request wizard selector icon diagnostics.")
-    push_chat_line("/gbm debug ledger - Print guild-bank ledger scanner state and raw Blizzard log samples.")
-    push_chat_line("/gbm test smoke - Run the in-game smoke test.")
-    push_chat_line("/gbm test unit - Run the in-game unit checks.")
     push_chat_line("/gbm auth export|pull|push|apply - Manage the guild policy string.")
 end
 
@@ -690,7 +731,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
         push_chat_line("GBankManager unknown test command.")
         return "unknown_test_command"
     elseif command == "ui" and mainFrame then
-        open_access_ui(mainFrame, accessProfile, false)
+        open_accessible_ui("slash_ui", false)
     elseif command == "request" and mainFrame then
         if accessProfile == "blocked" and type(mainFrame.ShowBlockedAccess) == "function" then
             mainFrame:ShowBlockedAccess("Access blocked")
@@ -709,7 +750,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     elseif command == "scan" and type(scanner) == "table" then
         scanner.BeginScan()
     elseif command == "" and mainFrame then
-        open_access_ui(mainFrame, accessProfile, accessProfile ~= "full_shell")
+        open_accessible_ui("slash_default", accessProfile ~= "full_shell")
     elseif command ~= "" then
         show_help()
         return "unknown_command"
@@ -718,6 +759,7 @@ end
 
 slash.command = _G.SlashCmdList.GBANKMANAGER
 slash.alias = _G.SLASH_GBANKMANAGER1
+slash.OpenAccessibleUI = open_accessible_ui
 slash.StartScan = slash.command
 
 ns.modules.slash = slash

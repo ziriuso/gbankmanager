@@ -16,10 +16,12 @@ local mainFrame = env.mainFrame
 local slash = env.slash
 local scanner = env.scanner
 local auth = env.ns.modules.auth or env.ns.modules.permissions
+local onboarding = env.ns.modules.onboarding
 
 local originalGetLivePlayerContext = auth.GetLivePlayerContext
 local originalGetEffectiveAccessProfile = auth.GetEffectiveAccessProfile
 local originalBeginScan = scanner.BeginScan
+local originalShouldAutoOpen = onboarding.ShouldAutoOpen
 
 local scanCalls = 0
 scanner.BeginScan = function()
@@ -47,6 +49,10 @@ auth.GetEffectiveAccessProfile = function()
     return "request_only"
 end
 
+onboarding.ShouldAutoOpen = function()
+    return false
+end
+
 if mainFrame.requestWizardModal then
     mainFrame.requestWizardModal:Hide()
 end
@@ -54,6 +60,44 @@ slash.command("")
 _G.C_Timer.RunPending()
 assert.equal("REQUESTS", mainFrame.activeView, "/gbm should switch to Requests for request-only access")
 assert.truthy(mainFrame.requestWizardModal:IsShown(), "/gbm should open the request wizard for request-only access")
+
+local originalOpenOnboarding = mainFrame.OpenOnboarding
+local openedFlow = nil
+mainFrame.OpenOnboarding = function(_, flowKey, options)
+    openedFlow = {
+        flowKey = flowKey,
+        reason = options and options.reason,
+    }
+end
+
+onboarding.ShouldAutoOpen = function(_, flowKey)
+    return flowKey == "manager"
+end
+
+auth.GetEffectiveAccessProfile = function()
+    return "full_shell"
+end
+
+openedFlow = nil
+slash.command("")
+assert.equal("manager", openedFlow and openedFlow.flowKey, "/gbm should auto-open manager onboarding for a first-run full-shell user")
+assert.equal("slash_default", openedFlow and openedFlow.reason, "/gbm should report the default slash-open reason")
+
+onboarding.ShouldAutoOpen = function(_, flowKey)
+    return flowKey == "requestOnly"
+end
+
+auth.GetEffectiveAccessProfile = function()
+    return "request_only"
+end
+
+openedFlow = nil
+slash.command("")
+assert.equal("requestOnly", openedFlow and openedFlow.flowKey, "/gbm should auto-open request onboarding for a first-run request-only user")
+assert.equal("slash_default", openedFlow and openedFlow.reason, "/gbm should report the default slash-open reason for request-only onboarding")
+
+mainFrame.OpenOnboarding = originalOpenOnboarding
+onboarding.ShouldAutoOpen = originalShouldAutoOpen
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 slash.command("help")
@@ -63,13 +107,8 @@ assert.truthy(string.find(helpText, "/gbm help", 1, true) ~= nil, "/gbm help sho
 assert.truthy(string.find(helpText, "/gbm scan", 1, true) ~= nil, "/gbm help should include the scan command")
 assert.truthy(string.find(helpText, "/gbm ui", 1, true) ~= nil, "/gbm help should include the full-shell command")
 assert.truthy(string.find(helpText, "/gbm request", 1, true) ~= nil, "/gbm help should include the request-only command")
-assert.truthy(string.find(helpText, "/gbm test smoke", 1, true) ~= nil, "/gbm help should include the smoke test command")
-assert.truthy(string.find(helpText, "/gbm test unit", 1, true) ~= nil, "/gbm help should include the unit test command")
-assert.truthy(string.find(helpText, "/gbm debug quality", 1, true) ~= nil, "/gbm help should include the crafted-quality debug command")
-assert.truthy(string.find(helpText, "/gbm debug atlas", 1, true) ~= nil, "/gbm help should include the crafted-quality atlas sampler command")
-assert.truthy(string.find(helpText, "/gbm debug render", 1, true) ~= nil, "/gbm help should include the table render diagnostics command")
-assert.truthy(string.find(helpText, "/gbm debug request", 1, true) ~= nil, "/gbm help should include the request wizard diagnostics command")
-assert.truthy(string.find(helpText, "/gbm debug ledger", 1, true) ~= nil, "/gbm help should include the guild-bank ledger diagnostics command")
+assert.truthy(string.find(helpText, "/gbm test", 1, true) == nil, "/gbm help should not expose internal test commands")
+assert.truthy(string.find(helpText, "/gbm debug", 1, true) == nil, "/gbm help should not expose internal debug commands")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
 local atlasSampler = slash.command("debug atlas")

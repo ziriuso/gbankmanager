@@ -24,9 +24,12 @@ assert.truthy((mainFrame.aboutCrestTexture.texture or "") ~= "", "about should a
 assert.equal("Guild Bank Manager", mainFrame.aboutNameText:GetText(), "about should show the addon name")
 assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "Version", 1, true) ~= nil, "about should show a version line")
 assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "v0.9.0-beta.3", 1, true) ~= nil, "about should show the latest tagged release identifier")
-assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "(", 1, true) == nil, "about should drop the runtime build stamp from the visible version line")
-assert.equal("Guild: Guild Testers", mainFrame.aboutAuthorText:GetText(), "about should replace the ownership line with the guild only")
-assert.equal("", mainFrame.aboutGuildText:GetText() or "", "about should remove the extra character and realm identity line")
+assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "(", 1, true) ~= nil, "about should restore the local build stamp on the visible version line")
+assert.equal("Author: Zirleficent-Stormrage", mainFrame.aboutAuthorText:GetText(), "about should restore the author line")
+assert.equal("Guild: Guild Testers", mainFrame.aboutGuildText:GetText() or "", "about should keep the guild on its own line")
+local guildPoint = (mainFrame.aboutGuildText.points or {})[1] or {}
+local guildOffsetY = guildPoint[5]
+assert.truthy((guildOffsetY or 0) <= -16, "about should leave extra vertical spacing between author and guild")
 assert.equal("", mainFrame.aboutDescriptionText:GetText() or "", "about should remove the support note description text")
 assert.equal("/gbm help", mainFrame.aboutSlashHintText:GetText(), "about should trim the slash hint copy")
 assert.equal("", mainFrame.viewSubtitle:GetText() or "", "about should remove the old descriptive subtitle text")

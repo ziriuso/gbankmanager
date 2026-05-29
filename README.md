@@ -21,7 +21,7 @@ Local tests use a Lua 5.1-compatible runner to load the addon in `.toc` order wi
 - The shared shell modernization pass now follows the approved no-art-pack `Hybrid Modern` direction: a native-paneled shell, soft distinct nav buttons with stronger selected state, a cleaner toolbar-band header, flatter dark-band content sections, separate metric cards, structured tables, slimmer actions, segmented tabs, cleaner floating-sheet modals, distinct colored themes, dense-but-clean spacing, and a more aggressively simplified chrome pass that removes nested line treatment, drops most full backdrop borders on flat shell surfaces, and relies on separators plus accent rails instead of boxes-within-boxes
 - The current shell follow-up also normalizes interactive control contrast: neutral action buttons now sit forward from panel backgrounds more consistently, select-style dropdown triggers now use a dedicated higher-contrast control treatment, export CTAs share one primary look, and dashboard `Quick Actions` now allow wrapped labels instead of overflowing longer text
 - `Options` now includes a dedicated `Stock Settings` tab that holds both `Restock Default` and a configurable `Critical Shortage Threshold`, where critical means current stock is at or below the chosen percentage of minimum
-- `Options` now also includes a dedicated `Data` tab that controls guild-bank ledger retention, audit-history retention, the configurable `Scan Interval`, a repair-classification threshold for money-log withdrawals, and a `Mute Silvermoon Citizen` toggle. Saving that panel now gives visible confirmation, that one scan interval now drives both the guild-bank-open auto-scan throttle and direct ledger rescans when the inventory snapshot is still fresh, and that same panel now owns irreversible local-data cleanup actions behind confirmation prompts.
+- `Options` now also includes a dedicated `Data` tab that controls guild-bank ledger retention, audit-history retention, the configurable `Scan Interval`, and a repair-classification threshold for money-log withdrawals. Saving that panel now gives visible confirmation, that one scan interval now drives both the guild-bank-open auto-scan throttle and direct ledger rescans when the inventory snapshot is still fresh, and that same panel now owns irreversible local-data cleanup actions behind confirmation prompts. `Mute Silvermoon Citizen` now lives under `Options -> Appearance` and saves immediately when toggled.
 - Dashboard `Top 10 Most Used` is now driven by bank-ledger withdrawal rows instead of the older stocking-history fallback.
 - Recurring stock minimum helpers with a modal-based add/edit flow and procurement-planning export workflows
 - Member request submission with explicit approval workflow and no auto-approval path
@@ -109,7 +109,8 @@ Current UI ownership is intentionally split across:
 10. Use `/gbm` to open the UI you have access to:
    - full-shell users land in the officer shell
    - request-only users land directly in the request workflow
-11. Use `/gbm help` to print the currently supported slash commands in chat.
+   - first-run users now see a role-aware walkthrough when opening from `/gbm` or the minimap button
+11. Use `/gbm help` to print the currently supported player-facing slash commands in chat.
 12. Use `/gbm ui` to open the accessible shell without forcing a scan.
 13. Use `/gbm request` to open the request workflow directly.
 14. Use `/gbm scan` while the guild bank is open to exercise the scan flow.
@@ -142,9 +143,7 @@ The next planned work after the completed pre-polish workflow block is:
 
 - Passive guild-bank ledger refresh now follows the working `GuildBankLedger` self-chaining cadence more closely; continue live validation around new item and money rows after `/reload` with the bank already open.
 - `/gbm debug ledger` is available for ledger investigations; run it while the guild bank is open on `Log` and `Money Log` if live Blizzard rows are visible but GBankManager imports `0 item rows, 0 money rows`. If older local history or fingerprints are suspect, clear only `Guild Bank Log Data` from `Options -> Data` and rescan from a clean ledger.
-- `About` still needs the `Author: Zirleficent-Stormrage` line restored above `Guild`.
-- `About` still needs the build date or timestamp restored beside the version in parentheses.
-- `/gbm help` still needs one copy-polish pass on the visible command list.
+- Live/manual sync sanity still needs a pass against real guild peers after install.
 
 ### Recently Completed
 
@@ -165,7 +164,8 @@ The next planned work after the completed pre-polish workflow block is:
 - Exports now shows `Excess Stock`, uses `None` for missing alternate stock, renders crafted-quality icons in the visible `Item Tier` column, and emits the newer Auctionator shopping-list line format while keeping numeric tier values for CSV-style outputs.
 - Exports now presents the supported outputs as four action cards: `Auctionator`, `TSM`, `CSV`, and `Shopping List`, while keeping the generated formats unchanged.
 - The shell navigation is now ordered as `Dashboard`, `Inventory`, `Minimums`, `Requests`, `Exports`, `History`, `Bank Ledger`, `Options`, and `About`, with refreshed iconography for each section.
-- The `About` panel now keeps trimmed semantic version, guild-only identity, and `/gbm help` copy instead of the older ownership and runtime-build text.
+- The `About` panel now shows the tagged version plus a local build stamp, restores `Author: Zirleficent-Stormrage`, keeps `Guild` on its own line with extra spacing, and retains the `/gbm help` hint.
+- First-run onboarding now uses separate manager and request-only walkthroughs, auto-opens from `/gbm` or the minimap button until completed or suppressed, and can be replayed by full-shell users from `Options -> Appearance`.
 - Dashboard metric cards and export action cards now carry dedicated large icons, and the export cards now use `Generate` or `Open List` CTA labels closer to the target mockup.
 - Dashboard `Critical Shortages` now reads from the configurable stock threshold instead of always counting every below-minimum row as critical.
 - The near-literal mockup fidelity pass now also drives the live shell palette and chrome more aggressively: the `Default` preset is darker and bluer, nav buttons carry left accent rails, dashboard quick actions use icon-led primary buttons, and shared sliders now render through a more deliberate track/thumb treatment instead of the earlier plain boxed controls.
