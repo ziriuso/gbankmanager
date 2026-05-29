@@ -400,6 +400,7 @@ local function run_request_sync_contract(db)
         type = "REQUEST_CREATED",
         updatedAt = 301,
         payload = {
+            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
                 characterKey = "Stormrage-MemberOne",
                 guildRankIndex = 2,
@@ -434,6 +435,7 @@ local function run_request_sync_contract(db)
         updatedAt = 302,
         payload = {
             action = "APPROVE",
+            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
                 characterKey = "Stormrage-OfficerOne",
                 guildRankIndex = 1,

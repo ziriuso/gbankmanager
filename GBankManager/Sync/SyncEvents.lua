@@ -37,6 +37,22 @@ local function current_policy(db)
     return store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or (db or {}).auth or {}
 end
 
+local function active_guild_key(db)
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+        return dbGuildKey
+    end
+
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    return tostring(context.guildName or "Unknown")
+end
+
 local function report_sync_status(message)
     if type(transport.ReportStatus) == "function" then
         transport.ReportStatus(message)
@@ -163,6 +179,15 @@ local function actor_matches_sender(actorContext, sender)
     end
 
     return true
+end
+
+local function request_targets_active_guild(db, guildKey)
+    guildKey = tostring(guildKey or "")
+    if guildKey == "" then
+        return false
+    end
+
+    return guildKey == active_guild_key(db)
 end
 
 local function request_is_newer(remoteRequest, localRequest)
@@ -332,6 +357,11 @@ local function handle_request_created(db, payload, sender)
     local request = type(payload.request) == "table" and payload.request or nil
     local localPolicy = current_policy(db)
 
+    if not request_targets_active_guild(db, payload.guildKey) then
+        report_request_sync_ignored("CREATE", sender)
+        return false
+    end
+
     if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
         report_request_sync_ignored("CREATE", sender)
         return false
@@ -378,6 +408,11 @@ local function handle_request_updated(db, payload, sender)
         EDIT = "request_edit",
         DELETE = "request_delete",
     }
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        report_request_sync_ignored(action, sender)
+        return false
+    end
 
     if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
         report_request_sync_ignored(action, sender)
@@ -516,12 +551,25 @@ function syncEvents.HandleEvent(event, ...)
             return false
         end
 
-        ns.state.lastSyncMessage = codec.DecodeTable(payload)
+        local decodedMessage, receiveState
+        if type(transport.Receive) == "function" then
+            decodedMessage, receiveState = transport.Receive(payload, distribution, sender)
+        else
+            decodedMessage = codec.DecodeTable(payload)
+            receiveState = "complete"
+        end
+
+        if not decodedMessage then
+            return receiveState == "partial" or receiveState == "invalid"
+        end
+
+        ns.state.lastSyncMessage = decodedMessage
         ns.state.lastSyncMessage.distribution = distribution
         ns.state.lastSyncMessage.sender = sender
         local db = current_db()
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
-            return handle_auth_policy_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            report_sync_status("Ignored retired auth policy snapshot message.")
+            return false
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_CREATED" then

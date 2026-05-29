@@ -118,12 +118,14 @@ local encodedTablePayload = codec.EncodeTable({
             fulfillment = "OPEN",
             updatedAt = 77,
         },
+        guildKey = "Guild Testers",
     },
 })
 local decodedTablePayload = codec.DecodeTable(encodedTablePayload)
 assert.equal("REQUEST_CREATED", decodedTablePayload.type, "codec should preserve typed table payload messages")
 assert.equal("req-sync-1", decodedTablePayload.payload.request.requestId, "codec should decode nested table payload request ids")
 assert.equal("Stormrage-OfficerOne", decodedTablePayload.payload.actorContext.characterKey, "codec should decode nested actor contexts")
+assert.equal("Guild Testers", decodedTablePayload.payload.guildKey, "codec should preserve request guild identity inside the payload envelope")
 
 _G.AceCommStub.reset()
 local whisperPayload = transport.Send("WHISPER", "OfficerOne", {
@@ -169,6 +171,8 @@ local oversizedRequestMessage = {
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 8,
+            guildRankName = "Raider",
+            inGuild = true,
             isGuildMaster = false,
             name = "MemberOne",
         },
@@ -311,6 +315,7 @@ local chunkedRemoteRequestMessage = {
             updatedAt = 90,
             updatedBy = "MemberOne",
         },
+        guildKey = "Guild Testers",
     },
 }
 local chunkedRemoteRequestEncoded = codec.EncodeTable(chunkedRemoteRequestMessage)
@@ -336,6 +341,7 @@ local remoteRequestPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 91,
     payload = {
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 2,
@@ -368,6 +374,7 @@ local forgedRequestPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 92,
     payload = {
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 2,
@@ -399,6 +406,7 @@ local staleDuplicateCreatePayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 91,
     payload = {
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 2,
@@ -431,6 +439,7 @@ local missingUpdatePayload = codec.EncodeTable({
     updatedAt = 130,
     payload = {
         action = "APPROVE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -461,6 +470,7 @@ local staleUpdatePayload = codec.EncodeTable({
     updatedAt = 100,
     payload = {
         action = "APPROVE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -492,6 +502,7 @@ local invalidTransitionUpdatePayload = codec.EncodeTable({
     updatedAt = 140,
     payload = {
         action = "FULFILL",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -523,6 +534,7 @@ local immutableFieldMutationPayload = codec.EncodeTable({
     updatedAt = 141,
     payload = {
         action = "APPROVE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -569,6 +581,7 @@ local selfApprovalUpdatePayload = codec.EncodeTable({
     updatedAt = 160,
     payload = {
         action = "APPROVE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -599,6 +612,7 @@ local forgedCancelPayload = codec.EncodeTable({
     updatedAt = 161,
     payload = {
         action = "CANCEL",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -629,6 +643,7 @@ local authorCancelPayload = codec.EncodeTable({
     updatedAt = 162,
     payload = {
         action = "CANCEL",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 2,
@@ -674,6 +689,7 @@ local approveSyncPayload = codec.EncodeTable({
     updatedAt = 180,
     payload = {
         action = "APPROVE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -731,6 +747,7 @@ local deleteUpdatePayload = codec.EncodeTable({
     updatedAt = 171,
     payload = {
         action = "DELETE",
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-OfficerOne",
             guildRankIndex = 1,
@@ -761,6 +778,7 @@ local forgedSenderPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 150,
     payload = {
+        guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
             guildRankIndex = 2,
@@ -786,6 +804,36 @@ local forgedSenderAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", forg
 assert.truthy(not forgedSenderAccepted, "sync events should reject payloads whose actor context does not match the addon-message sender")
 assert.equal(requestCountBeforeForgedSender, #db.requests, "forged sender payloads should not append requests")
 assert.equal("GBankManager: Ignored synced request create from DifferentSender.", last_chat_message(), "rejected synced request creates should report chat feedback")
+
+local wrongGuildPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 151,
+    payload = {
+        guildKey = "Other Guild",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-wrong-guild-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2014,
+            itemName = "Wrong Guild Flask",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 151,
+        },
+    },
+})
+local wrongGuildAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", wrongGuildPayload, "WHISPER", "MemberOne")
+assert.truthy(not wrongGuildAccepted, "sync events should reject request traffic for a different active guild")
+assert.equal(requestCountBeforeForgedSender, #db.requests, "mismatched-guild request traffic should not append requests")
 
 local remoteAuthPayload = codec.EncodeTable({
     type = "AUTH_POLICY_SNAPSHOT",
@@ -817,16 +865,17 @@ local remoteAuthPayload = codec.EncodeTable({
         },
     },
 })
-_G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteAuthPayload, "GUILD", "GuildLead")
+local authAuditCountBefore = #(db.auditLog or {})
+local previousDefaultQuantity = (((db.ui or {}).minimumSettings or {}).defaultQuantity)
+local authSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteAuthPayload, "GUILD", "GuildLead")
+assert.truthy(not authSnapshotAccepted, "sync events should ignore retired auth policy snapshot traffic from addon comms")
 assert.truthy(
-    (db.auth.blacklist["Stormrage-Troublemaker"] and db.auth.blacklist["Stormrage-Troublemaker"].reason == "Blocked")
-        or db.auth.blacklistHashes[ns.modules.permissions.HashCharacterKey("Stormrage-Troublemaker")] == true,
-    "sync events should accept guildmaster auth policy snapshots"
+    (db.auth.blacklist["Stormrage-Troublemaker"] == nil)
+        and (db.auth.blacklistHashes[ns.modules.permissions.HashCharacterKey("Stormrage-Troublemaker")] ~= true),
+    "sync events should leave guild auth policy authority with Guild Info instead of addon comms"
 )
-assert.equal(275, db.ui.minimumSettings.defaultQuantity, "sync auth policy snapshots should also update the shared restock default")
-assert.equal("AUTH_POLICY_UPDATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "sync auth policy snapshots should append auth-policy history")
-assert.equal("GuildLead-Stormrage", ((db.auditLog or {})[#(db.auditLog or {})] or {}).actor, "sync auth policy history should attribute the remote updater")
-assert.equal("GBankManager: Synced auth policy from GuildLead.", last_chat_message(), "accepted synced auth policy snapshots should report chat feedback")
+assert.equal(previousDefaultQuantity, (((db.ui or {}).minimumSettings or {}).defaultQuantity), "ignored auth policy snapshots should not mutate shared restock defaults")
+assert.equal(authAuditCountBefore, #(db.auditLog or {}), "ignored auth policy snapshots should not append auth-policy history")
 
 local scanner = ns.modules.scanner
 local scannerCalls = 0

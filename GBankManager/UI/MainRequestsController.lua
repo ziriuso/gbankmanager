@@ -7,6 +7,7 @@ local mainRequestsController = ns.modules.mainRequestsController or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 local itemCatalog = ns.modules.itemCatalog or {}
 local itemDisplay = ns.modules.itemDisplay or {}
+local coordinator = ns.modules.syncCoordinator or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
@@ -68,6 +69,42 @@ local function access_profile(context, policy)
     end
 
     return "full_shell"
+end
+
+local function active_guild_key(db)
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+        return dbGuildKey
+    end
+
+    return tostring((current_context(db) or {}).guildName or "Unknown")
+end
+
+local function send_request_sync_message(db, transport, request, message)
+    if type(request) ~= "table" or type(message) ~= "table" or type(transport) ~= "table" or type(transport.Send) ~= "function" then
+        return 0
+    end
+
+    local recipients = type(coordinator.ResolveRequestRecipients) == "function"
+        and coordinator.ResolveRequestRecipients(db, request, ((message.payload or {}).actorContext), current_policy(db))
+        or {}
+
+    local sentCount = 0
+    for _, recipient in ipairs(recipients or {}) do
+        local target = tostring(recipient.target or recipient.name or "")
+        if target ~= "" then
+            transport.Send("WHISPER", target, message)
+            sentCount = sentCount + 1
+        end
+    end
+
+    return sentCount
 end
 
 local function actor_summary(context)
@@ -1505,12 +1542,13 @@ function mainRequestsController.Attach(mainFrame, options)
             self:SaveMinimumForApprovedRequest(request, approvalBankTab, actor)
         end
         if request and transport and type(transport.Send) == "function" then
-            transport.Send("GUILD", "GUILD", {
+            send_request_sync_message(db, transport, request, {
                 type = "REQUEST_UPDATED",
                 updatedAt = request.updatedAt or (_G.time and _G.time() or 0),
                 payload = {
                     action = action,
                     actorContext = actor,
+                    guildKey = active_guild_key(db),
                     note = note,
                     request = request,
                 },
@@ -1585,11 +1623,12 @@ function mainRequestsController.Attach(mainFrame, options)
         })
 
         if request and transport and type(transport.Send) == "function" then
-            transport.Send("GUILD", "GUILD", {
+            send_request_sync_message(db, transport, request, {
                 type = "REQUEST_CREATED",
                 updatedAt = request.updatedAt or (_G.time and _G.time() or 0),
                 payload = {
                     actorContext = context,
+                    guildKey = active_guild_key(db),
                     request = request,
                 },
             })

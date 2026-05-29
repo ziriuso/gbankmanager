@@ -274,6 +274,7 @@ local function run_sync_sender_guard()
         type = "REQUEST_CREATED",
         updatedAt = 77,
         payload = {
+            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
                 characterKey = "Stormrage-MemberOne",
                 guildRankIndex = 2,

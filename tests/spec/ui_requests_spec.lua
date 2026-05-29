@@ -70,6 +70,53 @@ local function assert_aligned(label, value, message)
     assert.equal(point_y(label), point_y(value), message .. " label and value should share one fixed row")
 end
 
+local function decode_outbound_sync_message(sentMessages, senderKey)
+    local transport = env.ns.modules.syncTransport
+    local decodedMessage
+    senderKey = tostring(senderKey or "ui-requests-test")
+
+    for _, sent in ipairs(sentMessages or {}) do
+        local message = type(transport.Receive) == "function" and transport.Receive(sent.payload, sent.distribution, senderKey) or nil
+        if type(message) == "table" then
+            decodedMessage = message
+        end
+    end
+
+    return decodedMessage
+end
+
+local function capture_request_sync_calls(callback)
+    local transport = env.ns.modules.syncTransport
+    local originalSend = transport.Send
+    local sendCalls = {}
+
+    transport.Send = function(distribution, target, message)
+        sendCalls[#sendCalls + 1] = {
+            distribution = distribution,
+            target = target,
+            message = message,
+        }
+
+        if type(originalSend) == "function" then
+            return originalSend(distribution, target, message)
+        end
+
+        return message
+    end
+
+    local ok, result = pcall(callback, sendCalls)
+    transport.Send = originalSend
+    if not ok then
+        error(result)
+    end
+
+    return sendCalls, result
+end
+
+local function current_runtime_db()
+    return env.ns.state.db or _G.GBankManagerDB or {}
+end
+
 _G.GBankManagerDB = _G.GBankManagerDB or {}
 _G.GBankManagerDB.ui = _G.GBankManagerDB.ui or {}
 _G.GBankManagerDB.ui.minimumItemCatalog = {
@@ -419,12 +466,12 @@ assert.truthy(not mainFrame.requestDetailsActionNoteLabel:IsShown(), "approved r
 assert.truthy(not mainFrame.requestDetailsActionNoteInput:IsShown(), "approved requests should not accept another decision note")
 assert.truthy(not mainFrame.requestDetailsFulfillButton:IsShown(), "request details should remove manual fulfill from the workflow")
 assert.equal(-366, point_y(mainFrame.requestDetailsCloseButton), "request details Close should stay on the workflow button row")
-assert.equal(1, #_G.GBankManagerDB.minimums, "approving a request should immediately save a minimum rule")
-assert.equal(243734, _G.GBankManagerDB.minimums[1].itemID, "approval-created minimum should use the request item id")
-assert.equal("Thalassian Phoenix Oil", _G.GBankManagerDB.minimums[1].itemName, "approval-created minimum should use the request item name")
-assert.equal(100, _G.GBankManagerDB.minimums[1].quantity, "approval-created minimum should use the requested quantity")
-assert.equal("Raid Buffer", _G.GBankManagerDB.minimums[1].tabName, "approval-created minimum should use the selected bank tab")
-assert.truthy(_G.GBankManagerDB.minimums[1].enabled == true, "approval-created minimum should be enabled")
+assert.equal(1, #(current_runtime_db().minimums or {}), "approving a request should immediately save a minimum rule")
+assert.equal(243734, ((current_runtime_db().minimums or {})[1] or {}).itemID, "approval-created minimum should use the request item id")
+assert.equal("Thalassian Phoenix Oil", ((current_runtime_db().minimums or {})[1] or {}).itemName, "approval-created minimum should use the request item name")
+assert.equal(100, ((current_runtime_db().minimums or {})[1] or {}).quantity, "approval-created minimum should use the requested quantity")
+assert.equal("Raid Buffer", ((current_runtime_db().minimums or {})[1] or {}).tabName, "approval-created minimum should use the selected bank tab")
+assert.truthy(((current_runtime_db().minimums or {})[1] or {}).enabled == true, "approval-created minimum should be enabled")
 
 mainFrame:OpenRequestDetailsModal("req-stale-tier")
 assert.equal(TRUSTED_ITEM_LINKS[241326], mainFrame.requestDetailsItemNameText:GetText(), "request details should restore bundled trusted hyperlinks when stale saved request data lacks them")
@@ -436,7 +483,7 @@ assert.equal("Not needed", mainFrame.requestDetailsDecisionNoteText:GetText(), "
 assert.truthy(not mainFrame.requestDetailsActionNoteLabel:IsShown(), "denied requests should not show a decision note editor")
 assert.truthy(not mainFrame.requestDetailsActionNoteInput:IsShown(), "denied requests should not accept another decision note")
 
-table.insert(_G.GBankManagerDB.requests, {
+table.insert((current_runtime_db().requests or {}), {
     requestId = "req-delete-target",
     requester = "RaiderDelete",
     requesterCharacterKey = "Stormrage-RaiderDelete",
@@ -454,11 +501,16 @@ mainFrame:ShowDashboard()
 mainFrame:SelectView("REQUESTS")
 mainFrame:OpenRequestDetailsModal("req-delete-target")
 assert.truthy(mainFrame.requestDetailsDeleteButton:IsShown(), "request admins should see a Delete action in request details when request-delete is allowed")
-mainFrame.requestDetailsDeleteButton:GetScript("OnClick")(mainFrame.requestDetailsDeleteButton)
+local requestDeleteCalls = capture_request_sync_calls(function()
+    mainFrame.requestDetailsDeleteButton:GetScript("OnClick")(mainFrame.requestDetailsDeleteButton)
+end)
 assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "deleting a request should close the request details modal")
 assert.equal(nil, mainFrame:SelectRequestById("req-delete-target"), "deleting a request should remove it from the saved request list")
-assert.equal(1, #_G.C_ChatInfo.sentMessages, "deleting a request should sync the request update to guild clients")
-assert.truthy(string.find(_G.C_ChatInfo.sentMessages[1].payload or "", "DELETE", 1, true) ~= nil, "request delete sync should send a delete action payload")
+assert.truthy(#requestDeleteCalls >= 1, "deleting a request should sync the request update to guild clients")
+assert.equal("REQUEST_UPDATED", ((((requestDeleteCalls[1] or {}).message) or {}).type), "request delete sync should keep the request-updated message type")
+assert.equal("DELETE", (((((requestDeleteCalls[1] or {}).message) or {}).payload or {}).action), "request delete sync should send a delete action payload")
+assert.equal("WHISPER", (requestDeleteCalls[1] or {}).distribution, "request delete sync should use targeted whisper delivery")
+assert.equal("Guild Testers", (((((requestDeleteCalls[1] or {}).message) or {}).payload or {}).guildKey), "request delete sync should carry the active guild identity inside the payload envelope")
 
 assert.equal("New Request", mainFrame.requestWorkflowCreateButton.labelText:GetText(), "request-only workflow should expose a wizard launch button")
 mainFrame.requestWorkflowCreateButton:GetScript("OnClick")(mainFrame.requestWorkflowCreateButton)
@@ -598,18 +650,45 @@ assert.equal("BOTTOMLEFT", (mainFrame.requestWizardSubmitButton.points[1] or {})
 assert.equal("BOTTOMLEFT", (mainFrame.requestWizardCancelButton.points[1] or {})[1], "request wizard Cancel should share the same left action rail baseline on review")
 assert.truthy((((mainFrame.requestWizardSubmitButton.points[1] or {})[4] or 0) > (((mainFrame.requestWizardBackButton.points[1] or {})[4] or 0))), "request wizard Submit should sit to the right of Back on review")
 assert.truthy((((mainFrame.requestWizardCancelButton.points[1] or {})[4] or 0) > (((mainFrame.requestWizardSubmitButton.points[1] or {})[4] or 0))), "request wizard Cancel should sit to the right of Submit on review")
+_G.GetNumGuildMembers = function()
+    return 3
+end
+_G.GetGuildRosterInfo = function(index)
+    if index == 1 then
+        return "GuildLead-Stormrage", "Guild Master", 0, 70, "Paladin", "Orgrimmar", "", "", true, 0, nil, 0, 0, false, false, nil, "guid-guildlead"
+    end
+
+    if index == 2 then
+        return "OfficerOne-Stormrage", "Officer", 1, 70, "Mage", "Orgrimmar", "", "", true, 0, nil, 0, 0, false, false, nil, "guid-officer"
+    end
+
+    return "MemberOne-Stormrage", "Raider", 2, 70, "Warrior", "Orgrimmar", "", "", true, 0, nil, 0, 0, false, false, nil, "guid-member"
+end
 _G.C_ChatInfo.sentMessages = {}
-mainFrame.requestWizardSubmitButton:GetScript("OnClick")(mainFrame.requestWizardSubmitButton)
+local requestCreateCalls = capture_request_sync_calls(function()
+    mainFrame.requestWizardSubmitButton:GetScript("OnClick")(mainFrame.requestWizardSubmitButton)
+end)
 assert.truthy(not mainFrame.requestWizardModal:IsShown(), "request wizard should close after submit")
-assert.equal("PENDING", _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].approval, "wizard-created requests should remain pending")
-assert.equal(TRUSTED_ITEM_LINKS[241327], _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].itemLink, "wizard-created requests should persist the trusted hyperlink for later shared item-display surfaces")
-assert.equal(trusted_item_string(241327), _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].itemString, "wizard-created requests should persist the trusted item string for later shared item-display surfaces")
-assert.equal(2, tonumber(_G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].craftedQualityFamilySize or 0), "wizard-created requests should persist two-rank crafted-quality family metadata for request table rendering")
-assert.equal("Professions-Icon-Quality-12-Tier1-Inv", _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].craftedQualityDisplayAtlas, "wizard-created requests should persist the canonical single-silver display atlas for lower two-rank variants")
-assert.truthy(_G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].tabName == nil or _G.GBankManagerDB.requests[#_G.GBankManagerDB.requests].tabName == "", "wizard-created requests should no longer require a preferred bank tab from a removed wizard step")
+local createdRequest = ((current_runtime_db().requests or {})[#(current_runtime_db().requests or {})] or {})
+assert.equal("PENDING", createdRequest.approval, "wizard-created requests should remain pending")
+assert.equal(TRUSTED_ITEM_LINKS[241327], createdRequest.itemLink, "wizard-created requests should persist the trusted hyperlink for later shared item-display surfaces")
+assert.equal(trusted_item_string(241327), createdRequest.itemString, "wizard-created requests should persist the trusted item string for later shared item-display surfaces")
+assert.equal(2, tonumber(createdRequest.craftedQualityFamilySize or 0), "wizard-created requests should persist two-rank crafted-quality family metadata for request table rendering")
+assert.equal("Professions-Icon-Quality-12-Tier1-Inv", createdRequest.craftedQualityDisplayAtlas, "wizard-created requests should persist the canonical single-silver display atlas for lower two-rank variants")
+assert.truthy(createdRequest.tabName == nil or createdRequest.tabName == "", "wizard-created requests should no longer require a preferred bank tab from a removed wizard step")
 assert.equal(nil, mainFrame.selectedRequestId, "creating a request should not leave the new request row highlighted in the officer table by default")
-assert.equal(1, #_G.C_ChatInfo.sentMessages, "wizard submit should sync the created request to guild clients")
-assert.truthy(string.find(_G.C_ChatInfo.sentMessages[1].payload or "", "REQUEST_CREATED", 1, true) ~= nil, "wizard submit should send a request-created sync payload")
+assert.truthy(#requestCreateCalls >= 1, "wizard submit should sync the created request to guild clients")
+assert.equal("REQUEST_CREATED", (((requestCreateCalls[1] or {}).message) or {}).type, "wizard submit should send a request-created sync payload")
+assert.equal(2, #requestCreateCalls, "wizard submit should sync only to the submitter plus current policy-qualified viewers")
+assert.equal("WHISPER", (requestCreateCalls[1] or {}).distribution, "wizard submit should use targeted whisper request sync")
+assert.equal("Guild Testers", (((((requestCreateCalls[1] or {}).message) or {}).payload or {}).guildKey), "wizard submit should stamp outbound request sync with the active guild key")
+local routedCreateTargets = {}
+for _, call in ipairs(requestCreateCalls) do
+    routedCreateTargets[call.target] = true
+end
+assert.truthy(routedCreateTargets["GuildLead-Stormrage"] == true, "wizard submit should sync to guildmaster viewers")
+assert.truthy(routedCreateTargets["OfficerOne-Stormrage"] == true, "wizard submit should sync back to the submitting full-shell player")
+assert.truthy(routedCreateTargets["MemberOne-Stormrage"] ~= true, "wizard submit should not sync to non-viewer guild members")
 
 mainFrame.requestCreateItemIDInput:SetText("990001")
 mainFrame.requestCreateItemIDInput:GetScript("OnTextChanged")(mainFrame.requestCreateItemIDInput)

@@ -4,6 +4,7 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local coordinator = ns.modules.syncCoordinator or {}
+local permissions = ns.modules.auth or ns.modules.permissions or {}
 
 local rank = {
     MEMBER = 1,
@@ -59,6 +60,104 @@ local function workflow_authority_rank(record)
     end
 
     return 0
+end
+
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
+local function build_character_key(name, realmName)
+    if type(permissions.BuildCharacterKey) == "function" then
+        return permissions.BuildCharacterKey(name, realmName)
+    end
+
+    local resolvedName = trim(name)
+    local resolvedRealm = trim(realmName)
+    if resolvedName == "" then
+        return ""
+    end
+
+    if resolvedRealm == "" then
+        return resolvedName
+    end
+
+    return string.format("%s-%s", resolvedRealm, resolvedName)
+end
+
+local function append_unique_recipient(recipients, seenKeys, recipient)
+    recipient = type(recipient) == "table" and recipient or {}
+    local dedupeKey = trim(recipient.characterKey)
+    if dedupeKey == "" then
+        dedupeKey = trim(recipient.target or recipient.name)
+    end
+    if dedupeKey == "" or seenKeys[dedupeKey] == true then
+        return
+    end
+
+    seenKeys[dedupeKey] = true
+    recipients[#recipients + 1] = recipient
+end
+
+local function roster_context(values, guildName)
+    local rosterName = trim(values[1])
+    if rosterName == "" then
+        return nil
+    end
+
+    local name, realmName = rosterName:match("^([^%-]+)%-(.+)$")
+    if not name then
+        name = rosterName
+        realmName = trim(type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
+    end
+
+    local rankIndex = tonumber(values[3])
+    local context = {
+        target = rosterName,
+        name = trim(name),
+        realmName = trim(realmName),
+        characterKey = build_character_key(name, realmName),
+        guildName = guildName,
+        guildRankName = trim(values[2]),
+        guildRankIndex = rankIndex,
+        isGuildMaster = rankIndex == 0,
+        inGuild = true,
+    }
+
+    return context
+end
+
+function coordinator.ResolveRequestRecipients(db, request, actorContext, policy)
+    db = db or {}
+    request = type(request) == "table" and request or {}
+    actorContext = type(actorContext) == "table" and actorContext or {}
+    policy = type(policy) == "table" and policy or ((db or {}).auth or {})
+
+    local recipients = {}
+    local seenKeys = {}
+    local guildName = trim((((db or {}).meta or {}).guildName) or actorContext.guildName)
+
+    if type(_G.GetNumGuildMembers) == "function" and type(_G.GetGuildRosterInfo) == "function" then
+        local memberCount = tonumber(_G.GetNumGuildMembers() or 0) or 0
+        for index = 1, memberCount do
+            local context = roster_context({ _G.GetGuildRosterInfo(index) }, guildName)
+            if context and type(permissions.GetEffectiveAccessProfile) == "function" and permissions.GetEffectiveAccessProfile(context, policy) == "full_shell" then
+                append_unique_recipient(recipients, seenKeys, context)
+            end
+        end
+    end
+
+    local submitterName = trim(actorContext.name or request.requester)
+    local submitterTarget = submitterName
+    local submitterCharacterKey = trim(actorContext.characterKey or request.requesterCharacterKey)
+    if submitterTarget ~= "" then
+        append_unique_recipient(recipients, seenKeys, {
+            target = submitterTarget,
+            name = submitterName,
+            characterKey = submitterCharacterKey,
+        })
+    end
+
+    return recipients
 end
 
 function coordinator.ResolveRequestConflict(localRequest, remoteRequest)
