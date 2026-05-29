@@ -6,6 +6,15 @@ ns.data = ns.data or {}
 
 local defaults = ns.data.defaults or ns.modules.defaults or {}
 
+local function normalize_guild_name(guildName)
+    local resolvedGuild = tostring(guildName or "")
+    if resolvedGuild == "" then
+        return "Unknown"
+    end
+
+    return resolvedGuild
+end
+
 function defaults.CreateDefaultExportTemplate()
     return {
         delimiter = "|",
@@ -48,10 +57,12 @@ function defaults.CreateDefaultAuthPolicy()
 end
 
 function defaults.CreateDatabase(guildName)
+    local resolvedGuild = normalize_guild_name(guildName)
+
     return {
         meta = {
             schemaVersion = 1,
-            guildName = guildName or "Unknown",
+            guildName = resolvedGuild,
             createdAt = 0,
             updatedAt = 0,
         },
@@ -122,6 +133,17 @@ function defaults.CreateDatabase(guildName)
                 summary = "",
                 results = {},
             },
+        },
+    }
+end
+
+function defaults.CreateDatabaseRoot(guildName)
+    local resolvedGuild = normalize_guild_name(guildName)
+
+    return {
+        activeGuildKey = resolvedGuild,
+        guilds = {
+            [resolvedGuild] = defaults.CreateDatabase(resolvedGuild),
         },
     }
 end

@@ -9,77 +9,144 @@ local store = ns.data.store or ns.modules.store or {}
 local defaults = ns.data.defaults or ns.modules.defaults
 local migrations = ns.data.migrations or ns.modules.migrations
 
-local function is_db_empty(db)
-    db = db or {}
+local function normalize_guild_name(guildName)
+    local resolvedGuild = tostring(guildName or "")
+    if resolvedGuild == "" then
+        return "Unknown"
+    end
 
-    if db.currentSnapshotId ~= nil then
+    return resolvedGuild
+end
+
+local function looks_like_root(db)
+    return type(db) == "table" and type(db.guilds) == "table"
+end
+
+local function looks_like_database(db)
+    if type(db) ~= "table" then
         return false
     end
 
-    if next(db.snapshots or {}) ~= nil then
-        return false
+    return type(db.meta) == "table"
+        or db.currentSnapshotId ~= nil
+        or type(db.snapshots) == "table"
+        or type(db.requests) == "table"
+        or type(db.minimums) == "table"
+        or type(db.oneTimeTargets) == "table"
+        or type(db.ui) == "table"
+        or type(db.bankLedger) == "table"
+end
+
+local function resolve_guild_name(guildName, source)
+    if guildName ~= nil and tostring(guildName) ~= "" then
+        return tostring(guildName)
     end
 
-    if next(db.requests or {}) ~= nil then
-        return false
+    if looks_like_root(source) then
+        local activeGuildKey = source.activeGuildKey
+        if type(activeGuildKey) == "string" and activeGuildKey ~= "" then
+            return activeGuildKey
+        end
+
+        local firstGuildKey = next(source.guilds or {})
+        if firstGuildKey ~= nil then
+            return tostring(firstGuildKey)
+        end
     end
 
-    if next(db.minimums or {}) ~= nil then
-        return false
+    local persistedGuild = (((source or {}).meta or {}).guildName)
+    if type(persistedGuild) == "string" and persistedGuild ~= "" then
+        return persistedGuild
     end
 
-    if next(db.oneTimeTargets or {}) ~= nil then
-        return false
+    local runtimeGuild = (((ns.state or {}).db or {}).meta or {}).guildName
+    if type(runtimeGuild) == "string" and runtimeGuild ~= "" then
+        return runtimeGuild
     end
 
-    return true
+    return "Unknown"
+end
+
+local function resolve_active_database(db, guildName)
+    if looks_like_root(db) then
+        local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName, db))
+        local root = migrations.Apply(db, resolvedGuild)
+        return root.guilds[resolvedGuild], root
+    end
+
+    local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName, db))
+    if migrations and type(migrations.ApplyDatabase) == "function" then
+        return migrations.ApplyDatabase(db, resolvedGuild), nil
+    end
+
+    return db, nil
+end
+
+local function select_runtime_source(guildName)
+    local runtime = _G.GBankManagerDB
+    if type(runtime) == "table" and next(runtime) ~= nil then
+        return runtime
+    end
+
+    local rootState = (ns.state or {}).dbRoot
+    if type(rootState) == "table" and next(rootState) ~= nil then
+        return rootState
+    end
+
+    local stateDb = (ns.state or {}).db
+    if looks_like_database(stateDb) and next(stateDb) ~= nil then
+        return stateDb
+    end
+
+    if defaults and type(defaults.CreateDatabaseRoot) == "function" then
+        return defaults.CreateDatabaseRoot(resolve_guild_name(guildName))
+    end
+
+    return {}
 end
 
 function store.CreateFreshDatabase(guildName)
-    return migrations.Apply(defaults.CreateDatabase(guildName))
+    local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName))
+    if migrations and type(migrations.ApplyDatabase) == "function" then
+        return migrations.ApplyDatabase(defaults.CreateDatabase(resolvedGuild), resolvedGuild)
+    end
+
+    return defaults.CreateDatabase(resolvedGuild)
 end
 
 function store.Normalize(db, guildName)
     if db == nil then
-        return store.CreateFreshDatabase(guildName)
+        if defaults and type(defaults.CreateDatabaseRoot) == "function" then
+            return migrations.Apply(defaults.CreateDatabaseRoot(resolve_guild_name(guildName)), guildName)
+        end
+
+        return migrations.Apply({}, guildName)
     end
 
-    if guildName ~= nil then
-        db.meta = db.meta or {}
-        db.meta.guildName = db.meta.guildName or guildName
-    end
-
-    return migrations.Apply(db)
+    return migrations.Apply(db, resolve_guild_name(guildName, db))
 end
 
 function store.GetDatabase(guildName)
-    local runtime = _G.GBankManagerDB or {}
-    local stateDb = ns.state.db or {}
-
-    if runtime ~= stateDb and (is_db_empty(runtime) and not is_db_empty(stateDb)) then
-        runtime = stateDb
-    elseif runtime == nil or next(runtime) == nil then
-        runtime = stateDb
-    end
-
-    runtime = store.Normalize(runtime, guildName)
+    local runtime = store.Normalize(select_runtime_source(guildName), guildName)
+    local activeDb = resolve_active_database(runtime, guildName)
     local bankLedger = ns.modules.bankLedger
     if bankLedger and type(bankLedger.PruneRetention) == "function" then
-        local logsHistory = (((runtime or {}).ui or {}).logsHistorySettings or {})
+        local logsHistory = (((activeDb or {}).ui or {}).logsHistorySettings or {})
         local shouldPruneLedger = tostring(logsHistory.ledgerRetention or "indefinite") ~= "indefinite"
         local shouldPruneHistory = tostring(logsHistory.historyRetention or "indefinite") ~= "indefinite"
         if shouldPruneLedger or shouldPruneHistory then
             local now = type(_G.time) == "function" and (_G.time() or 0) or 0
-            bankLedger.PruneRetention(runtime, now)
+            bankLedger.PruneRetention(activeDb, now)
         end
     end
     _G.GBankManagerDB = runtime
-    ns.state.db = runtime
-    return runtime
+    ns.state.dbRoot = looks_like_root(runtime) and runtime or nil
+    ns.state.db = activeDb
+    return activeDb
 end
 
 function store.GetUiState(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     return db.ui
 end
 
@@ -104,7 +171,7 @@ function store.GetExportSettings(db)
 end
 
 function store.GetCurrentSnapshot(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     if db.currentSnapshotId ~= nil then
         return (db.snapshots or {})[db.currentSnapshotId] or { items = {} }
     end
@@ -113,22 +180,26 @@ function store.GetCurrentSnapshot(db)
 end
 
 function store.GetAuthPolicy(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     return db.auth
 end
 
 function store.ClearGuildBankLogData(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     local guildName = (((db or {}).meta or {}).guildName) or "Unknown"
     local freshLedger = (((defaults or {}).CreateDatabase and defaults.CreateDatabase(guildName) or {}).bankLedger) or {}
-    db.bankLedger = migrations.Apply({
+    local normalizedLedgerDb = migrations.ApplyDatabase({
+        meta = {
+            guildName = guildName,
+        },
         bankLedger = freshLedger,
-    }).bankLedger or freshLedger
+    }, guildName)
+    db.bankLedger = normalizedLedgerDb.bankLedger or freshLedger
     return db.bankLedger
 end
 
 function store.ClearGuildBankInventoryData(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     db.snapshots = {}
     db.currentSnapshotId = nil
     db.changeLog = {}
@@ -148,7 +219,7 @@ local function request_is_completed(request)
 end
 
 function store.ClearCompletedRequestHistory(db)
-    db = store.Normalize(db or store.GetDatabase())
+    db = resolve_active_database(db or store.GetDatabase())
     local clearedRequestIds = {}
     local keptRequests = {}
     for _, request in ipairs(db.requests or {}) do

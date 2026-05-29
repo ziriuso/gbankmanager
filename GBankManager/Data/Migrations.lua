@@ -10,6 +10,15 @@ local latestSchemaVersion = ns.constants.SCHEMA_VERSION or 1
 local defaults = ns.data.defaults or ns.modules.defaults or {}
 local styleTokens = ns.modules.styleTokens or {}
 
+local function normalize_guild_name(guildName)
+    local resolvedGuild = tostring(guildName or "")
+    if resolvedGuild == "" then
+        return "Unknown"
+    end
+
+    return resolvedGuild
+end
+
 local function ensure_table(value)
     if type(value) == "table" then
         return value
@@ -18,11 +27,11 @@ local function ensure_table(value)
     return {}
 end
 
-local function ensure_v1_shape(db)
+local function ensure_v1_shape(db, guildName)
     db = ensure_table(db)
     db.meta = ensure_table(db.meta)
     db.meta.schemaVersion = latestSchemaVersion
-    db.meta.guildName = db.meta.guildName or "Unknown"
+    db.meta.guildName = normalize_guild_name(db.meta.guildName or guildName)
     db.meta.createdAt = db.meta.createdAt or 0
     db.meta.updatedAt = db.meta.updatedAt or 0
     db.meta.lastScanSequence = tonumber(db.meta.lastScanSequence or 0) or 0
@@ -137,23 +146,86 @@ local function ensure_v1_shape(db)
     return db
 end
 
-function migrations.Apply(db)
-    db = ensure_table(db)
-    local schemaVersion = 0
-
+local function current_schema_version(db)
     if type(db.meta) == "table" and type(db.meta.schemaVersion) == "number" then
-        schemaVersion = db.meta.schemaVersion
+        return db.meta.schemaVersion
     end
 
-    if schemaVersion < 1 then
-        return ensure_v1_shape(db)
-    end
+    return 0
+end
+
+local function apply_database(db, guildName)
+    db = ensure_table(db)
+    local schemaVersion = current_schema_version(db)
 
     if schemaVersion > latestSchemaVersion then
         return db
     end
 
-    return ensure_v1_shape(db)
+    return ensure_v1_shape(db, guildName)
+end
+
+local function resolve_root_guild_key(root, guildName)
+    local resolvedGuild = normalize_guild_name(guildName or root.activeGuildKey)
+    if resolvedGuild ~= "Unknown" then
+        return resolvedGuild
+    end
+
+    local firstGuildKey = next(root.guilds or {})
+    if firstGuildKey ~= nil then
+        return normalize_guild_name(firstGuildKey)
+    end
+
+    return resolvedGuild
+end
+
+local function wrap_legacy_database(db, guildName)
+    local resolvedGuild = normalize_guild_name(guildName or ((type(db.meta) == "table" and db.meta.guildName) or nil))
+    local legacyDb = apply_database(db, resolvedGuild)
+    legacyDb.meta.guildName = resolvedGuild
+    return {
+        activeGuildKey = resolvedGuild,
+        guilds = {
+            [resolvedGuild] = legacyDb,
+        },
+    }
+end
+
+function migrations.ApplyDatabase(db, guildName)
+    return apply_database(db, guildName)
+end
+
+function migrations.Apply(db, guildName)
+    db = ensure_table(db)
+    if type(db.guilds) ~= "table" then
+        local schemaVersion = current_schema_version(db)
+        if schemaVersion > latestSchemaVersion then
+            return db
+        end
+
+        return wrap_legacy_database(db, guildName)
+    end
+
+    local resolvedGuild = resolve_root_guild_key(db, guildName)
+    local normalizedGuilds = {}
+
+    for key, guildDb in pairs(db.guilds) do
+        local normalizedKey = normalize_guild_name(key)
+        normalizedGuilds[normalizedKey] = apply_database(guildDb, normalizedKey)
+    end
+
+    if normalizedGuilds[resolvedGuild] == nil then
+        local freshDb = type(defaults.CreateDatabase) == "function" and defaults.CreateDatabase(resolvedGuild) or {}
+        normalizedGuilds[resolvedGuild] = apply_database(freshDb, resolvedGuild)
+    end
+
+    if next(normalizedGuilds) == nil then
+        return db
+    end
+
+    db.activeGuildKey = resolvedGuild
+    db.guilds = normalizedGuilds
+    return db
 end
 
 ns.data.migrations = migrations
