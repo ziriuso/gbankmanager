@@ -286,6 +286,7 @@ The next practical work item is the pushed AceComm sync review:
 - Exports regression coverage now also verifies the action-card presentation, icon slots, and `Generate` / `Open List` CTA labels in `ui_exports_spec`.
 - Minimums regression coverage now also verifies staged-row grouping, row badges, and staged-summary or `Revert All` footer behavior in `ui_minimums_spec`.
 - Sync regression coverage now also includes milestone chat feedback for hello, accepted sync, and ignored forged payloads.
+- Release automation maintenance now targets `actions/checkout@v6` and `softprops/action-gh-release@v3` so the CurseForge workflow is aligned with GitHub's Node 24 JavaScript action transition warning.
 - In-game unit-lane regression coverage now spans `in_game_unit_spec.lua` plus `store_spec.lua` for slash availability, persistence, chat output, the saved-variables shape of `testing.inGameUnit`, blacklist normalization, officer queue prioritization, and unresolved minimum repair-row ordering.
 - Live-smoke regression coverage now also verifies deterministic behavior when ambient auth policy denies raider request submission and when stale request/minimum selector state existed before the smoke run.
 - Live-smoke and options regression coverage now also verify the policy-string `Select All` affordance, the current modal-driven Minimums staging flow, and successful request creation after the gating check clears stale selector state.
