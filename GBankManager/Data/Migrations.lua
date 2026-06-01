@@ -10,9 +10,20 @@ local latestSchemaVersion = ns.constants.SCHEMA_VERSION or 1
 local defaults = ns.data.defaults or ns.modules.defaults or {}
 local styleTokens = ns.modules.styleTokens or {}
 
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
+local function is_placeholder_guild_name(guildName)
+    local resolvedGuild = trim(guildName)
+    return resolvedGuild == ""
+        or resolvedGuild == "Unknown"
+        or resolvedGuild == "Unknown Guild"
+end
+
 local function normalize_guild_name(guildName)
-    local resolvedGuild = tostring(guildName or "")
-    if resolvedGuild == "" then
+    local resolvedGuild = trim(guildName)
+    if is_placeholder_guild_name(resolvedGuild) then
         return "Unknown"
     end
 

@@ -267,7 +267,8 @@ onEvent(events, "PLAYER_LOGIN")
 assert.equal("GBankManager", _G.C_ChatInfo.registeredPrefixes[1], "player login should register the addon message prefix")
 assert.equal(1, #_G.C_ChatInfo.sentMessages, "player login should send a sync hello")
 assert.equal("SYNC_HELLO|0|Stormrage-SyncTester", _G.C_ChatInfo.sentMessages[1].payload, "sync hello should include the current player character key")
-assert.equal("GBankManager: Sync hello sent for Stormrage-SyncTester.", last_chat_message(), "player login should report sync hello activity in chat")
+local loginChatText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
+assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for Stormrage-SyncTester.", 1, true) == nil, "player login should not add self hello noise to chat")
 
 local db = ns.state.db
 db.requests = {}
@@ -337,6 +338,67 @@ assert.truthy(bootstrappedGuildAccepted, "sync events should bootstrap the activ
 assert.equal("Guild Testers", tostring((((bootstrappedDb or {}).meta or {}).guildName) or ""), "bootstrapped sync traffic should promote the local database guild identity")
 assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "bootstrapped sync traffic should promote the active guild root key")
 assert.equal(1, #(bootstrappedDb.requests or {}), "bootstrapped sync traffic should still append the incoming request")
+
+local unknownHelloRoot = ns.modules.defaults.CreateDatabaseRoot("Unknown Guild")
+_G.GBankManagerDB = unknownHelloRoot
+ns.state.dbRoot = unknownHelloRoot
+ns.state.db = unknownHelloRoot.guilds["Unknown Guild"]
+
+local bootstrappedHelloPayload = codec.EncodeTable({
+    type = "SYNC_HELLO",
+    updatedAt = 91,
+    payload = "Stormrage-MemberOne",
+})
+local bootstrappedHelloAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedHelloPayload, "GUILD", "MemberOne")
+local bootstrappedHelloDb = ns.modules.store.GetDatabase()
+local bootstrappedHelloPeer = ((((bootstrappedHelloDb.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+assert.truthy(bootstrappedHelloAccepted, "sync hello traffic should promote the active guild identity when the local root still points at Unknown")
+assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "sync hello traffic should promote the active guild root key from the live guild context")
+assert.equal(91, tonumber(bootstrappedHelloPeer.lastSeen or 0), "sync hello traffic should record peers under the promoted live guild instead of Unknown")
+assert.equal(nil, ((((bootstrappedHelloDb.syncState or {}).peers or {})["Unknown"] or {})["Stormrage-MemberOne"]), "sync hello traffic should stop recording peers under the Unknown guild bucket once the live guild is known")
+
+local unknownSnapshotRoot = ns.modules.defaults.CreateDatabaseRoot("Unknown Guild")
+_G.GBankManagerDB = unknownSnapshotRoot
+ns.state.dbRoot = unknownSnapshotRoot
+ns.state.db = unknownSnapshotRoot.guilds["Unknown Guild"]
+
+local bootstrappedRequestsSnapshotPayload = codec.EncodeTable({
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 92,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        requests = {
+            {
+                requestId = "req-bootstrap-snapshot-1",
+                requester = "MemberOne",
+                requesterCharacterKey = "Stormrage-MemberOne",
+                itemID = 2001,
+                itemName = "Bootstrap Snapshot Oil",
+                quantity = 2,
+                approval = "PENDING",
+                fulfillment = "OPEN",
+                createdAt = 92,
+                updatedAt = 92,
+                createdBy = "OfficerOne",
+                updatedBy = "OfficerOne",
+            },
+        },
+    },
+})
+local bootstrappedRequestsSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedRequestsSnapshotPayload, "GUILD", "OfficerOne")
+local bootstrappedRequestsSnapshotDb = ns.modules.store.GetDatabase()
+assert.truthy(bootstrappedRequestsSnapshotAccepted, "request snapshot sync should promote the active guild identity before wrong-guild validation runs")
+assert.equal("Guild Testers", tostring((((bootstrappedRequestsSnapshotDb or {}).meta or {}).guildName) or ""), "request snapshot sync should promote the local database guild identity from the payload guild key")
+assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "request snapshot sync should promote the active guild root key from the payload guild key")
+assert.equal(1, #(bootstrappedRequestsSnapshotDb.requests or {}), "request snapshot sync should still replace the local request cache after guild promotion")
 
 _G.GBankManagerDB = runtimeBeforeGuildBootstrap
 ns.state.db = stateDbBeforeGuildBootstrap

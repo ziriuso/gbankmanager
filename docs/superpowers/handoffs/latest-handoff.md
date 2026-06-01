@@ -5,6 +5,8 @@
 ### 2026-06-01 Sync Debug Follow-up
 
 - Current local troubleshooting checkpoint adds `/gbm debug sync`.
+- The latest live clue from two-client testing was a `wrong_guild` reject even though both characters were in the same guild; the debug output showed the runtime root could still be keyed as `Unknown Guild`.
+- The current local fix now treats `Unknown Guild` the same as `Unknown` across store normalization, sync receive validation, manual sync actions, request publish paths, Minimums publish paths, Sync-tab peer lookups, and `/gbm debug sync`.
 - The new debug command prints:
   - local `name`, `characterKey`, `guild`, and active guild key
   - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
@@ -13,6 +15,7 @@
 - Focused regression coverage now also checks:
   - `/gbm debug sync` chat output in `tests/spec/slash_commands_spec.lua`
   - rejected request snapshots now persist `lastSyncDecision.category= requests_snapshot` and `reason= actor_sender_mismatch` in `tests/spec/sync_spec.lua`
+  - sync hello traffic and request snapshots both bootstrap a client whose saved root still uses the placeholder `Unknown Guild`
 - Known live clue still under investigation:
   - the login hello chat line reported `Stormrage-Zirleficent`, which suggests a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
   - if live request sync still fails while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`
@@ -195,7 +198,7 @@
 - The request-only modernization pass is underway: the member `New Request` flow now has a three-step progress rail, a live preview card, quantity/reason labeling, and quantity steppers while preserving the existing request persistence and sync path.
 - Appearance sliders now support direct slider interaction in addition to `+` / `-` stepping, and opening `Options` proactively reloads the current Guild Info auth policy before populating the visible auth controls.
 - Two-rank crafted items now keep that surface-specific icon treatment consistently across Exports, the manual shopping list, request review, and request details, and appearance sliders now stop dragging cleanly even when the mouse is released off the bar.
-- Sync now reports milestone chat feedback for login hello, accepted incoming updates, and ignored forged payloads without writing per-step noise into chat.
+- Sync now keeps self login hello silent while still reporting compact chat feedback for accepted incoming updates and ignored forged payloads without writing per-step noise into chat.
 - The shell now participates in top-level window ordering so other dragged addon or Blizzard UI can come above it, and clicking back onto the shell or its registered modals brings `GBankManager` back to the front.
 - The shell now defaults to a lower dialog stratum, keeps shared columns fitted inside the shell viewport, clamps shared table height so bottom action strips stay inside the window, hides zero-range scrollbars on Requests and Exports, applies shell or modal opacity through backdrop and art layers instead of whole-frame alpha, keeps the top-bar scan plus status controls separated at smaller scales, and keeps the shopping list plus Auctionator export output aligned with the live product expectations.
 - The floating manual shopping list now lives independently from the main shell, survives tab switches and shell close, remembers its moved position locally, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot.
@@ -256,7 +259,7 @@ Work these in the exact order below unless a new blocking regression appears:
 
 1. `Review addon communication`
    - Recheck addon sync and messaging behavior end to end in live guild testing.
-   - Focus on login hello, accepted sync updates, ignored forged payloads, request propagation, request approval side effects, and any guild-bank scan or ledger status noise that still feels off in chat.
+   - Focus on silent self hello, accepted sync updates, ignored forged payloads, request propagation, request approval side effects, and any guild-bank scan or ledger status noise that still feels off in chat.
    - If communication gaps still exist, fix those next before taking on more visual polishing.
 
 2. `Release/install sanity pass`
@@ -287,7 +290,7 @@ Do not spend another session trying to perfect visible tier-icon parity as a sta
 
 The next practical work item is the pushed AceComm sync review:
 
-1. Live-test login hello and accepted sync update chat milestones.
+1. Live-test silent self hello plus accepted sync update chat milestones.
 2. Live-test ignored forged payload feedback without chat spam.
 3. Live-test request propagation and approval-created Minimums side effects on receiving clients.
 4. Recheck everyone-to-everyone ledger sync and peer last-alive updates in `Options -> Sync`.
@@ -329,7 +332,7 @@ The next practical work item is the pushed AceComm sync review:
 - Dashboard regression coverage now spans `dashboard_spec` for zero-shortage `Ready to Buy` counting plus `ui_dashboard_spec` for the four-card dashboard layout, `Recent Activity`, and `Quick Actions`.
 - Exports regression coverage now also verifies the action-card presentation, icon slots, and `Generate` / `Open List` CTA labels in `ui_exports_spec`.
 - Minimums regression coverage now also verifies staged-row grouping, row badges, and staged-summary or `Revert All` footer behavior in `ui_minimums_spec`.
-- Sync regression coverage now also includes milestone chat feedback for hello, accepted sync, and ignored forged payloads.
+- Sync regression coverage now also includes silent self hello plus chat feedback for accepted sync and ignored forged payloads.
 - Release automation maintenance now targets `actions/checkout@v6` and `softprops/action-gh-release@v3` so the CurseForge workflow is aligned with GitHub's Node 24 JavaScript action transition warning.
 - In-game unit-lane regression coverage now spans `in_game_unit_spec.lua` plus `store_spec.lua` for slash availability, persistence, chat output, the saved-variables shape of `testing.inGameUnit`, blacklist normalization, officer queue prioritization, and unresolved minimum repair-row ordering.
 - Live-smoke regression coverage now also verifies deterministic behavior when ambient auth policy denies raider request submission and when stale request/minimum selector state existed before the smoke run.

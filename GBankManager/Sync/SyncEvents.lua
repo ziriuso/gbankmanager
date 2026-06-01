@@ -34,6 +34,16 @@ local function current_db()
     return store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
 end
 
+local function guild_key_is_known(guildKey)
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.IsPlaceholderGuildName) == "function" then
+        return not store.IsPlaceholderGuildName(guildKey)
+    end
+
+    local normalized = tostring(guildKey or ""):match("^%s*(.-)%s*$")
+    return normalized ~= "" and normalized ~= "Unknown" and normalized ~= "Unknown Guild"
+end
+
 local function current_policy(db)
     local store = ns.data.store or ns.modules.store
     return store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or (db or {}).auth or {}
@@ -42,12 +52,12 @@ end
 local function active_guild_key(db)
     local root = (ns.state or {}).dbRoot
     local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
-    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+    if guild_key_is_known(rootGuildKey) then
         return rootGuildKey
     end
 
     local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
-    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+    if guild_key_is_known(dbGuildKey) then
         return dbGuildKey
     end
 
@@ -833,7 +843,6 @@ function syncEvents.HandleEvent(event, ...)
                 updatedAt = _G.time(),
                 payload = context.characterKey or (_G.UnitName("player") or "Unknown"),
             })
-            report_sync_status(string.format("Sync hello sent for %s.", context.characterKey or (_G.UnitName("player") or "Unknown")))
         end
 
         return true
@@ -904,7 +913,11 @@ function syncEvents.HandleEvent(event, ...)
         ns.state.lastSyncMessage = decodedMessage
         ns.state.lastSyncMessage.distribution = distribution
         ns.state.lastSyncMessage.sender = sender
-        local db = current_db()
+        local preferredGuildKey = type((ns.state.lastSyncMessage or {}).payload) == "table" and ns.state.lastSyncMessage.payload.guildKey or nil
+        local store = ns.data.store or ns.modules.store
+        local db = store and type(store.GetDatabase) == "function"
+            and store.GetDatabase(preferredGuildKey)
+            or current_db()
         if message_is_from_local_player(db, ns.state.lastSyncMessage, sender) then
             remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "sync_receive", "self_origin")
             return false

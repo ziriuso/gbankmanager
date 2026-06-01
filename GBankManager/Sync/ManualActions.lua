@@ -7,6 +7,7 @@ local manualActions = ns.modules.syncManualActions or {}
 local permissions = ns.modules.auth or ns.modules.permissions or {}
 local transport = ns.modules.syncTransport or {}
 local bankLedger = ns.modules.bankLedger or {}
+local store = ns.modules.store or ns.data.store
 
 local COOLDOWN_SECONDS = 60
 local ACTION_ORDER = {
@@ -82,12 +83,12 @@ end
 local function current_guild_key(db)
     local root = (ns.state or {}).dbRoot
     local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
-    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+    if rootGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(rootGuildKey)) then
         return rootGuildKey
     end
 
     local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
-    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+    if dbGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(dbGuildKey)) then
         return dbGuildKey
     end
 

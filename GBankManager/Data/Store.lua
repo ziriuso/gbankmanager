@@ -9,9 +9,20 @@ local store = ns.data.store or ns.modules.store or {}
 local defaults = ns.data.defaults or ns.modules.defaults
 local migrations = ns.data.migrations or ns.modules.migrations
 
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
+local function is_placeholder_guild_name(guildName)
+    local resolvedGuild = trim(guildName)
+    return resolvedGuild == ""
+        or resolvedGuild == "Unknown"
+        or resolvedGuild == "Unknown Guild"
+end
+
 local function normalize_guild_name(guildName)
-    local resolvedGuild = tostring(guildName or "")
-    if resolvedGuild == "" then
+    local resolvedGuild = trim(guildName)
+    if is_placeholder_guild_name(resolvedGuild) then
         return "Unknown"
     end
 
@@ -51,24 +62,24 @@ local function looks_like_database(db)
 end
 
 local function resolve_guild_name(guildName, source)
-    if guildName ~= nil and tostring(guildName) ~= "" then
-        return tostring(guildName)
+    if not is_placeholder_guild_name(guildName) then
+        return trim(guildName)
     end
 
     if looks_like_root(source) then
         local activeGuildKey = source.activeGuildKey
-        if type(activeGuildKey) == "string" and activeGuildKey ~= "" and activeGuildKey ~= "Unknown" then
+        if not is_placeholder_guild_name(activeGuildKey) then
             return activeGuildKey
         end
     end
 
     local persistedGuild = (((source or {}).meta or {}).guildName)
-    if type(persistedGuild) == "string" and persistedGuild ~= "" and persistedGuild ~= "Unknown" then
+    if not is_placeholder_guild_name(persistedGuild) then
         return persistedGuild
     end
 
     local runtimeGuild = (((ns.state or {}).db or {}).meta or {}).guildName
-    if type(runtimeGuild) == "string" and runtimeGuild ~= "" and runtimeGuild ~= "Unknown" then
+    if not is_placeholder_guild_name(runtimeGuild) then
         return runtimeGuild
     end
 
@@ -132,6 +143,10 @@ function store.CreateFreshDatabase(guildName)
     end
 
     return defaults.CreateDatabase(resolvedGuild)
+end
+
+function store.IsPlaceholderGuildName(guildName)
+    return is_placeholder_guild_name(guildName)
 end
 
 function store.Normalize(db, guildName)

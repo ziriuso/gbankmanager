@@ -71,14 +71,15 @@ local function access_profile(context, policy)
 end
 
 local function active_guild_key(db)
+    local store = ns.modules.store or ns.data.store
     local root = (ns.state or {}).dbRoot
     local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
-    if rootGuildKey ~= "" and rootGuildKey ~= "Unknown" then
+    if rootGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(rootGuildKey)) then
         return rootGuildKey
     end
 
     local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
-    if dbGuildKey ~= "" and dbGuildKey ~= "Unknown" then
+    if dbGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(dbGuildKey)) then
         return dbGuildKey
     end
 

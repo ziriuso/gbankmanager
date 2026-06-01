@@ -388,15 +388,16 @@ local function collect_sync_debug(db, context)
     local permissions = ns.modules.auth or ns.modules.permissions or {}
     local peerState = ns.modules.syncPeerState or {}
     local syncState = (ns.state or {})
+    local store = ns.modules.store or ns.data.store
     db = type(db) == "table" and db or {}
     context = type(context) == "table" and context or {}
 
     local root = syncState.dbRoot
     local activeGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
-    if activeGuildKey == "" or activeGuildKey == "Unknown" then
+    if activeGuildKey == "" or (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(activeGuildKey)) then
         activeGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
     end
-    if activeGuildKey == "" then
+    if activeGuildKey == "" or (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(activeGuildKey)) then
         activeGuildKey = tostring(context.guildName or "Unknown")
     end
 
