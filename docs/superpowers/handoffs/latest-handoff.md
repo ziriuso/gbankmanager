@@ -2,6 +2,21 @@
 
 ## Resume Here
 
+### 2026-06-01 Sync Debug Follow-up
+
+- Current local troubleshooting checkpoint adds `/gbm debug sync`.
+- The new debug command prints:
+  - local `name`, `characterKey`, `guild`, and active guild key
+  - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
+  - the last sync decision (`accepted`, `category`, `reason`, `peerCharacterKey`, plus sender and guild fields)
+  - the stored peer rows and `peerKeys` for the active guild
+- Focused regression coverage now also checks:
+  - `/gbm debug sync` chat output in `tests/spec/slash_commands_spec.lua`
+  - rejected request snapshots now persist `lastSyncDecision.category= requests_snapshot` and `reason= actor_sender_mismatch` in `tests/spec/sync_spec.lua`
+- Known live clue still under investigation:
+  - the login hello chat line reported `Stormrage-Zirleficent`, which suggests a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
+  - if live request sync still fails while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`
+
 ### 2026-06-01 Local Troubleshooting Update
 
 - Current repo truth at session start:

@@ -383,6 +383,88 @@ local function collect_ledger_debug(scanner)
     return lines
 end
 
+local function collect_sync_debug(db, context)
+    local lines = {}
+    local permissions = ns.modules.auth or ns.modules.permissions or {}
+    local peerState = ns.modules.syncPeerState or {}
+    local syncState = (ns.state or {})
+    db = type(db) == "table" and db or {}
+    context = type(context) == "table" and context or {}
+
+    local root = syncState.dbRoot
+    local activeGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if activeGuildKey == "" or activeGuildKey == "Unknown" then
+        activeGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    end
+    if activeGuildKey == "" then
+        activeGuildKey = tostring(context.guildName or "Unknown")
+    end
+
+    append_line(lines, string.format(
+        "sync debug local name=%s characterKey=%s guild=%s activeGuildKey=%s",
+        value_text(context.name),
+        value_text(context.characterKey),
+        value_text(context.guildName),
+        value_text(activeGuildKey)
+    ))
+
+    local lastMessage = type(syncState.lastSyncMessage) == "table" and syncState.lastSyncMessage or {}
+    local lastPayload = type(lastMessage.payload) == "table" and lastMessage.payload or {}
+    local lastActorContext = type(lastPayload.actorContext) == "table" and lastPayload.actorContext or {}
+    append_line(lines, string.format(
+        "lastMessage type=%s sender=%s distribution=%s guildKey=%s actorName=%s actorCharacterKey=%s",
+        value_text(lastMessage.type),
+        value_text(lastMessage.sender),
+        value_text(lastMessage.distribution),
+        value_text(lastPayload.guildKey),
+        value_text(lastActorContext.name),
+        value_text(lastActorContext.characterKey)
+    ))
+
+    local lastDecision = type(syncState.lastSyncDecision) == "table" and syncState.lastSyncDecision or {}
+    append_line(lines, string.format(
+        "lastDecision accepted=%s category=%s reason=%s sender=%s distribution=%s messageType=%s guildKey=%s actorName=%s actorCharacterKey=%s peerCharacterKey=%s",
+        tostring(lastDecision.accepted == true),
+        value_text(lastDecision.category),
+        value_text(lastDecision.reason),
+        value_text(lastDecision.sender),
+        value_text(lastDecision.distribution),
+        value_text(lastDecision.messageType),
+        value_text(lastDecision.guildKey),
+        value_text(lastDecision.actorName),
+        value_text(lastDecision.actorCharacterKey),
+        value_text(lastDecision.peerCharacterKey)
+    ))
+
+    local peers = {}
+    if type(peerState.GetPeers) == "function" then
+        peers = peerState.GetPeers(db, activeGuildKey)
+    else
+        peers = ((((db or {}).syncState or {}).peers or {})[activeGuildKey] or {})
+    end
+
+    local peerKeys = {}
+    for index, entry in ipairs(peers or {}) do
+        local displayCharacterKey = type(permissions.DisplayCharacterKey) == "function"
+            and permissions.DisplayCharacterKey(entry.characterKey)
+            or tostring(entry.characterKey or "")
+        peerKeys[#peerKeys + 1] = tostring(entry.characterKey or "")
+        append_line(lines, string.format(
+            "peer[%d].characterKey=%s display=%s lastSeen=%s lastSynchronizedAt=%s lastMessageType=%s version=%s",
+            index,
+            value_text(entry.characterKey),
+            value_text(displayCharacterKey),
+            value_text(entry.lastSeen),
+            value_text(entry.lastSynchronizedAt),
+            value_text(entry.lastMessageType),
+            value_text(entry.version)
+        ))
+    end
+    append_line(lines, "peerKeys=" .. table.concat(peerKeys, ","))
+
+    return lines
+end
+
 local function create_or_reset_atlas_sampler()
     if type(_G.CreateFrame) ~= "function" then
         push_chat_line("GBankManager: Atlas sampler requires the WoW UI frame API.")
@@ -683,6 +765,12 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             return lines
         elseif subcommand == "ledger" then
             local lines = collect_ledger_debug(scanner)
+            for _, line in ipairs(lines or {}) do
+                push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
+            end
+            return lines
+        elseif subcommand == "sync" then
+            local lines = collect_sync_debug(db, context)
             for _, line in ipairs(lines or {}) do
                 push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
             end

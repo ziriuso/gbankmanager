@@ -323,6 +323,28 @@ local function payload_version(payload)
     return ""
 end
 
+local function remember_sync_decision(message, sender, payload, accepted, category, reason)
+    message = type(message) == "table" and message or {}
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+
+    ns.state.lastSyncDecision = {
+        accepted = accepted == true,
+        category = tostring(category or ""),
+        reason = tostring(reason or ""),
+        sender = tostring(sender or ""),
+        distribution = tostring(message.distribution or ""),
+        messageType = tostring(message.type or ""),
+        guildKey = tostring(payload.guildKey or ""),
+        actorName = tostring(actorContext.name or ""),
+        actorCharacterKey = tostring(actorContext.characterKey or ""),
+        peerCharacterKey = tostring(actorContext.characterKey or (message.type == "SYNC_HELLO" and message.payload) or sender or ""),
+        updatedAt = tonumber(message.updatedAt or 0) or 0,
+    }
+
+    return ns.state.lastSyncDecision
+end
+
 local function touch_sync_peer(db, message, sender)
     if type(peerState.TouchPeer) ~= "function" then
         return nil
@@ -507,32 +529,38 @@ local function handle_request_created(db, payload, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", "wrong_guild")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
     if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", request and "blacklisted" or "missing_request")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
     if not actor_can(actorContext, "request_submit", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", "capability_denied")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", "actor_sender_mismatch")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
     if not requester_matches_actor(actorContext, request) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", "requester_actor_mismatch")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
     local existing = find_request(db, request.requestId)
     if existing and not request_is_newer(request, existing) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_create", "stale_duplicate")
         return true
     end
 
@@ -540,6 +568,7 @@ local function handle_request_created(db, payload, sender)
     upsert_request(db, request)
     append_request_sync_audit(db, "CREATE", previousRequest, request, actorContext, request.note)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_create", "applied")
     report_request_sync_applied("CREATE", request, sender)
     return true
 end
@@ -560,49 +589,58 @@ local function handle_request_updated(db, payload, sender)
     }
 
     if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "wrong_guild")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", request and "blacklisted" or "missing_request")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     local capability = capabilityByAction[action]
     if capability and not actor_can(actorContext, capability, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "capability_denied")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "actor_sender_mismatch")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     local existing = find_request(db, request.requestId)
     if not existing then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "missing_local_request")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     if not immutable_request_fields_match(existing, request) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "immutable_field_mismatch")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     if type(requestsModule.CanActorApplyAction) == "function" and not requestsModule.CanActorApplyAction(existing, action, actorContext) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "invalid_transition")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     if type(requestsModule.CanActorApplyAction) ~= "function" and type(requestsModule.CanApplyAction) == "function" and not requestsModule.CanApplyAction(existing, action) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "invalid_transition")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     local resolved = type(coordinator.ResolveRequestConflict) == "function" and coordinator.ResolveRequestConflict(existing, request) or nil
     if resolved and resolved ~= request then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "conflict_kept_local")
         return true
     end
 
@@ -616,6 +654,7 @@ local function handle_request_updated(db, payload, sender)
         if deleted then
             append_request_sync_audit(db, action, previousRequest, request, actorContext, payload.note)
             mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+            remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
             report_request_sync_applied(action, request, sender)
         end
         return deleted
@@ -625,6 +664,7 @@ local function handle_request_updated(db, payload, sender)
     append_request_sync_audit(db, action, previousRequest, request, actorContext, payload.note)
     sync_request_minimum_side_effect(db, action, request, actorContext)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
     report_request_sync_applied(action, request, sender)
     return true
 end
@@ -636,27 +676,32 @@ local function handle_minimums_snapshot(db, payload, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "wrong_guild")
         report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if minimums == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", minimums and "blacklisted" or "missing_minimums")
         report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "actor_sender_mismatch")
         report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_can_manage_minimums(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "capability_denied")
         report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     db.minimums = clone_array_records(minimums)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", "applied")
     report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
     return true
 end
@@ -668,16 +713,19 @@ local function handle_requests_snapshot(db, payload, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "wrong_guild")
         report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if requests == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", requests and "blacklisted" or "missing_requests")
         report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "actor_sender_mismatch")
         report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
@@ -686,6 +734,7 @@ local function handle_requests_snapshot(db, payload, sender)
         and not actor_can(actorContext, "request_approve", localPolicy)
         and not actor_can(actorContext, "full_ui", localPolicy)
     then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "capability_denied")
         report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
@@ -708,6 +757,7 @@ local function handle_requests_snapshot(db, payload, sender)
     end
 
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", "applied")
     report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
     return true
 end
@@ -718,26 +768,31 @@ local function handle_ledger_delta(db, payload, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "wrong_guild")
         report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "blacklisted")
         report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "actor_sender_mismatch")
         report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if type(bankLedger.MergeRemoteDelta) ~= "function" then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "merge_unavailable")
         return false
     end
 
     bankLedger.MergeRemoteDelta(db, payload)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_delta", "applied")
     report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
     return true
 end
@@ -851,10 +906,12 @@ function syncEvents.HandleEvent(event, ...)
         ns.state.lastSyncMessage.sender = sender
         local db = current_db()
         if message_is_from_local_player(db, ns.state.lastSyncMessage, sender) then
+            remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "sync_receive", "self_origin")
             return false
         end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
+            remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "auth_policy_snapshot", "retired_message_type")
             report_sync_status("Ignored retired auth policy snapshot message.")
             return false
         end

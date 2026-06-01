@@ -89,6 +89,7 @@ Current UI ownership is intentionally split across:
 - `/gbm debug render <itemID>` prints the active table renderer diagnostics for live rows, including matching `tableRowsData` atlas fields, active column keys, and the atlas on each visible row texture after painting.
 - `/gbm debug request <itemID>` prints the New Request wizard selector diagnostics, including visible result-row and selected-item quality atlases, for modal issues that are outside the shared table renderer path.
 - `/gbm debug ledger` prints the live scanner flags plus raw Blizzard item-log and money-log counts/sample rows, so missing ledger activity can be diagnosed before choosing whether to clear local ledger history.
+- `/gbm debug sync` prints the local live player identity, the last decoded sync envelope, the last sync accept or reject reason, and the currently stored peer keys for the active guild so two-client AceComm investigations can confirm whether traffic is landing under the expected `Character-Server` identity.
 - When the local client does not expose crafted tiers directly for modern duplicate-name crafted variants, the maintainer pipeline derives those tiers from stable grouped item-level ordering so searches such as `Flask of the Shattered Sun` and `Thalassian Phoenix Oil` can surface distinct crafted variants reliably.
 - Older Blizzard web metadata and credential-free refresh scripts remain available only as fallback tooling, not the recommended primary path.
 - The full maintainer manifest and local `wow.export` runtime are now intentionally git-ignored local assets under `tools/catalog/runtime/`; only the generated addon payload in `GBankManager_ItemData/` is shipped in git.
@@ -143,6 +144,7 @@ The next planned work after the completed pre-polish workflow block is:
 
 - Passive guild-bank ledger refresh now follows the working `GuildBankLedger` self-chaining cadence more closely; continue live validation around new item and money rows after `/reload` with the bank already open.
 - `/gbm debug ledger` is available for ledger investigations; run it while the guild bank is open on `Log` and `Money Log` if live Blizzard rows are visible but GBankManager imports `0 item rows, 0 money rows`. If older local history or fingerprints are suspect, clear only `Guild Bank Log Data` from `Options -> Data` and rescan from a clean ledger.
+- `/gbm debug sync` is available for live sync investigations; run it on both clients after login hello, after `Sync Requests`, and after creating or approving a request when `Options -> Sync` stays empty or chat reports an ignored sync snapshot. Compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys` directly to confirm both clients are storing peers and actor context in `Character-Server` form.
 - Live/manual sync sanity still needs a pass against real guild peers after install.
 
 ### Recently Completed

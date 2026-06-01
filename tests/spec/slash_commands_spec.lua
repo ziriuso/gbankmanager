@@ -262,6 +262,62 @@ assert.truthy(string.find(ledgerDebugText, "itemLog tab=1 name=Donations viewabl
 assert.truthy(string.find(ledgerDebugText, "moneyLog queryId=9 count=1", 1, true) ~= nil, "/gbm debug ledger should report raw money-log counts")
 assert.truthy(string.find(ledgerDebugText, "money[1] type=deposit who=GuildLead-Stormrage amount=500000000 age=0/0/0/1", 1, true) ~= nil, "/gbm debug ledger should include a raw money-log sample row")
 
+local debugSyncDb = env.ns.state.db or _G.GBankManagerDB or {}
+debugSyncDb.meta = debugSyncDb.meta or {}
+debugSyncDb.meta.guildName = "Guild Testers"
+debugSyncDb.syncState = {
+    peers = {
+        ["Guild Testers"] = {
+            ["Stormrage-OfficerOne"] = {
+                characterKey = "Stormrage-OfficerOne",
+                guildKey = "Guild Testers",
+                lastSeen = 301,
+                lastSynchronizedAt = 299,
+            },
+            ["Ziriously-Stormrage"] = {
+                characterKey = "Ziriously-Stormrage",
+                guildKey = "Guild Testers",
+                lastSeen = 302,
+                lastSynchronizedAt = 0,
+            },
+        },
+    },
+}
+env.ns.state.lastSyncMessage = {
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 302,
+    distribution = "GUILD",
+    sender = "Ziriously",
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            name = "Ziriously",
+            characterKey = "Ziriously-Stormrage",
+        },
+        requests = {},
+    },
+}
+env.ns.state.lastSyncDecision = {
+    accepted = false,
+    category = "requests_snapshot",
+    reason = "actor_sender_mismatch",
+    sender = "Ziriously",
+    distribution = "GUILD",
+    messageType = "REQUESTS_SNAPSHOT",
+    guildKey = "Guild Testers",
+    actorName = "Ziriously",
+    actorCharacterKey = "Ziriously-Stormrage",
+    peerCharacterKey = "Ziriously-Stormrage",
+}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+local syncDebugLines = slash.command("debug sync")
+local syncDebugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
+assert.truthy(type(syncDebugLines) == "table", "/gbm debug sync should return sync diagnostics for tests")
+assert.truthy(string.find(syncDebugText, "sync debug local name=GuildLead characterKey=Stormrage-GuildLead", 1, true) ~= nil, "/gbm debug sync should report the local live player identity")
+assert.truthy(string.find(syncDebugText, "lastMessage type=REQUESTS_SNAPSHOT sender=Ziriously distribution=GUILD guildKey=Guild Testers actorName=Ziriously actorCharacterKey=Ziriously-Stormrage", 1, true) ~= nil, "/gbm debug sync should report the last decoded sync envelope")
+assert.truthy(string.find(syncDebugText, "lastDecision accepted=false category=requests_snapshot reason=actor_sender_mismatch", 1, true) ~= nil, "/gbm debug sync should report the last sync accept or reject reason")
+assert.truthy(string.find(syncDebugText, "peerKeys=Ziriously-Stormrage,Stormrage-OfficerOne", 1, true) ~= nil, "/gbm debug sync should report the currently stored peer keys for the active guild")
+
 _G.DEFAULT_CHAT_FRAME.messages = {}
 slash.command("debug quality 241322")
 local debugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")

@@ -1035,6 +1035,42 @@ local memberMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", mem
 assert.truthy(not memberMinimumAccepted, "sync events should reject member-authored minimum snapshots")
 assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "rejected minimum snapshots should leave the local minimum cache unchanged")
 
+local requestSnapshotCountBeforeSenderMismatch = #(db.requests or {})
+local senderMismatchRequestsSnapshotPayload = codec.EncodeTable({
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 206,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        requests = {
+            {
+                requestId = "req-sender-mismatch-snapshot-1",
+                requester = "MemberOne",
+                requesterCharacterKey = "Stormrage-MemberOne",
+                itemID = 243734,
+                itemName = "Snapshot Sender Mismatch Oil",
+                quantity = 2,
+                approval = "PENDING",
+                fulfillment = "OPEN",
+                updatedAt = 206,
+                createdAt = 206,
+            },
+        },
+    },
+})
+local senderMismatchRequestsSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", senderMismatchRequestsSnapshotPayload, "GUILD", "DifferentSender")
+assert.truthy(not senderMismatchRequestsSnapshotAccepted, "sync events should reject request snapshots whose actor context does not match the sender")
+assert.equal(requestSnapshotCountBeforeSenderMismatch, #(db.requests or {}), "sender-mismatch request snapshots should not mutate the local request cache")
+assert.equal("requests_snapshot", tostring((((ns.state or {}).lastSyncDecision or {}).category) or ""), "rejected request snapshots should record the debug decision category")
+assert.equal("actor_sender_mismatch", tostring((((ns.state or {}).lastSyncDecision or {}).reason) or ""), "rejected request snapshots should record the debug reject reason")
+
 local wrongDistributionMinimumPayload = codec.EncodeTable({
     type = "MINIMUMS_SNAPSHOT",
     updatedAt = 206,
