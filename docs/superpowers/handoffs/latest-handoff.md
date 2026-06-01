@@ -9,6 +9,14 @@
 - The current local fix now treats `Unknown Guild` the same as `Unknown` across store normalization, sync receive validation, manual sync actions, request publish paths, Minimums publish paths, Sync-tab peer lookups, and `/gbm debug sync`.
 - The current local follow-up also refreshes `Options -> Sync` live when guild hello or accepted sync traffic arrives while that tab is already open.
 - The current local follow-up also suppresses repeated `Synced ledger delta ...` chat lines when a remote ledger delta is accepted but merges zero new rows.
+- The current local follow-up also blocks stale `GUILDBANK_UPDATE_TABS` or `GUILDBANKBAGSLOTS_CHANGED` events from arming an inventory auto-scan when the guild bank is actually closed after `/reload`.
+- The current local follow-up now also auto-publishes guild-scoped `LEDGER_DELTA` sync payloads whenever a manual, bank-open, or passive ledger scan appends new ledger rows locally, so other online guild clients do not have to wait for a separate `Sync Ledger` click.
+- The current local follow-up now also fixes the live `Options -> Sync` peer list rendering bug: the Sync subtable now assigns a concrete scroll-child and row width instead of relying on anchor-only width resolution that left the peer rows clipped away in the real WoW client.
+- Possible future feature note:
+  - add a global `Suppress routine addon chat messages` option
+  - default scope: mute routine status or progress messages only
+  - keep `/gbm debug ...` output and real error messages visible
+  - likely low-to-moderate effort because most chat already flows through shared status helpers
 - The new debug command prints:
   - local `name`, `characterKey`, `guild`, and active guild key
   - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
@@ -19,7 +27,11 @@
   - rejected request snapshots now persist `lastSyncDecision.category= requests_snapshot` and `reason= actor_sender_mismatch` in `tests/spec/sync_spec.lua`
   - sync hello traffic and request snapshots both bootstrap a client whose saved root still uses the placeholder `Unknown Guild`
   - `tests/spec/ui_options_spec.lua` now verifies the open Sync tab repaints immediately when a new guild peer hello arrives
+  - `tests/spec/ui_options_spec.lua` now also verifies the Sync peer subtable gets a concrete drawable width so stored peers render visibly in the live client
   - `tests/spec/sync_spec.lua` now verifies duplicate no-op ledger deltas stay quiet in chat while still being accepted
+  - `tests/spec/sync_spec.lua` now verifies closed-bank reload noise cannot arm an inventory scan from stale guild-bank tab or bag-slot events
+  - `tests/spec/bank_ledger_scanner_spec.lua` now verifies ledger scans automatically publish one guild-scoped sync delta per merged item-log or money-log target while repeated no-change reruns stay quiet
+  - `tests/spec/bank_ledger_spec.lua` still verifies a later local ledger scan does not duplicate a row that was already merged from remote sync traffic
 - Known live clue still under investigation:
   - the login hello chat line reported `Stormrage-Zirleficent`, which suggests a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
   - if live request sync still fails while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`

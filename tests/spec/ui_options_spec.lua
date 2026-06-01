@@ -126,6 +126,7 @@ assert.equal("Character", (((mainFrame.optionsSyncColumnHeaders or {})[1] or {})
 assert.equal("Last Time Seen", (((mainFrame.optionsSyncColumnHeaders or {})[2] or {}).text), "options Sync should show a Last Time Seen column")
 assert.equal("Last Time Synchronized", (((mainFrame.optionsSyncColumnHeaders or {})[3] or {}).text), "options Sync should show a Last Time Synchronized column")
 assert.truthy(type(mainFrame.optionsSyncTableRowsData) == "table" and #mainFrame.optionsSyncTableRowsData >= 1, "options Sync should populate at least one peer row from persisted history")
+assert.truthy((mainFrame.optionsSyncTableScrollChild:GetWidth() or 0) > 0, "options Sync should size its scroll child to a real drawable width for live row rendering")
 local firstSyncRow = (mainFrame.optionsSyncTableRowsData or {})[1] or {}
 assert.equal("OfficerOne-Stormrage", tostring(firstSyncRow.character or ""), "sync rows should render Name-Realm values")
 assert.truthy(string.find(tostring(firstSyncRow.lastSeen or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSeen or "") ~= "", "sync rows should show a formatted last-seen timestamp")
@@ -149,6 +150,7 @@ assert.equal(2, #(mainFrame.optionsSyncTableRowsData or {}), "sync tab should re
 assert.equal("MemberTwo-Stormrage", tostring((((mainFrame.optionsSyncTableRowsData or {})[1] or {}).character) or ""), "sync tab should immediately show the newest peer at the top after live sync traffic")
 local firstVisibleSyncRow = ((mainFrame.optionsSyncTableRows or {})[1] or {})
 local firstVisibleSyncCharacter = firstVisibleSyncRow.characterText and firstVisibleSyncRow.characterText:GetText() or ""
+assert.truthy((firstVisibleSyncRow:GetWidth() or 0) > 0, "sync tab should size visible peer rows to a real width instead of relying on zero-width anchor resolution")
 assert.equal("MemberTwo-Stormrage", tostring(firstVisibleSyncCharacter or ""), "sync tab should repaint the visible first peer row after live sync traffic")
 mainFrame:SetOptionsTab("STOCK")
 assert.equal("STOCK", mainFrame.optionsActiveTab, "options should switch to the Stock Settings tab when clicked")

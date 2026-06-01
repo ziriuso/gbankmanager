@@ -30,6 +30,7 @@ local scanner = ns.modules.scanner or {
     pendingLedgerAutoScan = false,
     ledgerMergedItemRows = 0,
     ledgerMergedMoneyRows = 0,
+    pendingLedgerSyncPayloads = {},
     ledgerScanToken = 0,
     ledgerFinalizeToken = 0,
     guildBankOpen = false,
@@ -57,6 +58,10 @@ local schedule_passive_ledger_refresh
 local refresh_ledger_view_if_visible
 local advance_scan
 
+local function trim(value)
+    return tostring(value or ""):match("^%s*(.-)%s*$")
+end
+
 local function current_context(db)
     local auth = ns.modules.auth or ns.modules.permissions
     if auth and type(auth.GetLivePlayerContext) == "function" then
@@ -64,6 +69,23 @@ local function current_context(db)
     end
 
     return {}
+end
+
+local function current_guild_key(db)
+    local store = ns.modules.store or ns.data.store
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(rootGuildKey)) then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(dbGuildKey)) then
+        return dbGuildKey
+    end
+
+    local context = current_context(db)
+    return tostring(context.guildName or "Unknown")
 end
 
 local function current_db()
@@ -504,6 +526,7 @@ function scanner.BeginLedgerScan(options)
     scanner.ledgerScanSilent = options.silent == true
     scanner.ledgerMergedItemRows = 0
     scanner.ledgerMergedMoneyRows = 0
+    scanner.pendingLedgerSyncPayloads = {}
     clear_ledger_wait_state()
     if scanner.ledgerScanSilent ~= true then
         report_status("Guild bank ledger scan started.")
@@ -573,6 +596,11 @@ function scanner.RetryPendingAutoScan()
         return false
     end
 
+    if not is_guild_bank_open_now() then
+        scanner.pendingAutoScan = false
+        return false
+    end
+
     scanner.BeginScan({ auto = true, manual = false })
     return scanner.scanInProgress
 end
@@ -610,6 +638,50 @@ local function moved_from_tab(currentTabName, tabOne, tabTwo)
         return tabTwo
     end
     return "-"
+end
+
+local function split_timestamp(timestamp)
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
+    if type(formatter) ~= "function" then
+        return {}
+    end
+
+    local ok, parts = pcall(formatter, "*t", tonumber(timestamp or 0) or 0)
+    if not ok or type(parts) ~= "table" then
+        return {}
+    end
+
+    return {
+        year = parts.year,
+        month = parts.month,
+        day = parts.day,
+        hour = parts.hour,
+        minute = parts.min,
+    }
+end
+
+local function item_row_type(action)
+    action = trim(action):lower()
+    if action == "deposit" then
+        return "deposit"
+    end
+    if action == "moved" or action == "move" then
+        return "move"
+    end
+
+    return "withdrawal"
+end
+
+local function money_row_type(action)
+    action = trim(action):lower()
+    if action == "deposit" then
+        return "deposit"
+    end
+    if action == "repair" then
+        return "repair"
+    end
+
+    return "withdrawal"
 end
 
 local function read_item_log_transactions(target)
@@ -714,21 +786,109 @@ local function fingerprint_transactions(target, transactions)
     return out
 end
 
+local function append_ledger_sync_payload(db, target, mergedRows)
+    local transport = ns.modules.syncTransport or {}
+    if not target or type(mergedRows) ~= "table" or #mergedRows == 0 or type(transport.Send) ~= "function" then
+        return false
+    end
+
+    local payload = {
+        guildKey = current_guild_key(db),
+        actorContext = current_context(db),
+        kind = target.kind,
+        scanStartedAt = tonumber(scanner.ledgerScanStartedAt or 0) or 0,
+        transactions = {},
+    }
+
+    if target.kind == "money" then
+        payload.repairThresholdGold = tonumber((((bankLedger.GetSettings and bankLedger.GetSettings(db)) or {}).repairThresholdGold) or 5000) or 5000
+        for _, row in ipairs(mergedRows) do
+            local transaction = {
+                type = money_row_type(row.action),
+                who = row.who,
+                amountCopper = row.amountCopper or row.amount,
+            }
+            for keyName, value in pairs(split_timestamp(row.timestamp or row.when)) do
+                transaction[keyName] = value
+            end
+            payload.transactions[#payload.transactions + 1] = transaction
+        end
+    else
+        payload.sourceTabIndex = target.queryId
+        payload.sourceTabName = target.label
+        for _, row in ipairs(mergedRows) do
+            local transaction = {
+                type = item_row_type(row.action),
+                who = row.who,
+                itemID = row.itemID,
+                itemName = row.item,
+                quantity = row.quantity,
+                fromTabName = row.fromTabName ~= "-" and row.fromTabName or nil,
+                craftedQuality = row.craftedQuality or row.qualityTier,
+            }
+            for keyName, value in pairs(split_timestamp(row.timestamp or row.when)) do
+                transaction[keyName] = value
+            end
+            payload.transactions[#payload.transactions + 1] = transaction
+        end
+    end
+
+    if #(payload.transactions or {}) == 0 then
+        return false
+    end
+
+    scanner.pendingLedgerSyncPayloads = scanner.pendingLedgerSyncPayloads or {}
+    scanner.pendingLedgerSyncPayloads[#scanner.pendingLedgerSyncPayloads + 1] = payload
+    return true
+end
+
+local function publish_pending_ledger_sync_payloads(updatedAt)
+    local transport = ns.modules.syncTransport or {}
+    if type(transport.Send) ~= "function" then
+        scanner.pendingLedgerSyncPayloads = {}
+        return false
+    end
+
+    local published = false
+    for _, payload in ipairs(scanner.pendingLedgerSyncPayloads or {}) do
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_DELTA",
+            updatedAt = tonumber(updatedAt or 0) or 0,
+            payload = payload,
+        })
+        published = true
+    end
+
+    scanner.pendingLedgerSyncPayloads = {}
+    return published
+end
+
 local function merge_target_transactions(db, target, transactions)
     if not target or not bankLedger then
         return 0
     end
 
     if target.kind == "money" and type(bankLedger.MergeMoneyTransactions) == "function" then
+        local ledger = type(bankLedger.EnsureState) == "function" and bankLedger.EnsureState(db) or nil
+        local beforeCount = #(type(ledger) == "table" and ledger.moneyLogs or {})
         local merged = bankLedger.MergeMoneyTransactions(db, {
             scanStartedAt = scanner.ledgerScanStartedAt,
             transactions = transactions,
         })
+        if (tonumber(merged or 0) or 0) > 0 and type(ledger) == "table" then
+            local mergedRows = {}
+            for index = beforeCount + 1, #(ledger.moneyLogs or {}) do
+                mergedRows[#mergedRows + 1] = ledger.moneyLogs[index]
+            end
+            append_ledger_sync_payload(db, target, mergedRows)
+        end
         scanner.ledgerMergedMoneyRows = (tonumber(scanner.ledgerMergedMoneyRows or 0) or 0) + (tonumber(merged or 0) or 0)
         return merged
     end
 
     if target.kind == "item" and type(bankLedger.MergeItemTransactions) == "function" then
+        local ledger = type(bankLedger.EnsureState) == "function" and bankLedger.EnsureState(db) or nil
+        local beforeCount = #(type(ledger) == "table" and ledger.itemLogs or {})
         local merged = bankLedger.MergeItemTransactions(db, {
             scanStartedAt = scanner.ledgerScanStartedAt,
             sourceTabIndex = target.queryId,
@@ -736,6 +896,13 @@ local function merge_target_transactions(db, target, transactions)
             transactions = transactions,
             allowSuspiciousUnknownAppend = true,
         })
+        if (tonumber(merged or 0) or 0) > 0 and type(ledger) == "table" then
+            local mergedRows = {}
+            for index = beforeCount + 1, #(ledger.itemLogs or {}) do
+                mergedRows[#mergedRows + 1] = ledger.itemLogs[index]
+            end
+            append_ledger_sync_payload(db, target, mergedRows)
+        end
         scanner.ledgerMergedItemRows = (tonumber(scanner.ledgerMergedItemRows or 0) or 0) + (tonumber(merged or 0) or 0)
         return merged
     end
@@ -792,6 +959,7 @@ finish_ledger_scan = function(db)
 
     local mergedItemRows = tonumber(scanner.ledgerMergedItemRows or 0) or 0
     local mergedMoneyRows = tonumber(scanner.ledgerMergedMoneyRows or 0) or 0
+    local publishedLedgerSyncAt = tonumber(scanner.ledgerScanStartedAt or 0) or 0
     scanner.ledgerScanInProgress = false
     scanner.ledgerTargets = {}
     scanner.ledgerScanStartedAt = 0
@@ -804,6 +972,7 @@ finish_ledger_scan = function(db)
         local now = type(_G.time) == "function" and (_G.time() or 0) or 0
         bankLedger.PruneRetention(db, now)
     end
+    publish_pending_ledger_sync_payloads(publishedLedgerSyncAt)
     if silentScan then
         if mergedItemRows > 0 or mergedMoneyRows > 0 then
             report_status(string.format("Guild bank ledger auto-refresh found %d item rows and %d money rows.", mergedItemRows, mergedMoneyRows))
@@ -832,6 +1001,7 @@ cancel_ledger_scan = function(message, options)
     scanner.ledgerScanSilent = false
     scanner.ledgerMergedItemRows = 0
     scanner.ledgerMergedMoneyRows = 0
+    scanner.pendingLedgerSyncPayloads = {}
     clear_ledger_wait_state()
 
     if not silent and type(message) == "string" and message ~= "" then
@@ -922,6 +1092,12 @@ schedule_passive_ledger_refresh = function()
 end
 
 function scanner.OnGuildBankTabsUpdated()
+    if not scanner.scanInProgress and not is_guild_bank_open_now() then
+        scanner.pendingAutoScan = false
+        scanner.pendingLedgerAutoScan = false
+        return false
+    end
+
     local db = current_db()
     if (not scanner.scanInProgress or scanner.waitingForTab == nil) and scanner.pendingAutoScan then
         scanner.RetryPendingAutoScan()
@@ -1033,6 +1209,11 @@ function scanner.RecordTabScan(tabData)
 end
 
 function scanner.OnGuildBankSlotsChanged(tabIndex, scanSource)
+    if not scanner.scanInProgress and not is_guild_bank_open_now() then
+        scanner.pendingAutoScan = false
+        return tabIndex
+    end
+
     if not scanner.scanInProgress or scanner.waitingForTab == nil then
         if not scanner.scanInProgress and not scanner.pendingAutoScan then
             local db = current_db()

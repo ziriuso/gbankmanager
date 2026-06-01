@@ -148,6 +148,27 @@ local remoteMergedCount = bankLedger.MergeRemoteDelta(remoteLedgerDb, {
 assert.equal(1, remoteMergedCount, "remote ledger deltas should append unseen rows into the local ledger")
 assert.equal(1, #remoteLedgerDb.bankLedger.itemLogs, "remote ledger deltas should persist their rows in the item ledger")
 assert.equal(1716570000, tonumber(remoteLedgerDb.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local ledger scan freshness")
+local laterVisibleScanMergedCount = bankLedger.MergeItemTransactions(remoteLedgerDb, {
+    scanStartedAt = 1716573600,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Flask of Tempered Swiftness",
+            craftedQuality = 3,
+            quantity = 12,
+            year = 2024,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+assert.equal(0, laterVisibleScanMergedCount, "a later local ledger scan of the same visible row should not duplicate a row that already arrived through remote sync")
+assert.equal(1, #remoteLedgerDb.bankLedger.itemLogs, "a later local ledger scan of the same visible row should leave the remote-synced ledger row count unchanged")
 
 local relogStableItemDb = fresh_db()
 _G.GetServerTime = function()

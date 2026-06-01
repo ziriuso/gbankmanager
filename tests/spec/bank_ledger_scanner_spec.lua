@@ -17,9 +17,32 @@ dofile("tests/helpers/wow_stubs.lua")
 local addonName, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local scanner = ns.modules.scanner
 local store = ns.modules.store
+local syncCodec = ns.modules.syncCodec or dofile("GBankManager/Sync/Codec.lua")
+local transport = ns.modules.syncTransport or {}
+
+local originalStoreGetDatabase = store.GetDatabase
+if type(originalStoreGetDatabase) == "function" then
+    store.GetDatabase = function(...)
+        local db = originalStoreGetDatabase(...)
+        if type(_G.GBankManagerDB) == "table" and type(db) == "table" and _G.GBankManagerDB ~= db then
+            _G.GBankManagerDB.meta = db.meta
+            _G.GBankManagerDB.bankLedger = db.bankLedger
+            _G.GBankManagerDB.ui = db.ui
+        end
+        return db
+    end
+end
 
 _G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
 ns.state.db = _G.GBankManagerDB
+
+local function current_db()
+    if store and type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
+    end
+
+    return ns.state.db or _G.GBankManagerDB
+end
 
 _G.time = function()
     return 1716577200
@@ -114,16 +137,16 @@ scanner.BeginLedgerScan = function(options)
     return true
 end
 
-_G.GBankManagerDB.meta.updatedAt = 0
-_G.GBankManagerDB.bankLedger.lastScanAt = 0
-_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+current_db().meta.updatedAt = 0
+current_db().bankLedger.lastScanAt = 0
+current_db().ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
 
 scanner.OnGuildBankOpened()
 assert.equal(1, beginScanCalls, "guild bank open should still route through the main inventory scan path")
 assert.equal(0, beginLedgerCalls, "guild bank open should not start a parallel ledger scan before the inventory scan finishes")
 
-_G.GBankManagerDB.meta.updatedAt = 1716577200
-_G.GBankManagerDB.bankLedger.lastScanAt = 0
+current_db().meta.updatedAt = 1716577200
+current_db().bankLedger.lastScanAt = 0
 scanner.scanInProgress = false
 scanner.pendingAutoScan = false
 scanner.guildBankOpen = false
@@ -132,8 +155,8 @@ assert.equal(1, beginScanCalls, "guild bank open should skip a second inventory 
 assert.equal(1, beginLedgerCalls, "guild bank open should still trigger a direct ledger scan when ledger data is stale but the main snapshot is still fresh")
 assert.truthy(beginLedgerOptions[1] and beginLedgerOptions[1].force == true, "bank-open ledger scans should force one ledger pass instead of depending on the stale-data throttle")
 
-_G.GBankManagerDB.meta.updatedAt = 1716577200
-_G.GBankManagerDB.bankLedger.lastScanAt = 1716577200
+current_db().meta.updatedAt = 1716577200
+current_db().bankLedger.lastScanAt = 1716577200
 scanner.scanInProgress = false
 scanner.pendingAutoScan = false
 scanner.guildBankOpen = false
@@ -145,15 +168,15 @@ assert.truthy(beginLedgerOptions[2] and beginLedgerOptions[2].force == true, "fr
 scanner.BeginScan = originalBeginScan
 scanner.BeginLedgerScan = originalBeginLedgerScan
 scanner.pendingLedgerScanAfterInventory = false
-_G.GBankManagerDB.bankLedger.lastScanAt = 0
+current_db().bankLedger.lastScanAt = 0
 _G.C_Timer.ClearPending()
 
 local queuedAutoLedgerDb = store.CreateFreshDatabase("Guild Testers")
 _G.GBankManagerDB = queuedAutoLedgerDb
 ns.state.db = queuedAutoLedgerDb
-_G.GBankManagerDB.meta.updatedAt = 0
-_G.GBankManagerDB.bankLedger.lastScanAt = 1716577200
-_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+current_db().meta.updatedAt = 0
+current_db().bankLedger.lastScanAt = 1716577200
+current_db().ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
 scanner.scanInProgress = false
 scanner.pendingAutoScan = false
 scanner.pendingLedgerScanAfterInventory = false
@@ -167,8 +190,21 @@ assert.truthy(scanner.scanInProgress == true, "fresh guild-bank open should star
 assert.truthy(scanner.pendingLedgerScanAfterInventory == true, "fresh guild-bank inventory auto-scans should still queue a ledger follow-up even when ledger freshness is inside the interval")
 assert.truthy(scanner.pendingLedgerScanOptions and scanner.pendingLedgerScanOptions.force == true, "fresh guild-bank inventory auto-scans should force the queued ledger follow-up")
 scanner.OnGuildBankClosed()
-_G.GBankManagerDB.bankLedger.lastScanAt = 0
+current_db().bankLedger.lastScanAt = 0
 
+local originalTransportSend = transport.Send
+local outboundLedgerSyncMessages = {}
+transport.Send = function(distribution, target, message)
+    outboundLedgerSyncMessages[#outboundLedgerSyncMessages + 1] = {
+        distribution = distribution,
+        target = target,
+        message = message,
+        encoded = type(originalTransportSend) == "function" and originalTransportSend(distribution, target, message) or nil,
+    }
+    return outboundLedgerSyncMessages[#outboundLedgerSyncMessages].encoded
+end
+
+_G.C_ChatInfo.sentMessages = {}
 assert.truthy(scanner.BeginLedgerScan(), "ledger scan should start when guild bank logs are available")
 run_all_pending()
 assert.equal(1, queriedLogs[1], "ledger scan should query the first item-log tab")
@@ -176,17 +212,34 @@ assert.equal(2, queriedLogs[2], "ledger scan should query the second item-log ta
 assert.equal(9, queriedLogs[3], "ledger scan should query the fixed guild-bank money-log slot")
 assert.equal(0, #(_G.SetCurrentGuildBankTabCalls or {}), "ledger scan should not rotate the visible guild-bank tab during log imports")
 
-assert.equal(2, #(_G.GBankManagerDB.bankLedger.itemLogs or {}), "ledger scan should persist new item-log rows")
-assert.equal(2, #(_G.GBankManagerDB.bankLedger.moneyLogs or {}), "ledger scan should persist new money-log rows")
-assert.equal("Deposit", _G.GBankManagerDB.bankLedger.itemLogs[1].action, "ledger scan should humanize deposit log actions")
-assert.equal("Withdrawal", _G.GBankManagerDB.bankLedger.itemLogs[2].action, "ledger scan should humanize withdrawal log actions")
-assert.equal("Repair", _G.GBankManagerDB.bankLedger.moneyLogs[1].action, "ledger scan should preserve repair actions from money logs")
-assert.equal(1716577200, _G.GBankManagerDB.bankLedger.lastScanAt, "ledger scan should stamp the combined scan time")
+assert.equal(2, #(current_db().bankLedger.itemLogs or {}), "ledger scan should persist new item-log rows")
+assert.equal(2, #(current_db().bankLedger.moneyLogs or {}), "ledger scan should persist new money-log rows")
+assert.equal("Deposit", current_db().bankLedger.itemLogs[1].action, "ledger scan should humanize deposit log actions")
+assert.equal("Withdrawal", current_db().bankLedger.itemLogs[2].action, "ledger scan should humanize withdrawal log actions")
+assert.equal("Repair", current_db().bankLedger.moneyLogs[1].action, "ledger scan should preserve repair actions from money logs")
+assert.equal(1716577200, current_db().bankLedger.lastScanAt, "ledger scan should stamp the combined scan time")
 assert.equal("Guild bank ledger scan finished (2 item rows, 2 money rows).", scanner:GetStatusText(), "ledger scan should report a visible completion summary with merged row counts")
+assert.equal(3, #(outboundLedgerSyncMessages or {}), "ledger scan should automatically publish one addon sync delta per merged ledger target")
+local publishedLedgerDeltaOne = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
+local publishedLedgerDeltaTwo = ((outboundLedgerSyncMessages or {})[2] or {}).message or {}
+local publishedLedgerDeltaThree = ((outboundLedgerSyncMessages or {})[3] or {}).message or {}
+assert.equal("LEDGER_DELTA", tostring(publishedLedgerDeltaOne.type or ""), "ledger scan should publish encoded ledger delta messages")
+assert.equal("item", tostring(((publishedLedgerDeltaOne.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for item-log targets")
+assert.equal("item", tostring(((publishedLedgerDeltaTwo.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for each visible item-log target")
+assert.equal("money", tostring(((publishedLedgerDeltaThree.payload or {}).kind) or ""), "ledger scan should publish one money ledger delta when money rows merged")
 
 queriedLogs = {}
 assert.truthy(not scanner.BeginLedgerScan(), "ledger scan should throttle inside the configured interval")
 assert.equal(0, #queriedLogs, "throttled ledger scans should not query any logs")
+
+current_db().bankLedger.lastScanAt = 0
+local autoPublishCountBeforeNoChangeRepeat = #(outboundLedgerSyncMessages or {})
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "forced ledger scan should still run when we want to verify no-change publish suppression")
+run_all_pending()
+assert.equal(autoPublishCountBeforeNoChangeRepeat, #(outboundLedgerSyncMessages or {}), "re-reading the same visible ledger windows should not auto-publish duplicate no-op ledger deltas")
+transport.Send = originalTransportSend
 
 local manualLedgerStartCalls = 0
 scanner.BeginLedgerScan = function(options)
@@ -200,9 +253,9 @@ local originalGetGuildBankItemLink = _G.GetGuildBankItemLink
 
 _G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
 ns.state.db = _G.GBankManagerDB
-_G.GBankManagerDB.meta.updatedAt = 0
-_G.GBankManagerDB.bankLedger.lastScanAt = 1716577200
-_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 3600
+current_db().meta.updatedAt = 0
+current_db().bankLedger.lastScanAt = 1716577200
+current_db().ui.logsHistorySettings.ledgerScanIntervalSeconds = 3600
 _G.GetNumGuildBankTabs = function()
     return 1
 end
@@ -228,9 +281,9 @@ end
 
 _G.GBankManagerDB = store.CreateFreshDatabase("Guild Testers")
 ns.state.db = _G.GBankManagerDB
-_G.GBankManagerDB.meta.updatedAt = 0
-_G.GBankManagerDB.bankLedger.lastScanAt = 0
-_G.GBankManagerDB.ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
+current_db().meta.updatedAt = 0
+current_db().bankLedger.lastScanAt = 0
+current_db().ui.logsHistorySettings.ledgerScanIntervalSeconds = 300
 _G.QueryGuildBankTab = function()
     return true
 end

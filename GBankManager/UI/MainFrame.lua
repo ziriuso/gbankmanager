@@ -1651,6 +1651,7 @@ apply_surface_variant(mainFrame.optionsSyncTable, "table-viewport-structured")
 mainFrame.optionsSyncColumnHeaders = mainFrame.optionsSyncColumnHeaders or {}
 local syncHeaderTitles = { "Character", "Last Time Seen", "Last Time Synchronized" }
 local syncHeaderWidths = { 200, 160, 200 }
+mainFrame.optionsSyncTableContentWidth = 8
 local previousSyncHeader = nil
 for index, title in ipairs(syncHeaderTitles) do
     local header = mainFrame.optionsSyncColumnHeaders[index] or {}
@@ -1669,6 +1670,10 @@ for index, title in ipairs(syncHeaderTitles) do
     header.text = title
     mainFrame.optionsSyncColumnHeaders[index] = header
     previousSyncHeader = header
+    mainFrame.optionsSyncTableContentWidth = (tonumber(mainFrame.optionsSyncTableContentWidth or 0) or 0) + syncHeaderWidths[index]
+    if index < #syncHeaderTitles then
+        mainFrame.optionsSyncTableContentWidth = (tonumber(mainFrame.optionsSyncTableContentWidth or 0) or 0) + 8
+    end
 end
 
 mainFrame.optionsSyncTableScrollFrame = mainFrame.optionsSyncTableScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.optionsSyncTable, "BackdropTemplate")
@@ -1681,6 +1686,7 @@ end
 mainFrame.optionsSyncTableScrollChild = mainFrame.optionsSyncTableScrollChild or _G.CreateFrame("Frame", nil, mainFrame.optionsSyncTableScrollFrame, "BackdropTemplate")
 mainFrame.optionsSyncTableScrollChild:SetPoint("TOPLEFT", mainFrame.optionsSyncTableScrollFrame, "TOPLEFT", 0, 0)
 mainFrame.optionsSyncTableScrollChild:SetPoint("TOPRIGHT", mainFrame.optionsSyncTableScrollFrame, "TOPRIGHT", 0, 0)
+mainFrame.optionsSyncTableScrollChild:SetWidth(tonumber(mainFrame.optionsSyncTableContentWidth or 0) or 0)
 mainFrame.optionsSyncTableScrollChild:SetHeight(24)
 mainFrame.optionsSyncTableScrollFrame:SetScrollChild(mainFrame.optionsSyncTableScrollChild)
 
@@ -2445,6 +2451,10 @@ function mainFrame:RefreshSyncControls()
     local db = current_db()
     local rows = build_sync_peer_rows(db)
     self.optionsSyncTableRowsData = rows
+    local contentWidth = math.max(
+        tonumber(self.optionsSyncTableContentWidth or 0) or 0,
+        self.optionsSyncTableScrollFrame and (tonumber(self.optionsSyncTableScrollFrame:GetWidth() or 0) or 0) or 0
+    )
 
     if self.optionsSyncTableRows == nil then
         self.optionsSyncTableRows = {}
@@ -2466,7 +2476,7 @@ function mainFrame:RefreshSyncControls()
 
         rowFrame:ClearAllPoints()
         rowFrame:SetPoint("TOPLEFT", self.optionsSyncTableScrollChild, "TOPLEFT", 0, -((index - 1) * 26))
-        rowFrame:SetPoint("TOPRIGHT", self.optionsSyncTableScrollChild, "TOPRIGHT", 0, -((index - 1) * 26))
+        rowFrame:SetWidth(contentWidth)
         apply_surface_variant(rowFrame, index % 2 == 1 and "row" or "row-alt")
         rowFrame.rowData = row
         rowFrame.characterText:SetText(tostring(row.character or ""))
@@ -2484,6 +2494,7 @@ function mainFrame:RefreshSyncControls()
     end
 
     if self.optionsSyncTableScrollChild then
+        self.optionsSyncTableScrollChild:SetWidth(contentWidth)
         self.optionsSyncTableScrollChild:SetHeight(math.max(24, #rows * 26))
     end
 

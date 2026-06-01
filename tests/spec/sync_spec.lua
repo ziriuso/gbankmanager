@@ -1344,3 +1344,50 @@ scanner.OnGuildBankOpened = originalOnGuildBankOpened
 
 assert.equal(1, scannerOpenedCalls, "central event dispatcher should forward guild bank opened events to the scanner event adapter")
 assert.equal(1, scannerCalls, "central event dispatcher should forward guild bank slot events to the scanner event adapter")
+
+local originalGetNumGuildBankTabs = _G.GetNumGuildBankTabs
+local originalGetGuildBankTabInfo = _G.GetGuildBankTabInfo
+local originalGuildBankFrame = _G.GuildBankFrame
+local originalEnum = _G.Enum
+local originalPlayerInteractionManager = _G.C_PlayerInteractionManager
+local scannerStatusBeforeClosedBankNoise = scanner:GetStatusText()
+
+_G.GetNumGuildBankTabs = function()
+    return 8
+end
+_G.GetGuildBankTabInfo = function(tabIndex)
+    return "Tab " .. tostring(tabIndex), nil, true
+end
+_G.GuildBankFrame = {
+    IsShown = function()
+        return false
+    end,
+}
+_G.Enum = _G.Enum or {}
+_G.Enum.PlayerInteractionType = _G.Enum.PlayerInteractionType or {}
+_G.Enum.PlayerInteractionType.GuildBanker = 10
+_G.C_PlayerInteractionManager = {
+    IsInteractingWithNpcOfType = function()
+        return false
+    end,
+}
+
+scanner.scanInProgress = false
+scanner.pendingAutoScan = false
+scanner.guildBankOpen = false
+scanner.autoScanRetryCount = 0
+_G.C_Timer.ClearPending()
+onEvent(events, "GUILDBANK_UPDATE_TABS")
+assert.equal(false, scanner.pendingAutoScan, "guild bank tab updates should not arm an auto scan when the bank is actually closed")
+assert.equal(false, scanner.scanInProgress, "guild bank tab updates should not start a scan when the bank is actually closed")
+assert.equal(scannerStatusBeforeClosedBankNoise, scanner:GetStatusText(), "closed-bank tab updates should not replace the scanner status with a fake scan")
+
+onEvent(events, "GUILDBANKBAGSLOTS_CHANGED", 1)
+assert.equal(false, scanner.pendingAutoScan, "guild bank slot updates should not arm an auto scan when the bank is actually closed")
+assert.equal(false, scanner.scanInProgress, "guild bank slot updates should not start a scan when the bank is actually closed")
+
+_G.GetNumGuildBankTabs = originalGetNumGuildBankTabs
+_G.GetGuildBankTabInfo = originalGetGuildBankTabInfo
+_G.GuildBankFrame = originalGuildBankFrame
+_G.Enum = originalEnum
+_G.C_PlayerInteractionManager = originalPlayerInteractionManager
