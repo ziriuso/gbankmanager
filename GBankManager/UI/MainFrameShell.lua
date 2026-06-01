@@ -1521,7 +1521,7 @@ function mainFrameShell.CreateItemSearchSelector(parent, options)
     end
 
     selector.statusText = mainFrameShell.MakeLabel(selector, "", "GameFontHighlightSmall")
-    selector.statusText:SetPoint("TOPLEFT", selector.selectedItemNameText, "BOTTOMLEFT", 0, -6)
+    selector.statusText:SetPoint("TOPLEFT", selector.selectedItemLabel, "BOTTOMLEFT", 0, -30)
     if type(selector.statusText.SetWidth) == "function" then
         selector.statusText:SetWidth(selectedTextWidth)
     end

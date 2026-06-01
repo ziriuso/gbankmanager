@@ -12,11 +12,16 @@
 - The current local follow-up also blocks stale `GUILDBANK_UPDATE_TABS` or `GUILDBANKBAGSLOTS_CHANGED` events from arming an inventory auto-scan when the guild bank is actually closed after `/reload`.
 - The current local follow-up now also auto-publishes guild-scoped `LEDGER_DELTA` sync payloads whenever a manual, bank-open, or passive ledger scan appends new ledger rows locally, so other online guild clients do not have to wait for a separate `Sync Ledger` click.
 - The current local follow-up now also fixes the live `Options -> Sync` peer list rendering bug: the Sync subtable now assigns a concrete scroll-child and row width instead of relying on anchor-only width resolution that left the peer rows clipped away in the real WoW client.
+- The current local follow-up also brings the Minimums add-item modal back into line with the New Request wizard: both now enable the shared selector's crafted-quality icon path, so crafted search results and the selected-item summary show the same quality icons in both surfaces.
+- The current local follow-up also fixes two Minimums add-flow regressions: the typed `Minimum` value now carries from the add-search modal into `Minimum Details` instead of resetting to the default, and the lower add-search controls no longer jump right when a crafted-quality selected-item icon appears.
 - Possible future feature note:
   - add a global `Suppress routine addon chat messages` option
   - default scope: mute routine status or progress messages only
   - keep `/gbm debug ...` output and real error messages visible
   - likely low-to-moderate effort because most chat already flows through shared status helpers
+  - add active-view auto-refresh when accepted remote sync mutates Requests, Minimums, or Bank Ledger data
+  - preferred scope: repaint only when the relevant view is currently open, while preserving filters, selected row, and scroll where possible
+  - likely moderate effort because each view already has a refresh path, but Requests and Bank Ledger currently reset scroll or selection state during naive refreshes
 - The new debug command prints:
   - local `name`, `characterKey`, `guild`, and active guild key
   - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
@@ -28,6 +33,8 @@
   - sync hello traffic and request snapshots both bootstrap a client whose saved root still uses the placeholder `Unknown Guild`
   - `tests/spec/ui_options_spec.lua` now verifies the open Sync tab repaints immediately when a new guild peer hello arrives
   - `tests/spec/ui_options_spec.lua` now also verifies the Sync peer subtable gets a concrete drawable width so stored peers render visibly in the live client
+  - `tests/spec/ui_minimums_spec.lua` now also verifies the Minimums add-item selector shows crafted-quality icons in both result rows and the selected-item summary, matching the Requests selector contract
+  - `tests/spec/ui_minimums_spec.lua` now also verifies the add-search modal preserves a typed minimum through the handoff into `Minimum Details` and keeps the lower controls horizontally stable after a selection resolves
   - `tests/spec/sync_spec.lua` now verifies duplicate no-op ledger deltas stay quiet in chat while still being accepted
   - `tests/spec/sync_spec.lua` now verifies closed-bank reload noise cannot arm an inventory scan from stale guild-bank tab or bag-slot events
   - `tests/spec/bank_ledger_scanner_spec.lua` now verifies ledger scans automatically publish one guild-scoped sync delta per merged item-log or money-log target while repeated no-change reruns stay quiet

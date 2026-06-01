@@ -206,6 +206,8 @@ assert.equal("Search Item Name", mainFrame.minimumAddItemNameLabel:GetText(), "m
 assert.equal("Minimum", mainFrame.minimumAddQuantityLabel:GetText(), "minimum add modal should label the quantity field clearly")
 assert.equal("Matches", mainFrame.minimumAddResultsLabel:GetText(), "minimum add modal should label the results list clearly")
 assert.equal("Selected Item", mainFrame.minimumAddSelectedItemLabel:GetText(), "minimum add modal should clearly label the selected item display")
+local minimumAddQuantityLabelAnchorBeforeSelection = { unpack(mainFrame.minimumAddQuantityLabel.points[1] or {}) }
+local minimumAddQuantityInputAnchorBeforeSelection = { unpack(mainFrame.minimumAddQuantityInput.points[1] or {}) }
 
 mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemIDInput:SetText("243734")
@@ -213,6 +215,9 @@ mainFrame.minimumAddItemIDInput:GetScript("OnTextChanged")(mainFrame.minimumAddI
 assert.equal("243734", mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should resolve item 243734 by exact item id before the modal handoff assertion runs")
 assert.equal("Thalassian Phoenix Oil", mainFrame.minimumAddItemNameInput:GetText(), "minimum add modal should populate item 243734 name before the modal handoff assertion runs")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should enable Add after resolving item 243734 before the modal handoff assertion runs")
+assert.equal(minimumAddQuantityLabelAnchorBeforeSelection[4], (mainFrame.minimumAddQuantityLabel.points[1] or {})[4], "minimum add modal should keep the minimum label in the same horizontal position after item selection")
+assert.equal(minimumAddQuantityInputAnchorBeforeSelection[4], (mainFrame.minimumAddQuantityInput.points[1] or {})[4], "minimum add modal should keep the minimum input in the same horizontal position after item selection")
+mainFrame.minimumAddQuantityInput:SetText("10")
 mainFrame.minimumAddButton:GetScript("OnClick")(mainFrame.minimumAddButton)
 assert.truthy(mainFrame.minimumDetailsModal ~= nil, "minimums should build a reusable details modal shell")
 assert.truthy(not mainFrame.minimumAddModal:IsShown(), "search modal should close after confirming an item for add")
@@ -221,6 +226,7 @@ assert.equal("modal-sheet", mainFrame.minimumDetailsModal.gbmSurfaceVariant, "mi
 assert.truthy(not mainFrame.minimumEditorPanel:IsShown(), "minimums should not use the footer editor after add")
 assert.equal("243734", mainFrame.minimumDetailsItemIDText:GetText(), "details modal should inherit the chosen item id from the search modal")
 assert.equal(TRUSTED_ITEM_LINKS[243734], mainFrame.minimumDetailsItemNameText:GetText(), "details modal should inherit the chosen shared item-display text from the search modal")
+assert.equal("10", mainFrame.minimumDetailsQuantityInput:GetText(), "minimum add handoff should preserve the typed minimum instead of resetting to the default value in details")
 assert.truthy(mainFrame.minimumPendingRules == nil or next(mainFrame.minimumPendingRules) == nil, "minimum add handoff should not stage a draft row before later details confirmation work lands")
 assert.equal("add", mainFrame.minimumDetailsConfirmButton.iconKind, "details modal should use the shared add icon button")
 assert.equal("remove", mainFrame.minimumDetailsRemoveButton.iconKind, "details modal should use the shared remove icon button")
@@ -272,7 +278,8 @@ mainFrame.minimumAddItemNameInput:SetText("Test Crafted Widget")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.equal("990001", mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should resolve catalog items by item name")
 assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", "Test Crafted Widget", 1, true) ~= nil, "minimum add modal should show the selected item name after resolution")
-assert.truthy(not (mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown()), "minimum add modal should stop depending on a separate selected-item quality icon once the shared item display owns the visible label")
+assert.equal("Professions-ChatIcon-Quality-Tier5", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should show the shared selected-item crafted-quality atlas after resolution")
+assert.truthy(mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown(), "minimum add modal should show the shared selected-item quality icon once a crafted-quality item is resolved")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should enable Add after a catalog item is selected")
 
 mainFrame:ResetMinimumAddRow()
@@ -286,7 +293,7 @@ assert.truthy((mainFrame.minimumAddSearchSelector.resultsScrollFrame or {}).scro
 local minimumBroadResultRow = (mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}
 assert.truthy(tostring((minimumBroadResultRow.itemText or {}):GetText() or "") ~= "", "minimum add result rows should render shared item-display text for broad searches")
 assert.truthy(string.find((minimumBroadResultRow.itemText or {}):GetText() or "", tostring(((minimumBroadResultRow.resolvedItem or {}).itemID or "")), 1, true) == nil, "minimum add result rows should stop showing the item id inline once the shared item display owns the visible label")
-assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should stop depending on a separate quality icon region")
+assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == true), "minimum add result rows should show the shared item-display quality icon when crafted-quality metadata exists")
 
 mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemIDInput:SetText("241323")
@@ -307,10 +314,15 @@ mainFrame:ResetMinimumAddRow()
 mainFrame.minimumAddItemNameInput:SetText("test variant flask")
 mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemNameInput)
 assert.truthy(mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep duplicate-name quality variants in the results list")
-assert.equal("Test Variant Flask", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).itemText or {}):GetText() or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the higher crafted variant")
-assert.equal("Test Variant Flask", ((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).itemText or {}):GetText() or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the lower crafted variant")
-assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[1] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should not keep a dedicated quality icon path active for duplicate-name variants")
-assert.truthy(((((mainFrame.minimumAddSearchSelector.resultRows or {})[2] or {}).qualityIcon or {}):IsShown() == false), "minimum add result rows should not keep a dedicated quality icon path active for duplicate-name variants")
+local minimumVariantResultRows = mainFrame.minimumAddSearchSelector.resultRows or {}
+local higherMinimumVariantRow = minimumVariantResultRows[1] or {}
+local lowerMinimumVariantRow = minimumVariantResultRows[2] or {}
+assert.equal("Test Variant Flask", (((higherMinimumVariantRow.itemText or {}):GetText()) or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the higher crafted variant")
+assert.equal("Test Variant Flask", (((lowerMinimumVariantRow.itemText or {}):GetText()) or ""), "minimum add result rows should fall back to a plain shared item label when no trusted hyperlink is available for the lower crafted variant")
+assert.equal("Professions-ChatIcon-Quality-Tier5", (((higherMinimumVariantRow.qualityIcon or {}).atlas) or ""), "minimum add result rows should show the shared five-rank icon for the higher duplicate-name variant")
+assert.equal("Professions-ChatIcon-Quality-Tier2", (((lowerMinimumVariantRow.qualityIcon or {}).atlas) or ""), "minimum add result rows should show the shared five-rank icon for the lower duplicate-name variant")
+assert.truthy((((higherMinimumVariantRow.qualityIcon or {}):IsShown()) == true), "minimum add result rows should show the shared quality icon for the higher duplicate-name variant")
+assert.truthy((((lowerMinimumVariantRow.qualityIcon or {}):IsShown()) == true), "minimum add result rows should show the shared quality icon for the lower duplicate-name variant")
 local selectedMinimumVariantRow = mainFrame.minimumAddMatchButtons[2]
 local selectedMinimumVariantItem = selectedMinimumVariantRow.resolvedItem
 mainFrame.minimumAddMatchButtons[2]:GetScript("OnClick")(mainFrame.minimumAddMatchButtons[2])
@@ -318,7 +330,8 @@ mainFrame.minimumAddItemNameInput:GetScript("OnTextChanged")(mainFrame.minimumAd
 mainFrame.minimumAddItemIDInput:GetScript("OnTextChanged")(mainFrame.minimumAddItemIDInput)
 assert.equal(tostring((selectedMinimumVariantItem or {}).itemID or ""), mainFrame.minimumAddItemIDInput:GetText(), "minimum add modal should preserve the explicitly selected duplicate-name item id after delayed input callbacks")
 assert.truthy(string.find(mainFrame.minimumAddSelectedItemNameText:GetText() or "", tostring((selectedMinimumVariantItem or {}).name or (selectedMinimumVariantItem or {}).itemName or ""), 1, true) ~= nil, "minimum add modal should keep the selected item display after delayed input callbacks")
-assert.truthy(not (mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown()), "minimum add modal should keep the selected duplicate-name item on the shared item-display contract after delayed input callbacks")
+assert.equal("Professions-ChatIcon-Quality-Tier2", (mainFrame.minimumAddSelectedItemQualityIcon or {}).atlas, "minimum add modal should keep the selected duplicate-name tier on the shared crafted-quality icon contract after delayed input callbacks")
+assert.truthy(mainFrame.minimumAddSelectedItemQualityIcon and mainFrame.minimumAddSelectedItemQualityIcon:IsShown(), "minimum add modal should show the selected-item shared quality icon beside the selected item label")
 assert.truthy(not mainFrame.minimumAddResultsPanel:IsShown(), "minimum add modal should keep the matches panel hidden after a duplicate-name selection survives delayed input callbacks")
 assert.truthy(mainFrame.minimumAddButton.enabled ~= false, "minimum add modal should keep Add enabled after delayed callbacks on a valid selection")
 mainFrame.minimumPendingRules = {}

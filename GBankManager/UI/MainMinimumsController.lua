@@ -264,6 +264,7 @@ function mainMinimumsController.Attach(mainFrame, options)
         resultsPanelWidth = 452,
         resultsPanelHeight = 74,
         minimumNameQueryLength = 2,
+        showQualityIcon = true,
         resolveQuery = function(query)
             local itemCatalog = ns.modules.itemCatalog
             return itemCatalog and type(itemCatalog.ResolveSearchSessionQuery) == "function"
@@ -1540,6 +1541,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         local itemID = tonumber(item.itemID)
         local itemName = tostring(item.name or item.itemName or "")
+        local quantity = parseNumber(self.minimumAddQuantityInput:GetText() or "")
         if not itemID or itemName == "" then
             return nil
         end
@@ -1549,7 +1551,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             itemName = itemName,
             itemLink = item.itemLink,
             itemString = item.itemString,
-            quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100,
+            quantity = quantity or self:GetMinimumSettings(currentDb()).defaultQuantity or 100,
             scope = "TAB",
             tabName = nil,
             enabled = true,
