@@ -45,7 +45,7 @@ Use these tag shapes:
 - `vX.Y.Z-beta.N` -> CurseForge `beta`
 - `vX.Y.Z` -> CurseForge `release`
 
-While `GBankManager` is still pre-1.0, prefer beta tags unless the user explicitly asks for alpha or stable release.
+Use plain semantic version tags for stable public releases, and keep using alpha or beta suffixes whenever the user explicitly wants a prerelease channel.
 
 ## Normal Release Flow
 

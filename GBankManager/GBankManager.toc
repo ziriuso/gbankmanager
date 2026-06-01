@@ -1,7 +1,7 @@
 ## Interface: 120005
 ## Title: GBankManager
-## Version: 0.9.0-beta
-## X-Release-Tag: v0.9.0-beta.4
+## Version: 1.0.0
+## X-Release-Tag: v1.0.0
 ## Notes: Guild bank inventory and procurement manager
 ## Category: Guild
 ## Author: ziriuso

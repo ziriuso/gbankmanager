@@ -31,7 +31,7 @@ Anything containing `-alpha` publishes as an alpha file.
 Anything containing `-beta` publishes as a beta file.
 A plain semantic version tag publishes as a release file.
 
-Because the project is still working toward `1.0`, prefer beta tags until the first public stable release.
+Use plain semantic version tags for stable public releases, and keep using `-alpha` or `-beta` suffixes whenever a prerelease channel is the intended outcome.
 
 ## GitHub Actions Workflow
 
