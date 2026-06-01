@@ -2,6 +2,35 @@
 
 ## Resume Here
 
+### 2026-06-01 Local Troubleshooting Update
+
+- Current repo truth at session start:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - HEAD: `65cde0a` (`chore:update-release-actions-for-node24`)
+  - branch was in sync with `origin/codex/gbankmanager-v1`
+  - only pre-existing local noise was untracked `.vscode/`
+  - published beta remains `v0.9.0-beta.4`
+- Full local verification was green before this troubleshooting slice:
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_requests_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\live_smoke_spec.lua`
+- Live/manual sync finding:
+  - request sync could be rejected on a fresh client when the local SavedVariables root was still under `Unknown`, even though the incoming payload had the correct guild key.
+  - local fixes now prefer live guild info when resolving the active guild and migrate an `Unknown` root into the real guild key before valid guild-scoped request traffic is applied.
+- Request-only UX follow-up now in the local worktree:
+  - `/gbm` for request-only users opens the trimmed Requests shell instead of auto-opening the request wizard.
+  - request-only sidebar navigation is limited to `Requests`, `Options`, and `About`.
+  - request-only `Options` is limited to `Appearance`, `Sync`, and `Data`.
+  - `/gbm request` still opens the request-creation wizard directly.
+- Focused local verification for this slice should include:
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\slash_commands_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_requests_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\live_smoke_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+
 ### 2026-05-28 Sync Rollout Update
 
 - AceComm sync rollout is now through Task 5 on top of the published `v0.9.0-beta.3` checkpoint.

@@ -571,8 +571,38 @@ local function current_access_profile(db)
     return "full_shell", context
 end
 
+local function request_only_shell(mainFrame)
+    return mainFrame.requestOnlyMode == true
+end
+
 local function request_only_layout(mainFrame)
-    return mainFrame.requestOnlyMode == true and mainFrame.activeView == "REQUESTS"
+    return request_only_shell(mainFrame) and mainFrame.activeView == "REQUESTS"
+end
+
+local function request_only_view_allowed(viewKey)
+    return viewKey == "REQUESTS" or viewKey == "OPTIONS" or viewKey == "ABOUT"
+end
+
+local function normalize_request_only_view(viewKey)
+    local normalizedKey = tostring(viewKey or "REQUESTS")
+    if request_only_view_allowed(normalizedKey) then
+        return normalizedKey
+    end
+
+    return "REQUESTS"
+end
+
+local function request_only_options_tab_allowed(tabKey)
+    return tabKey == "APPEARANCE" or tabKey == "SYNC" or tabKey == "LOGS_HISTORY"
+end
+
+local function normalize_request_only_options_tab(tabKey)
+    local normalizedKey = tostring(tabKey or "APPEARANCE")
+    if request_only_options_tab_allowed(normalizedKey) then
+        return normalizedKey
+    end
+
+    return "APPEARANCE"
 end
 
 local function clamp_range(value, minValue, maxValue)
@@ -2817,6 +2847,9 @@ end
 
 function mainFrame:SetOptionsTab(tabKey)
     local nextTab = tostring(tabKey or "APPEARANCE")
+    if request_only_shell(self) then
+        nextTab = normalize_request_only_options_tab(nextTab)
+    end
     self.optionsActiveTab = nextTab
 
     set_frame_shown(self.optionsAppearancePanel, nextTab == "APPEARANCE")
@@ -2831,7 +2864,24 @@ function mainFrame:SetOptionsTab(tabKey)
     set_frame_shown(self.optionsExportsPanel, false)
     set_frame_shown(self.optionsRequestsPanel, false)
 
+    local previousVisibleButton = nil
     for _, button in ipairs(self.optionsTabButtons or {}) do
+        local showButton = not request_only_shell(self) or request_only_options_tab_allowed(button.key)
+        if type(button.ClearAllPoints) == "function" then
+            button:ClearAllPoints()
+        end
+        if showButton then
+            if previousVisibleButton == nil then
+                button:SetPoint("TOPLEFT", self.optionsTabBar, "TOPLEFT", 0, 0)
+            else
+                button:SetPoint("LEFT", previousVisibleButton, "RIGHT", 8, 0)
+            end
+            button:Show()
+            previousVisibleButton = button
+        else
+            button:Hide()
+        end
+
         apply_button_variant(button, button.key == nextTab and "primary" or "tab")
         button.gbmTabStyle = "segmented-soft"
     end
@@ -3906,13 +3956,14 @@ for index, item in ipairs(mainFrame.navItems) do
 end
 
 function mainFrame:ApplyTheme()
+    local requestOnlyShell = request_only_shell(self)
     local compactRequestMode = request_only_layout(self)
     local shellScale = self.appearanceShellScale or 1
     local sidebarWidth = self.collapsedSidebar and theme.spacing.sidebarCollapsed or theme.spacing.sidebarExpanded
-    local shellWidth = compactRequestMode and 960 or theme.spacing.frameWidth
-    local shellHeight = compactRequestMode and 580 or theme.spacing.frameHeight
-    local topBarHeight = compactRequestMode and 44 or theme.spacing.topBarHeight
-    local topBarWidth = math.max(320, shellWidth - (compactRequestMode and 0 or sidebarWidth))
+    local shellWidth = requestOnlyShell and 960 or theme.spacing.frameWidth
+    local shellHeight = requestOnlyShell and 580 or theme.spacing.frameHeight
+    local topBarHeight = requestOnlyShell and 44 or theme.spacing.topBarHeight
+    local topBarWidth = math.max(320, shellWidth - sidebarWidth)
     local contentHeight = math.max(280, shellHeight - topBarHeight)
     local navButtonHeight = math.max(28, math.floor(30 * shellScale + 0.5))
     local navButtonSpacing = math.max(36, math.floor(40 * shellScale + 0.5))
@@ -3934,17 +3985,10 @@ function mainFrame:ApplyTheme()
     if type(self.content.ClearAllPoints) == "function" then
         self.content:ClearAllPoints()
     end
-    if compactRequestMode then
-        self.topBar:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
-        self.topBar:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, 0)
-        self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
-        self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
-    else
-        self.topBar:SetPoint("TOPLEFT", self.sidebar, "TOPRIGHT", 0, 0)
-        self.topBar:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, 0)
-        self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
-        self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
-    end
+    self.topBar:SetPoint("TOPLEFT", self.sidebar, "TOPRIGHT", 0, 0)
+    self.topBar:SetPoint("TOPRIGHT", self, "TOPRIGHT", 0, 0)
+    self.content:SetPoint("TOPLEFT", self.topBar, "BOTTOMLEFT", 0, 0)
+    self.content:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 0)
     topBarHeight = math.max(52, math.min(76, topBarHeight))
     self.topBar:SetSize(topBarWidth, topBarHeight)
     self.content:SetSize(topBarWidth, contentHeight)
@@ -4122,8 +4166,10 @@ function mainFrame:ApplyTheme()
     set_label_color(self.aboutDescriptionText, theme.tokens.textMuted)
     set_label_color(self.aboutSlashHintText, theme.tokens.header)
 
-    for index, button in ipairs(self.sidebarButtons) do
+    local visibleNavIndex = 0
+    for _, button in ipairs(self.sidebarButtons) do
         local isActive = button.key == self.activeView
+        local showButton = not requestOnlyShell or request_only_view_allowed(button.key)
         apply_button_variant(button, "nav", isActive and theme.colors.panelAlt or theme.colors.panel)
         button.gbmButtonFamily = "nav-soft"
         button.gbmSelectionStyle = isActive and "selected-strong" or "selected-soft"
@@ -4136,7 +4182,10 @@ function mainFrame:ApplyTheme()
         if type(button.ClearAllPoints) == "function" then
             button:ClearAllPoints()
         end
-        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, navStartOffset - ((index - 1) * navButtonSpacing))
+        if showButton then
+            button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 16, navStartOffset - (visibleNavIndex * navButtonSpacing))
+            visibleNavIndex = visibleNavIndex + 1
+        end
         if button.navIcon then
             if type(button.navIcon.SetTexture) == "function" then
                 button.navIcon:SetTexture(nav_icon_texture_for(button.key))
@@ -4178,10 +4227,10 @@ function mainFrame:ApplyTheme()
         if mainFrameShell.SetGlow then
             mainFrameShell.SetGlow(button, color_with_alpha(theme.tokens.accent or theme.colors.accent, isActive and 0.08 or 0.0), isActive)
         end
-        if compactRequestMode then
-            button:Hide()
-        else
+        if showButton then
             button:Show()
+        else
+            button:Hide()
         end
     end
 
@@ -4242,12 +4291,7 @@ function mainFrame:ApplyTheme()
         self.sidebarIdentityNameText:Hide()
         self.sidebarIdentityGuildText:Hide()
     end
-    if compactRequestMode then
-        self.sidebarIdentityPanel:Hide()
-        if self.sidebarCrestTexture then
-            self.sidebarCrestTexture:Hide()
-        end
-    elseif self.collapsedSidebar then
+    if self.collapsedSidebar then
         self.sidebarIdentityPanel:Hide()
         if self.sidebarCrestTexture then
             self.sidebarCrestTexture:Hide()
@@ -4260,9 +4304,9 @@ function mainFrame:ApplyTheme()
     end
 
     self.collapseButton.labelText:SetText(self.collapsedSidebar and ">" or "<")
-    if compactRequestMode then
-        self.sidebar:Hide()
-        self.collapseButton:Hide()
+    if requestOnlyShell then
+        self.sidebar:Show()
+        self.collapseButton:Show()
         self.scanButton:Hide()
         self.statusText:Hide()
         self.subtitleText:Hide()
@@ -5035,6 +5079,9 @@ end
 
 function mainFrame:SelectView(name)
     local nextView = name or "DASHBOARD"
+    if request_only_shell(self) then
+        nextView = normalize_request_only_view(nextView)
+    end
     if nextView ~= self.activeView then
         self:ClearTableFilters()
     end

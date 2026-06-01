@@ -19,6 +19,19 @@ local function normalize_guild_name(guildName)
     return resolvedGuild
 end
 
+local function live_guild_name()
+    if type(_G.GetGuildInfo) ~= "function" then
+        return nil
+    end
+
+    local guildName = _G.GetGuildInfo("player")
+    if type(guildName) == "string" and guildName ~= "" then
+        return guildName
+    end
+
+    return nil
+end
+
 local function ensure_table(value)
     if type(value) == "table" then
         return value
@@ -179,6 +192,18 @@ local function resolve_root_guild_key(root, guildName)
         return resolvedGuild
     end
 
+    for key in pairs(root.guilds or {}) do
+        local normalizedKey = normalize_guild_name(key)
+        if normalizedKey ~= "Unknown" then
+            return normalizedKey
+        end
+    end
+
+    local liveGuild = live_guild_name()
+    if liveGuild ~= nil then
+        return normalize_guild_name(liveGuild)
+    end
+
     local firstGuildKey = next(root.guilds or {})
     if firstGuildKey ~= nil then
         return normalize_guild_name(firstGuildKey)
@@ -223,8 +248,14 @@ function migrations.Apply(db, guildName)
     end
 
     if normalizedGuilds[resolvedGuild] == nil then
-        local freshDb = type(defaults.CreateDatabase) == "function" and defaults.CreateDatabase(resolvedGuild) or {}
-        normalizedGuilds[resolvedGuild] = apply_database(freshDb, resolvedGuild)
+        if resolvedGuild ~= "Unknown" and type(normalizedGuilds.Unknown) == "table" then
+            normalizedGuilds[resolvedGuild] = apply_database(normalizedGuilds.Unknown, resolvedGuild)
+            normalizedGuilds[resolvedGuild].meta.guildName = resolvedGuild
+            normalizedGuilds.Unknown = nil
+        else
+            local freshDb = type(defaults.CreateDatabase) == "function" and defaults.CreateDatabase(resolvedGuild) or {}
+            normalizedGuilds[resolvedGuild] = apply_database(freshDb, resolvedGuild)
+        end
     end
 
     if next(normalizedGuilds) == nil then

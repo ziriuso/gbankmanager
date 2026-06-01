@@ -59,7 +59,10 @@ end
 slash.command("")
 _G.C_Timer.RunPending()
 assert.equal("REQUESTS", mainFrame.activeView, "/gbm should switch to Requests for request-only access")
-assert.truthy(mainFrame.requestWizardModal:IsShown(), "/gbm should open the request wizard for request-only access")
+assert.truthy(mainFrame:IsShown(), "/gbm should keep the request-only shell visible")
+assert.truthy(mainFrame.requestOnlyMode == true, "/gbm should keep request-only mode active for request-only access")
+assert.truthy(mainFrame.requestWorkflowPanel:IsShown(), "/gbm should open the request-only request UI for request-only access")
+assert.truthy(not mainFrame.requestWizardModal:IsShown(), "/gbm should not auto-open the request wizard for request-only access")
 
 local originalOpenOnboarding = mainFrame.OpenOnboarding
 local openedFlow = nil

@@ -294,6 +294,54 @@ local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or 
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
 assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic alone should not mark the peer as synchronized")
 
+local runtimeBeforeGuildBootstrap = _G.GBankManagerDB
+local stateDbBeforeGuildBootstrap = ns.state.db
+local stateDbRootBeforeGuildBootstrap = ns.state.dbRoot
+_G.GBankManagerDB = ns.modules.defaults.CreateDatabaseRoot("Unknown")
+ns.state.db = nil
+ns.state.dbRoot = nil
+
+local bootstrappedGuildPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 90,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-bootstrap-guild-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2000,
+            itemName = "Bootstrap Flask",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            createdAt = 90,
+            createdBy = "MemberOne",
+            updatedAt = 90,
+            updatedBy = "MemberOne",
+        },
+    },
+})
+
+local bootstrappedGuildAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedGuildPayload, "GUILD", "MemberOne")
+local bootstrappedDb = ns.modules.store.GetDatabase()
+assert.truthy(bootstrappedGuildAccepted, "sync events should bootstrap the active guild identity before validating valid guild request traffic")
+assert.equal("Guild Testers", tostring((((bootstrappedDb or {}).meta or {}).guildName) or ""), "bootstrapped sync traffic should promote the local database guild identity")
+assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "bootstrapped sync traffic should promote the active guild root key")
+assert.equal(1, #(bootstrappedDb.requests or {}), "bootstrapped sync traffic should still append the incoming request")
+
+_G.GBankManagerDB = runtimeBeforeGuildBootstrap
+ns.state.db = stateDbBeforeGuildBootstrap
+ns.state.dbRoot = stateDbRootBeforeGuildBootstrap
+
 _G.C_ChatInfo.sentMessages = {}
 db.requests = {}
 db.auditLog = {}

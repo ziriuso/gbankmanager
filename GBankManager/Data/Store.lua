@@ -18,6 +18,19 @@ local function normalize_guild_name(guildName)
     return resolvedGuild
 end
 
+local function live_guild_name()
+    if type(_G.GetGuildInfo) ~= "function" then
+        return nil
+    end
+
+    local guildName = _G.GetGuildInfo("player")
+    if type(guildName) == "string" and guildName ~= "" then
+        return guildName
+    end
+
+    return nil
+end
+
 local function looks_like_root(db)
     return type(db) == "table" and type(db.guilds) == "table"
 end
@@ -44,24 +57,31 @@ local function resolve_guild_name(guildName, source)
 
     if looks_like_root(source) then
         local activeGuildKey = source.activeGuildKey
-        if type(activeGuildKey) == "string" and activeGuildKey ~= "" then
+        if type(activeGuildKey) == "string" and activeGuildKey ~= "" and activeGuildKey ~= "Unknown" then
             return activeGuildKey
-        end
-
-        local firstGuildKey = next(source.guilds or {})
-        if firstGuildKey ~= nil then
-            return tostring(firstGuildKey)
         end
     end
 
     local persistedGuild = (((source or {}).meta or {}).guildName)
-    if type(persistedGuild) == "string" and persistedGuild ~= "" then
+    if type(persistedGuild) == "string" and persistedGuild ~= "" and persistedGuild ~= "Unknown" then
         return persistedGuild
     end
 
     local runtimeGuild = (((ns.state or {}).db or {}).meta or {}).guildName
-    if type(runtimeGuild) == "string" and runtimeGuild ~= "" then
+    if type(runtimeGuild) == "string" and runtimeGuild ~= "" and runtimeGuild ~= "Unknown" then
         return runtimeGuild
+    end
+
+    local liveGuild = live_guild_name()
+    if type(liveGuild) == "string" and liveGuild ~= "" then
+        return liveGuild
+    end
+
+    if looks_like_root(source) then
+        local firstGuildKey = next(source.guilds or {})
+        if firstGuildKey ~= nil then
+            return tostring(firstGuildKey)
+        end
     end
 
     return "Unknown"

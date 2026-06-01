@@ -747,7 +747,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
     elseif command == "scan" and type(scanner) == "table" then
         scanner.BeginScan()
     elseif command == "" and mainFrame then
-        open_accessible_ui("slash_default", accessProfile ~= "full_shell")
+        open_accessible_ui("slash_default", false)
     elseif command ~= "" then
         show_help()
         return "unknown_command"

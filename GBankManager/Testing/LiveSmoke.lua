@@ -178,6 +178,7 @@ local function reset_minimum_editor_state(mainFrame)
         return
     end
 
+    mainFrame.requestOnlyMode = false
     mainFrame.minimumPendingRules = {}
     mainFrame.minimumPendingDirty = {}
     mainFrame.minimumPendingDeleted = {}

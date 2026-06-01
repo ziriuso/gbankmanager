@@ -70,6 +70,26 @@ local function assert_aligned(label, value, message)
     assert.equal(point_y(label), point_y(value), message .. " label and value should share one fixed row")
 end
 
+local function visible_sidebar_keys(frame)
+    local keys = {}
+    for _, button in ipairs((frame or {}).sidebarButtons or {}) do
+        if button:IsShown() then
+            keys[#keys + 1] = button.key
+        end
+    end
+    return keys
+end
+
+local function visible_options_tab_keys(frame)
+    local keys = {}
+    for _, button in ipairs((frame or {}).optionsTabButtons or {}) do
+        if button:IsShown() then
+            keys[#keys + 1] = button.key
+        end
+    end
+    return keys
+end
+
 local function decode_outbound_sync_message(sentMessages, senderKey)
     local transport = env.ns.modules.syncTransport
     local decodedMessage
@@ -345,7 +365,8 @@ assert.truthy(mainFrame.requestWorkflowPanel:IsShown(), "request-only mode shoul
 assert.equal("panel-alt", mainFrame.requestWorkflowPanel.gbmSurfaceVariant, "request-only summary should use the elevated workflow panel styling")
 assert.truthy(not mainFrame.requestCreatePanel:IsShown(), "request-only workflow should not use the old inline create panel")
 assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only mode should hide officer action controls")
-assert.truthy(not mainFrame.sidebar:IsShown(), "request-only mode should hide the sidebar")
+assert.truthy(mainFrame.sidebar:IsShown(), "request-only mode should keep the sidebar visible")
+assert.equal("REQUESTS,OPTIONS,ABOUT", table.concat(visible_sidebar_keys(mainFrame), ","), "request-only mode should only expose requests, options, and about navigation")
 assert.same(mainFrame.viewSubtitle, (mainFrame.requestWorkflowPanel.points[1] or {})[2], "request-only mode should place the request workflow directly below the request subtitle")
 assert.equal("Guild Bank Manager", mainFrame.titleText:GetText(), "request-only header should keep the addon title visible")
 assert.truthy(mainFrame.titleText:IsShown(), "request-only header should show the addon title")
@@ -430,6 +451,34 @@ assert.equal("select", mainFrame.requestWizardBankTabDropdownButton.gbmButtonVar
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsSubmissionNoteText.points[1] or {})[2], "long request details values should use the same fixed modal column")
 assert.same(mainFrame.requestDetailsModal, (mainFrame.requestDetailsActionNoteLabel.points[1] or {})[2], "request detail action controls should align to fixed modal positions")
 mainFrame.requestWizardCancelButton:GetScript("OnClick")(mainFrame.requestWizardCancelButton)
+
+mainFrame:SelectView("INVENTORY")
+assert.equal("REQUESTS", mainFrame.activeView, "request-only mode should keep manager-only views inaccessible")
+
+mainFrame:SelectView("OPTIONS")
+assert.equal("OPTIONS", mainFrame.activeView, "request-only mode should allow the options view")
+assert.equal(true, mainFrame.requestOnlyMode == true, "request-only mode should stay active while visiting options")
+assert.equal("REQUESTS,OPTIONS,ABOUT", table.concat(visible_sidebar_keys(mainFrame), ","), "request-only options should keep the restricted sidebar navigation")
+assert.equal("APPEARANCE,SYNC,LOGS_HISTORY", table.concat(visible_options_tab_keys(mainFrame), ","), "request-only options should only expose appearance, sync, and data tabs")
+assert.equal("APPEARANCE", mainFrame.optionsActiveTab, "request-only options should default to appearance")
+assert.truthy(mainFrame.optionsAppearancePanel:IsShown(), "request-only options should show appearance by default")
+assert.truthy(not mainFrame.optionsStockSettingsPanel:IsShown(), "request-only options should hide stock settings")
+assert.truthy(not mainFrame.optionsPermissionsPanel:IsShown(), "request-only options should hide permissions")
+assert.truthy(not mainFrame.optionsBlacklistPanel:IsShown(), "request-only options should hide blacklist")
+mainFrame:SetOptionsTab("PERMISSIONS")
+assert.equal("APPEARANCE", mainFrame.optionsActiveTab, "request-only options should normalize disallowed tabs back to appearance")
+mainFrame:SetOptionsTab("SYNC")
+assert.equal("SYNC", mainFrame.optionsActiveTab, "request-only options should still allow the sync tab")
+assert.truthy(mainFrame.optionsSyncPanel:IsShown(), "request-only options should show sync controls")
+mainFrame:SetOptionsTab("LOGS_HISTORY")
+assert.equal("LOGS_HISTORY", mainFrame.optionsActiveTab, "request-only options should still allow the data tab")
+assert.truthy(mainFrame.optionsLogsHistoryPanel:IsShown(), "request-only options should show data controls")
+
+mainFrame:SelectView("ABOUT")
+assert.equal("ABOUT", mainFrame.activeView, "request-only mode should allow the about view")
+assert.equal(true, mainFrame.requestOnlyMode == true, "request-only mode should stay active while visiting about")
+assert.truthy(mainFrame.aboutPanel:IsShown(), "request-only about should show the shared about panel")
+assert.equal("REQUESTS,OPTIONS,ABOUT", table.concat(visible_sidebar_keys(mainFrame), ","), "request-only about should keep the restricted sidebar navigation")
 
 mainFrame:ShowDashboard()
 mainFrame:SelectView("REQUESTS")
