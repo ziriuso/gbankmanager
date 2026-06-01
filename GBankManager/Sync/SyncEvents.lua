@@ -406,6 +406,23 @@ local function mark_sync_peer_synchronized(db, message, sender)
     })
 end
 
+local function refresh_sync_peer_view()
+    local mainFrame = ns.modules.mainFrame or {}
+    if type(mainFrame.RefreshSyncControls) ~= "function" then
+        return
+    end
+
+    if type(mainFrame.optionsSyncTableScrollChild) ~= "table" then
+        return
+    end
+
+    if tostring(mainFrame.activeView or "") ~= "OPTIONS" or tostring(mainFrame.optionsActiveTab or "") ~= "SYNC" then
+        return
+    end
+
+    mainFrame:RefreshSyncControls()
+end
+
 local function append_audit_entry(db, entry)
     db.auditLog = db.auditLog or {}
     local lastEntry = db.auditLog[#db.auditLog]
@@ -800,10 +817,12 @@ local function handle_ledger_delta(db, payload, sender)
         return false
     end
 
-    bankLedger.MergeRemoteDelta(db, payload)
+    local mergedCount = tonumber(bankLedger.MergeRemoteDelta(db, payload) or 0) or 0
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_delta", "applied")
-    report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_delta", mergedCount > 0 and "applied" or "no_change")
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
+    end
     return true
 end
 
@@ -926,29 +945,41 @@ function syncEvents.HandleEvent(event, ...)
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
             remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "auth_policy_snapshot", "retired_message_type")
             report_sync_status("Ignored retired auth policy snapshot message.")
+            refresh_sync_peer_view()
             return false
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_CREATED" then
-            return handle_request_created(db, ns.state.lastSyncMessage.payload, sender)
+            local accepted = handle_request_created(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_UPDATED" then
-            return handle_request_updated(db, ns.state.lastSyncMessage.payload, sender)
+            local accepted = handle_request_updated(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
         end
 
         if ns.state.lastSyncMessage.type == "MINIMUMS_SNAPSHOT" then
-            return handle_minimums_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            local accepted = handle_minimums_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
         end
 
         if ns.state.lastSyncMessage.type == "REQUESTS_SNAPSHOT" then
-            return handle_requests_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            local accepted = handle_requests_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
         end
 
         if ns.state.lastSyncMessage.type == "LEDGER_DELTA" then
-            return handle_ledger_delta(db, ns.state.lastSyncMessage.payload, sender)
+            local accepted = handle_ledger_delta(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
         end
 
+        refresh_sync_peer_view()
         return true
     end
 

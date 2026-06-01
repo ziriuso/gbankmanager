@@ -7,6 +7,8 @@
 - Current local troubleshooting checkpoint adds `/gbm debug sync`.
 - The latest live clue from two-client testing was a `wrong_guild` reject even though both characters were in the same guild; the debug output showed the runtime root could still be keyed as `Unknown Guild`.
 - The current local fix now treats `Unknown Guild` the same as `Unknown` across store normalization, sync receive validation, manual sync actions, request publish paths, Minimums publish paths, Sync-tab peer lookups, and `/gbm debug sync`.
+- The current local follow-up also refreshes `Options -> Sync` live when guild hello or accepted sync traffic arrives while that tab is already open.
+- The current local follow-up also suppresses repeated `Synced ledger delta ...` chat lines when a remote ledger delta is accepted but merges zero new rows.
 - The new debug command prints:
   - local `name`, `characterKey`, `guild`, and active guild key
   - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
@@ -16,6 +18,8 @@
   - `/gbm debug sync` chat output in `tests/spec/slash_commands_spec.lua`
   - rejected request snapshots now persist `lastSyncDecision.category= requests_snapshot` and `reason= actor_sender_mismatch` in `tests/spec/sync_spec.lua`
   - sync hello traffic and request snapshots both bootstrap a client whose saved root still uses the placeholder `Unknown Guild`
+  - `tests/spec/ui_options_spec.lua` now verifies the open Sync tab repaints immediately when a new guild peer hello arrives
+  - `tests/spec/sync_spec.lua` now verifies duplicate no-op ledger deltas stay quiet in chat while still being accepted
 - Known live clue still under investigation:
   - the login hello chat line reported `Stormrage-Zirleficent`, which suggests a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
   - if live request sync still fails while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`

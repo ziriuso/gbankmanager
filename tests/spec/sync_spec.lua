@@ -1239,6 +1239,11 @@ local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDelt
 assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
 assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
+local ledgerChatCountBeforeDuplicate = #(_G.DEFAULT_CHAT_FRAME.messages or {})
+local duplicateLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(duplicateLedgerAccepted, "duplicate ledger deltas should still be accepted for peer bookkeeping")
+assert.equal(1, #(db.bankLedger.itemLogs or {}), "duplicate ledger deltas should not append duplicate ledger rows")
+assert.equal(ledgerChatCountBeforeDuplicate, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "duplicate ledger deltas should not spam chat when they merge no new rows")
 
 local wrongDistributionLedgerPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",

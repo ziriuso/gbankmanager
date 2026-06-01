@@ -21,6 +21,7 @@ local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
 local syncEvents = env.ns.modules.syncEvents
 local peerState = env.ns.modules.syncPeerState or dofile("GBankManager/Sync/PeerState.lua")
+local syncCodec = env.ns.modules.syncCodec or dofile("GBankManager/Sync/Codec.lua")
 local store = env.ns.modules.store or {}
 
 local function current_db()
@@ -137,6 +138,18 @@ assert.truthy(mainFrame.optionsSyncRequestsButton:IsEnabled(), "full-shell users
 assert.truthy(mainFrame.optionsSyncMinimumsButton:IsEnabled(), "full-shell users should be able to trigger minimums sync from the Sync tab")
 assert.truthy(mainFrame.optionsSyncLedgerButton:IsEnabled(), "full-shell users should be able to trigger ledger sync from the Sync tab")
 assert.truthy(mainFrame.optionsSyncAllButton:IsEnabled(), "full-shell users should be able to trigger Sync All from the Sync tab")
+local incomingHelloPayload = syncCodec.EncodeTable({
+    type = "SYNC_HELLO",
+    updatedAt = 1717000400,
+    payload = "Stormrage-MemberTwo",
+})
+local incomingHelloAccepted = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", incomingHelloPayload, "GUILD", "MemberTwo")
+assert.truthy(incomingHelloAccepted, "sync tab regression should accept guild hello traffic while the panel is already open")
+assert.equal(2, #(mainFrame.optionsSyncTableRowsData or {}), "sync tab should refresh its peer rows immediately when new peer traffic arrives while the panel is open")
+assert.equal("MemberTwo-Stormrage", tostring((((mainFrame.optionsSyncTableRowsData or {})[1] or {}).character) or ""), "sync tab should immediately show the newest peer at the top after live sync traffic")
+local firstVisibleSyncRow = ((mainFrame.optionsSyncTableRows or {})[1] or {})
+local firstVisibleSyncCharacter = firstVisibleSyncRow.characterText and firstVisibleSyncRow.characterText:GetText() or ""
+assert.equal("MemberTwo-Stormrage", tostring(firstVisibleSyncCharacter or ""), "sync tab should repaint the visible first peer row after live sync traffic")
 mainFrame:SetOptionsTab("STOCK")
 assert.equal("STOCK", mainFrame.optionsActiveTab, "options should switch to the Stock Settings tab when clicked")
 assert.truthy(mainFrame.optionsStockSettingsPanel:IsShown(), "options should show the Stock Settings panel after tab switch")
