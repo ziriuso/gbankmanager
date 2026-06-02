@@ -29,6 +29,7 @@ Domain/Diff.lua
 Domain/Planning.lua
 Domain/CraftedQuality.lua
 Domain/ItemDisplay.lua
+Domain/MinimumsPortability.lua
 Domain/Exports.lua
 Domain/Requests.lua
 Domain/BankLedger.lua

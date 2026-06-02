@@ -10,12 +10,13 @@ Completed on 2026-05-28: full live regression for the item-hyperlink and crafted
 2. Validate the completed Guild Info auth slice end to end: Restock Default propagation, preload on load or refresh, explicit `Character-Server` blacklist guidance, correct last-updated actor metadata, and policy-history visibility or sync behavior
 3. Validate guild-bank-open auto-scan with the 10-minute throttle and manual-scan coexistence
 3a. If the guild bank opens before tab metadata is fully ready, confirm the auto-scan still wakes and begins once `GUILDBANK_UPDATE_TABS` fires.
-4. Validate guild-client sync behavior for chat milestones, history, requests, approval-created minimum side effects, and permission-policy updates. Managing a request should not spam `No player named ...` whisper errors for guild roster members.
+4. Validate guild-client sync behavior for chat milestones, history, requests, approval-created minimum side effects, permission-policy updates, and reconstructed History rows for accepted remote Minimums changes. Managing a request should not spam `No player named ...` whisper errors for guild roster members.
 5. Validate the landed UI polish foundation, including the native-paneled shell pass, soft nav buttons with stronger selected state, slimmer actions, segmented tabs, colored themes, scalable theme or sizing controls, separate shell-vs-modal opacity slider behavior, and the shell yielding behind other dragged UI until clicked again
 6. Validate the broadened in-game unit-test lane
 7. Maintainer deployment/status workflow and target-path UI
 
-1. Copy both `GBankManager` and `GBankManager_ItemData` into `Interface/AddOns`.
+0. Preferred local Retail deploy path on this machine: run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Get-ItemCatalogMaintainerStatus.ps1 -Target Retail -Json`, confirm the resolved AddOns directory is `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`, then run `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`.
+1. Copy both `GBankManager` and `GBankManager_ItemData` into `Interface/AddOns` if you are not using the repo deploy helper above.
 2. Run `/reload`.
 3. Open the guild bank.
 4. Run `/gbm ui`.
@@ -33,6 +34,8 @@ Completed on 2026-05-28: full live regression for the item-hyperlink and crafted
 11. Confirm the sidebar includes Minimums, Requests, Exports, About, and Options without changing the shell style.
 11a. Open `About` and confirm it now renders through a centered branded panel with crest art, addon name, tagged version plus local build stamp, `Author: Zirleficent-Stormrage`, a separately spaced `Guild` line, and the `/gbm help` hint instead of the old plain text block.
 12. Add a recurring minimum and confirm saving the same item and scope updates the existing rule.
+12a. In `Minimums`, click `Export`, confirm the portable payload is formatted across multiple lines in the export box, click `Select All`, and confirm the copy guidance appears. Then copy the payload, open `Import`, paste it, and confirm the review list shows the incoming rows before anything is staged locally.
+12b. In that import review, edit at least one quantity or enabled toggle before confirm. If the payload references a missing Bank Tab, confirm the row stays blocked until you choose a local tab, then confirm `Apply` stages the reviewed rows and still requires the normal `Save All`.
 13. Confirm the dashboard purchase summary changes when minimums and approved open requests change.
 13a. Confirm the dashboard now shows four metric cards (`Last Scan`, `Pending Requests`, `Ready to Buy`, `Critical Shortages`) plus separate `Top 10 Most Used`, `Recent Activity`, and `Quick Actions` panels.
 13b. Confirm the dashboard `Quick Actions` row is trimmed to `Add Minimum`, `Create Request`, and `Export Data`, and confirm `Create Request` opens the request workflow immediately.
@@ -44,6 +47,7 @@ Completed on 2026-05-28: full live regression for the item-hyperlink and crafted
 17. Log in on two addon-enabled guild characters and confirm a `SYNC_HELLO` is sent on login.
 18. Approve a request on one character, relay the sync payload, and confirm the second character records the incoming message state. While creating, approving, rejecting, fulfilling, reopening, canceling, or deleting requests, confirm the sender publishes one guild-scoped addon sync instead of whispering individual recipients.
 18a. On a freshly reloaded client whose SavedVariables were still rooted under `Unknown`, receive a valid guild-scoped request sync and confirm the client promotes into the real guild key instead of ignoring the request because the local guild identity was not initialized yet.
+18b. Change Minimums on one officer client, let the accepted `MINIMUMS_SNAPSHOT` reach a second client, and confirm the receiving client's `History` tab gains the expected existing minimum-history row types (`created`, `updated`, `enabled`, `disabled`, or `removed`) without inventing any new ledger- or snapshot-only entries.
 19. Create conflicting request records and confirm officer authority wins over a newer member update.
 20. Capture a manual recovery payload and confirm it can be replayed without Lua errors after a `/reload`.
 21. With the guild bank open, verify a scan queues only tabs the current character can view.
@@ -67,7 +71,8 @@ Completed on 2026-05-28: full live regression for the item-hyperlink and crafted
 28. Confirm the inventory quality column shows a quality marker for known uncommon-or-better items and stays blank for items without known quality.
 29. Confirm long item names and long tab lists clip with an ellipsis instead of spilling into adjacent inventory columns.
 30. Run a scan, `/reload`, and confirm both the inventory snapshot and last-scan status still appear before starting a fresh scan.
-31. Open the History tab and confirm request approvals, minimum changes, and auth-policy updates render as audit-style rows with actor, old value, new value, and timestamp columns.
+31. Open the History tab and confirm request approvals, minimum changes, and auth-policy updates render as audit-style rows in the compact `When`, `Category`, `Item`, `Action`, and `Who` table layout.
+31aa. Click a History row and confirm the `History Details` modal exposes the longer old/new values there instead of in the visible grid.
 31a. Open `Bank Ledger` after a successful guild-bank scan and confirm it defaults into the shared table shell with `Item Log` mode, action filtering, a preset `Date Range` dropdown, summary lines, and `Export CSV`. Confirm the item table now shows `Date`, `Who`, `Action`, icon `Tier`, `Item`, `Quantity`, `Tab`, and `Moved From`. When the ledger follow-up runs, confirm chat reports both `Guild bank ledger scan started.` and a matching `Guild bank ledger scan finished (X item rows, Y money rows).` completion line.
 31aa. Click `Scan Bank`, wait for the main bank scan plus the ledger follow-up to finish, then click `Scan Bank` again without changing the live guild-bank logs. Confirm the second run does not duplicate existing ledger rows, and confirm manual `Scan Bank` still forces the ledger follow-up even when the configured `Scan Interval` would normally throttle auto scans.
 31ab. If the Blizzard `Donations Log` or `Money Log` already shows newly added item, gold, or repair rows, `/reload`, reopen the guild bank, and wait for the ledger follow-up. Confirm the addon still imports those delayed item and money rows and that the completion line reports the expected non-zero `X item rows` or `Y money rows` count instead of finishing early at `0 item rows, 0 money rows`.

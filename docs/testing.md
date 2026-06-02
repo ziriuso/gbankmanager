@@ -131,6 +131,7 @@ Completed on 2026-05-28: the item-hyperlink and crafted-quality live regression 
 - `tests/spec/ui_table_spec.lua` verifies shared table content stops before the external slim scrollbar so the bar does not overlap the rightmost column.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums uses shared table filters, hides the old bottom search, and keeps only the compact three-button action strip below the table.
 - `tests/spec/ui_minimums_spec.lua` verifies existing saved minimum rows auto-populate Bank Tab as a read-only value, including legacy saved rows that need the tab inferred from the table row.
+- `tests/spec/minimums_portability_spec.lua` verifies portable Minimums export emits the versioned `gbankmanager.minimums` payload shape, import parsing accepts valid rows, flags missing local tabs as `needs_tab`, and rejects malformed or wrong-schema payloads.
 - `tests/spec/ui_requests_spec.lua` verifies the full-shell `Requests` surface has no inline creation panel or top workflow action box, uses shared table filters, includes date requested plus date fulfilled, exposes the bottom `All` / `Pending Approval` / `Pending Fulfillment` / `Completed` filter strip, and keeps `Add Request` plus `Refresh` on the left edge.
 - `tests/spec/ui_requests_spec.lua` also verifies request-only mode uses the smaller titled request shell, restricts sidebar navigation to `Requests`, `Options`, and `About`, limits `Options` to `Appearance`, `Sync`, and `Data`, preserves row-click details, and keeps the item -> quantity/reason -> review request wizard, including progress-rail state, preview visibility, and quantity steppers.
 - `tests/spec/ui_requests_spec.lua` verifies request details align values to fixed modal columns, render crafted-quality icons inline beside the shared item display without leaving the retired quality-row gap, labels the Decision Note input, keeps details open after approval, prompts approvers for Bank Tab, leaves breathing room above the Approval Bank Tab control, and saves approval-created Minimums rules.
@@ -166,6 +167,8 @@ Completed on 2026-05-28: the item-hyperlink and crafted-quality live regression 
 - `tests/spec/toc_spec.lua` and `tests/spec/ui_about_spec.lua` verify `GBankManager.toc` carries the current addon `Version` metadata and that the About panel renders that semantic version alongside the local build stamp.
 - `tests/spec/ui_minimums_spec.lua` verifies staged Minimums rows group at the top, expose `ADD` / `EDIT` / `DELETE` badges, reveal staged-summary plus `Revert All` footer affordances only while drafts exist, keep the shared selector's crafted-quality icons visible in Minimums search results plus the selected-item summary just like Requests, preserve the typed minimum value when the add-search modal hands off into `Minimum Details`, and keep the lower add-search controls from shifting right when the selected-item icon appears.
 - `tests/spec/ui_minimums_spec.lua` verifies Minimums now uses separate `Enabled Only` and `Show All` buttons with active-state highlighting.
+- `tests/spec/ui_minimums_spec.lua` also verifies the portable import review flow stages rows instead of writing immediately: missing imported tabs block apply until a local tab is chosen, review rows can be edited before confirm, and accepting the review feeds the existing draft/save workflow rather than mutating saved Minimums directly.
+- `tests/spec/ui_minimums_spec.lua` also verifies the portable Minimums export modal pretty-prints the JSON payload into the shared scrollable output surface and exposes the same `Select All` copy guidance used by the other export modals.
 - `tests/spec/auth_source_spec.lua`, `tests/spec/auth_spec.lua`, `tests/spec/history_spec.lua`, `tests/spec/sync_spec.lua`, and `tests/spec/ui_options_spec.lua` verify auth policy strings now preserve Restock Default plus updater metadata, Options can reload that Guild Info state, auth-policy updates appear in History newest-first, and the Blacklist tab explains the shared `[GBMBL]` officer-note contract.
 - `tests/spec/auth_source_spec.lua` and `tests/spec/auth_spec.lua` also verify the compact updater-hash policy-string encoding, the removal of Guild Info blacklist membership export, and legacy blacklist-key normalization behavior.
 - `tests/spec/officer_note_blacklist_spec.lua` and `tests/spec/ui_options_spec.lua` verify appended `[GBMBL]` officer-note tags, guild-roster-driven blacklist refresh, the read-only Blacklist tab guidance, the cleaner ordered-list officer-note instructions, the explicit themed `Refresh` action below the parsed-member list, the removal of the old duplicate blacklist header, and the refresh-status transition back to the parsed summary after `GUILD_ROSTER_UPDATE`.
@@ -175,6 +178,7 @@ Completed on 2026-05-28: the item-hyperlink and crafted-quality live regression 
 - `tests/spec/sync_spec.lua` verifies synced request creation writes local history, higher-authority request updates win conflict resolution, synced approvals recreate the matching Minimums rule plus history rows on receiving clients, officer-authored minimum snapshots are accepted while member-authored snapshots are rejected, fresh `Unknown` guild roots promote to the live or synced guild before valid request traffic is applied, remote ledger deltas merge without advancing the local scan timer, persisted peer history stays partitioned by guild, retired auth-policy snapshots stay ignored, and sync milestone chat feedback is emitted for hello, accepted sync, and ignored forged payloads.
 - `tests/spec/sync_spec.lua` also verifies inbound request updates, request snapshots, minimum snapshots, and ledger deltas are only accepted from the `GUILD` addon channel, so same-guild payloads delivered over `WHISPER` are rejected before they can mutate local state.
 - `tests/spec/sync_spec.lua` also verifies request sync rejects non-guildmaster self-approval updates and forged cancellation updates while accepting author cancellations.
+- `tests/spec/sync_spec.lua` now also verifies accepted remote minimum snapshots reconstruct the existing local `MINIMUM_*` History rows and stay quiet on identical replays, so the History tab converges without creating new ledger- or snapshot-only audit categories.
 - `tests/spec/ui_minimums_sync_spec.lua` verifies `Minimums -> Save All` now publishes the guild-scoped `MINIMUMS_SNAPSHOT` message family through addon communication.
 - `tests/spec/sync_peer_state_spec.lua` verifies persisted sync-peer history stores `lastSeen`, `lastMessageType`, and `version` by guild so one guild's sync state cannot bleed into another.
 - `tests/spec/planning_spec.lua` verifies approved requests converted into Minimums rules do not double-count demand as both request demand and restock demand.
@@ -233,6 +237,20 @@ If PowerShell execution policy blocks direct script execution on Windows, run:
 
 - `powershell -ExecutionPolicy Bypass -File .\tools\test\run-wowless.ps1`
 
+## Retail Deploy
+
+For this repo's normal local live-client flow, prefer the repo deployment helper over manual folder copy:
+
+1. Check the resolved target and AddOns path:
+   - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Get-ItemCatalogMaintainerStatus.ps1 -Target Retail -Json`
+2. Deploy the current worktree state:
+   - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+3. On this machine, Retail should resolve to:
+   - `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
+4. `/reload` in game before smoke or manual validation.
+
+The deploy helper copies both `GBankManager/` and `GBankManager_ItemData/` from the current worktree, including uncommitted local changes.
+
 ## Live Smoke
 
 Run these in retail only after the automated lanes pass:
@@ -241,3 +259,5 @@ Run these in retail only after the automated lanes pass:
 2. Confirm chat prints one overall `PASS` or `FAIL` line plus individual check lines.
 3. If it fails, inspect `GBankManagerDB.testing.liveSmoke` after `/reload` for the last persisted summary and check details. Pay special attention to `minimums_render` and `request_selection_gating`, because those now exercise the live modal workflow and confirmed-selection reset path rather than the older footer-editor assumptions.
 4. If it passes, still do a short visual spot-check in `Options`, `Requests`, and `Minimums` for layout/art regressions the smoke cannot prove.
+5. For this checkpoint's manual follow-up, also spot-check the Minimums portable import review modal: export a payload, paste it back in, reassign at least one missing Bank Tab, edit one quantity before confirm, and verify the changes land as staged rows that still require `Save All`.
+6. For the current History-sync slice, also run a two-client officer check: change one Minimum on client A, let the accepted sync reach client B, and confirm client B's `History` tab gains the matching existing minimum-history row type (`created`, `updated`, `enabled`, `disabled`, or `removed`) without any new ledger- or snapshot-only category.

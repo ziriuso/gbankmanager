@@ -2,6 +2,44 @@
 
 ## Resume Here
 
+### 2026-06-02 Portable Minimums + History Sync Slice
+
+- Current repo truth at resume:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - HEAD at session start: `353c102`
+  - branch was in sync with `origin/codex/gbankmanager-v1`
+  - only pre-existing local noise was untracked `.vscode/`
+- Exact GitHub backlog items resolved first before coding:
+  - `Add portable Minimums export and import`
+  - `Design History sync propagation`
+- Confirmed implementation scope from those exact items plus follow-up clarification:
+  - Minimums import/export is now a portable JSON payload flow
+  - import is review-first, not immediate apply
+  - review rows allow last-minute edits before acceptance, including remapping a missing imported Bank Tab to a local tab
+  - accepted remote sync should reconstruct the existing `History` tab categories already tracked today
+  - do not add new ledger-history or minimum-snapshot-only audit categories
+- Local implementation now in the worktree:
+  - new `GBankManager/Domain/MinimumsPortability.lua` module exports versioned `gbankmanager.minimums` payloads and parses them back into review rows
+  - `Minimums` now has `Export` and `Import` actions
+  - import opens a review modal, blocks rows whose imported tab does not exist locally until the user picks a local tab, allows quantity/enabled edits, and stages accepted rows through the existing draft workflow so `Save All` still controls the final write
+  - accepted remote `MINIMUMS_SNAPSHOT` payloads now diff previous vs accepted rules and append equivalent local `MINIMUM_CREATED`, `MINIMUM_UPDATED`, `MINIMUM_ENABLED`, `MINIMUM_DISABLED`, and `MINIMUM_REMOVED` audit rows when those outcomes actually occurred
+- Focused verification in this slice:
+  - `.\tools\lua\lua.exe .\tests\spec\minimums_portability_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - all three passed in this slice
+- Baseline warning before feature work and still important for the next session:
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` was already failing before this slice in `tests/spec/item_catalog_target_spec.lua` with `fixture writer should open the target file`
+  - a fresh rerun at the end of this slice reproduced that same failure after the three focused Minimums/History specs passed
+  - do not misreport that failure as caused by the Minimums/History work unless new evidence says otherwise
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- If resuming from here, rerun the three focused specs above first, then rerun `.\tools\lua\lua.exe .\tests\run_all.lua` and treat any remaining `item_catalog_target_spec.lua` failure as a pre-existing baseline unless new evidence says otherwise
+
 ### 2026-06-01 PTR Maintainer + 12.0.7 Support Checkpoint
 
 - Current local checkpoint:

@@ -747,3 +747,90 @@ end
 assert.truthy(undoneAddedDraftRow == nil, "undoing a newly staged minimum through the details modal should discard the staged row entirely")
 assert.truthy(not mainFrame.minimumSaveAllButton:IsShown(), "minimums should hide Revert All again after the staged rows are cleared")
 assert.truthy(not mainFrame.minimumEditorStateText:IsShown(), "minimums should hide the staged-change summary once all drafts are cleared")
+
+local portability = dofile("GBankManager/Domain/MinimumsPortability.lua")
+local importPayload = portability.Export({
+    guildName = "Guild Testers",
+    minimums = {
+        {
+            itemID = 241324,
+            itemName = "Flask of the Blood Knights",
+            scope = "TAB",
+            tabName = "Missing Imported Tab",
+            quantity = 77,
+            enabled = true,
+            craftedQuality = 2,
+            craftedQualityIcon = "Professions-Icon-Quality-12-Tier2-Inv",
+            craftedQualityDisplayAtlas = "Professions-Icon-Quality-12-Tier2-Inv",
+            craftedQualityPreferredAtlas = "Professions-Icon-Quality-12-Tier2-Inv",
+            craftedQualityMax = 2,
+        },
+    },
+})
+
+current_db().minimums = {}
+current_db().requests = {}
+current_db().auditLog = {}
+mainFrame.minimumPendingDb = nil
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.minimumPendingDeleted = {}
+mainFrame.selectedMinimumKey = nil
+mainFrame:RefreshView()
+
+mainFrame:PreviewImportedMinimums(importPayload)
+assert.equal(1, #(mainFrame.minimumImportReviewRows or {}), "minimum import preview should create one staged review row")
+assert.equal("needs_tab", mainFrame.minimumImportReviewRows[1].status, "import preview should flag missing local bank tabs before apply")
+assert.equal("", tostring(mainFrame.minimumImportReviewRows[1].resolvedTabName or ""), "import preview should leave unresolved local bank tabs blank")
+assert.truthy(mainFrame.minimumImportApplyButton.enabled == false, "import preview should keep Apply disabled while a row still needs tab reassignment")
+
+mainFrame:SetImportedMinimumRowTab(1, "Alchemy")
+assert.equal("Alchemy", mainFrame.minimumImportReviewRows[1].resolvedTabName, "import review edits should allow the user to remap the imported row to a detected local tab")
+assert.equal("ready", mainFrame.minimumImportReviewRows[1].status, "import review should mark the row ready after tab reassignment")
+assert.truthy(mainFrame.minimumImportApplyButton.enabled ~= false, "import review should enable Apply once all rows are valid")
+
+local minimumCountBeforeApply = #(current_db().minimums or {})
+mainFrame:ApplyReviewedImportedMinimums()
+assert.equal(minimumCountBeforeApply, #(current_db().minimums or {}), "applying reviewed imports should not write directly into saved minimums before Save All")
+assert.truthy(mainFrame.minimumPendingRules ~= nil and next(mainFrame.minimumPendingRules) ~= nil, "applying reviewed imports should stage imported rows into the existing draft workflow")
+
+local importedDraftRow
+for _, row in ipairs(mainFrame.tableRowsData or {}) do
+    if tonumber(row.itemID) == 241324 and tostring(row.bankTab or "") == "Alchemy" then
+        importedDraftRow = row
+        break
+    end
+end
+assert.truthy(importedDraftRow ~= nil, "applying reviewed imports should surface the imported row through the shared Minimums draft table")
+assert.equal(77, importedDraftRow.quantityValue, "applying reviewed imports should preserve the reviewed quantity in the staged draft row")
+assert.equal("added", mainFrame:GetMinimumDraftState(importedDraftRow), "applying reviewed imports should stage imported rows as draft additions before save")
+
+current_db().minimums = {
+    {
+        itemID = 241324,
+        itemName = "Flask of the Blood Knights",
+        scope = "TAB",
+        tabName = "Alchemy",
+        quantity = 33,
+        enabled = true,
+        craftedQuality = 2,
+        craftedQualityIcon = "Professions-Icon-Quality-12-Tier2-Inv",
+        craftedQualityDisplayAtlas = "Professions-Icon-Quality-12-Tier2-Inv",
+        craftedQualityPreferredAtlas = "Professions-Icon-Quality-12-Tier2-Inv",
+        craftedQualityMax = 2,
+        itemLink = TRUSTED_ITEM_LINKS[241324],
+        itemString = trusted_item_string(241324),
+    },
+}
+
+mainFrame:OpenMinimumExportModal()
+local minimumExportText = mainFrame.minimumExportOutput:GetText() or ""
+assert.truthy(string.find(minimumExportText, "\n", 1, true) ~= nil, "minimum export modal should pretty-print the portable payload across multiple lines")
+assert.truthy(string.find(minimumExportText, "\n  \"rules\":", 1, true) ~= nil, "minimum export modal should indent the payload like the shared export output surfaces")
+assert.truthy(mainFrame.minimumExportSelectAllButton ~= nil, "minimum export modal should expose a Select All action")
+mainFrame.minimumExportSelectAllButton:GetScript("OnClick")(mainFrame.minimumExportSelectAllButton)
+assert.truthy(mainFrame.minimumExportOutput:HasFocus(), "minimum export select all should focus the copy field")
+assert.equal(0, mainFrame.minimumExportOutput.cursorPosition, "minimum export select all should rewind the cursor before highlighting")
+assert.equal(0, mainFrame.minimumExportOutput.highlightStart, "minimum export select all should highlight from the beginning")
+assert.equal(-1, mainFrame.minimumExportOutput.highlightEnd, "minimum export select all should highlight through the full payload")
+assert.equal("Selected all output. Press Ctrl+C to copy.", mainFrame.minimumExportStatusText:GetText(), "minimum export select all should show the same copy guidance as other export modals")

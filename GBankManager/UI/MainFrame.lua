@@ -1283,6 +1283,7 @@ mainMinimumsController.Attach(mainFrame, {
     makeLabel = make_label,
     makeButton = make_button,
     makeInput = make_input,
+    makeExportOutputInput = make_export_output_input,
     createItemSearchSelector = mainFrameShell.CreateItemSearchSelector,
     setButtonIcon = set_button_icon,
     parseNumber = parse_number,

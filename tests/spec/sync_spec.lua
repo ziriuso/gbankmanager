@@ -1064,6 +1064,13 @@ local officerMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", re
 assert.truthy(officerMinimumAccepted, "sync events should accept officer-authored minimum snapshots")
 assert.equal(1, #(db.minimums or {}), "accepted minimum snapshots should replace the local minimum cache")
 assert.equal(243734, ((db.minimums or {})[1] or {}).itemID, "accepted minimum snapshots should persist shared minimum item ids")
+assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "accepted remote minimum snapshots should reconstruct created minimum history rows locally")
+assert.equal("Thalassian Phoenix Oil", ((db.auditLog or {})[#(db.auditLog or {})] or {}).itemName, "accepted remote minimum snapshots should preserve the created minimum item name in history")
+assert.equal("OfficerOne", ((db.auditLog or {})[#(db.auditLog or {})] or {}).actor, "accepted remote minimum snapshots should use the remote actor name in reconstructed history rows")
+local minimumAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local duplicateMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumSnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(duplicateMinimumSnapshotAccepted, "replayed minimum snapshots should still count as handled accepted messages")
+assert.equal(minimumAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change minimum snapshots should not append duplicate history rows")
 
 local memberMinimumPayload = codec.EncodeTable({
     type = "MINIMUMS_SNAPSHOT",

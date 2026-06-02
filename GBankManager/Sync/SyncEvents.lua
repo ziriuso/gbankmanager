@@ -504,6 +504,77 @@ local function sync_request_minimum_side_effect(db, action, request, actorContex
     })
 end
 
+local function minimum_rule_key(rule)
+    return table.concat({
+        tostring((rule or {}).itemID or ""),
+        tostring((rule or {}).scope or "GLOBAL"),
+        tostring((rule or {}).tabName or ""),
+    }, "|")
+end
+
+local function append_minimum_sync_audit(db, eventType, rule, actorContext, timestamp, oldValue, newValue)
+    rule = type(rule) == "table" and rule or {}
+    return append_audit_entry(db, {
+        category = "MINIMUM",
+        type = tostring(eventType or ""),
+        actor = tostring((actorContext or {}).name or (actorContext or {}).characterKey or "Unknown"),
+        itemID = tonumber(rule.itemID),
+        itemName = tostring(rule.itemName or "Unknown"),
+        oldValue = oldValue,
+        newValue = newValue,
+        timestamp = tonumber(timestamp or _G.time()) or 0,
+    })
+end
+
+local function append_minimums_snapshot_audit(db, previousMinimums, nextMinimums, actorContext, timestamp)
+    previousMinimums = clone_array_records(previousMinimums)
+    nextMinimums = clone_array_records(nextMinimums)
+
+    local previousByKey = {}
+    local nextByKey = {}
+
+    for _, rule in ipairs(previousMinimums or {}) do
+        previousByKey[minimum_rule_key(rule)] = rule
+    end
+
+    for _, rule in ipairs(nextMinimums or {}) do
+        nextByKey[minimum_rule_key(rule)] = rule
+    end
+
+    for ruleKey, nextRule in pairs(nextByKey) do
+        local previousRule = previousByKey[ruleKey]
+        if not previousRule then
+            append_minimum_sync_audit(db, "MINIMUM_CREATED", nextRule, actorContext, timestamp, nil, tostring(nextRule.quantity or 0))
+        else
+            local previousQuantity = tonumber(previousRule.quantity or 0) or 0
+            local nextQuantity = tonumber(nextRule.quantity or 0) or 0
+            if previousQuantity ~= nextQuantity then
+                append_minimum_sync_audit(db, "MINIMUM_UPDATED", nextRule, actorContext, timestamp, tostring(previousQuantity), tostring(nextQuantity))
+            end
+
+            local previousEnabled = previousRule.enabled ~= false
+            local nextEnabled = nextRule.enabled ~= false
+            if previousEnabled ~= nextEnabled then
+                append_minimum_sync_audit(
+                    db,
+                    nextEnabled and "MINIMUM_ENABLED" or "MINIMUM_DISABLED",
+                    nextRule,
+                    actorContext,
+                    timestamp,
+                    previousEnabled and "ENABLED" or "DISABLED",
+                    nextEnabled and "ENABLED" or "DISABLED"
+                )
+            end
+        end
+    end
+
+    for ruleKey, previousRule in pairs(previousByKey) do
+        if not nextByKey[ruleKey] then
+            append_minimum_sync_audit(db, "MINIMUM_REMOVED", previousRule, actorContext, timestamp, tostring(previousRule.quantity or 0), "REMOVED")
+        end
+    end
+end
+
 local function handle_auth_policy_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
@@ -726,7 +797,9 @@ local function handle_minimums_snapshot(db, payload, sender)
         return false
     end
 
+    local previousMinimums = clone_array_records(db.minimums or {})
     db.minimums = clone_array_records(minimums)
+    append_minimums_snapshot_audit(db, previousMinimums, db.minimums, actorContext, payload.updatedAt or ns.state.lastSyncMessage.updatedAt)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", "applied")
     report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
