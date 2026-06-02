@@ -2,6 +2,23 @@
 
 ## Resume Here
 
+### 2026-06-02 v1.1.0 Release Success
+
+- Current repo truth after release:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - release-prep commit used for the public tag: `b93de46` (`chore: prepare 1.1.0 release metadata`)
+  - pushed tag: `v1.1.0`
+  - release workflow run: `26851324160`
+  - GitHub release: `GBankManager v1.1.0`
+  - release asset: `GBankManager-1.1.0.zip`
+- Release result:
+  - `Release to CurseForge` completed successfully
+  - the full Lua suite passed inside the release workflow
+  - the combined package built successfully
+  - the CurseForge upload step succeeded
+  - the GitHub Release was created with the combined zip attached
+
 ### 2026-06-02 Portable Minimums + History Sync + Peer Table Polish Slice
 
 - Current repo truth at resume:
