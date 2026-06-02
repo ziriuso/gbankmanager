@@ -38,8 +38,8 @@ end
 
 assert.equal("## Interface: 120007, 120005", interfaceLine, "toc should advertise the current retail interface versions")
 assert.equal("## Interface: 120007, 120005", itemDataInterfaceLine, "item-data toc should advertise the current retail interface versions")
-assert.equal("## Version: 1.0.1", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
-assert.equal("## X-Release-Tag: v1.0.1", releaseTagLine, "toc should advertise the current tagged release for the About panel")
+assert.equal("## Version: 1.1.0", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
+assert.equal("## X-Release-Tag: v1.1.0", releaseTagLine, "toc should advertise the current tagged release for the About panel")
 assert.equal("## Category: Guild", categoryLine, "toc should place the addon under the Guild category in game")
 assert.truthy(#duplicateEntries == 0, "toc should not contain duplicate file loads")
 

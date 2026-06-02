@@ -7,6 +7,7 @@
 - Current repo truth at resume:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
+  - current stable release prep version in `GBankManager.toc`: `1.1.0`
   - HEAD at session start of the backlog slice: `353c102`
   - later pre-polish pushed checkpoint before this follow-up work: `cb06993` (`fix: stabilize minimum imports and sync peers`)
   - only pre-existing local noise was untracked `.vscode/`
