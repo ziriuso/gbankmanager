@@ -338,6 +338,7 @@ function manualActions.Run(db, options)
     local action = normalize_action(options.action)
     local now = tonumber(options.now or (_G.time and _G.time() or 0)) or 0
     local allowed = allowed_actions_for_profile(accessProfile)
+    local skipCooldown = options.skipCooldown == true
 
     if not action then
         return {
@@ -357,23 +358,25 @@ function manualActions.Run(db, options)
 
     local targets, reportedAction = action_targets(action, accessProfile)
     local state = cooldown_state(db)
-    local actionCooldown = remaining_cooldown_seconds(state, action, now)
-    if actionCooldown > 0 then
-        return {
-            ok = false,
-            action = reportedAction,
-            message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", actionCooldown),
-        }
-    end
-
-    for _, targetAction in ipairs(targets) do
-        local remaining = remaining_cooldown_seconds(state, targetAction, now)
-        if remaining > 0 then
+    if not skipCooldown then
+        local actionCooldown = remaining_cooldown_seconds(state, action, now)
+        if actionCooldown > 0 then
             return {
                 ok = false,
                 action = reportedAction,
-                message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", remaining),
+                message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", actionCooldown),
             }
+        end
+
+        for _, targetAction in ipairs(targets) do
+            local remaining = remaining_cooldown_seconds(state, targetAction, now)
+            if remaining > 0 then
+                return {
+                    ok = false,
+                    action = reportedAction,
+                    message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", remaining),
+                }
+            end
         end
     end
 
@@ -397,9 +400,11 @@ function manualActions.Run(db, options)
         end
     end
 
-    mark_run(state, action, now)
-    for _, targetAction in ipairs(targets) do
-        mark_run(state, targetAction, now)
+    if not skipCooldown then
+        mark_run(state, action, now)
+        for _, targetAction in ipairs(targets) do
+            mark_run(state, targetAction, now)
+        end
     end
 
     local successMessage = action == "all"

@@ -28,7 +28,7 @@
   - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
   - visible History rows now also have a dedicated `HISTORY_SNAPSHOT` sync family that merges only the same `History` page categories already shown today
   - `Options -> Sync` now includes `Sync History`, and `Sync All` now includes that family too
-  - automatic visible-history catch-up now publishes on incoming guild hello plus local request and minimum publishes, so a reloaded client can converge its `History` tab without waiting for another fresh edit
+  - incoming guild hello now triggers the same catch-up family set as `Sync All` for the receiver's local access profile, so full-shell clients can republish Requests, Minimums, visible History rows, and ledger deltas automatically while request-only clients still collapse to Requests only
   - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
   - the Sync peer table now provisions its own slim scrollbar, keeps that scrollbar hidden until the peer list truly overflows, reserves a stable right-side gutter for it, and keeps the delete `X` inside a dedicated trailing action column instead of hugging the outer edge
   - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line

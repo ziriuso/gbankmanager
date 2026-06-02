@@ -14,6 +14,7 @@ local authPolicyCodec = ns.modules.authPolicyCodec or {}
 local requestsModule = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
 local peerState = ns.modules.syncPeerState or {}
+local manualActions = ns.modules.syncManualActions or {}
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -418,6 +419,9 @@ local function mark_sync_peer_synchronized(db, message, sender)
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
     local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
+    if characterKey == "" and message.type == "SYNC_HELLO" and type(message.payload) == "string" then
+        characterKey = normalize_character_key(message.payload)
+    end
     if characterKey == "" then
         characterKey = normalize_character_key(sender)
     end
@@ -1190,7 +1194,30 @@ function syncEvents.HandleEvent(event, ...)
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
             local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
-            send_visible_history_snapshot(db, liveContext, ns.state.lastSyncMessage.updatedAt)
+            local manualSyncActions = ns.modules.syncManualActions or manualActions or {}
+            local accessProfile = type(permissions.GetEffectiveAccessProfile) == "function"
+                and permissions.GetEffectiveAccessProfile(liveContext, current_policy(db))
+                or "full_shell"
+            local defaultAction = type(manualSyncActions.ResolveDefaultAction) == "function"
+                and manualSyncActions.ResolveDefaultAction(accessProfile)
+                or (accessProfile == "request_only" and "requests" or "all")
+            local syncTriggered = false
+            if accessProfile ~= "blocked" and type(manualSyncActions.Run) == "function" then
+                local result = manualSyncActions.Run(db, {
+                    action = defaultAction,
+                    accessProfile = accessProfile,
+                    now = tonumber(ns.state.lastSyncMessage.updatedAt or (_G.time and _G.time() or 0)) or 0,
+                    skipCooldown = true,
+                })
+                syncTriggered = type(result) == "table" and result.ok == true
+            end
+            if not syncTriggered and accessProfile ~= "blocked" then
+                send_visible_history_snapshot(db, liveContext, ns.state.lastSyncMessage.updatedAt)
+                syncTriggered = true
+            end
+            if syncTriggered then
+                mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+            end
             refresh_sync_peer_view()
             return true
         end

@@ -284,16 +284,109 @@ db.auth.capabilities.minimum_add = { [1] = true }
 db.auth.capabilities.minimum_edit = { [1] = true }
 db.auth.capabilities.minimum_delete = { [1] = true }
 db.auth.capabilities.auth_manage = { [1] = true }
+db.requests = {
+    {
+        requestId = "req-hello-catchup-1",
+        requester = "MemberOne",
+        requesterCharacterKey = "MemberOne-Stormrage",
+        itemID = 243734,
+        itemName = "Hello Catch-up Oil",
+        quantity = 2,
+        approval = "PENDING",
+        fulfillment = "OPEN",
+        updatedAt = 88,
+        createdAt = 88,
+    },
+}
+db.minimums = {
+    {
+        itemID = 171276,
+        itemName = "Spectral Flask",
+        quantity = 20,
+        scope = "TAB",
+        tabName = "Alchemy",
+        enabled = true,
+        updatedAt = 89,
+        updatedBy = "SyncTester-Stormrage",
+        updatedByRankIndex = 1,
+    },
+}
+db.auditLog = {
+    {
+        type = "REQUEST_CREATED",
+        category = "REQUEST",
+        itemName = "Hello Catch-up Oil",
+        actor = "SyncTester-Stormrage",
+        requestId = "req-hello-catchup-1",
+        timestamp = 89,
+    },
+}
+db.bankLedger = db.bankLedger or {}
+db.bankLedger.itemLogs = {
+    {
+        timestamp = 1716573600,
+        action = "deposit",
+        who = "SyncTester-Stormrage",
+        itemID = 243734,
+        item = "Hello Catch-up Oil",
+        quantity = 1,
+        tabIndex = 1,
+        tabName = "Alchemy",
+    },
+}
+db.bankLedger.moneyLogs = {}
+local helloDispatches = {}
+local originalManualSyncHandlers = ns.modules.syncManualActionHandlers
+ns.modules.syncManualActionHandlers = {
+    requests = function()
+        helloDispatches[#helloDispatches + 1] = "requests"
+        return true, "ok"
+    end,
+    minimums = function()
+        helloDispatches[#helloDispatches + 1] = "minimums"
+        return true, "ok"
+    end,
+    history = function()
+        helloDispatches[#helloDispatches + 1] = "history"
+        return true, "ok"
+    end,
+    ledger = function()
+        helloDispatches[#helloDispatches + 1] = "ledger"
+        return true, "ok"
+    end,
+}
 
 local remoteHelloPayload = codec.EncodeTable({
     type = "SYNC_HELLO",
     updatedAt = 90,
     payload = "Stormrage-MemberOne",
 })
+_G.C_ChatInfo.sentMessages = {}
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "MemberOne")
 local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
-assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic alone should not mark the peer as synchronized")
+assert.equal(90, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic should mark the peer as synchronized when it triggers outbound catch-up")
+assert.equal("requests,minimums,history,ledger", table.concat(helloDispatches, ","), "sync hello should trigger the same sync families as Sync All for full-shell users")
+
+local originalFullUi = db.auth.capabilities.full_ui
+local originalGetGuildInfo = _G.GetGuildInfo
+db.auth.capabilities.full_ui = {}
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Raider", 2
+end
+helloDispatches = {}
+local requestOnlyHelloPayload = codec.EncodeTable({
+    type = "SYNC_HELLO",
+    updatedAt = 91,
+    payload = "Stormrage-MemberTwo",
+})
+_G.FireEvent("CHAT_MSG_ADDON", "GBankManager", requestOnlyHelloPayload, "GUILD", "MemberTwo")
+local requestOnlyPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberTwo-Stormrage"] or {})
+assert.equal(91, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello should still update peer sync time for request-only users")
+assert.equal("requests", table.concat(helloDispatches, ","), "sync hello should collapse to request sync only for request-only users")
+db.auth.capabilities.full_ui = originalFullUi
+_G.GetGuildInfo = originalGetGuildInfo
+ns.modules.syncManualActionHandlers = originalManualSyncHandlers
 
 local runtimeBeforeGuildBootstrap = _G.GBankManagerDB
 local stateDbBeforeGuildBootstrap = ns.state.db
