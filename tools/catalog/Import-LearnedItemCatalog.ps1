@@ -97,6 +97,8 @@ function ConvertTo-ManifestItemRecord {
     return [pscustomobject][ordered]@{
         itemID = $itemID
         name = [string](Get-ObjectPropertyValue -Object $Item -Name "name")
+        itemLink = Get-ObjectPropertyValue -Object $Item -Name "itemLink"
+        itemString = Get-ObjectPropertyValue -Object $Item -Name "itemString"
         quality = Get-ObjectPropertyValue -Object $Item -Name "quality"
         qualityName = Get-ObjectPropertyValue -Object $Item -Name "qualityName"
         craftedQuality = Get-ObjectPropertyValue -Object $Item -Name "craftedQuality"
@@ -164,6 +166,16 @@ function ConvertTo-LearnedImportRecord {
         }
     }
 
+    $itemLink = [string](Get-ObjectPropertyValue -Object $Item -Name "itemLink")
+    if ([string]::IsNullOrWhiteSpace($itemLink)) {
+        $itemLink = $null
+    }
+
+    $itemString = [string](Get-ObjectPropertyValue -Object $Item -Name "itemString")
+    if ([string]::IsNullOrWhiteSpace($itemString)) {
+        $itemString = $null
+    }
+
     $source = [string](Get-ObjectPropertyValue -Object $Item -Name "source")
     if ([string]::IsNullOrWhiteSpace($source)) {
         $source = [string](Get-ObjectPropertyValue -Object $Payload -Name "source")
@@ -190,6 +202,8 @@ function ConvertTo-LearnedImportRecord {
     return [pscustomobject][ordered]@{
         itemID = $itemID
         name = $name
+        itemLink = $itemLink
+        itemString = $itemString
         quality = $quality
         qualityName = $qualityName
         craftedQuality = $craftedQuality
@@ -216,6 +230,16 @@ function Merge-LearnedRecord {
     $quality = $LearnedRecord.quality
     if ($null -eq $quality) {
         $quality = $ExistingRecord.quality
+    }
+
+    $itemLink = $LearnedRecord.itemLink
+    if ([string]::IsNullOrWhiteSpace([string]$itemLink)) {
+        $itemLink = $ExistingRecord.itemLink
+    }
+
+    $itemString = $LearnedRecord.itemString
+    if ([string]::IsNullOrWhiteSpace([string]$itemString)) {
+        $itemString = $ExistingRecord.itemString
     }
 
     $qualityName = $LearnedRecord.qualityName
@@ -256,6 +280,8 @@ function Merge-LearnedRecord {
     return [pscustomobject][ordered]@{
         itemID = $ExistingRecord.itemID
         name = $LearnedRecord.name
+        itemLink = $itemLink
+        itemString = $itemString
         quality = $quality
         qualityName = $qualityName
         craftedQuality = $craftedQuality

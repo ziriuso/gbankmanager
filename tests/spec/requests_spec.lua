@@ -85,8 +85,8 @@ assert.equal("APPROVED", approvedRequest.approval, "approve should transition th
 assert.equal("GuildLead", approvedRequest.approvedBy, "approve should store approver identity")
 assert.equal(55, approvedRequest.decidedAt, "approve should store decision timestamp")
 
-local fulfilledRequest = requests.MarkSuggestedFulfilled(approvedRequest, 99)
-assert.equal("SUGGESTED_FULFILLED", fulfilledRequest.fulfillment, "requests should support suggested fulfillment")
+local fulfilledRequest = requests.MarkFulfilled(approvedRequest, "GuildLead", 99)
+assert.equal("FULFILLED", fulfilledRequest.fulfillment, "requests should use the real fulfilled state for completed requests")
 assert.equal(99, fulfilledRequest.fulfillmentUpdatedAt, "fulfillment updates should track timestamps")
 
 local reopenedRequest = requests.Reopen(fulfilledRequest, 123)

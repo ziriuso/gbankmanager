@@ -35,6 +35,14 @@ local slash = ns.modules.slash
 local mainFrame = ns.modules.mainFrame
 local scanner = ns.modules.scanner
 
+local function current_db()
+    if type(store.GetDatabase) == "function" then
+        return store.GetDatabase()
+    end
+
+    return _G.GBankManagerDB
+end
+
 local db = store.CreateFreshDatabase("Guild Testers")
 
 assert.truthy(type(db.auth) == "table", "fresh databases should include an auth policy container")
@@ -123,17 +131,17 @@ assert.truthy(mainFrame.requestOnlyMode == true, "adaptive slash ui should open 
 assert.equal("REQUESTS", mainFrame.activeView, "adaptive slash ui should route request-only members into the requests surface")
 assert.truthy(not mainFrame.requestActionsPanel:IsShown(), "request-only access should not expose officer workflow controls")
 
-_G.GBankManagerDB.auth.capabilities.request_submit = {}
+current_db().auth.capabilities.request_submit = {}
 mainFrame:RefreshView()
 assert.truthy(mainFrame.requestWorkflowCreateButton:IsEnabled(), "request-only members should keep the lightweight submit flow entrypoint when request-submit is allowed")
 
-_G.GBankManagerDB.auth.capabilities.request_submit[1] = true
-_G.GBankManagerDB.auth.capabilities.request_submit[2] = nil
+current_db().auth.capabilities.request_submit[1] = true
+current_db().auth.capabilities.request_submit[2] = nil
 mainFrame:RefreshView()
 assert.truthy(not mainFrame.requestCreateButton:IsEnabled(), "request-only members should lose submit actions when their rank is not allowed")
 assert.equal("You do not have permission to submit requests.", mainFrame.requestCreateStatusText:GetText(), "request-only denied submitters should see a clear read-only banner")
 
-_G.GBankManagerDB.auth.blacklist["Stormrage-MemberOne"] = {
+current_db().auth.blacklist["Stormrage-MemberOne"] = {
     name = "MemberOne",
     reason = "Blocked",
     updatedAt = 1,

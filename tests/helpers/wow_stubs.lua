@@ -4,11 +4,13 @@ _G.SlashCmdList = _G.SlashCmdList or {}
 _G.UIParent = _G.UIParent or { children = {} }
 _G.C_ChatInfo = _G.C_ChatInfo or {
     sentMessages = {},
+    loggedMessages = {},
     registeredPrefixes = {},
 }
 _G.C_Timer = _G.C_Timer or {
     pending = {},
 }
+_G.Enum = _G.Enum or {}
 _G.C_GuildInfo = _G.C_GuildInfo or {
     infoText = "",
     motd = "",
@@ -21,6 +23,7 @@ _G.C_GuildInfo = _G.C_GuildInfo or {
 _G.C_Secrets = _G.C_Secrets or {
     hasSecretRestrictions = false,
 }
+_G.C_TradeSkillUI = _G.C_TradeSkillUI or {}
 _G.StaticPopupDialogs = _G.StaticPopupDialogs or {
     ["SET_GUILDOFFICERNOTE"] = {
         maxLetters = 31,
@@ -37,12 +40,84 @@ _G.guildRosterSelection = _G.guildRosterSelection or 0
 _G.SetGuildRosterSelectionCalls = _G.SetGuildRosterSelectionCalls or {}
 _G.currentGuildBankTab = _G.currentGuildBankTab or 1
 _G.SetCurrentGuildBankTabCalls = _G.SetCurrentGuildBankTabCalls or {}
+_G.__eventFrames = _G.__eventFrames or {}
+_G.AceCommStub = _G.AceCommStub or {}
 
 if _G.time == nil then
     _G.time = function()
         return 0
     end
 end
+
+if _G.GetTime == nil then
+    _G.__wowTestNow = _G.__wowTestNow or 0
+    _G.GetTime = function()
+        _G.__wowTestNow = _G.__wowTestNow + 1
+        return _G.__wowTestNow
+    end
+end
+
+if _G.GetFramerate == nil then
+    _G.GetFramerate = function()
+        return 60
+    end
+end
+
+if _G.geterrorhandler == nil then
+    _G.geterrorhandler = function()
+        return error
+    end
+end
+
+if _G.securecallfunction == nil then
+    _G.securecallfunction = function(func, ...)
+        return func(...)
+    end
+end
+
+if _G.Ambiguate == nil then
+    _G.Ambiguate = function(value)
+        return value
+    end
+end
+
+if _G.hooksecurefunc == nil then
+    _G.hooksecurefunc = function(target, methodName, hook)
+        if type(target) == "string" then
+            hook = methodName
+            methodName = target
+            target = _G
+        end
+
+        local original = target[methodName]
+        if type(original) ~= "function" then
+            target[methodName] = function(...) end
+            original = target[methodName]
+        end
+
+        target[methodName] = function(...)
+            local results = { original(...) }
+            hook(...)
+            return unpack(results)
+        end
+    end
+end
+
+if _G.table and _G.table.wipe == nil then
+    _G.table.wipe = function(target)
+        for key in pairs(target or {}) do
+            target[key] = nil
+        end
+    end
+end
+
+_G.Enum.SendAddonMessageResult = _G.Enum.SendAddonMessageResult or {
+    Success = 0,
+    AddonMessageThrottle = 3,
+    NotInGroup = 5,
+    ChannelThrottle = 8,
+    GeneralError = 9,
+}
 
 if _G.UnitName == nil then
     _G.UnitName = function()
@@ -55,6 +130,15 @@ function _G.C_ChatInfo.RegisterAddonMessagePrefix(prefix)
     return true
 end
 
+function _G.C_ChatInfo.SendChatMessage(messageType, language, target)
+    _G.C_ChatInfo.lastChatMessage = {
+        messageType = messageType,
+        language = language,
+        target = target,
+    }
+    return true
+end
+
 function _G.C_ChatInfo.SendAddonMessage(prefix, payload, distribution, channel)
     table.insert(_G.C_ChatInfo.sentMessages, {
         prefix = prefix,
@@ -62,6 +146,98 @@ function _G.C_ChatInfo.SendAddonMessage(prefix, payload, distribution, channel)
         distribution = distribution,
         channel = channel,
     })
+    return true
+end
+
+function _G.C_ChatInfo.SendAddonMessageLogged(prefix, payload, distribution, channel)
+    table.insert(_G.C_ChatInfo.loggedMessages, {
+        prefix = prefix,
+        payload = payload,
+        distribution = distribution,
+        channel = channel,
+    })
+    return _G.C_ChatInfo.SendAddonMessage(prefix, payload, distribution, channel)
+end
+
+local function append_event_frame(eventName, frame)
+    _G.__eventFrames[eventName] = _G.__eventFrames[eventName] or {}
+    for _, existing in ipairs(_G.__eventFrames[eventName]) do
+        if existing == frame then
+            return
+        end
+    end
+    table.insert(_G.__eventFrames[eventName], frame)
+end
+
+local function remove_event_frame(eventName, frame)
+    local frames = _G.__eventFrames[eventName]
+    if type(frames) ~= "table" then
+        return
+    end
+
+    for index = #frames, 1, -1 do
+        if frames[index] == frame then
+            table.remove(frames, index)
+        end
+    end
+end
+
+function _G.FireEvent(eventName, ...)
+    local lastResult = nil
+    for _, frame in ipairs(_G.__eventFrames[eventName] or {}) do
+        local handler = frame.GetScript and frame:GetScript("OnEvent")
+        if type(handler) == "function" then
+            lastResult = handler(frame, eventName, ...)
+        end
+    end
+    return lastResult
+end
+
+function _G.AceCommStub.attach()
+    local libStub = _G.LibStub
+    local aceComm = libStub and libStub("AceComm-3.0", true)
+    if not aceComm then
+        return nil
+    end
+
+    local chatThrottleLib = _G.ChatThrottleLib
+    if type(chatThrottleLib) == "table" then
+        chatThrottleLib.HardThrottlingBeginTime = -1000
+        chatThrottleLib.LastAvailUpdate = -1000
+        chatThrottleLib.avail = chatThrottleLib.BURST or 4000
+        chatThrottleLib.bQueueing = false
+    end
+
+    if _G.AceCommStub.boundAceComm ~= aceComm then
+        local originalSendCommMessage = aceComm.SendCommMessage
+        aceComm.SendCommMessage = function(self, prefix, text, distribution, target, ...)
+            _G.AceCommStub.lastPrefix = prefix
+            _G.AceCommStub.lastMessage = text
+            _G.AceCommStub.lastDistribution = distribution
+            _G.AceCommStub.lastTarget = target
+            return originalSendCommMessage(self, prefix, text, distribution, target, ...)
+        end
+        _G.AceCommStub.boundAceComm = aceComm
+    end
+
+    return aceComm
+end
+
+function _G.AceCommStub.reset()
+    _G.AceCommStub.lastPrefix = nil
+    _G.AceCommStub.lastMessage = nil
+    _G.AceCommStub.lastDistribution = nil
+    _G.AceCommStub.lastTarget = nil
+    return _G.AceCommStub.attach()
+end
+
+function _G.AceCommStub.fire(prefix, message, distribution, sender)
+    local aceComm = _G.AceCommStub.attach()
+    if not aceComm or not aceComm.callbacks then
+        error("AceComm-3.0 is not available for the sync transport test harness")
+    end
+
+    aceComm.callbacks:Fire(prefix, message, distribution, sender)
 end
 
 function _G.C_GuildInfo.GetInfoText()
@@ -441,6 +617,23 @@ if _G.CreateFrame == nil then
 
         function frame:RegisterEvent(event)
             table.insert(self.events, event)
+            append_event_frame(event, self)
+        end
+
+        function frame:UnregisterEvent(event)
+            remove_event_frame(event, self)
+            for index = #self.events, 1, -1 do
+                if self.events[index] == event then
+                    table.remove(self.events, index)
+                end
+            end
+        end
+
+        function frame:UnregisterAllEvents()
+            for _, event in ipairs(self.events) do
+                remove_event_frame(event, self)
+            end
+            self.events = {}
         end
 
         function frame:SetScript(scriptName, handler)
@@ -486,8 +679,12 @@ if _G.CreateFrame == nil then
             return region
         end
 
-        function frame:CreateTexture()
+        function frame:CreateTexture(name, layer, inherits, subLevel)
             local region = make_region()
+            region.name = name
+            region.layer = layer
+            region.inherits = inherits
+            region.subLevel = subLevel
             region.parent = self
             region.SetColorTexture = function() end
             region.SetAllPoints = function() end

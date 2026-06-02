@@ -7,6 +7,9 @@ local scannerEvents = ns.modules.guildBankScannerEvents or {}
 
 local REGISTERED_EVENTS = {
     "GUILDBANKFRAME_OPENED",
+    "GUILDBANKFRAME_CLOSED",
+    "PLAYER_INTERACTION_MANAGER_FRAME_SHOW",
+    "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
     "GUILDBANK_UPDATE_TABS",
     "GUILDBANKBAGSLOTS_CHANGED",
     "GUILDBANKLOG_UPDATE",
@@ -22,7 +25,43 @@ function scannerEvents.HandleEvent(event, ...)
         return false
     end
 
+    local guildBankerInteractionType = (((_G.Enum or {}).PlayerInteractionType or {}).GuildBanker)
+
+    if event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" then
+        if guildBankerInteractionType == nil or select(1, ...) ~= guildBankerInteractionType then
+            return false
+        end
+
+        if scanner.guildBankOpen == true then
+            return true
+        end
+
+        if type(scanner.OnGuildBankOpened) ~= "function" then
+            return false
+        end
+
+        scanner.OnGuildBankOpened(...)
+        return true
+    end
+
+    if event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
+        if guildBankerInteractionType == nil or select(1, ...) ~= guildBankerInteractionType then
+            return false
+        end
+
+        if type(scanner.OnGuildBankClosed) ~= "function" then
+            return false
+        end
+
+        scanner.OnGuildBankClosed(...)
+        return true
+    end
+
     if event == "GUILDBANKFRAME_OPENED" then
+        if scanner.guildBankOpen == true then
+            return true
+        end
+
         if type(scanner.OnGuildBankOpened) ~= "function" then
             return false
         end
@@ -37,6 +76,15 @@ function scannerEvents.HandleEvent(event, ...)
         end
 
         scanner.OnGuildBankTabsUpdated(...)
+        return true
+    end
+
+    if event == "GUILDBANKFRAME_CLOSED" then
+        if type(scanner.OnGuildBankClosed) ~= "function" then
+            return false
+        end
+
+        scanner.OnGuildBankClosed(...)
         return true
     end
 

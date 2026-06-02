@@ -155,11 +155,11 @@ function requests.CanApplyAction(request, action)
     end
 
     if action == "FULFILL" then
-        return approval == "APPROVED" and (fulfillment == "OPEN" or fulfillment == "SUGGESTED_FULFILLED")
+        return approval == "APPROVED" and fulfillment == "OPEN"
     end
 
     if action == "REOPEN" then
-        return fulfillment == "FULFILLED" or fulfillment == "SUGGESTED_FULFILLED"
+        return fulfillment == "FULFILLED"
     end
 
     if action == "EDIT" then
@@ -208,8 +208,14 @@ function requests.Create(input)
         role = input.role or context.guildRankName,
         itemID = input.itemID,
         itemName = input.itemName,
+        itemLink = input.itemLink,
+        itemString = input.itemString,
         craftedQuality = input.craftedQuality,
         craftedQualityIcon = input.craftedQualityIcon,
+        craftedQualityMax = input.craftedQualityMax,
+        craftedQualityFamilySize = input.craftedQualityFamilySize,
+        craftedQualityDisplayAtlas = input.craftedQualityDisplayAtlas,
+        craftedQualityPreferredAtlas = input.craftedQualityPreferredAtlas,
         quantity = input.quantity,
         tabName = input.tabName,
         preferredBankTab = input.preferredBankTab or input.tabName,
@@ -259,13 +265,6 @@ function requests.Reject(request, actor, note, decidedAt)
     request.updatedAt = request.decidedAt
     request.updatedBy = actor_character_key(actor) or actor_name(actor)
     request.updatedByRankIndex = type(actor) == "table" and actor.guildRankIndex or request.updatedByRankIndex
-    return request
-end
-
-function requests.MarkSuggestedFulfilled(request, updatedAt)
-    request.fulfillment = "SUGGESTED_FULFILLED"
-    request.fulfillmentUpdatedAt = updatedAt or now()
-    request.updatedAt = request.fulfillmentUpdatedAt
     return request
 end
 

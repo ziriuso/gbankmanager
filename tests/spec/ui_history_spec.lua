@@ -30,6 +30,7 @@ _G.GBankManagerDB = {
 env.ns.state.db = _G.GBankManagerDB
 mainFrame:SelectView("HISTORY")
 
+assert.equal("Review audit history", mainFrame.viewSubtitle:GetText(), "history should use the shorter subtitle copy")
 assert.equal("When", mainFrame.tableHeaderLabels[1]:GetText(), "history should keep the timestamp summary column")
 assert.equal("Category", mainFrame.tableHeaderLabels[2]:GetText(), "history should keep the category summary column")
 assert.equal("Item", mainFrame.tableHeaderLabels[3]:GetText(), "history should keep the item summary column")

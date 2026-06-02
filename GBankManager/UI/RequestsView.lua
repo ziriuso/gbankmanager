@@ -5,8 +5,42 @@ ns.modules = ns.modules or {}
 
 local requestsView = ns.modules.requestsView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
+local itemCatalog = ns.modules.itemCatalog or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
+    itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
+end
+
+local function canonical_item(item)
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        return itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+
+    return item
+end
+
+local function preferred_quality_icon(item)
+    item = type(item) == "table" and item or {}
+    return tostring(item.craftedQualityIcon or item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or "")
+end
+
+local function build_item_display(item)
+    if type(itemCatalog.HydrateItem) == "function" then
+        itemCatalog.HydrateItem(item)
+    end
+    if type(itemDisplay.BuildDisplayPayload) == "function" then
+        return itemDisplay.BuildDisplayPayload(item)
+    end
+
+    return {
+        visibleText = tostring((item or {}).itemName or (item or {}).name or "Unknown"),
+    }
 end
 
 local function format_timestamp(timestamp)
@@ -22,9 +56,25 @@ local function format_timestamp(timestamp)
     return tostring(timestamp)
 end
 
-local function crafted_quality_markup(atlasName)
+local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+        return craftedQuality.DisplayNonInventoryMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
+    if type(craftedQuality.DisplayMarkupForItem) == "function" then
+        return craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
+    if type(craftedQuality.DisplayMarkup) == "function" then
+        return craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
+    if type(craftedQuality.ToMarkupForItem) == "function" then
+        return craftedQuality.ToMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+    end
+
     if type(craftedQuality.ToMarkup) == "function" then
-        return craftedQuality.ToMarkup(atlasName, 22)
+        return craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
     end
 
     if atlasName == nil or atlasName == "" then
@@ -32,6 +82,22 @@ local function crafted_quality_markup(atlasName)
     end
 
     return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlas) == "function" then
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    return tostring(atlasName or "")
 end
 
 local function title_status(value)
@@ -176,12 +242,25 @@ function requestsView.BuildTableRows(rows)
     local out = {}
 
     for _, row in ipairs(queue) do
+        row = canonical_item(row)
+        local tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax)
+        local display = build_item_display(row)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
             itemID = tostring(row.itemID or ""),
-            tier = crafted_quality_markup(row.craftedQualityIcon),
+            tier = tierAtlas ~= "" and "" or crafted_quality_markup(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax),
+            tierAtlas = tierAtlas,
+            tierIconAtlas = tierAtlas,
+            itemDisplayText = tostring(display.visibleText or row.itemName or "Unknown"),
+            itemDisplayTextIconAtlas = tierAtlas,
             tierValue = tonumber(row.craftedQuality or 0) or 0,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
+            craftedQualityFamilySize = row.craftedQualityFamilySize,
+            craftedQualityDisplayAtlas = row.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = row.craftedQualityPreferredAtlas,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),
@@ -225,12 +304,25 @@ function requestsView.BuildTableRows(rows, viewerContext, accessProfile, filters
     local out = {}
 
     for _, row in ipairs(queue) do
+        row = canonical_item(row)
+        local tierAtlas = crafted_quality_atlas(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax)
+        local display = build_item_display(row)
         table.insert(out, {
             requestId = row.requestId,
             requester = tostring(row.requester or "Unknown"),
             itemID = tostring(row.itemID or ""),
-            tier = crafted_quality_markup(row.craftedQualityIcon),
+            tier = tierAtlas ~= "" and "" or crafted_quality_markup(row.itemID, preferred_quality_icon(row), row.craftedQuality, row.craftedQualityFamilySize or row.craftedQualityMax),
+            tierAtlas = tierAtlas,
+            tierIconAtlas = tierAtlas,
+            itemDisplayText = tostring(display.visibleText or row.itemName or "Unknown"),
+            itemDisplayTextIconAtlas = tierAtlas,
             tierValue = tonumber(row.craftedQuality or 0) or 0,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
+            craftedQualityFamilySize = row.craftedQualityFamilySize,
+            craftedQualityDisplayAtlas = row.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = row.craftedQualityPreferredAtlas,
             itemName = tostring(row.itemName or "Unknown"),
             quantity = tostring(row.quantity or 0),
             approval = tostring(row.approval or "UNKNOWN"),

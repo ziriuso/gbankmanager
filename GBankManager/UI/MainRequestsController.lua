@@ -5,8 +5,24 @@ ns.modules = ns.modules or {}
 
 local mainRequestsController = ns.modules.mainRequestsController or {}
 local craftedQuality = ns.modules.craftedQuality or {}
+local itemCatalog = ns.modules.itemCatalog or {}
+local itemDisplay = ns.modules.itemDisplay or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemCatalog.ApplyCanonicalCraftedQuality == nil and type(_G.dofile) == "function" then
+    itemCatalog = _G.dofile("GBankManager/Domain/ItemCatalog.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
+end
+
+local function canonical_item(item)
+    if type(itemCatalog.ApplyCanonicalCraftedQuality) == "function" then
+        return itemCatalog.ApplyCanonicalCraftedQuality(item)
+    end
+
+    return item
 end
 
 local function current_db()
@@ -54,6 +70,31 @@ local function access_profile(context, policy)
     return "full_shell"
 end
 
+local function active_guild_key(db)
+    local store = ns.modules.store or ns.data.store
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(rootGuildKey)) then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(dbGuildKey)) then
+        return dbGuildKey
+    end
+
+    return tostring((current_context(db) or {}).guildName or "Unknown")
+end
+
+local function send_request_sync_message(db, transport, request, message)
+    if type(request) ~= "table" or type(message) ~= "table" or type(transport) ~= "table" or type(transport.Send) ~= "function" then
+        return 0
+    end
+
+    transport.Send("GUILD", "GUILD", message)
+    return 1
+end
+
 local function actor_summary(context)
     local name = tostring((context or {}).name or "Unknown")
     local rankName = tostring((context or {}).guildRankName or "")
@@ -64,14 +105,24 @@ local function actor_summary(context)
     return string.format("Acting As: %s", name)
 end
 
-local function crafted_quality_markup(atlasName, fallbackQuality)
+local function crafted_quality_markup(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.DisplayNonInventoryMarkupForItem) == "function" then
+        local markup = craftedQuality.DisplayNonInventoryMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+        return markup ~= "" and markup or "-"
+    end
+
+    if type(craftedQuality.DisplayMarkupForItem) == "function" then
+        local markup = craftedQuality.DisplayMarkupForItem(itemID, atlasName, 22, "reagent", fallbackQuality, maxQuality)
+        return markup ~= "" and markup or "-"
+    end
+
     if type(craftedQuality.DisplayMarkup) == "function" then
-        local markup = craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality)
+        local markup = craftedQuality.DisplayMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
         return markup ~= "" and markup or "-"
     end
 
     if type(craftedQuality.ToMarkup) == "function" then
-        local markup = craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality)
+        local markup = craftedQuality.ToMarkup(atlasName, 22, "reagent", fallbackQuality, maxQuality)
         return markup ~= "" and markup or "-"
     end
 
@@ -80,6 +131,58 @@ local function crafted_quality_markup(atlasName, fallbackQuality)
     end
 
     return string.format("|A:%s:22:22|a", tostring(atlasName))
+end
+
+local function crafted_quality_atlas(itemID, atlasName, fallbackQuality, maxQuality)
+    if type(craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlasForItem) == "function" then
+        return craftedQuality.GetDisplayAtlasForItem(itemID, atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQuality.GetDisplayAtlas) == "function" then
+        return craftedQuality.GetDisplayAtlas(atlasName, fallbackQuality, "reagent", maxQuality)
+    end
+
+    return tostring(atlasName or "")
+end
+
+local function build_item_display(item)
+    if type(itemCatalog.HydrateItem) == "function" then
+        itemCatalog.HydrateItem(item)
+    end
+    if type(itemDisplay.BuildDisplayPayload) == "function" then
+        return itemDisplay.BuildDisplayPayload(item)
+    end
+
+    return {
+        visibleText = tostring((item or {}).itemName or (item or {}).name or ""),
+    }
+end
+
+local function set_quality_texture(texture, atlasName, size)
+    if type(texture) ~= "table" then
+        return false
+    end
+
+    atlasName = tostring(atlasName or "")
+    if atlasName == "" then
+        texture.atlas = nil
+        texture:Hide()
+        return false
+    end
+
+    if type(texture.SetAtlas) == "function" then
+        texture:SetAtlas(atlasName, false)
+    end
+    if tonumber(size or 0) and type(texture.SetSize) == "function" then
+        texture:SetSize(size, size)
+    end
+    texture.atlas = atlasName
+    texture:Show()
+    return true
 end
 
 local function actor_owns_request(request, actor)
@@ -339,8 +442,12 @@ function mainRequestsController.Attach(mainFrame, options)
     end
     mainFrame.requestWizardPreviewQualityText = mainFrame.requestWizardPreviewQualityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
     mainFrame.requestWizardPreviewQualityText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewItemText, "BOTTOMLEFT", 0, -10)
+    mainFrame.requestWizardPreviewQualityIcon = mainFrame.requestWizardPreviewQualityIcon or mainFrame.requestWizardPreviewPanel:CreateTexture()
+    mainFrame.requestWizardPreviewQualityIcon:SetPoint("LEFT", mainFrame.requestWizardPreviewQualityText, "LEFT", 0, 0)
+    mainFrame.requestWizardPreviewQualityIcon:SetSize(18, 18)
+    mainFrame.requestWizardPreviewQualityIcon:Hide()
     mainFrame.requestWizardPreviewRequestedQuantityLabel = mainFrame.requestWizardPreviewRequestedQuantityLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Requested Quantity", "GameFontHighlightSmall")
-    mainFrame.requestWizardPreviewRequestedQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewQualityText, "BOTTOMLEFT", 0, -14)
+    mainFrame.requestWizardPreviewRequestedQuantityLabel:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewItemText, "BOTTOMLEFT", 0, -14)
     mainFrame.requestWizardPreviewRequestedQuantityText = mainFrame.requestWizardPreviewRequestedQuantityText or makeLabel(mainFrame.requestWizardPreviewPanel, "-", "GameFontNormal")
     mainFrame.requestWizardPreviewRequestedQuantityText:SetPoint("TOPLEFT", mainFrame.requestWizardPreviewRequestedQuantityLabel, "BOTTOMLEFT", 0, -4)
     mainFrame.requestWizardPreviewReasonLabel = mainFrame.requestWizardPreviewReasonLabel or makeLabel(mainFrame.requestWizardPreviewPanel, "Reason", "GameFontHighlightSmall")
@@ -453,49 +560,52 @@ function mainRequestsController.Attach(mainFrame, options)
 
     mainFrame.requestDetailsQualityLabel = mainFrame.requestDetailsQualityLabel or makeLabel(mainFrame.requestDetailsModal, "Quality", "GameFontHighlightSmall")
     mainFrame.requestDetailsQualityText = mainFrame.requestDetailsQualityText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsQualityLabel, mainFrame.requestDetailsQualityText, -82)
+    mainFrame.requestDetailsQualityIcon = mainFrame.requestDetailsQualityIcon or mainFrame.requestDetailsModal:CreateTexture()
+    mainFrame.requestDetailsQualityIcon:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 160, -58)
+    mainFrame.requestDetailsQualityIcon:SetSize(18, 18)
+    mainFrame.requestDetailsQualityIcon:Hide()
 
     mainFrame.requestDetailsQuantityLabel = mainFrame.requestDetailsQuantityLabel or makeLabel(mainFrame.requestDetailsModal, "Quantity", "GameFontHighlightSmall")
     mainFrame.requestDetailsQuantityText = mainFrame.requestDetailsQuantityText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsQuantityLabel, mainFrame.requestDetailsQuantityText, -106)
+    placeRequestDetailRow(mainFrame.requestDetailsQuantityLabel, mainFrame.requestDetailsQuantityText, -82)
 
     mainFrame.requestDetailsSubmissionNoteLabel = mainFrame.requestDetailsSubmissionNoteLabel or makeLabel(mainFrame.requestDetailsModal, "Submission Note", "GameFontHighlightSmall")
     mainFrame.requestDetailsSubmissionNoteText = mainFrame.requestDetailsSubmissionNoteText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsSubmissionNoteLabel, mainFrame.requestDetailsSubmissionNoteText, -130)
+    placeRequestDetailRow(mainFrame.requestDetailsSubmissionNoteLabel, mainFrame.requestDetailsSubmissionNoteText, -106)
 
     mainFrame.requestDetailsStatusLabel = mainFrame.requestDetailsStatusLabel or makeLabel(mainFrame.requestDetailsModal, "Status", "GameFontHighlightSmall")
     mainFrame.requestDetailsStatusText = mainFrame.requestDetailsStatusText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsStatusLabel, mainFrame.requestDetailsStatusText, -154)
+    placeRequestDetailRow(mainFrame.requestDetailsStatusLabel, mainFrame.requestDetailsStatusText, -130)
 
     mainFrame.requestDetailsRequesterLabel = mainFrame.requestDetailsRequesterLabel or makeLabel(mainFrame.requestDetailsModal, "Requested By", "GameFontHighlightSmall")
     mainFrame.requestDetailsRequesterLabel:SetText("Requested By")
     mainFrame.requestDetailsRequesterText = mainFrame.requestDetailsRequesterText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsRequesterLabel, mainFrame.requestDetailsRequesterText, -178)
+    placeRequestDetailRow(mainFrame.requestDetailsRequesterLabel, mainFrame.requestDetailsRequesterText, -154)
 
     mainFrame.requestDetailsRequestedAtLabel = mainFrame.requestDetailsRequestedAtLabel or makeLabel(mainFrame.requestDetailsModal, "Date Requested", "GameFontHighlightSmall")
     mainFrame.requestDetailsRequestedAtText = mainFrame.requestDetailsRequestedAtText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsRequestedAtLabel, mainFrame.requestDetailsRequestedAtText, -202)
+    placeRequestDetailRow(mainFrame.requestDetailsRequestedAtLabel, mainFrame.requestDetailsRequestedAtText, -178)
 
     mainFrame.requestDetailsApprovedByLabel = mainFrame.requestDetailsApprovedByLabel or makeLabel(mainFrame.requestDetailsModal, "Updated By", "GameFontHighlightSmall")
     mainFrame.requestDetailsApprovedByLabel:SetText("Updated By")
     mainFrame.requestDetailsApprovedByText = mainFrame.requestDetailsApprovedByText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsApprovedByLabel, mainFrame.requestDetailsApprovedByText, -226)
+    placeRequestDetailRow(mainFrame.requestDetailsApprovedByLabel, mainFrame.requestDetailsApprovedByText, -202)
 
     mainFrame.requestDetailsApprovedAtLabel = mainFrame.requestDetailsApprovedAtLabel or makeLabel(mainFrame.requestDetailsModal, "Date Updated", "GameFontHighlightSmall")
     mainFrame.requestDetailsApprovedAtLabel:SetText("Date Updated")
     mainFrame.requestDetailsApprovedAtText = mainFrame.requestDetailsApprovedAtText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsApprovedAtLabel, mainFrame.requestDetailsApprovedAtText, -250)
+    placeRequestDetailRow(mainFrame.requestDetailsApprovedAtLabel, mainFrame.requestDetailsApprovedAtText, -226)
 
     mainFrame.requestDetailsFulfilledAtLabel = mainFrame.requestDetailsFulfilledAtLabel or makeLabel(mainFrame.requestDetailsModal, "Date Fulfilled", "GameFontHighlightSmall")
     mainFrame.requestDetailsFulfilledAtText = mainFrame.requestDetailsFulfilledAtText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsFulfilledAtLabel, mainFrame.requestDetailsFulfilledAtText, -274)
+    placeRequestDetailRow(mainFrame.requestDetailsFulfilledAtLabel, mainFrame.requestDetailsFulfilledAtText, -250)
 
     mainFrame.requestDetailsDecisionNoteLabel = mainFrame.requestDetailsDecisionNoteLabel or makeLabel(mainFrame.requestDetailsModal, "Decision Note", "GameFontHighlightSmall")
     mainFrame.requestDetailsDecisionNoteText = mainFrame.requestDetailsDecisionNoteText or makeLabel(mainFrame.requestDetailsModal, "", "GameFontNormal")
-    placeRequestDetailRow(mainFrame.requestDetailsDecisionNoteLabel, mainFrame.requestDetailsDecisionNoteText, -298)
+    placeRequestDetailRow(mainFrame.requestDetailsDecisionNoteLabel, mainFrame.requestDetailsDecisionNoteText, -274)
 
     mainFrame.requestDetailsBankTabLabel = mainFrame.requestDetailsBankTabLabel or makeLabel(mainFrame.requestDetailsModal, "Approval Bank Tab", "GameFontHighlightSmall")
-    mainFrame.requestDetailsBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 24, -314)
+    mainFrame.requestDetailsBankTabLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 24, -306)
     mainFrame.requestDetailsBankTabDropdownButton = mainFrame.requestDetailsBankTabDropdownButton or makeButton(mainFrame.requestDetailsModal, 180, 22, "Select Bank Tab")
     mainFrame.requestDetailsBankTabDropdownButton:SetPoint("TOPLEFT", mainFrame.requestDetailsBankTabLabel, "BOTTOMLEFT", 0, -4)
     mainFrame.requestDetailsBankTabDropdownPanel = mainFrame.requestDetailsBankTabDropdownPanel or _G.CreateFrame("Frame", nil, mainFrame.requestDetailsModal, "BackdropTemplate")
@@ -505,7 +615,7 @@ function mainRequestsController.Attach(mainFrame, options)
     mainFrame.requestDetailsBankTabDropdownPanel:Hide()
 
     mainFrame.requestDetailsActionNoteLabel = mainFrame.requestDetailsActionNoteLabel or makeLabel(mainFrame.requestDetailsModal, "Decision Note", "GameFontHighlightSmall")
-    mainFrame.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 240, -314)
+    mainFrame.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", mainFrame.requestDetailsModal, "TOPLEFT", 264, -306)
     mainFrame.requestDetailsActionNoteInput = mainFrame.requestDetailsActionNoteInput or makeInput(mainFrame.requestDetailsModal, 260, 22)
     mainFrame.requestDetailsActionNoteInput:SetPoint("TOPLEFT", mainFrame.requestDetailsActionNoteLabel, "BOTTOMLEFT", 0, -4)
 
@@ -570,6 +680,7 @@ function mainRequestsController.Attach(mainFrame, options)
         resultsPanelWidth = 520,
         resultsPanelHeight = 74,
         minimumNameQueryLength = 2,
+        showQualityIcon = true,
         resolveQuery = function(query)
             local itemCatalog = ns.modules.itemCatalog
             return itemCatalog and type(itemCatalog.ResolveSearchSessionQuery) == "function"
@@ -649,7 +760,7 @@ function mainRequestsController.Attach(mainFrame, options)
     end
     mainFrame.requestCreateQuantityIncreaseButton:SetPoint("LEFT", mainFrame.requestCreateQuantityDecreaseButton, "RIGHT", 6, 0)
 
-    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardPrimaryPanel, 502, 24)
+    mainFrame.requestCreateNoteInput = mainFrame.requestCreateNoteInput or makeInput(mainFrame.requestWizardPrimaryPanel, 320, 24)
     if type(mainFrame.requestCreateNoteInput.SetParent) == "function" then
         mainFrame.requestCreateNoteInput:SetParent(mainFrame.requestWizardPrimaryPanel)
     end
@@ -784,9 +895,27 @@ function mainRequestsController.Attach(mainFrame, options)
         local item = self:GetConfirmedRequestCreateItem() or {}
         local requestedQuantity = parseNumber(self.requestCreateQuantityInput:GetText() or "")
         local note = tostring(self.requestCreateNoteInput:GetText() or "")
-
-        self.requestWizardPreviewItemText:SetText(tostring(item.name or item.itemName or "No item selected."))
-        self.requestWizardPreviewQualityText:SetText(crafted_quality_markup(item.craftedQualityIcon, item.craftedQuality))
+        local display = build_item_display(item)
+        self.requestWizardPreviewItemText:SetText(tostring(display.visibleText or "No item selected."))
+        self.requestWizardPreviewQualityText:SetText("")
+        self.requestWizardPreviewQualityText:Hide()
+        local previewIconShown = set_quality_texture(
+            self.requestWizardPreviewQualityIcon,
+            crafted_quality_atlas(item.itemID, item.craftedQualityPreferredAtlas or item.craftedQualityDisplayAtlas or item.craftedQualityIcon, item.craftedQuality, item.craftedQualityFamilySize or item.craftedQualityMax),
+            18
+        )
+        if type(self.requestWizardPreviewQualityIcon.ClearAllPoints) == "function" then
+            self.requestWizardPreviewQualityIcon:ClearAllPoints()
+        end
+        self.requestWizardPreviewQualityIcon:SetPoint("TOPLEFT", self.requestWizardPreviewTitle, "BOTTOMLEFT", 0, -12)
+        if type(self.requestWizardPreviewItemText.ClearAllPoints) == "function" then
+            self.requestWizardPreviewItemText:ClearAllPoints()
+        end
+        if previewIconShown then
+            self.requestWizardPreviewItemText:SetPoint("TOPLEFT", self.requestWizardPreviewTitle, "BOTTOMLEFT", 24, -12)
+        else
+            self.requestWizardPreviewItemText:SetPoint("TOPLEFT", self.requestWizardPreviewTitle, "BOTTOMLEFT", 0, -12)
+        end
         self.requestWizardPreviewRequestedQuantityText:SetText(requestedQuantity and tostring(requestedQuantity) or "-")
         self.requestWizardPreviewReasonText:SetText(note ~= "" and note or "-")
     end
@@ -911,10 +1040,10 @@ function mainRequestsController.Attach(mainFrame, options)
     end
 
     function mainFrame:LayoutRequestDetailsActionControls(canApprove, actionButtons)
-        local actionX = canApprove and 240 or 24
+        local actionX = canApprove and 264 or 24
 
         self.requestDetailsActionNoteLabel:ClearAllPoints()
-        self.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", actionX, -314)
+        self.requestDetailsActionNoteLabel:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", actionX, -306)
         self.requestDetailsActionNoteInput:ClearAllPoints()
         self.requestDetailsActionNoteInput:SetPoint("TOPLEFT", self.requestDetailsActionNoteLabel, "BOTTOMLEFT", 0, -4)
 
@@ -1026,6 +1155,7 @@ function mainRequestsController.Attach(mainFrame, options)
         if not request then
             return nil
         end
+        request = self:BackfillRequestCraftedTier(request)
 
         local db = current_db()
         local context = current_context(db)
@@ -1039,8 +1169,26 @@ function mainRequestsController.Attach(mainFrame, options)
         local canDelete = allowAdminWorkflow and can(context, "request_delete", policy) and (not canActorApply or canActorApply(request, "DELETE", context))
         local canCancel = actor_owns_request(request, context) and (not canActorApply or canActorApply(request, "CANCEL", context))
 
-        self.requestDetailsItemNameText:SetText(tostring(request.itemName or ""))
-        self.requestDetailsQualityText:SetText(crafted_quality_markup(request.craftedQualityIcon, request.craftedQuality))
+        local detailsDisplay = build_item_display(request)
+        local detailsAtlas = crafted_quality_atlas(
+            request.itemID,
+            request.craftedQualityPreferredAtlas or request.craftedQualityDisplayAtlas or request.craftedQualityIcon,
+            request.craftedQuality,
+            request.craftedQualityFamilySize or request.craftedQualityMax
+        )
+        self.requestDetailsItemNameText:SetText(tostring(detailsDisplay.visibleText or request.itemName or ""))
+        self.requestDetailsQualityLabel:Hide()
+        self.requestDetailsQualityText:SetText("")
+        self.requestDetailsQualityText:Hide()
+        if type(self.requestDetailsQualityIcon.ClearAllPoints) == "function" then
+            self.requestDetailsQualityIcon:ClearAllPoints()
+        end
+        self.requestDetailsQualityIcon:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", 160, -58)
+        local detailsIconShown = set_quality_texture(self.requestDetailsQualityIcon, detailsAtlas, 18)
+        if type(self.requestDetailsItemNameText.ClearAllPoints) == "function" then
+            self.requestDetailsItemNameText:ClearAllPoints()
+        end
+        self.requestDetailsItemNameText:SetPoint("TOPLEFT", self.requestDetailsModal, "TOPLEFT", detailsIconShown and 184 or 160, -58)
         self.requestDetailsQuantityText:SetText(tostring(request.quantity or ""))
         self.requestDetailsSubmissionNoteText:SetText(tostring(request.note or ""))
         self.requestDetailsStatusText:SetText(format_request_status(request))
@@ -1179,12 +1327,79 @@ function mainRequestsController.Attach(mainFrame, options)
         return snapshot
     end
 
+    function mainFrame:BackfillRequestCraftedTier(item)
+        if type(item) ~= "table" then
+            return item
+        end
+
+        local itemID = tonumber(item.itemID)
+        if not itemID then
+            return item
+        end
+
+        canonical_item(item)
+
+        local catalogItem = nil
+        local snapshot = self:GetRequestSearchSnapshot()
+        for _, sourceItem in pairs(snapshot.items or {}) do
+            if tonumber((sourceItem or {}).itemID) == itemID then
+                catalogItem = sourceItem
+                break
+            end
+        end
+        if not catalogItem then
+            for _, sourceItem in ipairs(snapshot.searchCatalog or {}) do
+                if tonumber((sourceItem or {}).itemID) == itemID then
+                    catalogItem = sourceItem
+                    break
+                end
+            end
+        end
+
+        local bundledItem = itemCatalog and type(itemCatalog.GetBundledItemByID) == "function" and itemCatalog.GetBundledItemByID(itemID) or nil
+        local authoritativeItem = bundledItem or catalogItem
+
+        if not authoritativeItem then
+            return item
+        end
+
+        if (tonumber(authoritativeItem.craftedQuality or 0) or 0) > 0 then
+            item.craftedQuality = authoritativeItem.craftedQuality
+        end
+        if tostring(authoritativeItem.craftedQualityIcon or "") ~= "" then
+            item.craftedQualityIcon = authoritativeItem.craftedQualityIcon
+        end
+        if (tonumber(authoritativeItem.craftedQualityMax or 0) or 0) > 0 then
+            item.craftedQualityMax = authoritativeItem.craftedQualityMax
+        end
+        if (tonumber(authoritativeItem.craftedQualityFamilySize or 0) or 0) > 0 then
+            item.craftedQualityFamilySize = authoritativeItem.craftedQualityFamilySize
+        end
+        if tostring(authoritativeItem.craftedQualityDisplayAtlas or "") ~= "" then
+            item.craftedQualityDisplayAtlas = authoritativeItem.craftedQualityDisplayAtlas
+        end
+        if tostring(authoritativeItem.craftedQualityPreferredAtlas or "") ~= "" then
+            item.craftedQualityPreferredAtlas = authoritativeItem.craftedQualityPreferredAtlas
+        end
+        if tostring(authoritativeItem.itemLink or "") ~= "" then
+            item.itemLink = authoritativeItem.itemLink
+        end
+        if tostring(authoritativeItem.itemString or "") ~= "" then
+            item.itemString = authoritativeItem.itemString
+        end
+
+        return item
+    end
+
     function mainFrame:GetRequestSearchSession()
         local itemCatalog = ns.modules.itemCatalog
         if type(itemCatalog) ~= "table" or type(itemCatalog.CreateSearchSession) ~= "function" then
             return nil
         end
 
+        if type(itemCatalog.EnsureBundledDataLoaded) == "function" then
+            itemCatalog.EnsureBundledDataLoaded()
+        end
         local bundledReady = type(itemCatalog.IsBundledDataLoaded) == "function" and itemCatalog.IsBundledDataLoaded() or false
         local sessionIndexedReady = type(itemCatalog.IsSearchSessionIndexedReady) == "function"
             and itemCatalog.IsSearchSessionIndexedReady(self.requestSearchSession)
@@ -1315,12 +1530,13 @@ function mainRequestsController.Attach(mainFrame, options)
             self:SaveMinimumForApprovedRequest(request, approvalBankTab, actor)
         end
         if request and transport and type(transport.Send) == "function" then
-            transport.Send("GUILD", "GUILD", {
+            send_request_sync_message(db, transport, request, {
                 type = "REQUEST_UPDATED",
                 updatedAt = request.updatedAt or (_G.time and _G.time() or 0),
                 payload = {
                     action = action,
                     actorContext = actor,
+                    guildKey = active_guild_key(db),
                     note = note,
                     request = request,
                 },
@@ -1382,24 +1598,31 @@ function mainRequestsController.Attach(mainFrame, options)
             actorContext = context,
             itemID = itemID,
             itemName = itemName,
+            itemLink = selectedItem.itemLink,
+            itemString = selectedItem.itemString,
             craftedQuality = selectedItem.craftedQuality,
             craftedQualityIcon = selectedItem.craftedQualityIcon,
+            craftedQualityMax = selectedItem.craftedQualityMax,
+            craftedQualityFamilySize = selectedItem.craftedQualityFamilySize,
+            craftedQualityDisplayAtlas = selectedItem.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = selectedItem.craftedQualityPreferredAtlas,
             quantity = quantity,
             note = note,
         })
 
         if request and transport and type(transport.Send) == "function" then
-            transport.Send("GUILD", "GUILD", {
+            send_request_sync_message(db, transport, request, {
                 type = "REQUEST_CREATED",
                 updatedAt = request.updatedAt or (_G.time and _G.time() or 0),
                 payload = {
                     actorContext = context,
+                    guildKey = active_guild_key(db),
                     request = request,
                 },
             })
         end
 
-        self.selectedRequestId = request and request.requestId or nil
+        self.selectedRequestId = nil
         self.requestCreateRequesterInput:SetText("")
         self.requestCreateRoleInput:SetText("")
         self.requestCreateSelectedCatalogItem = nil
@@ -1425,6 +1648,7 @@ function mainRequestsController.Attach(mainFrame, options)
         end
         self:UpdateRequestCreateButtonState()
         self:RefreshRequestActionButtons()
+        self.suppressNextRequestAutoSelect = true
         self:RefreshView()
         return request
     end

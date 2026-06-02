@@ -45,7 +45,7 @@ Use these tag shapes:
 - `vX.Y.Z-beta.N` -> CurseForge `beta`
 - `vX.Y.Z` -> CurseForge `release`
 
-While `GBankManager` is still pre-1.0, prefer beta tags unless the user explicitly asks for alpha or stable release.
+Use plain semantic version tags for stable public releases, and keep using alpha or beta suffixes whenever the user explicitly wants a prerelease channel.
 
 ## Normal Release Flow
 
@@ -102,8 +102,8 @@ Use a commit message that describes the release-prep change truthfully. Do not c
 Examples:
 
 ```powershell
-git tag v0.9.0-beta.3
-git push origin v0.9.0-beta.3
+git tag v1.0.1-beta.1
+git push origin v1.0.1-beta.1
 ```
 
 Push the branch before the tag if the release fix is not already on origin.
@@ -188,8 +188,8 @@ Instead:
 Example:
 
 ```powershell
-git tag v0.9.0-beta.2
-git push origin v0.9.0-beta.2
+git tag v1.0.1-beta.2
+git push origin v1.0.1-beta.2
 ```
 
 Then repeat the workflow-watch and output-confirmation steps.

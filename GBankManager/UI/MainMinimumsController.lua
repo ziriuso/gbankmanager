@@ -5,8 +5,44 @@ ns.modules = ns.modules or {}
 
 local mainMinimumsController = ns.modules.mainMinimumsController or {}
 local craftedQualityUtil = ns.modules.craftedQuality or {}
+local itemDisplay = ns.modules.itemDisplay or {}
+local transport = ns.modules.syncTransport or {}
+local permissions = ns.modules.permissions or ns.modules.auth or {}
 if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
+end
+if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
+    itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
+end
+
+local function non_inventory_atlas(itemID, atlasName, craftedQuality, maxQuality)
+    if type(craftedQualityUtil.GetNonInventoryDisplayAtlasForItem) == "function" then
+        return craftedQualityUtil.GetNonInventoryDisplayAtlasForItem(itemID, atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQualityUtil.GetDisplayAtlasForItem) == "function" then
+        return craftedQualityUtil.GetDisplayAtlasForItem(itemID, atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    if type(craftedQualityUtil.GetDisplayAtlas) == "function" then
+        return craftedQualityUtil.GetDisplayAtlas(atlasName, craftedQuality, "reagent", maxQuality)
+    end
+
+    return tostring(atlasName or "")
+end
+
+local function build_item_display(item)
+    local itemCatalog = ns.modules.itemCatalog or {}
+    if type(itemCatalog.HydrateItem) == "function" then
+        itemCatalog.HydrateItem(item)
+    end
+    if type(itemDisplay.BuildDisplayPayload) == "function" then
+        return itemDisplay.BuildDisplayPayload(item)
+    end
+
+    return {
+        visibleText = tostring((item or {}).itemName or (item or {}).name or "Unknown"),
+    }
 end
 
 local function minimum_rule_key(rule)
@@ -15,6 +51,42 @@ local function minimum_rule_key(rule)
         tostring((rule or {}).scope or "GLOBAL"),
         tostring((rule or {}).tabName or ""),
     }, "|")
+end
+
+local function current_policy(db)
+    local store = ns.data.store or ns.modules.store
+    return store and type(store.GetAuthPolicy) == "function" and store.GetAuthPolicy(db) or (db or {}).auth or {}
+end
+
+local function active_guild_key(db)
+    local store = ns.modules.store or ns.data.store
+    local root = (ns.state or {}).dbRoot
+    local rootGuildKey = type(root) == "table" and tostring(root.activeGuildKey or "") or ""
+    if rootGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(rootGuildKey)) then
+        return rootGuildKey
+    end
+
+    local dbGuildKey = tostring((((db or {}).meta or {}).guildName) or "")
+    if dbGuildKey ~= "" and not (store and type(store.IsPlaceholderGuildName) == "function" and store.IsPlaceholderGuildName(dbGuildKey)) then
+        return dbGuildKey
+    end
+
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    return tostring(context.guildName or "Unknown")
+end
+
+local function actor_can_manage_minimums(db)
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    local can = type(permissions.Can) == "function" and permissions.Can or nil
+    if type(can) ~= "function" then
+        return true, context
+    end
+
+    local policy = current_policy(db)
+    return can(context, "minimum_add", policy)
+        or can(context, "minimum_edit", policy)
+        or can(context, "minimum_delete", policy),
+        context
 end
 
 local function minimum_dropdown_width(tabOptions, minimumWidth, maximumWidth)
@@ -60,7 +132,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumsPanel = mainFrame.minimumsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.minimumsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
     mainFrame.minimumsPanel:SetPoint("RIGHT", mainFrame.content, "RIGHT", -24, 0)
-    mainFrame.minimumsPanel:SetHeight(64)
+    mainFrame.minimumsPanel:SetHeight(72)
     applyPanelStyle(mainFrame.minimumsPanel, theme.colors.panel)
     mainFrame.minimumsPanel.transparentActions = true
     if type(mainFrame.minimumsPanel.SetBackdrop) == "function" then
@@ -77,7 +149,10 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumsHint:Hide()
 
     mainFrame.minimumEditorStateText = mainFrame.minimumEditorStateText or makeLabel(mainFrame.minimumsPanel, "No draft minimum changes yet.", "GameFontHighlightSmall")
-    mainFrame.minimumEditorStateText:SetPoint("TOPLEFT", mainFrame.minimumsHint, "BOTTOMLEFT", 0, -14)
+    if type(mainFrame.minimumEditorStateText.ClearAllPoints) == "function" then
+        mainFrame.minimumEditorStateText:ClearAllPoints()
+    end
+    mainFrame.minimumEditorStateText:SetPoint("BOTTOMLEFT", mainFrame.minimumsPanel, "BOTTOMLEFT", 16, 8)
     mainFrame.minimumEditorStateText:Hide()
 
     mainFrame.minimumEnabledOnlyButton = mainFrame.minimumEnabledOnlyButton or makeButton(mainFrame.minimumsPanel, 110, 28, "Enabled Only")
@@ -189,6 +264,7 @@ function mainMinimumsController.Attach(mainFrame, options)
         resultsPanelWidth = 452,
         resultsPanelHeight = 74,
         minimumNameQueryLength = 2,
+        showQualityIcon = true,
         resolveQuery = function(query)
             local itemCatalog = ns.modules.itemCatalog
             return itemCatalog and type(itemCatalog.ResolveSearchSessionQuery) == "function"
@@ -264,7 +340,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumDetailsItemQualityIcon:Hide()
 
     mainFrame.minimumDetailsItemNameText = mainFrame.minimumDetailsItemNameText or makeLabel(mainFrame.minimumDetailsModal, "No item selected.", "GameFontNormal")
-    mainFrame.minimumDetailsItemNameText:SetPoint("LEFT", mainFrame.minimumDetailsItemQualityIcon, "RIGHT", 6, 0)
+    mainFrame.minimumDetailsItemNameText:SetPoint("TOPLEFT", mainFrame.minimumDetailsModalTitle, "BOTTOMLEFT", 0, -14)
     if type(mainFrame.minimumDetailsItemNameText.SetWidth) == "function" then
         mainFrame.minimumDetailsItemNameText:SetWidth(320)
     end
@@ -274,7 +350,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumDetailsItemQualityText:Hide()
 
     mainFrame.minimumDetailsItemIDText = mainFrame.minimumDetailsItemIDText or makeLabel(mainFrame.minimumDetailsModal, "", "GameFontHighlightSmall")
-    mainFrame.minimumDetailsItemIDText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemQualityIcon, "BOTTOMLEFT", 0, -8)
+    mainFrame.minimumDetailsItemIDText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemNameText, "BOTTOMLEFT", 0, -8)
 
     mainFrame.minimumDetailsStatusText = mainFrame.minimumDetailsStatusText or makeLabel(mainFrame.minimumDetailsModal, "Edit Minimum details here.", "GameFontHighlightSmall")
     mainFrame.minimumDetailsStatusText:SetPoint("TOPLEFT", mainFrame.minimumDetailsItemIDText, "BOTTOMLEFT", 0, -12)
@@ -387,6 +463,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             enabled = rule.enabled,
             craftedQuality = rule.craftedQuality,
             craftedQualityIcon = rule.craftedQualityIcon,
+            craftedQualityMax = rule.craftedQualityMax,
             draftKey = rule.draftKey,
             originalItemID = rule.originalItemID,
             originalScope = rule.originalScope,
@@ -427,7 +504,11 @@ function mainMinimumsController.Attach(mainFrame, options)
         if row.configured ~= true then
             quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100
             scope = "TAB"
-            tabName = nil
+            if row.needsBankTab == true then
+                tabName = nil
+            else
+                tabName = row.tabKey or row.tabName or row.bankTab
+            end
         end
 
         return {
@@ -439,6 +520,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             enabled = row.restock == "Yes",
             craftedQuality = row.craftedQuality,
             craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityMax = row.craftedQualityMax,
             draftKey = row.rowKey,
             originalItemID = row.originalItemID or tonumber(row.itemID),
             originalScope = row.originalScope or row.scope,
@@ -478,11 +560,39 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
+        if self:IsSnapshotBackedMinimumRow(row) then
+            return "changed"
+        end
+
         if self:GetMinimumBaselineRule(row) then
             return "changed"
         end
 
         return "added"
+    end
+
+    function mainFrame:IsSnapshotBackedMinimumRow(row)
+        if type(row) ~= "table" then
+            return false
+        end
+
+        local rowKey = tostring(row.rowKey or "")
+        if rowKey == "" then
+            return false
+        end
+
+        for _, itemRow in ipairs((self:GetCurrentSnapshot() or {}).itemRows or {}) do
+            local snapshotKey = tostring(itemRow.rowKey or table.concat({
+                tostring(itemRow.itemID or ""),
+                "TAB",
+                tostring(itemRow.tabName or "-"),
+            }, "|"))
+            if snapshotKey == rowKey then
+                return true
+            end
+        end
+
+        return false
     end
 
     function mainFrame:GetMergedMinimumRules(db)
@@ -508,6 +618,7 @@ function mainMinimumsController.Attach(mainFrame, options)
                     enabled = true,
                     craftedQuality = request.craftedQuality,
                     craftedQualityIcon = request.craftedQualityIcon,
+                    craftedQualityMax = request.craftedQualityMax,
                     draftKey = table.concat({ "request", tostring(request.requestId or request.itemID or ""), "GLOBAL" }, "|"),
                     originalItemID = request.itemID,
                     originalScope = "GLOBAL",
@@ -551,6 +662,14 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         for _, row in ipairs(rows or {}) do
             self:BackfillMinimumCraftedTier(row, snapshot)
+            row.tierValue = tonumber(row.craftedQuality or 0) or 0
+            local tierAtlas = row.craftedQualityIcon or row.craftedQualityPreferredAtlas or row.craftedQualityDisplayAtlas
+            local tierMax = row.craftedQualityFamilySize or row.craftedQualityMax
+            row.tierIconAtlas = non_inventory_atlas(row.itemID, tierAtlas, row.craftedQuality, tierMax)
+            row.tierAtlas = row.tierIconAtlas
+            if tostring(row.tierIconAtlas or "") ~= "" then
+                row.tier = ""
+            end
         end
 
         rows = minimumsView.SortRows(rows, self.minimumSortState)
@@ -840,7 +959,12 @@ function mainMinimumsController.Attach(mainFrame, options)
             return false
         end
 
-        return self:GetMinimumBaselineRule(row) ~= nil
+        local draftState = self:GetMinimumDraftState(row)
+        if draftState == "added" or draftState == "changed" then
+            return false
+        end
+
+        return tostring(row.bankTab or row.tabName or "") ~= ""
     end
 
     function mainFrame:ConfigureMinimumDetailsBankTabDropdown(row, state)
@@ -904,11 +1028,10 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     function mainFrame:SyncMinimumDetailsModal(row, state)
         state = state or (row and self:GetPendingMinimumDraft(row)) or nil
-        local itemName = tostring((row and row.itemName) or (state and state.itemName) or "Unknown")
+        local display = build_item_display(state or row or {})
+        local itemName = tostring(display.visibleText or (row and row.itemName) or (state and state.itemName) or "Unknown")
         local itemID = tonumber((row and row.itemID) or (state and state.itemID) or 0) or 0
         local tabName = (state and state.tabName and state.tabName ~= "") and state.tabName or ((row and row.needsBankTab) and "-") or (row and row.bankTab) or "-"
-        local craftedQuality = tonumber((row and row.craftedQuality) or (state and state.craftedQuality) or 0) or 0
-        local craftedQualityIcon = tostring((row and row.craftedQualityIcon) or (state and state.craftedQualityIcon) or "")
 
         self.minimumDetailsItemNameText:SetText(itemName)
         self.minimumDetailsItemIDText:SetText(tostring(itemID > 0 and itemID or ""))
@@ -917,26 +1040,10 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.minimumDetailsRestockToggleButton.labelText:SetText((state and state.enabled ~= false) and "Yes" or "No")
         self:ConfigureMinimumDetailsBankTabDropdown(row, state)
         self:UpdateMinimumDetailsActionState(row, state)
-
-        if craftedQualityIcon ~= "" then
-            local displayAtlas = type(craftedQualityUtil.NormalizeDisplayAtlas) == "function" and craftedQualityUtil.NormalizeDisplayAtlas(craftedQualityIcon) or craftedQualityIcon
-            self.minimumDetailsItemQualityIcon.atlas = displayAtlas
-            if type(self.minimumDetailsItemQualityIcon.SetAtlas) == "function" then
-                self.minimumDetailsItemQualityIcon:SetAtlas(displayAtlas, true)
-            end
-            self.minimumDetailsItemQualityIcon:Show()
-        else
-            self.minimumDetailsItemQualityIcon.atlas = nil
-            self.minimumDetailsItemQualityIcon:Hide()
-        end
-
-        if craftedQuality > 0 then
-            self.minimumDetailsItemQualityText:SetText(string.format("Tier %d", craftedQuality))
-            self.minimumDetailsItemQualityText:Show()
-        else
-            self.minimumDetailsItemQualityText:SetText("")
-            self.minimumDetailsItemQualityText:Hide()
-        end
+        self.minimumDetailsItemQualityIcon.atlas = nil
+        self.minimumDetailsItemQualityIcon:Hide()
+        self.minimumDetailsItemQualityText:SetText("")
+        self.minimumDetailsItemQualityText:Hide()
     end
 
     function mainFrame:OpenMinimumDetailsModal(row, state)
@@ -1019,7 +1126,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         rowFrame.minimumDraftState = draftState
         rowFrame.minimumDraftTint = tintByState[draftState]
-        rowFrame.minimumDraftBackground = rowFrame.minimumDraftBackground or rowFrame:CreateTexture(nil, "BACKGROUND")
+        rowFrame.minimumDraftBackground = rowFrame.minimumDraftBackground or rowFrame:CreateTexture(nil, "ARTWORK", nil, 1)
         if type(rowFrame.minimumDraftBackground.SetAllPoints) == "function" then
             rowFrame.minimumDraftBackground:SetAllPoints(rowFrame)
         end
@@ -1082,11 +1189,20 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.minimumPendingRules = self.minimumPendingRules or {}
         self.minimumPendingDirty = self.minimumPendingDirty or {}
         self.minimumPendingDeleted = self.minimumPendingDeleted or {}
-        self.minimumPendingRules[row.rowKey] = nil
+        local hasBaseline = self:GetMinimumBaselineRule(row) ~= nil
+        local snapshotBacked = self:IsSnapshotBackedMinimumRow(row)
+
+        if snapshotBacked and not hasBaseline then
+            local restored = self:BuildMinimumRuleFromRow(row)
+            restored.draftKey = row.rowKey
+            self.minimumPendingRules[row.rowKey] = restored
+        else
+            self.minimumPendingRules[row.rowKey] = nil
+        end
         self.minimumPendingDirty[row.rowKey] = nil
         self.minimumPendingDeleted[row.rowKey] = nil
 
-        if self.selectedMinimumKey == row.rowKey and not self:GetMinimumBaselineRule(row) then
+        if self.selectedMinimumKey == row.rowKey and not hasBaseline then
             self.selectedMinimumKey = nil
         end
 
@@ -1099,7 +1215,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
-        if not self:GetMinimumBaselineRule(row) then
+        if not self:GetMinimumBaselineRule(row) and not self:IsSnapshotBackedMinimumRow(row) then
             return self:UndoMinimumRow(row)
         end
 
@@ -1202,22 +1318,43 @@ function mainMinimumsController.Attach(mainFrame, options)
         end
 
         local numericID = tonumber(item.itemID)
-        local hasCraftedQuality = (tonumber(item.craftedQuality or 0) or 0) > 0
-        local hasCraftedQualityIcon = tostring(item.craftedQualityIcon or "") ~= ""
-        if not numericID or (hasCraftedQuality and hasCraftedQualityIcon) then
+        if not numericID then
             return item
         end
 
         local catalogItem = self:GetMinimumCatalogItemByID(numericID, snapshot)
-        if not catalogItem then
+        local itemCatalog = ns.modules.itemCatalog
+        local bundledItem = type(itemCatalog) == "table" and type(itemCatalog.GetBundledItemByID) == "function"
+            and itemCatalog.GetBundledItemByID(numericID)
+            or nil
+        local authoritativeItem = bundledItem or catalogItem
+        if not authoritativeItem then
             return item
         end
 
-        if not hasCraftedQuality then
-            item.craftedQuality = catalogItem.craftedQuality
+        if tonumber(authoritativeItem.craftedQuality or 0) > 0 then
+            item.craftedQuality = authoritativeItem.craftedQuality
         end
-        if not hasCraftedQualityIcon then
-            item.craftedQualityIcon = catalogItem.craftedQualityIcon
+        if tostring(authoritativeItem.craftedQualityIcon or "") ~= "" then
+            item.craftedQualityIcon = authoritativeItem.craftedQualityIcon
+        end
+        if tonumber(authoritativeItem.craftedQualityMax or 0) > 0 then
+            item.craftedQualityMax = authoritativeItem.craftedQualityMax
+        end
+        if tonumber(authoritativeItem.craftedQualityFamilySize or 0) > 0 then
+            item.craftedQualityFamilySize = authoritativeItem.craftedQualityFamilySize
+        end
+        if tostring(authoritativeItem.craftedQualityDisplayAtlas or "") ~= "" then
+            item.craftedQualityDisplayAtlas = authoritativeItem.craftedQualityDisplayAtlas
+        end
+        if tostring(authoritativeItem.craftedQualityPreferredAtlas or "") ~= "" then
+            item.craftedQualityPreferredAtlas = authoritativeItem.craftedQualityPreferredAtlas
+        end
+        if tostring(authoritativeItem.itemLink or "") ~= "" then
+            item.itemLink = authoritativeItem.itemLink
+        end
+        if tostring(authoritativeItem.itemString or "") ~= "" then
+            item.itemString = authoritativeItem.itemString
         end
 
         return item
@@ -1229,6 +1366,9 @@ function mainMinimumsController.Attach(mainFrame, options)
             return nil
         end
 
+        if type(itemCatalog.EnsureBundledDataLoaded) == "function" then
+            itemCatalog.EnsureBundledDataLoaded()
+        end
         local bundledReady = type(itemCatalog.IsBundledDataLoaded) == "function" and itemCatalog.IsBundledDataLoaded() or false
         local sessionIndexedReady = type(itemCatalog.IsSearchSessionIndexedReady) == "function"
             and itemCatalog.IsSearchSessionIndexedReady(self.minimumSearchSession)
@@ -1401,6 +1541,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
         local itemID = tonumber(item.itemID)
         local itemName = tostring(item.name or item.itemName or "")
+        local quantity = parseNumber(self.minimumAddQuantityInput:GetText() or "")
         if not itemID or itemName == "" then
             return nil
         end
@@ -1408,12 +1549,15 @@ function mainMinimumsController.Attach(mainFrame, options)
         local workingState = {
             itemID = itemID,
             itemName = itemName,
-            quantity = self:GetMinimumSettings(currentDb()).defaultQuantity or 100,
+            itemLink = item.itemLink,
+            itemString = item.itemString,
+            quantity = quantity or self:GetMinimumSettings(currentDb()).defaultQuantity or 100,
             scope = "TAB",
             tabName = nil,
             enabled = true,
             craftedQuality = item.craftedQuality,
             craftedQualityIcon = item.craftedQualityIcon,
+            craftedQualityMax = item.craftedQualityMax,
             isNewlyAdded = true,
         }
 
@@ -1533,10 +1677,15 @@ function mainMinimumsController.Attach(mainFrame, options)
         local rule = {
             itemID = itemID,
             itemName = itemName,
+            itemLink = selectedItem.itemLink,
+            itemString = selectedItem.itemString,
             quantity = quantity,
             scope = "TAB",
             tabName = nil,
             enabled = self.selectedMinimumEnabled ~= false,
+            craftedQuality = selectedItem.craftedQuality,
+            craftedQualityIcon = selectedItem.craftedQualityIcon,
+            craftedQualityMax = selectedItem.craftedQualityMax,
             isNewlyAdded = true,
             draftKey = draftKey,
             originalItemID = itemID,
@@ -1619,6 +1768,23 @@ function mainMinimumsController.Attach(mainFrame, options)
                 table.insert(self.minimumSessionBaseline, self:CloneMinimumRule(rule))
             end
             self.selectedMinimumKey = nil
+
+            local canPublish, actorContext = actor_can_manage_minimums(db)
+            if canPublish and type(transport.Send) == "function" then
+                local minimumSnapshot = {}
+                for _, rule in ipairs(db.minimums or {}) do
+                    minimumSnapshot[#minimumSnapshot + 1] = self:CloneMinimumRule(rule)
+                end
+                transport.Send("GUILD", "GUILD", {
+                    type = "MINIMUMS_SNAPSHOT",
+                    updatedAt = _G.time and _G.time() or 0,
+                    payload = {
+                        guildKey = active_guild_key(db),
+                        actorContext = actorContext,
+                        minimums = minimumSnapshot,
+                    },
+                })
+            end
         end
 
         self:RefreshView()

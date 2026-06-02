@@ -178,6 +178,7 @@ local function reset_minimum_editor_state(mainFrame)
         return
     end
 
+    mainFrame.requestOnlyMode = false
     mainFrame.minimumPendingRules = {}
     mainFrame.minimumPendingDirty = {}
     mainFrame.minimumPendingDeleted = {}
@@ -374,7 +375,7 @@ local function seed_request_sync_smoke_db(db)
     db.auth.capabilities = db.auth.capabilities or {}
     db.auth.blacklist = db.auth.blacklist or {}
     db.auth.blacklistHashes = db.auth.blacklistHashes or {}
-    db.auth.capabilities.request_submit = db.auth.capabilities.request_submit or {}
+    db.auth.capabilities.request_submit = {}
     db.auth.capabilities.request_approve = { [0] = true, [1] = true }
     db.auth.capabilities.request_reject = { [0] = true, [1] = true }
     db.auth.capabilities.request_edit = { [0] = true, [1] = true }
@@ -400,6 +401,7 @@ local function run_request_sync_contract(db)
         type = "REQUEST_CREATED",
         updatedAt = 301,
         payload = {
+            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
                 characterKey = "Stormrage-MemberOne",
                 guildRankIndex = 2,
@@ -434,6 +436,7 @@ local function run_request_sync_contract(db)
         updatedAt = 302,
         payload = {
             action = "APPROVE",
+            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
                 characterKey = "Stormrage-OfficerOne",
                 guildRankIndex = 1,

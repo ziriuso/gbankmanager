@@ -61,6 +61,12 @@ local function toc_metadata(path)
 end
 
 function M.load_addon_from_toc(path)
+    local stubChunk, stubLoadError = loadfile("tests/helpers/wow_stubs.lua")
+    if not stubChunk then
+        error(stubLoadError)
+    end
+    stubChunk()
+
     local addonName = addon_name_from_toc(path)
     addonTocRegistry[addonName] = path
     addonMetadataRegistry[addonName] = toc_metadata(path)

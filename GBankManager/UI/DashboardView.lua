@@ -191,14 +191,9 @@ function dashboard.BuildSummary(db, planRows)
     db.meta = db.meta or {}
 
     local pending = 0
-    local suggested = 0
     for _, request in ipairs(db.requests or {}) do
         if request.approval == "PENDING" then
             pending = pending + 1
-        end
-
-        if request.fulfillment == "SUGGESTED_FULFILLED" then
-            suggested = suggested + 1
         end
     end
 
@@ -231,7 +226,6 @@ function dashboard.BuildSummary(db, planRows)
     return {
         lastScanAt = db.meta.updatedAt or 0,
         pendingRequestCount = pending,
-        suggestedFulfillmentCount = suggested,
         exportReadyCount = exportReadyCount,
         totalPurchaseQuantity = totalPurchaseQuantity,
         criticalShortageCount = criticalShortageCount,
@@ -245,7 +239,6 @@ function dashboard.BuildLines(db, planRows)
     return {
         string.format("Last scan: %s", format_timestamp(summary.lastScanAt)),
         string.format("Pending requests: %d", summary.pendingRequestCount),
-        string.format("Suggested fulfillments: %d", summary.suggestedFulfillmentCount),
         string.format("Export rows ready: %d", summary.exportReadyCount),
         string.format("Total purchase quantity: %d", summary.totalPurchaseQuantity),
     }
@@ -264,12 +257,12 @@ function dashboard.BuildCards(db, planRows)
         {
             title = "Last Scan",
             value = format_timestamp(summary.lastScanAt),
-            note = string.format("%d tracked items", trackedItems),
+            note = string.format("%d unique snapshot items", trackedItems),
         },
         {
             title = "Pending Requests",
             value = tostring(summary.pendingRequestCount),
-            note = string.format("%d suggested fulfillments", summary.suggestedFulfillmentCount),
+            note = "",
         },
         {
             title = "Ready To Buy",

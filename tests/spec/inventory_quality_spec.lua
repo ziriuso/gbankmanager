@@ -80,6 +80,7 @@ local rows = inventory.BuildTableRows({
             totalCount = 5,
             craftedQuality = 0,
             craftedQualityIcon = "|A:Interface-Crafting-ReagentQuality-1-Med:16:16|a",
+            craftedQualityMax = 2,
             tabs = { Potions = 5 },
         },
         [1003] = {
@@ -87,7 +88,8 @@ local rows = inventory.BuildTableRows({
             name = "Algari Mana Oil",
             totalCount = 5,
             craftedQuality = 0,
-            craftedQualityIcon = "Professions-Icon-Quality-2-Inv",
+            craftedQualityIcon = "Professions-Icon-Quality-12-Tier2-Inv",
+            craftedQualityMax = 5,
             tabs = { Potions = 5 },
         },
         [1004] = {
@@ -107,9 +109,9 @@ for _, row in ipairs(rows) do
 end
 
 assert.equal(
-    "|A:Interface-Crafting-ReagentQuality-1-Med:16:16|a",
-    rowsByName["Potion Bomb of Speed"].tier,
-    "inventory should preserve crafted-quality atlas markup that is already formatted"
+    "Professions-Icon-Quality-12-Tier1-Inv",
+    rowsByName["Potion Bomb of Speed"].tierIconAtlas,
+    "inventory should normalize true two-rank tier-one items into the shared visible silver-diamond icon treatment through the texture-backed tier atlas"
 )
 assert.equal(
     1,
@@ -117,9 +119,9 @@ assert.equal(
     "inventory should derive tier 1 from live-client reagent-quality icon markup variants"
 )
 assert.equal(
-    "|A:Professions-ChatIcon-Quality-Tier2:22:22|a",
-    rowsByName["Algari Mana Oil"].tier,
-    "inventory should normalize plain quality atlas variants into the shared visible crafted-quality icon family"
+    "Professions-ChatIcon-Quality-Tier2",
+    rowsByName["Algari Mana Oil"].tierIconAtlas,
+    "inventory should normalize plain quality atlas variants into the shared visible crafted-quality icon family through the texture-backed tier atlas"
 )
 assert.equal(
     2,
@@ -161,6 +163,7 @@ local rankRows = inventory.BuildTableRows({
             totalCount = 5,
             craftedQuality = 0,
             craftedQualityIcon = "|A:Interface-Crafting-ReagentRank1-Med:16:16|a",
+            craftedQualityMax = 2,
             tabs = { Potions = 5 },
         },
         [2002] = {
@@ -169,6 +172,7 @@ local rankRows = inventory.BuildTableRows({
             totalCount = 5,
             craftedQuality = 0,
             craftedQualityIcon = "Professions-Icon-Rank2-Inv",
+            craftedQualityMax = 5,
             tabs = { Potions = 5 },
         },
         [2003] = {
@@ -178,6 +182,14 @@ local rankRows = inventory.BuildTableRows({
             craftedQuality = 0,
             craftedQualityIcon = "",
             tabs = { Cloth = 5 },
+        },
+        [2004] = {
+            itemID = 2004,
+            name = "Generic Two-Rank Inventory Row",
+            totalCount = 5,
+            craftedQuality = 2,
+            craftedQualityIcon = "Professions-ChatIcon-Quality-Tier2",
+            tabs = { Potions = 5 },
         },
     },
 }, {}, "")
@@ -197,6 +209,11 @@ assert.equal(
     rankRowsByName["Algari Mana Oil Rank Atlas"].tierValue,
     "inventory should derive tier 2 from live-client crafted-quality rank atlas variants"
 )
+assert.equal(
+    "Interface-Crafting-ReagentQuality-2-Med",
+    rankRowsByName["Generic Two-Rank Inventory Row"].tierIconAtlas,
+    "inventory should keep generic higher two-rank rows on the legacy live medal atlas when bundled authoritative metadata is unavailable"
+)
 
 local rankSorted = inventory.SortRows(rankRows, {
     key = "tier",
@@ -214,7 +231,12 @@ assert.equal(
     "inventory tier sorting should place rank atlas variants into the derived tier 2 group"
 )
 assert.equal(
-    "Basic Cloth",
+    "Generic Two-Rank Inventory Row",
     rankSorted[3].itemName,
+    "inventory tier sorting should keep generic higher two-rank rows grouped with other parsed tier 2 entries"
+)
+assert.equal(
+    "Basic Cloth",
+    rankSorted[4].itemName,
     "inventory tier sorting should still push unranked items after parsed rank atlas variants"
 )

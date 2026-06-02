@@ -23,8 +23,14 @@ assert.truthy(type(mainFrame.aboutCrestTexture) == "table", "about should expose
 assert.truthy((mainFrame.aboutCrestTexture.texture or "") ~= "", "about should assign a crest texture")
 assert.equal("Guild Bank Manager", mainFrame.aboutNameText:GetText(), "about should show the addon name")
 assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "Version", 1, true) ~= nil, "about should show a version line")
-assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "0.9.0-beta", 1, true) ~= nil, "about should show the addon version from TOC metadata")
-assert.truthy(string.find(mainFrame.aboutAuthorText:GetText() or "", "Zirleficent", 1, true) ~= nil, "about should show the author line")
-assert.truthy(string.find(mainFrame.aboutGuildText:GetText() or "", "Guild Testers", 1, true) ~= nil, "about should show guild identity when available")
-assert.truthy(string.find(mainFrame.aboutSlashHintText:GetText() or "", "/gbm", 1, true) ~= nil, "about should include the slash command hint")
+assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "v1.0.0", 1, true) ~= nil, "about should show the latest tagged release identifier")
+assert.truthy(string.find(mainFrame.aboutVersionText:GetText() or "", "(", 1, true) ~= nil, "about should restore the local build stamp on the visible version line")
+assert.equal("Author: Zirleficent-Stormrage", mainFrame.aboutAuthorText:GetText(), "about should restore the author line")
+assert.equal("Guild: Guild Testers", mainFrame.aboutGuildText:GetText() or "", "about should keep the guild on its own line")
+local guildPoint = (mainFrame.aboutGuildText.points or {})[1] or {}
+local guildOffsetY = guildPoint[5]
+assert.truthy((guildOffsetY or 0) <= -16, "about should leave extra vertical spacing between author and guild")
+assert.equal("", mainFrame.aboutDescriptionText:GetText() or "", "about should remove the support note description text")
+assert.equal("/gbm help", mainFrame.aboutSlashHintText:GetText(), "about should trim the slash hint copy")
+assert.equal("", mainFrame.viewSubtitle:GetText() or "", "about should remove the old descriptive subtitle text")
 assert.truthy(not mainFrame.contentBodyText:IsShown(), "about should no longer fall back to the generic body text block")

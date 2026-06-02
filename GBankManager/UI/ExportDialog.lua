@@ -46,14 +46,16 @@ function exportDialog.BuildPresetState(rows, presetName, template)
         text = exports.BuildDelimited(rows or {}, {
             delimiter = ",",
             includeHeader = true,
-            fields = { "Item ID", "Tier", "Item Name", "Bank Tab", "Amount to Stock", "Excess Stock" },
+            fields = { "Item ID", "Tier", "Item Name", "Bank Tab", "Min Qty", "Qty In Stock", "Qty To Buy", "Excess Qty" },
             labels = {
                 ["Item ID"] = "itemID",
                 ["Tier"] = "itemTierValue",
                 ["Item Name"] = "itemName",
                 ["Bank Tab"] = "bankTab",
-                ["Amount to Stock"] = "amountToStock",
-                ["Excess Stock"] = "excessStockIn",
+                ["Min Qty"] = "minQty",
+                ["Qty In Stock"] = "qtyInStock",
+                ["Qty To Buy"] = "qtyToBuy",
+                ["Excess Qty"] = "excessQtyValue",
             },
         })
     end

@@ -39,6 +39,23 @@ local RETENTION_LABELS = {
     indefinite = "Indefinite",
 }
 
+local ABBREVIATED_TIMEZONES = {
+    ["Eastern Daylight Time"] = "EDT",
+    ["Eastern Standard Time"] = "EST",
+    ["Central Daylight Time"] = "CDT",
+    ["Central Standard Time"] = "CST",
+    ["Mountain Daylight Time"] = "MDT",
+    ["Mountain Standard Time"] = "MST",
+    ["Pacific Daylight Time"] = "PDT",
+    ["Pacific Standard Time"] = "PST",
+    ["Greenwich Mean Time"] = "GMT",
+    ["Coordinated Universal Time"] = "UTC",
+}
+
+local SESSION_BATCH_COUNTS = setmetatable({}, {
+    __mode = "k",
+})
+
 local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -55,6 +72,31 @@ local function clamp_percent(value)
     return math.max(0, math.min(100, tonumber(value or 0) or 0))
 end
 
+local function server_timestamp_now()
+    if type(_G.GetServerTime) == "function" then
+        local ok, stamp = pcall(_G.GetServerTime)
+        if ok and stamp then
+            return tonumber(stamp) or 0
+        end
+    end
+
+    if type(_G.time) == "function" then
+        local ok, stamp = pcall(_G.time)
+        if ok and stamp then
+            return tonumber(stamp) or 0
+        end
+    end
+
+    if type(os) == "table" and type(os.time) == "function" then
+        local ok, stamp = pcall(os.time)
+        if ok and stamp then
+            return tonumber(stamp) or 0
+        end
+    end
+
+    return 0
+end
+
 local function timestamp_from_parts(year, month, day, hour, minute, fallback)
     year = tonumber(year)
     month = tonumber(month)
@@ -62,7 +104,7 @@ local function timestamp_from_parts(year, month, day, hour, minute, fallback)
     hour = tonumber(hour)
     minute = tonumber(minute)
 
-    if year and month and day then
+    if year and year >= 1000 and month and day then
         local dateTable = {
             year = year,
             month = month,
@@ -88,6 +130,18 @@ local function timestamp_from_parts(year, month, day, hour, minute, fallback)
         end
     end
 
+    if year or month or day or hour or minute then
+        local now = server_timestamp_now()
+        local offset = ((year or 0) * 31536000)
+            + ((month or 0) * 2592000)
+            + ((day or 0) * 86400)
+            + ((hour or 0) * 3600)
+            + ((minute or 0) * 60)
+        if now > 0 then
+            return math.max(0, now - offset)
+        end
+    end
+
     return tonumber(fallback or 0) or 0
 end
 
@@ -107,6 +161,31 @@ local function raw_time_key(year, month, day, hour, minute)
     end
 
     return "unknown"
+end
+
+local function has_time_parts(year, month, day, hour, minute)
+    return year ~= nil or month ~= nil or day ~= nil or hour ~= nil or minute ~= nil
+end
+
+local function format_export_timestamp(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return "0"
+    end
+
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
+    if type(formatter) ~= "function" then
+        return tostring(timestamp)
+    end
+
+    local baseText = formatter("%Y-%m-%d %H:%M", timestamp)
+    local zoneText = tostring(formatter("%Z", timestamp) or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    zoneText = ABBREVIATED_TIMEZONES[zoneText] or zoneText
+    if zoneText ~= "" then
+        return string.format("%s %s", tostring(baseText or ""), zoneText)
+    end
+
+    return tostring(baseText or timestamp)
 end
 
 local function contains_text(haystack, needle)
@@ -144,6 +223,103 @@ local function make_fingerprint(parts)
     return table.concat(encoded, "|")
 end
 
+local function make_occurrence_fingerprint(base, occurrence)
+    return make_fingerprint({
+        tostring(base or ""),
+        tonumber(occurrence or 0) or 0,
+    })
+end
+
+local function fingerprint_base(fingerprint)
+    fingerprint = trim(fingerprint)
+    if fingerprint == "" then
+        return ""
+    end
+
+    return string.match(fingerprint, "^(.*)|%-?%d+$") or fingerprint
+end
+
+local function session_batch_counts(ledger)
+    if type(ledger) ~= "table" then
+        return {
+            item = {},
+            money = {},
+        }
+    end
+
+    local counts = SESSION_BATCH_COUNTS[ledger]
+    if type(counts) ~= "table" then
+        counts = {
+            item = {},
+            money = {},
+        }
+        SESSION_BATCH_COUNTS[ledger] = counts
+    end
+
+    counts.item = ensure_table(counts.item)
+    counts.money = ensure_table(counts.money)
+    return counts
+end
+
+local function timestamp_time_key(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return nil
+    end
+
+    local dateProvider = nil
+    if type(_G.date) == "function" then
+        dateProvider = _G.date
+    elseif type(os) == "table" and type(os.date) == "function" then
+        dateProvider = os.date
+    end
+
+    if not dateProvider then
+        return nil
+    end
+
+    local ok, dateTable = pcall(dateProvider, "*t", timestamp)
+    if not ok or type(dateTable) ~= "table" then
+        return nil
+    end
+
+    return make_fingerprint({
+        tonumber(dateTable.year or 0) or 0,
+        tonumber(dateTable.month or 0) or 0,
+        tonumber(dateTable.day or 0) or 0,
+        tonumber(dateTable.hour or 0) or 0,
+        tonumber(dateTable.min or 0) or 0,
+    })
+end
+
+local function stable_time_key(values, forceUnknownTimeKey)
+    values = type(values) == "table" and values or {}
+    if forceUnknownTimeKey then
+        return "unknown"
+    end
+
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+    local hour = tonumber(values.hour)
+    local minute = tonumber(values.minute)
+
+    if year and year >= 1000 and month and day then
+        return raw_time_key(year, month, day, hour, minute)
+    end
+
+    local persistedTimeKey = timestamp_time_key(values.timestamp or values.when)
+    if persistedTimeKey then
+        return persistedTimeKey
+    end
+
+    if year or month or day or hour or minute then
+        return raw_time_key(year, month, day, hour, minute)
+    end
+
+    return "unknown"
+end
+
 local function item_action_label(rawType)
     rawType = string.lower(trim(rawType))
     if rawType == "deposit" then
@@ -156,7 +332,7 @@ local function item_action_label(rawType)
     return "Withdrawal"
 end
 
-local function money_action_label(rawType, amountCopper)
+local function money_action_label(rawType, amountCopper, repairThresholdGold)
     rawType = string.lower(trim(rawType))
     amountCopper = tonumber(amountCopper or 0) or 0
     if rawType == "deposit" then
@@ -167,12 +343,26 @@ local function money_action_label(rawType, amountCopper)
         return "Repair"
     end
 
-    local repairThreshold = 5000 * 10000
-    if amountCopper > 0 and amountCopper < repairThreshold and (amountCopper % 10000) ~= 0 then
+    local repairThresholdCopper = math.max(0, tonumber(repairThresholdGold or 0) or 0) * 10000
+    if amountCopper > 0 and repairThresholdCopper > 0 and amountCopper <= repairThresholdCopper then
         return "Repair"
     end
 
     return "Withdrawal"
+end
+
+local function money_identity_type(rawType)
+    rawType = string.lower(trim(rawType))
+    if rawType == "deposit" then
+        return "deposit"
+    end
+    if rawType == "repair" or rawType == "withdrawal" or rawType == "withdraw" then
+        return "withdraw"
+    end
+    if rawType ~= "" then
+        return rawType
+    end
+    return "withdraw"
 end
 
 local function ensure_settings(db)
@@ -192,7 +382,161 @@ local function ensure_settings(db)
         scanSeconds = 300
     end
     settings.ledgerScanIntervalSeconds = scanSeconds
+    settings.repairThresholdGold = math.max(0, tonumber(settings.repairThresholdGold or 5000) or 5000)
+    settings.muteSilvermoonCitizen = settings.muteSilvermoonCitizen == true
     return settings
+end
+
+local function item_fingerprint_bases(values, forceUnknownTimeKey)
+    values = type(values) == "table" and values or {}
+    local timeKey = stable_time_key(values, forceUnknownTimeKey)
+    return make_fingerprint({
+        timeKey,
+        trim(values.who or "Unknown"),
+        item_action_label(values.action or values.type),
+        tonumber(values.itemID or 0) or 0,
+        tonumber(values.quantity or values.count or 0) or 0,
+        trim(values.tabName or values.sourceTabName or ("Tab " .. tostring(tonumber(values.tabIndex or values.sourceTabIndex or 0) or 0))),
+        trim(values.fromTabName) ~= "" and trim(values.fromTabName) or "-",
+    })
+end
+
+local function money_fingerprint_bases(values, repairThresholdGold, forceUnknownTimeKey)
+    values = type(values) == "table" and values or {}
+    local timeKey = stable_time_key(values, forceUnknownTimeKey)
+    local amountCopper = tonumber(values.amountCopper or values.amount or 0) or 0
+    return make_fingerprint({
+        timeKey,
+        trim(values.who or "Unknown"),
+        money_identity_type(values.type or values.rawType or values.action),
+        amountCopper,
+    })
+end
+
+local function assign_occurrence_fingerprints(rows)
+    local exactCounts = {}
+    local legacyCounts = {}
+
+    for index = #rows, 1, -1 do
+        local row = rows[index]
+        local exactBase = tostring(row.fingerprintBase or "")
+        exactCounts[exactBase] = (tonumber(exactCounts[exactBase] or 0) or 0) + 1
+        row.fingerprint = make_occurrence_fingerprint(exactBase, exactCounts[exactBase])
+
+        local legacyBase = tostring(row.legacyFingerprintBase or exactBase)
+        legacyCounts[legacyBase] = (tonumber(legacyCounts[legacyBase] or 0) or 0) + 1
+        local legacyFingerprint = make_occurrence_fingerprint(legacyBase, legacyCounts[legacyBase])
+        row.legacyFingerprint = legacyFingerprint ~= row.fingerprint and legacyFingerprint or nil
+    end
+end
+
+local function legacy_index_requires_rebuild(entries, fingerprintIndex)
+    if next(fingerprintIndex or {}) == nil then
+        return true
+    end
+
+    local entryIdSet = {}
+    for _, entry in ipairs(entries or {}) do
+        entryIdSet[tostring(entry.entryId or "")] = true
+    end
+
+    for key in pairs(fingerprintIndex or {}) do
+        if entryIdSet[tostring(key)] then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function add_index_keys(fingerprintIndex, row)
+    local fingerprint = trim((row or {}).fingerprint)
+    if fingerprint ~= "" then
+        fingerprintIndex[fingerprint] = true
+    end
+
+    local legacyFingerprint = trim((row or {}).legacyFingerprint)
+    if legacyFingerprint ~= "" then
+        fingerprintIndex[legacyFingerprint] = true
+    end
+end
+
+local function legacy_item_row_bases(entry)
+    entry = type(entry) == "table" and entry or {}
+    local unknownBase = item_fingerprint_bases({
+        who = entry.who,
+        action = entry.action,
+        itemID = entry.itemID,
+        quantity = entry.quantity,
+        tabName = entry.tabName,
+        tabIndex = entry.tabIndex,
+        fromTabName = entry.fromTabName,
+    }, true)
+
+    local reconstructedBase = item_fingerprint_bases({
+        year = entry.year,
+        month = entry.month,
+        day = entry.day,
+        hour = entry.hour,
+        minute = entry.minute,
+        timestamp = entry.timestamp,
+        when = entry.when,
+        who = entry.who,
+        action = entry.action,
+        itemID = entry.itemID,
+        quantity = entry.quantity,
+        tabName = entry.tabName,
+        tabIndex = entry.tabIndex,
+        fromTabName = entry.fromTabName,
+    }, false)
+
+    return reconstructedBase, unknownBase
+end
+
+local function legacy_money_row_bases(entry, repairThresholdGold)
+    entry = type(entry) == "table" and entry or {}
+    local unknownBase = money_fingerprint_bases({
+        who = entry.who,
+        action = entry.action,
+        amountCopper = entry.amountCopper or entry.amount,
+    }, repairThresholdGold, true)
+
+    local reconstructedBase = money_fingerprint_bases({
+        year = entry.year,
+        month = entry.month,
+        day = entry.day,
+        hour = entry.hour,
+        minute = entry.minute,
+        timestamp = entry.timestamp,
+        when = entry.when,
+        who = entry.who,
+        action = entry.action,
+        amountCopper = entry.amountCopper or entry.amount,
+    }, repairThresholdGold, false)
+
+    return reconstructedBase, unknownBase
+end
+
+local function rebuild_fingerprint_index(entries, fingerprintIndex, baseBuilder)
+    for key in pairs(fingerprintIndex or {}) do
+        fingerprintIndex[key] = nil
+    end
+
+    local exactCounts = {}
+    local legacyCounts = {}
+    for _, entry in ipairs(entries or {}) do
+        if trim(entry.fingerprint) == "" then
+            local exactBase, legacyBase = baseBuilder(entry)
+            exactCounts[exactBase] = (tonumber(exactCounts[exactBase] or 0) or 0) + 1
+            entry.fingerprint = make_occurrence_fingerprint(exactBase, exactCounts[exactBase])
+
+            legacyCounts[legacyBase] = (tonumber(legacyCounts[legacyBase] or 0) or 0) + 1
+            local legacyFingerprint = make_occurrence_fingerprint(legacyBase, legacyCounts[legacyBase])
+            entry.legacyFingerprint = legacyFingerprint ~= entry.fingerprint and legacyFingerprint or nil
+        end
+
+        add_index_keys(fingerprintIndex, entry)
+    end
 end
 
 function bankLedger.EnsureState(db)
@@ -208,6 +552,12 @@ function bankLedger.EnsureState(db)
     db.bankLedger.lastItemScanAt = tonumber(db.bankLedger.lastItemScanAt or 0) or 0
     db.bankLedger.lastMoneyScanAt = tonumber(db.bankLedger.lastMoneyScanAt or 0) or 0
     ensure_settings(db)
+
+    rebuild_fingerprint_index(db.bankLedger.itemLogs, db.bankLedger.itemFingerprints, legacy_item_row_bases)
+    rebuild_fingerprint_index(db.bankLedger.moneyLogs, db.bankLedger.moneyFingerprints, function(entry)
+        return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
+    end)
+
     return db.bankLedger
 end
 
@@ -370,7 +720,7 @@ end
 local function describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     local currentFingerprints = {}
     for index, row in ipairs(normalizedRows or {}) do
-        currentFingerprints[index] = tostring(row.fingerprintBase or "")
+        currentFingerprints[index] = tostring(row.fingerprint or "")
     end
 
     local previousFingerprints = sourceSnapshots[sourceKey] or {}
@@ -398,39 +748,122 @@ local function describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     }
 end
 
-local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix)
+local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix, options)
+    options = type(options) == "table" and options or {}
     local delta = describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     local currentFingerprints = delta.currentFingerprints
-    local previousFingerprints = delta.previousFingerprints
-    local newRowCount = delta.newRowCount
+    local currentCounts = {}
+    local knownFingerprintCount = 0
+    local storedCounts = {}
+    local groups = {}
+    local groupOrder = {}
+    local previousBatchCounts = type(options.previousBatchCounts) == "table" and options.previousBatchCounts or nil
+    local nextOccurrences = {}
+
+    local function is_known_row(row, includeLegacy)
+        if fingerprintIndex[tostring((row or {}).fingerprint or "")] then
+            return true
+        end
+
+        return includeLegacy == true and fingerprintIndex[tostring((row or {}).legacyFingerprint or "")] == true
+    end
+
+    for _, entry in ipairs(entries or {}) do
+        local base = fingerprint_base(entry and entry.fingerprint)
+        if base ~= "" then
+            storedCounts[base] = (tonumber(storedCounts[base] or 0) or 0) + 1
+        end
+    end
+
+    for _, row in ipairs(normalizedRows or {}) do
+        if is_known_row(row, true) then
+            knownFingerprintCount = knownFingerprintCount + 1
+        end
+
+        local base = tostring(row.fingerprintBase or fingerprint_base(row.fingerprint) or "")
+        if base ~= "" then
+            if not groups[base] then
+                groups[base] = {}
+                groupOrder[#groupOrder + 1] = base
+            end
+            groups[base][#groups[base] + 1] = row
+            currentCounts[base] = (tonumber(currentCounts[base] or 0) or 0) + 1
+        end
+    end
+
+    local function finish()
+        if type(options.currentBatchCounts) == "table" then
+            for key in pairs(options.currentBatchCounts) do
+                options.currentBatchCounts[key] = nil
+            end
+            for key, count in pairs(currentCounts) do
+                options.currentBatchCounts[key] = count
+            end
+        end
+
+        if options.skipSourceSnapshotUpdate ~= true then
+            sourceSnapshots[sourceKey] = currentFingerprints
+        end
+        return mergedCount
+    end
 
     if delta.emptyAfterKnown then
         return mergedCount
     end
 
-    if delta.suspiciousNoOverlap then
+    if delta.suspiciousNoOverlap and knownFingerprintCount == 0 and options.allowSuspiciousUnknownAppend ~= true then
         return mergedCount
     end
 
-    local startIndex = 1
-    local endIndex = newRowCount
-    if delta.appendMode == "back" then
-        startIndex = math.max(1, (#normalizedRows - newRowCount) + 1)
-        endIndex = #normalizedRows
-    end
+    local function append_row(row, base, alreadyKnown)
+        local nextOccurrence = nextOccurrences[base]
+        if nextOccurrence == nil then
+            nextOccurrence = math.max(
+                tonumber(storedCounts[base] or 0) or 0,
+                tonumber(alreadyKnown or 0) or 0
+            )
+        end
 
-    for index = startIndex, endIndex do
-        local row = normalizedRows[index]
         row.entryId = next_entry_id(ledger, entryPrefix)
+        row.fingerprint = make_occurrence_fingerprint(base, nextOccurrence + 1)
         row.fingerprintBase = nil
+        row.legacyFingerprintBase = nil
         row.sourceIndex = nil
-        fingerprintIndex[row.entryId] = true
+        add_index_keys(fingerprintIndex, row)
         entries[#entries + 1] = row
         mergedCount = mergedCount + 1
+        nextOccurrences[base] = nextOccurrence + 1
     end
 
-    sourceSnapshots[sourceKey] = currentFingerprints
-    return mergedCount
+    if delta.suspiciousNoOverlap and knownFingerprintCount > 0 then
+        for _, row in ipairs(normalizedRows or {}) do
+            if not is_known_row(row, true) then
+                local base = tostring(row.fingerprintBase or fingerprint_base(row.fingerprint) or "")
+                if base ~= "" then
+                    append_row(row, base, storedCounts[base])
+                end
+            end
+        end
+        return finish()
+    end
+
+    for _, base in ipairs(groupOrder) do
+        local group = groups[base] or {}
+        local alreadyKnown = 0
+        if previousBatchCounts ~= nil and previousBatchCounts[base] ~= nil then
+            alreadyKnown = tonumber(previousBatchCounts[base] or 0) or 0
+        else
+            alreadyKnown = tonumber(storedCounts[base] or 0) or 0
+        end
+        local newCount = math.max(0, #group - alreadyKnown)
+
+        for index = 1, newCount do
+            local row = group[index]
+            append_row(row, base, alreadyKnown)
+        end
+    end
+
+    return finish()
 end
 
 local function normalize_item_rows(payload)
@@ -447,6 +880,30 @@ local function normalize_item_rows(payload)
         local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
         local action = item_action_label(raw.type)
         local fromTabName = trim(raw.fromTabName)
+        local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
+        local fingerprintBase = item_fingerprint_bases({
+            timestamp = timestamp,
+            year = raw.year,
+            month = raw.month,
+            day = raw.day,
+            hour = raw.hour,
+            minute = raw.minute,
+            who = raw.who,
+            action = action,
+            itemID = itemID,
+            quantity = raw.quantity or raw.count,
+            tabName = sourceTabName,
+            fromTabName = fromTabName,
+        }, not rowHasTimeParts)
+        local legacyFingerprintBase = item_fingerprint_bases({
+            timestamp = timestamp,
+            who = raw.who,
+            action = action,
+            itemID = itemID,
+            quantity = raw.quantity or raw.count,
+            tabName = sourceTabName,
+            fromTabName = fromTabName,
+        }, true)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
@@ -461,18 +918,13 @@ local function normalize_item_rows(payload)
             fromTabName = fromTabName ~= "" and fromTabName or "-",
             craftedQuality = tonumber(raw.craftedQuality or raw.qualityTier or 0) or 0,
             craftedQualityIcon = raw.craftedQualityIcon or raw.qualityTierIcon,
-            fingerprintBase = make_fingerprint({
-                raw_time_key(raw.year, raw.month, raw.day, raw.hour, raw.minute),
-                trim(raw.who or "Unknown"),
-                action,
-                itemID,
-                tonumber(raw.quantity or raw.count or 0) or 0,
-                sourceTabName,
-                fromTabName,
-            }),
+            fingerprintBase = fingerprintBase,
+            legacyFingerprintBase = legacyFingerprintBase,
             sourceIndex = index,
         }
     end
+
+    assign_occurrence_fingerprints(normalizedRows)
 
     return sourceKey, normalizedRows
 end
@@ -482,11 +934,30 @@ local function normalize_money_rows(payload)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     local sourceKey = "money"
     local normalizedRows = {}
+    local repairThresholdGold = tonumber(payload.repairThresholdGold or payload.settingsRepairThresholdGold or 5000) or 5000
 
     for index, raw in ipairs(payload.transactions or {}) do
         local amountCopper = tonumber(raw.amountCopper or raw.amount or 0) or 0
         local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
-        local action = money_action_label(raw.type, amountCopper)
+        local action = money_action_label(raw.type, amountCopper, repairThresholdGold)
+        local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
+        local fingerprintBase = money_fingerprint_bases({
+            timestamp = timestamp,
+            year = raw.year,
+            month = raw.month,
+            day = raw.day,
+            hour = raw.hour,
+            minute = raw.minute,
+            who = raw.who,
+            action = action,
+            amountCopper = amountCopper,
+        }, repairThresholdGold, not rowHasTimeParts)
+        local legacyFingerprintBase = money_fingerprint_bases({
+            timestamp = timestamp,
+            who = raw.who,
+            action = action,
+            amountCopper = amountCopper,
+        }, repairThresholdGold, true)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
@@ -494,15 +965,13 @@ local function normalize_money_rows(payload)
             action = action,
             amountCopper = amountCopper,
             amount = amountCopper,
-            fingerprintBase = make_fingerprint({
-                raw_time_key(raw.year, raw.month, raw.day, raw.hour, raw.minute),
-                trim(raw.who or "Unknown"),
-                action,
-                amountCopper,
-            }),
+            fingerprintBase = fingerprintBase,
+            legacyFingerprintBase = legacyFingerprintBase,
             sourceIndex = index,
         }
     end
+
+    assign_occurrence_fingerprints(normalizedRows)
 
     return sourceKey, normalizedRows
 end
@@ -517,6 +986,8 @@ end
 function bankLedger.DescribeMoneyDelta(db, payload)
     db = db or {}
     local ledger = bankLedger.EnsureState(db)
+    payload = type(payload) == "table" and payload or {}
+    payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
     local sourceKey, normalizedRows = normalize_money_rows(payload)
     return describe_source_delta(ledger.moneySourceSnapshots, sourceKey, normalizedRows)
 end
@@ -527,6 +998,8 @@ function bankLedger.MergeItemTransactions(db, payload)
     local ledger = bankLedger.EnsureState(db)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     local sourceKey, normalizedRows = normalize_item_rows(payload)
+    local batchCounts = session_batch_counts(ledger).item
+    local currentBatchCounts = {}
 
     local mergedCount = append_delta_rows(
         ledger,
@@ -536,8 +1009,14 @@ function bankLedger.MergeItemTransactions(db, payload)
         sourceKey,
         normalizedRows,
         0,
-        "item"
+        "item",
+        {
+            allowSuspiciousUnknownAppend = payload.allowSuspiciousUnknownAppend == true,
+            previousBatchCounts = batchCounts[sourceKey],
+            currentBatchCounts = currentBatchCounts,
+        }
     )
+    batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "item")
     return mergedCount
 end
@@ -547,7 +1026,10 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     payload = type(payload) == "table" and payload or {}
     local ledger = bankLedger.EnsureState(db)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
+    payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
     local sourceKey, normalizedRows = normalize_money_rows(payload)
+    local batchCounts = session_batch_counts(ledger).money
+    local currentBatchCounts = {}
 
     local mergedCount = append_delta_rows(
         ledger,
@@ -557,10 +1039,62 @@ function bankLedger.MergeMoneyTransactions(db, payload)
         sourceKey,
         normalizedRows,
         0,
-        "money"
+        "money",
+        {
+            allowSuspiciousUnknownAppend = true,
+            previousBatchCounts = batchCounts[sourceKey],
+            currentBatchCounts = currentBatchCounts,
+        }
     )
+    batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "money")
     return mergedCount
+end
+
+function bankLedger.MergeRemoteDelta(db, payload)
+    db = db or {}
+    payload = type(payload) == "table" and payload or {}
+
+    local ledger = bankLedger.EnsureState(db)
+    local kind = tostring(payload.kind or "")
+    if kind == "item" then
+        local sourceKey, normalizedRows = normalize_item_rows(payload)
+        return append_delta_rows(
+            ledger,
+            ledger.itemLogs,
+            ledger.itemFingerprints,
+            ledger.itemSourceSnapshots,
+            sourceKey,
+            normalizedRows,
+            0,
+            "item",
+            {
+                allowSuspiciousUnknownAppend = true,
+                skipSourceSnapshotUpdate = true,
+            }
+        )
+    end
+
+    if kind == "money" then
+        payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
+        local sourceKey, normalizedRows = normalize_money_rows(payload)
+        return append_delta_rows(
+            ledger,
+            ledger.moneyLogs,
+            ledger.moneyFingerprints,
+            ledger.moneySourceSnapshots,
+            sourceKey,
+            normalizedRows,
+            0,
+            "money",
+            {
+                allowSuspiciousUnknownAppend = true,
+                skipSourceSnapshotUpdate = true,
+            }
+        )
+    end
+
+    return 0
 end
 
 local function filtered_item_logs(db, filters)
@@ -796,7 +1330,8 @@ local function prune_list(entries, fingerprintIndex, cutoff)
         if (tonumber(entry.timestamp or 0) or 0) >= cutoff then
             kept[#kept + 1] = entry
         else
-            fingerprintIndex[tostring(entry.entryId or "")] = nil
+            fingerprintIndex[tostring(entry.fingerprint or "")] = nil
+            fingerprintIndex[tostring(entry.legacyFingerprint or "")] = nil
         end
     end
     return kept
@@ -833,7 +1368,7 @@ function bankLedger.ExportRowsToCsv(db, mode, filters)
         lines[#lines + 1] = "Date/Time,Who,Action,Amount"
         for _, row in ipairs(rows) do
             lines[#lines + 1] = string.format("%s,%s,%s,%s",
-                tostring(row.timestamp or 0),
+                format_export_timestamp(row.timestamp),
                 tostring(row.who or ""),
                 tostring(row.action or ""),
                 tostring(row.amountCopper or 0)
@@ -843,7 +1378,7 @@ function bankLedger.ExportRowsToCsv(db, mode, filters)
         lines[#lines + 1] = "Date/Time,Who,Action,Item ID,Quality Tier,Item,Quantity,Tab,Moved From"
         for _, row in ipairs(rows) do
             lines[#lines + 1] = string.format("%s,%s,%s,%s,%s,%s,%s,%s,%s",
-                tostring(row.timestamp or 0),
+                format_export_timestamp(row.timestamp),
                 tostring(row.who or ""),
                 tostring(row.action or ""),
                 tostring(row.itemID or ""),

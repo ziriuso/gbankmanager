@@ -40,6 +40,118 @@ function Get-FastPropertyValue {
     return $property.Value
 }
 
+function Set-FastPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Object,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        $Value
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+        return
+    }
+
+    $property.Value = $Value
+}
+
+function Normalize-FamilyName {
+    param([AllowNull()][string]$Value)
+
+    return ([string]$Value).Trim().ToLowerInvariant()
+}
+
+function Get-CraftedQualityDisplayAtlas {
+    param(
+        [int]$CraftedQuality,
+        [int]$CraftedQualityMax,
+        [AllowNull()][string]$FallbackIcon
+    )
+
+    if ($CraftedQuality -lt 1) {
+        return $null
+    }
+
+    if ($CraftedQualityMax -eq 2) {
+        if ($CraftedQuality -eq 1) {
+            return "Professions-ChatIcon-Quality-Tier1"
+        }
+        if ($CraftedQuality -eq 2) {
+            return "Interface-Crafting-ReagentQuality-2-Med"
+        }
+    }
+
+    if ($CraftedQualityMax -ge 3) {
+        return "Professions-ChatIcon-Quality-Tier$CraftedQuality"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($FallbackIcon)) {
+        return [string]$FallbackIcon
+    }
+
+    return "Professions-ChatIcon-Quality-Tier$CraftedQuality"
+}
+
+function Apply-CraftedQualityDisplayFields {
+    param([object[]]$Items)
+
+    $tiersByFamily = @{}
+    foreach ($item in @($Items)) {
+        $familyName = Normalize-FamilyName -Value ([string](Get-FastPropertyValue -Object $item -Name "name"))
+        $tier = Get-FastPropertyValue -Object $item -Name "craftedQuality"
+        $tier = if ($null -ne $tier) { [int]$tier } else { 0 }
+        if (-not [string]::IsNullOrWhiteSpace($familyName) -and $tier -ge 1 -and $tier -le 5) {
+            if (-not $tiersByFamily.ContainsKey($familyName)) {
+                $tiersByFamily[$familyName] = @{}
+            }
+            $tiersByFamily[$familyName][$tier] = $true
+        }
+    }
+
+    foreach ($item in @($Items)) {
+        $familyName = Normalize-FamilyName -Value ([string](Get-FastPropertyValue -Object $item -Name "name"))
+        $tier = Get-FastPropertyValue -Object $item -Name "craftedQuality"
+        $tier = if ($null -ne $tier) { [int]$tier } else { 0 }
+        if ($tier -lt 1) {
+            continue
+        }
+
+        $familyTiers = if ($tiersByFamily.ContainsKey($familyName)) { $tiersByFamily[$familyName] } else { @{} }
+        $distinctCount = 0
+        $maxTier = 0
+        foreach ($candidateTier in 1..5) {
+            if ($familyTiers.ContainsKey($candidateTier)) {
+                $distinctCount += 1
+                $maxTier = $candidateTier
+            }
+        }
+
+        $craftedQualityMax = Get-FastPropertyValue -Object $item -Name "craftedQualityMax"
+        $craftedQualityMax = if ($null -ne $craftedQualityMax) { [int]$craftedQualityMax } else { 0 }
+        if ($craftedQualityMax -le 0) {
+            if ($maxTier -ge 3) {
+                $craftedQualityMax = 5
+            } elseif ($distinctCount -eq 2 -and $familyTiers.ContainsKey(1) -and $familyTiers.ContainsKey(2)) {
+                $craftedQualityMax = 2
+            } elseif ($maxTier -gt 0) {
+                $craftedQualityMax = $maxTier
+            }
+        }
+
+        $fallbackIcon = [string](Get-FastPropertyValue -Object $item -Name "craftedQualityIcon")
+        Set-FastPropertyValue -Object $item -Name "craftedQualityMax" -Value $craftedQualityMax
+        $displayAtlas = Get-CraftedQualityDisplayAtlas -CraftedQuality $tier -CraftedQualityMax $craftedQualityMax -FallbackIcon $fallbackIcon
+        Set-FastPropertyValue -Object $item -Name "craftedQualityDisplayAtlas" -Value $displayAtlas
+        Set-FastPropertyValue -Object $item -Name "craftedQualityPreferredAtlas" -Value $displayAtlas
+        Set-FastPropertyValue -Object $item -Name "craftedQualityFamilySize" -Value $craftedQualityMax
+    }
+}
+
 function Normalize-Text {
     param([AllowNull()][string]$Value)
 
@@ -211,6 +323,16 @@ function Write-ItemChunkFile {
         $recordFields.Add("itemID = $itemID")
         $recordFields.Add("name = $(ConvertTo-LuaString $resolvedName)")
 
+        $itemLinkValue = Get-FastPropertyValue -Object $item -Name "itemLink"
+        if ($null -ne $itemLinkValue) {
+            $recordFields.Add("itemLink = $(ConvertTo-LuaString ([string]$itemLinkValue))")
+        }
+
+        $itemStringValue = Get-FastPropertyValue -Object $item -Name "itemString"
+        if ($null -ne $itemStringValue) {
+            $recordFields.Add("itemString = $(ConvertTo-LuaString ([string]$itemStringValue))")
+        }
+
         $qualityValue = Get-FastPropertyValue -Object $item -Name "quality"
         if ($null -ne $qualityValue) {
             $recordFields.Add("quality = $([int]$qualityValue)")
@@ -229,6 +351,24 @@ function Write-ItemChunkFile {
         $craftedQualityIconValue = Get-FastPropertyValue -Object $item -Name "craftedQualityIcon"
         if ($null -ne $craftedQualityIconValue) {
             $recordFields.Add("craftedQualityIcon = $(ConvertTo-LuaString ([string]$craftedQualityIconValue))")
+        }
+
+        $craftedQualityMaxValue = Get-FastPropertyValue -Object $item -Name "craftedQualityMax"
+        if ($null -ne $craftedQualityMaxValue) {
+            $recordFields.Add("craftedQualityMax = $([int]$craftedQualityMaxValue)")
+        }
+
+        $craftedQualityDisplayAtlasValue = Get-FastPropertyValue -Object $item -Name "craftedQualityDisplayAtlas"
+        $craftedQualityPreferredAtlasValue = Get-FastPropertyValue -Object $item -Name "craftedQualityPreferredAtlas"
+        $craftedQualityFamilySizeValue = Get-FastPropertyValue -Object $item -Name "craftedQualityFamilySize"
+        if ($null -ne $craftedQualityDisplayAtlasValue) {
+            $recordFields.Add("craftedQualityDisplayAtlas = $(ConvertTo-LuaString ([string]$craftedQualityDisplayAtlasValue))")
+        }
+        if ($null -ne $craftedQualityPreferredAtlasValue) {
+            $recordFields.Add("craftedQualityPreferredAtlas = $(ConvertTo-LuaString ([string]$craftedQualityPreferredAtlasValue))")
+        }
+        if ($null -ne $craftedQualityFamilySizeValue) {
+            $recordFields.Add("craftedQualityFamilySize = $([int]$craftedQualityFamilySizeValue)")
         }
 
         $lines.Add("    { $($recordFields -join ', ') },")
@@ -338,6 +478,7 @@ $manifestItems = @($input.items)
 $items = @($manifestItems | Where-Object {
     [string](Get-FastPropertyValue -Object $_ -Name "status") -ne "deprecated"
 })
+Apply-CraftedQualityDisplayFields -Items $items
 $generatedAt = if ($input.generatedAt) { [string]$input.generatedAt } else { (Get-Date).ToString("yyyy-MM-dd") }
 $source = if ($input.source) { [string]$input.source } else { "manual_manifest" }
 

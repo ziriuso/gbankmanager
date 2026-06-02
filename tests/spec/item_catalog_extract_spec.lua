@@ -223,7 +223,7 @@ write_text_file(extractFixturePath, [[
   ],
   "hotfixRows": [
     { "itemID": 242273, "Display_lang": "Blooming Feast", "OverallQualityID": 3, "ClassID": 0, "SubclassID": 5 },
-    { "itemID": 240154, "Display_lang": "Arcanoweave Spellthread", "OverallQualityID": 4, "CraftingQualityID": 5, "ExpansionID": 11, "ClassID": 8, "SubclassID": 0 }
+    { "itemID": 240154, "Display_lang": "Arcanoweave Spellthread", "OverallQualityID": 4, "CraftingQualityID": 5, "ExpansionID": 11, "ClassID": 8, "SubclassID": 0, "ItemLink": "|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r", "ItemString": "item:240154::::::::80:::::" }
   ]
 }
 ]])
@@ -273,6 +273,8 @@ assert.equal("Rare", read_item_field(normalizedOutputPath, 242273, "qualityName"
 assert.equal("Arcanoweave Spellthread", read_item_field(normalizedOutputPath, 240154, "name"), "extract normalization should include newly introduced hotfix rows")
 assert.equal("5", read_item_field(normalizedOutputPath, 240154, "craftedQuality"), "extract normalization should preserve crafted quality tiers when present in the local source")
 assert.equal("Professions-ChatIcon-Quality-Tier5", read_item_field(normalizedOutputPath, 240154, "craftedQualityIcon"), "extract normalization should derive the crafted quality icon from the tier")
+assert.equal("|cffa335ee|Hitem:240154::::::::80:::::|h[Arcanoweave Spellthread]|h|r", read_item_field(normalizedOutputPath, 240154, "itemLink"), "extract normalization should preserve trusted hyperlink fields when the local source exposes them")
+assert.equal("item:240154::::::::80:::::", read_item_field(normalizedOutputPath, 240154, "itemString"), "extract normalization should preserve trusted item-string fields when the local source exposes them")
 assert.equal("1", read_item_field(normalizedOutputPath, 241326, "craftedQuality"), "extract normalization should derive the lower crafted tier for duplicate-name modern crafted variants")
 assert.equal("Professions-ChatIcon-Quality-Tier1", read_item_field(normalizedOutputPath, 241326, "craftedQualityIcon"), "extract normalization should derive the lower crafted tier icon for duplicate-name modern crafted variants")
 assert.equal("2", read_item_field(normalizedOutputPath, 241327, "craftedQuality"), "extract normalization should derive the higher crafted tier for two-rank duplicate-name variants")

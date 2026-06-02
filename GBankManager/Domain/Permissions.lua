@@ -383,10 +383,12 @@ function permissions.AppendPolicyAudit(db, previousPolicy, nextPolicy, source)
 
     local nextRevision = tonumber((nextPolicy or {}).revision or 0) or 0
     local nextUpdatedBy = tostring((nextPolicy or {}).updatedBy or "")
+    local nextTimestamp = tonumber((nextPolicy or {}).updatedAt or 0) or 0
     for _, entry in ipairs(db.auditLog) do
         if entry.type == "AUTH_POLICY_UPDATED"
             and (tonumber(entry.revision or 0) or 0) == nextRevision
-            and tostring(entry.updatedBy or "") == nextUpdatedBy then
+            and tostring(entry.updatedBy or "") == nextUpdatedBy
+            and (tonumber(entry.timestamp or 0) or 0) == nextTimestamp then
             return false, entry
         end
     end

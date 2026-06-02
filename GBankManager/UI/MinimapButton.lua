@@ -161,8 +161,13 @@ function minimapButton.EnsureButton()
         end
 
         local slash = ns.modules.slash
+        if slash and type(slash.OpenAccessibleUI) == "function" then
+            slash.OpenAccessibleUI("minimap", true)
+            return
+        end
+
         if slash and type(slash.command) == "function" then
-            slash.command("ui")
+            slash.command("")
         end
     end)
 

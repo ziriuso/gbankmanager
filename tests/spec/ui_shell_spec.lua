@@ -10,6 +10,8 @@ local scanner = env.scanner
 local themeManager = env.ns.modules.themeManager
 local syncEvents = env.ns.modules.syncEvents
 local minimapButton = env.ns.modules.minimapButton
+local onboarding = env.ns.modules.onboarding
+local auth = env.ns.modules.auth or env.ns.modules.permissions
 local activeTheme = env.mainFrameShell.GetTheme()
 
 assert.truthy(type(mainFrame.closeButton) == "table", "main frame should expose a close button")
@@ -177,6 +179,71 @@ assert.truthy(type(mainFrame.scanButton:GetScript("OnClick")) == "function", "sc
 assert.truthy(type(beginScanOptions) == "table" and beginScanOptions.forceLedgerScan == true, "Scan Bank should explicitly request the ledger follow-up alongside the inventory scan")
 scanner.BeginScan = originalBeginScan
 
+local originalOpenOnboarding = mainFrame.OpenOnboarding
+local originalShouldAutoOpen = onboarding.ShouldAutoOpen
+local originalGetEffectiveAccessProfile = auth.GetEffectiveAccessProfile
+local openedFlow = nil
+
+mainFrame.OpenOnboarding = function(_, flowKey, options)
+    openedFlow = {
+        flowKey = flowKey,
+        reason = options and options.reason,
+    }
+end
+
+onboarding.ShouldAutoOpen = function(_, flowKey)
+    return flowKey == "manager"
+end
+
+auth.GetEffectiveAccessProfile = function()
+    return "full_shell"
+end
+
+mainFrame:Hide()
+openedFlow = nil
+minimapButton.button:GetScript("OnClick")(minimapButton.button)
+assert.equal("manager", openedFlow and openedFlow.flowKey, "minimap open should auto-open manager onboarding for eligible first-run full-shell users")
+assert.equal("minimap", openedFlow and openedFlow.reason, "minimap open should report the minimap reason")
+
+auth.GetEffectiveAccessProfile = function()
+    return "request_only"
+end
+
+onboarding.ShouldAutoOpen = function(_, flowKey)
+    return flowKey == "requestOnly"
+end
+
+mainFrame:Hide()
+openedFlow = nil
+minimapButton.button:GetScript("OnClick")(minimapButton.button)
+assert.equal("requestOnly", openedFlow and openedFlow.flowKey, "minimap open should auto-open request onboarding for eligible first-run request-only users")
+assert.equal("minimap", openedFlow and openedFlow.reason, "minimap request onboarding should report the minimap reason")
+
+mainFrame.OpenOnboarding = originalOpenOnboarding
+onboarding.ShouldAutoOpen = originalShouldAutoOpen
+auth.GetEffectiveAccessProfile = originalGetEffectiveAccessProfile
+
+auth.GetEffectiveAccessProfile = function()
+    return "request_only"
+end
+
+onboarding.ShouldAutoOpen = function()
+    return false
+end
+
+mainFrame:Hide()
+if mainFrame.requestWizardModal then
+    mainFrame.requestWizardModal:Hide()
+end
+minimapButton.button:GetScript("OnClick")(minimapButton.button)
+_G.C_Timer.RunPending()
+assert.equal("REQUESTS", mainFrame.activeView, "minimap open should match /gbm default open for request-only users")
+assert.truthy(mainFrame.requestWizardModal and mainFrame.requestWizardModal:IsShown(), "minimap open should launch the request wizard for request-only users")
+
+onboarding.ShouldAutoOpen = originalShouldAutoOpen
+auth.GetEffectiveAccessProfile = originalGetEffectiveAccessProfile
+
+mainFrame:ShowDashboard()
 minimapButton.button:GetScript("OnClick")(minimapButton.button)
 assert.truthy(not mainFrame:IsShown(), "clicking the minimap launcher while the addon is open should close it")
 minimapButton.button:GetScript("OnClick")(minimapButton.button)

@@ -17,21 +17,21 @@ Use that skill when you want Codex to run the normal GBankManager release flow o
 
 Example prompt:
 
-> Use `$gbankmanager-release-operator` at `docs/skills/gbankmanager-release-operator` to handle the next beta release for this repo.
+> Use `$gbankmanager-release-operator` at `docs/skills/gbankmanager-release-operator` to handle the next release publish for this repo.
 
 ## Release Channels
 
 The workflow derives the CurseForge release type directly from the git tag:
 
-- `v0.9.0-alpha.1` -> `alpha`
-- `v0.9.0-beta.1` -> `beta`
-- `v1.0.0` -> `release`
+- `v1.0.1-alpha.1` -> `alpha`
+- `v1.0.1-beta.1` -> `beta`
+- `v1.0.1` -> `release`
 
 Anything containing `-alpha` publishes as an alpha file.
 Anything containing `-beta` publishes as a beta file.
 A plain semantic version tag publishes as a release file.
 
-Because the project is still working toward `1.0`, prefer beta tags until the first public stable release.
+Use plain semantic version tags for stable public releases, and keep using `-alpha` or `-beta` suffixes whenever a prerelease channel is the intended outcome.
 
 ## GitHub Actions Workflow
 
@@ -103,17 +103,17 @@ After generating a new token:
 
 No repository code changes are needed when the token rotates.
 
-## First Beta Release
+## Example Prerelease Publish
 
-Suggested first tag while the addon is still in beta:
+Example prerelease tag:
 
-- `v0.9.0-beta.1`
+- `v1.0.1-beta.1`
 
 Example flow:
 
 ```powershell
-git tag v0.9.0-beta.1
-git push origin v0.9.0-beta.1
+git tag v1.0.1-beta.1
+git push origin v1.0.1-beta.1
 ```
 
 That tag should:
@@ -122,13 +122,13 @@ That tag should:
 - create a prerelease on GitHub
 - attach the built zip to that prerelease
 
-## Stable 1.0 Release
+## Example Stable Release
 
-When ready for the first stable public release:
+Example stable tag:
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 That tag should:

@@ -47,18 +47,80 @@ function mainTableController.Attach(mainFrame, options)
         return total
     end
 
+    local function column_left_offset(columns, columnIndex)
+        local offset = 0
+        for layoutIndex = 1, math.max(0, (columnIndex or 1) - 1) do
+            offset = offset + (((columns or {})[layoutIndex] or {}).width or 0)
+        end
+        return offset
+    end
+
+    local function resolve_cell_icon(row, key)
+        if type(row) ~= "table" or tostring(key or "") == "" then
+            return nil
+        end
+
+        local cellIcons = row.cellIcons
+        if type(cellIcons) == "table" and type(cellIcons[key]) == "table" then
+            return cellIcons[key]
+        end
+
+        local atlasName = tostring(row[tostring(key) .. "IconAtlas"] or "")
+        if atlasName == "" then
+            return nil
+        end
+
+        return {
+            atlas = atlasName,
+            align = "RIGHT",
+            rightInset = 10,
+            size = 14,
+            textRightPadding = 22,
+        }
+    end
+
+    local function normalize_table_icon_atlas(atlasName, row)
+        atlasName = tostring(atlasName or "")
+        if atlasName == "Professions-Icon-Quality-Tier1-Inv"
+            or atlasName == "Interface-Crafting-ReagentQuality-1-Med" then
+            return "Professions-Icon-Quality-12-Tier1-Inv"
+        end
+        if atlasName == "Professions-Icon-Quality-Tier2-Inv"
+            or atlasName == "Interface-Crafting-ReagentQuality-2-Med" then
+            return "Professions-Icon-Quality-12-Tier2-Inv"
+        end
+
+        local familySize = tonumber((row or {}).craftedQualityFamilySize or (row or {}).craftedQualityMax or 0) or 0
+        if familySize == 2 then
+            if atlasName == "Professions-ChatIcon-Quality-Tier1" then
+                return "Professions-Icon-Quality-12-Tier1-Inv"
+            end
+            if atlasName == "Professions-ChatIcon-Quality-Tier2" then
+                return "Professions-Icon-Quality-12-Tier2-Inv"
+            end
+        end
+
+        return atlasName
+    end
+
     local function emergency_min_width(column)
         local key = tostring((column or {}).key or "")
-        if key == "itemName" or key == "name" then
+        if key == "itemName" or key == "itemDisplayText" or key == "name" then
             return 132
         end
-        if key == "bankTab" or key == "status" or key == "excessStockIn" or key == "createdAt" or key == "fulfilledAt" then
+        if key == "bankTab" or key == "status" or key == "excessQty" or key == "createdAt" or key == "fulfilledAt" then
+            if key == "excessQty" then
+                return 96
+            end
             return 92
         end
         if key == "requester" then
             return 80
         end
-        if key == "itemID" or key == "quantity" or key == "current" or key == "restock" or key == "amountToStock" then
+        if key == "itemID" or key == "quantity" or key == "current" or key == "restock" or key == "minQty" or key == "qtyInStock" or key == "qtyToBuy" then
+            if key == "qtyInStock" or key == "qtyToBuy" then
+                return 72
+            end
             return 56
         end
         if key == "tier" or key == "itemTier" then
@@ -88,7 +150,7 @@ function mainTableController.Attach(mainFrame, options)
         end
 
         if remainder < 0 then
-            local shrinkOrder = { "itemName", "bankTab", "status", "excessStockIn", "requester", "createdAt", "fulfilledAt", "quantity", "current", "restock", "itemID", "tier", "itemTier" }
+            local shrinkOrder = { "itemDisplayText", "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt", "quantity", "current", "restock", "minQty", "qtyInStock", "qtyToBuy", "itemID", "tier", "itemTier" }
             for _, key in ipairs(shrinkOrder) do
                 for _, column in ipairs(fitted) do
                     if remainder >= 0 then
@@ -104,7 +166,7 @@ function mainTableController.Attach(mainFrame, options)
                 end
             end
         elseif remainder > 0 then
-            local growOrder = { "itemName", "bankTab", "status", "excessStockIn", "requester", "createdAt", "fulfilledAt" }
+            local growOrder = { "itemDisplayText", "itemName", "bankTab", "status", "excessQty", "requester", "createdAt", "fulfilledAt" }
             while remainder > 0 do
                 local grew = false
                 for _, key in ipairs(growOrder) do
@@ -236,10 +298,20 @@ function mainTableController.Attach(mainFrame, options)
             applyPanelStyle(row, rowIndex % 2 == 1 and theme.colors.panel or theme.colors.panelAlt)
             row:Hide()
             row.columns = row.columns or {}
+            row.columnIcons = row.columnIcons or {}
 
             for columnIndex = 1, 9 do
                 local column = row.columns[columnIndex] or makeLabel(row, "", "GameFontNormal")
                 row.columns[columnIndex] = column
+                local icon = row.columnIcons[columnIndex] or row:CreateTexture()
+                if type(icon.SetWidth) == "function" then
+                    icon:SetWidth(16)
+                end
+                if type(icon.SetHeight) == "function" then
+                    icon:SetHeight(16)
+                end
+                icon:Hide()
+                row.columnIcons[columnIndex] = icon
             end
 
             mainFrame.tableRows[rowIndex] = row
@@ -312,14 +384,23 @@ function mainTableController.Attach(mainFrame, options)
             for _, rowFrame in ipairs(self.tableRows) do
                 rowFrame:SetSize(contentWidth, self.tableRowHeight - 2)
                 local column = rowFrame.columns[index]
+                local icon = rowFrame.columnIcons[index]
                 column:ClearAllPoints()
                 column:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", offset + 6, -4)
                 column:SetWidth(width)
                 if type(column.SetJustifyH) == "function" then
                     column:SetJustifyH(columnLayout.justifyH or "LEFT")
                 end
+                if icon then
+                    icon:ClearAllPoints()
+                    icon:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", offset + math.max(6, math.floor((width - 16) / 2)), -4)
+                    icon:Hide()
+                end
                 if width == 0 then
                     column:Hide()
+                    if icon then
+                        icon:Hide()
+                    end
                 else
                     column:Show()
                 end
@@ -374,7 +455,53 @@ function mainTableController.Attach(mainFrame, options)
             local row = self.tableRowsData[dataIndex]
             for colIndex = 1, #self.tableHeaderLabels do
                 local key = self.tableColumnKeys[colIndex]
-                rowFrame.columns[colIndex]:SetText(row and key and (row[key] or "") or "")
+                local column = rowFrame.columns[colIndex]
+                local icon = rowFrame.columnIcons and rowFrame.columnIcons[colIndex] or nil
+                local baseWidth = ((self.tableColumnLayout or {})[colIndex] or {}).width or 0
+                local iconConfig = resolve_cell_icon(row, key)
+                local leftOffset = column_left_offset(self.tableColumnLayout, colIndex)
+                if icon then
+                    icon:Hide()
+                end
+                column:ClearAllPoints()
+                column:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", leftOffset + 6, -4)
+                column:SetWidth(baseWidth)
+                column:SetText(row and key and (row[key] or "") or "")
+                if icon and row and key and iconConfig and tostring(iconConfig.atlas or "") ~= "" and baseWidth > 0 then
+                    local normalizedAtlas = normalize_table_icon_atlas(iconConfig.atlas, row)
+                    local iconSize = math.max(10, math.floor(tonumber(iconConfig.size or 14) or 14))
+                    local rightInset = math.max(0, math.floor(tonumber(iconConfig.rightInset or 10) or 10))
+                    local textRightPadding = math.max(iconSize + rightInset + 4, math.floor(tonumber(iconConfig.textRightPadding or (iconSize + 8)) or (iconSize + 8)))
+                    column:SetWidth(math.max(0, baseWidth - textRightPadding))
+                    icon:ClearAllPoints()
+                    if tostring(iconConfig.align or "RIGHT") == "RIGHT" then
+                        icon:SetPoint("TOPRIGHT", rowFrame, "TOPLEFT", leftOffset + baseWidth - rightInset, -5)
+                    elseif tostring(iconConfig.align or "") == "CENTER" then
+                        icon:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", leftOffset + math.max(0, math.floor((baseWidth - iconSize) / 2)), -5)
+                    else
+                        icon:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", leftOffset + math.max(6, rightInset), -5)
+                    end
+                    if type(icon.SetWidth) == "function" then
+                        icon:SetWidth(iconSize)
+                    end
+                    if type(icon.SetHeight) == "function" then
+                        icon:SetHeight(iconSize)
+                    end
+                    if type(icon.SetAtlas) == "function" then
+                        icon:SetAtlas(normalizedAtlas, false)
+                    end
+                    if type(icon.SetWidth) == "function" then
+                        icon:SetWidth(iconSize)
+                    end
+                    if type(icon.SetHeight) == "function" then
+                        icon:SetHeight(iconSize)
+                    end
+                    icon.atlas = normalizedAtlas
+                    if type(icon.SetVertexColor) == "function" and type(iconConfig.tint) == "table" then
+                        icon:SetVertexColor(unpack(iconConfig.tint))
+                    end
+                    icon:Show()
+                end
             end
 
             rowFrame.rowData = row
@@ -382,7 +509,7 @@ function mainTableController.Attach(mainFrame, options)
                 rowFrame:ClearAllPoints()
                 rowFrame:SetPoint("TOPLEFT", self.tableScrollChild, "TOPLEFT", 0, -((rowIndex - 1) * rowHeight))
                 rowFrame:Show()
-                applyTableRowStyle(rowFrame, rowIndex, isSelectedTableRow(self, row))
+                applyTableRowStyle(rowFrame, dataIndex, isSelectedTableRow(self, row))
                 rowFrame:SetScript("OnClick", function(frame)
                     handleTableRowClick(self, frame.rowData)
                 end)
@@ -452,6 +579,10 @@ function mainTableController.Attach(mainFrame, options)
             anchor = self.viewSubtitle
             offsetY = -24
             footerHeight = ((self.minimumsPanel and self.minimumsPanel:GetHeight()) or 64) + 18
+        elseif self.activeView == "INVENTORY" then
+            anchor = self.viewSubtitle
+            offsetY = -24
+            footerHeight = ((self.inventoryPanel and self.inventoryPanel:GetHeight()) or 52) + 18
         elseif self.activeView == "EXPORTS" then
             anchor = self.viewSubtitle
             offsetY = -24
@@ -517,6 +648,15 @@ function mainTableController.Attach(mainFrame, options)
             self.minimumsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
             self.minimumsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
         end
+        if self.activeView == "INVENTORY" and self.inventoryPanel then
+            self.inventoryPanel:ClearAllPoints()
+            self.inventoryPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
+            self.inventoryPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        elseif self.inventoryPanel then
+            self.inventoryPanel:ClearAllPoints()
+            self.inventoryPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
+            self.inventoryPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+        end
         if self.activeView == "REQUESTS" and self.requestOnlyMode ~= true and self.requestAdminFilterPanel then
             self.requestAdminFilterPanel:ClearAllPoints()
             self.requestAdminFilterPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
@@ -530,10 +670,16 @@ function mainTableController.Attach(mainFrame, options)
             self.exportsPanel:ClearAllPoints()
             self.exportsPanel:SetPoint("TOPLEFT", self.tableViewportFrame, "BOTTOMLEFT", 0, -18)
             self.exportsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+            if type(self.RelayoutExportActionCards) == "function" then
+                self:RelayoutExportActionCards()
+            end
         elseif self.exportsPanel then
             self.exportsPanel:ClearAllPoints()
             self.exportsPanel:SetPoint("TOPLEFT", self.viewSubtitle, "BOTTOMLEFT", 0, -24)
             self.exportsPanel:SetPoint("RIGHT", self.content, "RIGHT", -24, 0)
+            if type(self.RelayoutExportActionCards) == "function" then
+                self:RelayoutExportActionCards()
+            end
         end
         if self.activeView == "BANK_LEDGER" and self.bankLedgerPanel then
             self.bankLedgerPanel:ClearAllPoints()
