@@ -402,9 +402,21 @@ function Get-EffectiveResolvedTarget {
     $defaultDataDirectory = [string]$ResolvedTarget.dataDirectory
     $defaultLocaleDirectory = [string]$ResolvedTarget.localeDirectory
     $rootDataDirectory = Join-Path ([string]$ResolvedTarget.wowRoot) "Data"
-    $productDataDirectory = Join-Path $rootDataDirectory ([string]$ResolvedTarget.product)
+    $productDataDirectory = $null
+    $productDirectoryCandidates = New-Object System.Collections.Generic.List[string]
+    [void]$productDirectoryCandidates.Add([string]$ResolvedTarget.product)
+    if ([string]$ResolvedTarget.target -eq "PTR") {
+        [void]$productDirectoryCandidates.Add("wowxptr")
+    }
+    foreach ($productDirectoryName in $productDirectoryCandidates) {
+        $candidateDirectory = Join-Path $rootDataDirectory $productDirectoryName
+        if (Test-Path -LiteralPath $candidateDirectory) {
+            $productDataDirectory = $candidateDirectory
+            break
+        }
+    }
 
-    if ((-not (Test-Path -LiteralPath $defaultDataDirectory)) -and (Test-Path -LiteralPath $rootDataDirectory) -and (Test-Path -LiteralPath $productDataDirectory)) {
+    if ((-not (Test-Path -LiteralPath $defaultDataDirectory)) -and (Test-Path -LiteralPath $rootDataDirectory) -and (-not [string]::IsNullOrWhiteSpace([string]$productDataDirectory))) {
         return [pscustomobject]@{
             target = [string]$ResolvedTarget.target
             product = [string]$ResolvedTarget.product
@@ -418,6 +430,19 @@ function Get-EffectiveResolvedTarget {
     }
 
     return $ResolvedTarget
+}
+
+function Get-ExtractionProduct {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$ResolvedTarget
+    )
+
+    if ([string]$ResolvedTarget.target -eq "PTR" -and ([string]$ResolvedTarget.localeDirectory).ToLowerInvariant().EndsWith("\data\wowxptr")) {
+        return "wowxptr"
+    }
+
+    return [string]$ResolvedTarget.product
 }
 
 function New-RefreshSummary {
@@ -780,7 +805,7 @@ try {
                 CatalogProfile = $CatalogProfile
                 WoWRoot = $effectiveTarget.wowRoot
                 ClientDirectory = $effectiveTarget.clientDirectory
-                Product = $effectiveTarget.product
+                Product = Get-ExtractionProduct -ResolvedTarget $effectiveTarget
                 Locale = $effectiveTarget.locale
                 OutputPath = $ExtractionOutputPath
                 ProgressPath = $progressArtifacts.progressPath

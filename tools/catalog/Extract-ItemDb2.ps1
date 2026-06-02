@@ -57,12 +57,23 @@ function Get-AbsolutePath {
 function Get-ProductFromTarget {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$SelectedTarget
+        [string]$SelectedTarget,
+
+        [string]$ResolvedWoWRoot
     )
 
     switch ($SelectedTarget) {
         "Retail" { return "wow" }
-        "PTR" { return "wowt" }
+        "PTR" {
+            if (-not [string]::IsNullOrWhiteSpace($ResolvedWoWRoot)) {
+                $wowtDirectory = Join-Path $ResolvedWoWRoot "Data\wowt"
+                $wowxptrDirectory = Join-Path $ResolvedWoWRoot "Data\wowxptr"
+                if ((-not (Test-Path -LiteralPath $wowtDirectory)) -and (Test-Path -LiteralPath $wowxptrDirectory)) {
+                    return "wowxptr"
+                }
+            }
+            return "wowt"
+        }
         "Beta" { return "wow_beta" }
         default { throw "Unsupported target '$SelectedTarget' for extraction." }
     }
@@ -180,7 +191,7 @@ try {
         $resolvedProduct = if (-not [string]::IsNullOrWhiteSpace($Product)) {
             $Product
         } else {
-            Get-ProductFromTarget -SelectedTarget $Target
+            Get-ProductFromTarget -SelectedTarget $Target -ResolvedWoWRoot $resolvedWoWRoot
         }
 
         $arguments += @(

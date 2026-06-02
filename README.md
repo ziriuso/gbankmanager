@@ -76,6 +76,7 @@ Current UI ownership is intentionally split across:
   - yellow for edited rows
   - red for removed rows
 - Maintainers now use a local-client item catalog pipeline under `tools/catalog/`, targeting `Retail`, `PTR`, or `Beta`, and `Refresh-ItemCatalog.ps1` now carries extraction, merge, generated addon rebuild, plus target-scoped progress and phase-boundary resume in one command.
+- PTR maintainer targeting now accepts both the older `_ptr_` client layout and the current `_xptr_` plus shared `Data\wowxptr` layout, so local PTR refresh and deploy flows continue to work on modern installs.
 - That maintainer pipeline now defaults to `ProcurementCurrentExpansion`, and the generated addon only exports active non-deprecated rows so old manifest history does not bloat the live search payload.
 - `Import-LearnedItemCatalog.ps1` exists as the secondary maintainer path for PTR/Beta discoveries that need to land before the next confirmed target refresh.
 - Bundled catalog rows keep generic rarity in `quality` and `qualityName`, while `craftedQuality` and `craftedQualityIcon` are the addon-meaningful profession-tier fields and stay `nil` for non-crafted items.

@@ -28,7 +28,16 @@ for line in io.lines("GBankManager/GBankManager.toc") do
     end
 end
 
-assert.equal("## Interface: 120005", interfaceLine, "toc should advertise the current retail interface version")
+local itemDataInterfaceLine
+for line in io.lines("GBankManager_ItemData/GBankManager_ItemData.toc") do
+    if string.match(line, "^## Interface:") then
+        itemDataInterfaceLine = line
+        break
+    end
+end
+
+assert.equal("## Interface: 120007, 120005", interfaceLine, "toc should advertise the current retail interface versions")
+assert.equal("## Interface: 120007, 120005", itemDataInterfaceLine, "item-data toc should advertise the current retail interface versions")
 assert.equal("## Version: 1.0.0", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
 assert.equal("## X-Release-Tag: v1.0.0", releaseTagLine, "toc should advertise the current tagged release for the About panel")
 assert.equal("## Category: Guild", categoryLine, "toc should place the addon under the Guild category in game")

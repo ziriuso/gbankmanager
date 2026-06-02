@@ -102,6 +102,8 @@ Supported named targets:
 
 By default the tooling resolves those targets through `Resolve-WoWTarget.ps1`. You can still override the install root explicitly with `-WoWRoot` when a maintainer machine uses a non-default path.
 
+On current Blizzard installs, `PTR` may appear as `_xptr_` with shared extracted data under `Data\wowxptr` instead of the older `_ptr_\Data\...` layout. The maintainer resolver and refresh shell now accept both layouts.
+
 ## Deploy Notes
 
 Deployment copies both addon folders:

@@ -276,6 +276,18 @@ assert.equal("PTR", ptr.target, "ptr target should resolve with its explicit nam
 assert.equal(join_path(fixtureRootAbsolute, "_ptr_"), ptr.clientDirectory, "ptr target should use the ptr client directory")
 assert.equal("wowt", ptr.product, "ptr target should use the ptr product code")
 
+local xptrRoot = join_path(baseDir, "xptr-root")
+local xptrRootAbsolute = absolute_path(xptrRoot)
+ensure_directory(join_path(xptrRoot, "_xptr_"))
+
+local xptr = run_target_resolution({
+    "-Target", "PTR",
+    "-WoWRoot", powershell_argument(xptrRoot),
+})
+assert.equal("PTR", xptr.target, "ptr target should still resolve against the newer xptr client layout")
+assert.equal(join_path(xptrRootAbsolute, "_xptr_"), xptr.clientDirectory, "ptr target should accept the newer xptr client directory name when ptr is absent")
+assert.equal("wowt", xptr.product, "ptr target should keep the ptr product code when xptr is resolved")
+
 local beta = run_target_resolution({
     "-Target", "Beta",
     "-WoWRoot", powershell_argument(fixtureRoot),
@@ -520,6 +532,37 @@ assert.equal(join_path(fixtureRootAbsolute, "_retail_", "Data"), readySummary.da
 assert.equal(join_path(fixtureRootAbsolute, "_retail_", "Data", "en_US"), readySummary.localeDirectory, "refresh shell should report the validated locale directory")
 assert.truthy(readySummary.failureClass == nil, "refresh readiness should not include a failure classification")
 assert.truthy(readySummary.message:find("Extraction was skipped", 1, true) ~= nil, "refresh readiness should explain when extraction is skipped for a validated target layout")
+
+local xptrSharedFixture = join_path(baseDir, "wow-fixture-xptr-shared-data")
+local xptrSharedFixtureAbsolute = absolute_path(xptrSharedFixture)
+ensure_directory(join_path(xptrSharedFixture, "_xptr_"))
+ensure_directory(join_path(xptrSharedFixture, "Data"))
+ensure_directory(join_path(xptrSharedFixture, "Data", "wowxptr"))
+
+local ptrSharedReady = run_refresh({
+    "-Target", "PTR",
+    "-CatalogProfile", "Full",
+    "-Fresh",
+    "-WoWRoot", powershell_argument(xptrSharedFixture),
+    "-ManifestPath", powershell_argument(targetManifestPath),
+    "-OutputLuaPath", powershell_argument(targetOutputLuaPath),
+    "-ProgressPath", powershell_argument(targetProgressPath),
+    "-PartialRowsPath", powershell_argument(targetPartialRowsPath),
+})
+assert.truthy(ptrSharedReady.success, "refresh shell should accept PTR installs that store extracted data under the shared wowxptr root data folder")
+assert.equal(0, ptrSharedReady.exitCode, "refresh shell should exit 0 when PTR shared-root data validation passes")
+local ptrSharedSummary = parse_json_fields(ptrSharedReady.output, {
+    "status",
+    "target",
+    "clientDirectory",
+    "dataDirectory",
+    "localeDirectory",
+})
+assert.equal("ready", ptrSharedSummary.status, "PTR shared-root data should still report readiness")
+assert.equal("PTR", ptrSharedSummary.target, "PTR shared-root data should keep the resolved target")
+assert.equal(join_path(xptrSharedFixtureAbsolute, "_xptr_"), ptrSharedSummary.clientDirectory, "PTR shared-root data should report the resolved xptr client directory")
+assert.equal(join_path(xptrSharedFixtureAbsolute, "Data"), ptrSharedSummary.dataDirectory, "PTR shared-root data should report the root Data directory")
+assert.equal(join_path(xptrSharedFixtureAbsolute, "Data", "wowxptr"), ptrSharedSummary.localeDirectory, "PTR shared-root data should report the wowxptr product directory")
 
 local unknownTarget = run_refresh({
     "-Target", "Unknown",

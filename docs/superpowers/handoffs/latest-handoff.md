@@ -2,6 +2,31 @@
 
 ## Resume Here
 
+### 2026-06-01 PTR Maintainer + 12.0.7 Support Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - main addon TOC now advertises `## Interface: 120007, 120005`
+  - item-data addon TOC now advertises `## Interface: 120007, 120005`
+  - generated item-data TOC rebuilds now also stamp `120007, 120005`
+- PTR maintainer compatibility fixes:
+  - `Resolve-WoWTarget.ps1` now accepts both `_ptr_` and `_xptr_` for `PTR`
+  - `Refresh-ItemCatalog.ps1` now accepts shared-root `Data\wowxptr`
+  - extraction now passes `wowxptr` when the local PTR build manifest uses that product alias
+- Real maintainer run succeeded for `PTR`:
+  - target resolved to `C:\Gaming\World of Warcraft\_xptr_`
+  - data resolved to `C:\Gaming\World of Warcraft\Data\wowxptr`
+  - build `12.0.7.67808`
+  - normalized rows `5968`
+  - generated item count `5969`
+- Verification:
+  - `.\tools\lua\lua.exe .\tests\spec\toc_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\item_catalog_merge_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\item_catalog_target_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\item_catalog_extract_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+
 ### 2026-06-01 Post-1.0 Checkpoint
 
 - Current repo truth:
