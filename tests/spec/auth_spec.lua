@@ -64,7 +64,7 @@ assert.truthy(db.auth.blacklist["Troublemaker-Stormrage"] ~= nil, "policy normal
 
 local guildmasterContext = permissions.GetLivePlayerContext(db)
 
-assert.equal("Stormrage-GuildLead", guildmasterContext.characterKey, "auth should derive a full character key from live player identity")
+assert.equal("GuildLead-Stormrage", guildmasterContext.characterKey, "auth should derive a full Character-Server key from live player identity")
 assert.truthy(guildmasterContext.isGuildMaster, "guildmaster context should be detected from the live rank index")
 assert.truthy(permissions.Can(guildmasterContext, "full_ui", db.auth), "guildmaster should always have full ui access")
 assert.truthy(permissions.Can(guildmasterContext, "auth_manage", db.auth), "guildmaster should always be able to manage auth")

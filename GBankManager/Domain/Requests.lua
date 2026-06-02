@@ -61,6 +61,10 @@ local function actor_owns_request(request, actor)
 
     local actorKey = tostring(actor_character_key(actor) or "")
     local requesterKey = tostring(request.requesterCharacterKey or "")
+    if type(permissions.NormalizeCharacterKey) == "function" then
+        actorKey = permissions.NormalizeCharacterKey(actorKey, actor.realmName, actor.name)
+        requesterKey = permissions.NormalizeCharacterKey(requesterKey, actor.realmName, request.requester)
+    end
     if actorKey ~= "" and requesterKey ~= "" then
         return actorKey == requesterKey
     end

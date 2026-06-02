@@ -24,6 +24,8 @@
   - `Minimums` now has `Export` and `Import` actions
   - import opens a review modal, blocks rows whose imported tab does not exist locally until the user picks a local tab, allows quantity/enabled edits, and stages accepted rows through the existing draft workflow so `Save All` still controls the final write
   - accepted remote `MINIMUMS_SNAPSHOT` payloads now diff previous vs accepted rules and append equivalent local `MINIMUM_CREATED`, `MINIMUM_UPDATED`, `MINIMUM_ENABLED`, `MINIMUM_DISABLED`, and `MINIMUM_REMOVED` audit rows when those outcomes actually occurred
+  - live/sync identity is now normalized to `Character-Server` at the builder and peer-storage layers, so login hello, `/gbm debug sync`, and Sync-tab peer rows no longer drift back to `Server-Character`
+  - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
 - Focused verification in this slice:
   - `.\tools\lua\lua.exe .\tests\spec\minimums_portability_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`

@@ -80,6 +80,25 @@ local function sender_display_name(sender)
     return fullSender:match("^([^%-]+)") or fullSender
 end
 
+local function normalize_character_key(value, realmName, nameHint)
+    if type(permissions.NormalizeCharacterKey) == "function" then
+        return permissions.NormalizeCharacterKey(value, realmName, nameHint)
+    end
+
+    return tostring(value or "")
+end
+
+local function character_name_from_key(characterKey, realmName, nameHint)
+    if type(permissions.GetCharacterNameFromKey) == "function" then
+        return tostring(permissions.GetCharacterNameFromKey(characterKey, realmName, nameHint) or "")
+    end
+
+    local normalized = tostring(characterKey or "")
+    return normalized:match("^([^%-]+)") or normalized
+end
+
+local normalize_request_for_sync
+
 local function request_sync_label(request)
     request = type(request) == "table" and request or {}
     return tostring(request.requestId or request.itemName or "unknown-request")
@@ -154,8 +173,8 @@ local function requester_matches_actor(actorContext, request)
     actorContext = type(actorContext) == "table" and actorContext or {}
     request = type(request) == "table" and request or {}
 
-    local actorCharacterKey = tostring(actorContext.characterKey or "")
-    local requesterCharacterKey = tostring(request.requesterCharacterKey or "")
+    local actorCharacterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
+    local requesterCharacterKey = normalize_character_key(request.requesterCharacterKey, actorContext.realmName, request.requester)
     if actorCharacterKey == "" or requesterCharacterKey == "" or actorCharacterKey ~= requesterCharacterKey then
         return false
     end
@@ -182,9 +201,10 @@ local function actor_matches_sender(actorContext, sender)
         return false
     end
 
-    local actorCharacterKey = tostring(actorContext.characterKey or "")
-    if actorCharacterKey ~= "" and actorCharacterKey ~= sender then
-        local actorKeyCharacter = actorCharacterKey:match("^[^%-]+%-(.+)$") or actorCharacterKey
+    local actorCharacterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
+    local normalizedSenderKey = normalize_character_key(sender)
+    if actorCharacterKey ~= "" and actorCharacterKey ~= normalizedSenderKey then
+        local actorKeyCharacter = character_name_from_key(actorCharacterKey, actorContext.realmName, actorContext.name)
         if actorKeyCharacter ~= sender and actorKeyCharacter ~= senderName then
             return false
         end
@@ -195,6 +215,7 @@ end
 
 local function normalize_actor_context(actorContext)
     actorContext = type(actorContext) == "table" and actorContext or {}
+    actorContext.characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     if actorContext.inGuild == nil then
         actorContext.inGuild = true
     end
@@ -209,13 +230,14 @@ local function sender_matches_context(context, sender)
     end
 
     local contextName = tostring(context.name or "")
-    local contextCharacterKey = tostring(context.characterKey or "")
-    if sender == contextName or sender == contextCharacterKey then
+    local contextCharacterKey = normalize_character_key(context.characterKey, context.realmName, contextName)
+    local normalizedSenderKey = normalize_character_key(sender)
+    if sender == contextName or normalizedSenderKey == contextCharacterKey then
         return true
     end
 
     local senderName = sender:match("^([^%-]+)") or sender
-    if senderName ~= "" and senderName == contextName then
+    if senderName ~= "" and (senderName == contextName or senderName == character_name_from_key(contextCharacterKey, context.realmName, contextName)) then
         return true
     end
 
@@ -231,9 +253,9 @@ local function message_is_from_local_player(db, message, sender)
     message = type(message) == "table" and message or {}
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
-    local localCharacterKey = tostring(liveContext.characterKey or "")
+    local localCharacterKey = normalize_character_key(liveContext.characterKey, liveContext.realmName, liveContext.name)
     local localName = tostring(liveContext.name or "")
-    local actorCharacterKey = tostring(actorContext.characterKey or "")
+    local actorCharacterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     local actorName = tostring(actorContext.name or "")
 
     if actorCharacterKey ~= "" and actorCharacterKey == localCharacterKey then
@@ -286,7 +308,13 @@ local function immutable_request_fields_match(existing, incoming)
     }
 
     for _, key in ipairs(immutableKeys) do
-        if incoming[key] ~= nil and existing[key] ~= incoming[key] then
+        local existingValue = existing[key]
+        local incomingValue = incoming[key]
+        if key == "requesterCharacterKey" then
+            existingValue = normalize_character_key(existingValue, nil, existing.requester)
+            incomingValue = normalize_character_key(incomingValue, nil, incoming.requester)
+        end
+        if incoming[key] ~= nil and existingValue ~= incomingValue then
             return false
         end
     end
@@ -347,8 +375,8 @@ local function remember_sync_decision(message, sender, payload, accepted, catego
         messageType = tostring(message.type or ""),
         guildKey = tostring(payload.guildKey or ""),
         actorName = tostring(actorContext.name or ""),
-        actorCharacterKey = tostring(actorContext.characterKey or ""),
-        peerCharacterKey = tostring(actorContext.characterKey or (message.type == "SYNC_HELLO" and message.payload) or sender or ""),
+        actorCharacterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name),
+        peerCharacterKey = normalize_character_key(actorContext.characterKey or (message.type == "SYNC_HELLO" and message.payload) or sender or "", actorContext.realmName, actorContext.name),
         updatedAt = tonumber(message.updatedAt or 0) or 0,
     }
 
@@ -363,13 +391,12 @@ local function touch_sync_peer(db, message, sender)
     message = type(message) == "table" and message or {}
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
-    local characterKey = tostring(actorContext.characterKey or "")
+    local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     if characterKey == "" and message.type == "SYNC_HELLO" and type(message.payload) == "string" then
-        characterKey = tostring(message.payload or "")
+        characterKey = normalize_character_key(message.payload)
     end
     if characterKey == "" then
-        local senderName = tostring(sender or "")
-        characterKey = senderName
+        characterKey = normalize_character_key(sender)
     end
 
     local guildKey = tostring(payload.guildKey or active_guild_key(db))
@@ -390,9 +417,9 @@ local function mark_sync_peer_synchronized(db, message, sender)
     message = type(message) == "table" and message or {}
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
-    local characterKey = tostring(actorContext.characterKey or "")
+    local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     if characterKey == "" then
-        characterKey = tostring(sender or "")
+        characterKey = normalize_character_key(sender)
     end
 
     local guildKey = tostring(payload.guildKey or active_guild_key(db))
@@ -575,6 +602,66 @@ local function append_minimums_snapshot_audit(db, previousMinimums, nextMinimums
     end
 end
 
+local function request_snapshot_action(previousRequest, nextRequest)
+    previousRequest = type(previousRequest) == "table" and previousRequest or nil
+    nextRequest = type(nextRequest) == "table" and nextRequest or {}
+    if not previousRequest then
+        return "CREATE"
+    end
+
+    local previousApproval = tostring(previousRequest.approval or "")
+    local nextApproval = tostring(nextRequest.approval or "")
+    if previousApproval ~= nextApproval then
+        if nextApproval == "APPROVED" then
+            return "APPROVE"
+        end
+        if nextApproval == "REJECTED" then
+            return "REJECT"
+        end
+        if nextApproval == "CANCELED" then
+            return "CANCEL"
+        end
+    end
+
+    local previousFulfillment = tostring(previousRequest.fulfillment or "")
+    local nextFulfillment = tostring(nextRequest.fulfillment or "")
+    if previousFulfillment ~= nextFulfillment then
+        if nextFulfillment == "FULFILLED" then
+            return "FULFILL"
+        end
+        if nextFulfillment == "OPEN" then
+            return "REOPEN"
+        end
+    end
+
+    for _, key in ipairs({
+        "itemID",
+        "itemName",
+        "quantity",
+        "note",
+        "approvedBankTab",
+        "tabName",
+        "approval",
+        "fulfillment",
+        "updatedAt",
+    }) do
+        if previousRequest[key] ~= nextRequest[key] then
+            return "EDIT"
+        end
+    end
+
+    return nil
+end
+
+normalize_request_for_sync = function(request)
+    request = type(request) == "table" and request or {}
+    request.requesterCharacterKey = normalize_character_key(request.requesterCharacterKey, nil, request.requester)
+    if type(request.updatedBy) == "string" and string.find(request.updatedBy, "-", 1, true) then
+        request.updatedBy = normalize_character_key(request.updatedBy)
+    end
+    return request
+end
+
 local function handle_auth_policy_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
@@ -623,7 +710,7 @@ end
 local function handle_request_created(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
-    local request = type(payload.request) == "table" and payload.request or nil
+    local request = type(payload.request) == "table" and normalize_request_for_sync(payload.request) or nil
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -674,7 +761,7 @@ end
 local function handle_request_updated(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
-    local request = type(payload.request) == "table" and payload.request or nil
+    local request = type(payload.request) == "table" and normalize_request_for_sync(payload.request) or nil
     local action = tostring(payload.action or "")
     local localPolicy = current_policy(db)
     local capabilityByAction = {
@@ -842,14 +929,24 @@ local function handle_requests_snapshot(db, payload, sender)
     local mergedCount = 0
     for _, request in ipairs(requests) do
         if type(request) == "table" and tostring(request.requestId or "") ~= "" then
+            request = normalize_request_for_sync(request)
             local existing = find_request(db, request.requestId)
             if not existing then
                 upsert_request(db, request)
+                append_request_sync_audit(db, "CREATE", nil, request, actorContext, request.note)
                 mergedCount = mergedCount + 1
             elseif immutable_request_fields_match(existing, request) then
                 local resolved = type(coordinator.ResolveRequestConflict) == "function" and coordinator.ResolveRequestConflict(existing, request) or request
                 if resolved == request then
+                    local previousRequest = {}
+                    for key, value in pairs(existing or {}) do
+                        previousRequest[key] = value
+                    end
                     upsert_request(db, request)
+                    local action = request_snapshot_action(previousRequest, request)
+                    if action then
+                        append_request_sync_audit(db, action, previousRequest, request, actorContext, request.note)
+                    end
                     mergedCount = mergedCount + 1
                 end
             end

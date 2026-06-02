@@ -768,6 +768,24 @@ local importPayload = portability.Export({
     },
 })
 
+local formattedImportPayload = [[{
+  "schema": "gbankmanager.minimums",
+  "version": 1,
+  "sourceGuild": "Guild Testers",
+  "rules": [
+    {
+      "itemID": 241324,
+      "itemName": "Flask of the Blood Knights",
+      "scope": "TAB",
+      "tabName": "Missing Imported Tab",
+      "quantity": 77,
+      "enabled": true,
+      "craftedQuality": 2,
+      "craftedQualityIcon": "Professions-Icon-Quality-12-Tier2-Inv"
+    }
+  ]
+}]]
+
 current_db().minimums = {}
 current_db().requests = {}
 current_db().auditLog = {}
@@ -778,11 +796,23 @@ mainFrame.minimumPendingDeleted = {}
 mainFrame.selectedMinimumKey = nil
 mainFrame:RefreshView()
 
+assert.truthy(mainFrame.minimumImportModal:GetWidth() >= 700, "minimum import modal should widen enough to review larger payloads and row content comfortably")
+assert.truthy(mainFrame.minimumImportInput.EditBox ~= nil, "minimum import should use the shared scrollable multi-line input surface")
+mainFrame.minimumImportInput:SetText(formattedImportPayload)
+assert.equal(formattedImportPayload, mainFrame.minimumImportInput:GetText(), "minimum import input should preserve pasted payload formatting")
+
 mainFrame:PreviewImportedMinimums(importPayload)
 assert.equal(1, #(mainFrame.minimumImportReviewRows or {}), "minimum import preview should create one staged review row")
 assert.equal("needs_tab", mainFrame.minimumImportReviewRows[1].status, "import preview should flag missing local bank tabs before apply")
 assert.equal("", tostring(mainFrame.minimumImportReviewRows[1].resolvedTabName or ""), "import preview should leave unresolved local bank tabs blank")
 assert.truthy(mainFrame.minimumImportApplyButton.enabled == false, "import preview should keep Apply disabled while a row still needs tab reassignment")
+assert.truthy(mainFrame.minimumImportReviewViewport ~= nil, "minimum import preview should render review rows inside a scrollable viewport")
+assert.truthy(mainFrame.minimumImportReviewScrollChild ~= nil, "minimum import preview should expose a scroll child for long imported rule lists")
+assert.truthy(mainFrame.minimumImportReviewRowsFrames[1].parent == mainFrame.minimumImportReviewScrollChild, "minimum import review rows should live inside the scrollable review child instead of the fixed modal surface")
+assert.truthy(mainFrame.minimumImportReviewRowsFrames[1].itemQualityIcon ~= nil, "minimum import review rows should render a crafted-quality icon slot")
+assert.truthy(mainFrame.minimumImportReviewRowsFrames[1].itemQualityIcon:IsShown(), "minimum import review rows should show the crafted-quality icon when the imported row carries one")
+assert.equal("Professions-Icon-Quality-12-Tier2-Inv", mainFrame.minimumImportReviewRowsFrames[1].itemQualityIcon.atlas, "minimum import review rows should preserve the imported crafted-quality icon atlas")
+assert.truthy(select(2, mainFrame.minimumImportApplyButton:GetPoint(1)) == mainFrame.minimumImportModal, "minimum import action buttons should stay anchored to the modal footer")
 
 mainFrame:SetImportedMinimumRowTab(1, "Alchemy")
 assert.equal("Alchemy", mainFrame.minimumImportReviewRows[1].resolvedTabName, "import review edits should allow the user to remap the imported row to a detected local tab")

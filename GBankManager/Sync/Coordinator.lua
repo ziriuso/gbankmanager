@@ -81,7 +81,7 @@ local function build_character_key(name, realmName)
         return resolvedName
     end
 
-    return string.format("%s-%s", resolvedRealm, resolvedName)
+    return string.format("%s-%s", resolvedName, resolvedRealm)
 end
 
 local function append_unique_recipient(recipients, seenKeys, recipient)

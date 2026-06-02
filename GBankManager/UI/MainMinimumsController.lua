@@ -391,7 +391,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumAddCancelButton:SetPoint("RIGHT", mainFrame.minimumAddButton, "LEFT", -8, 0)
 
     mainFrame.minimumImportModal = mainFrame.minimumImportModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
-    mainFrame.minimumImportModal:SetSize(520, 360)
+    mainFrame.minimumImportModal:SetSize(760, 560)
     mainFrame.minimumImportModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
     applyPanelStyle(mainFrame.minimumImportModal, theme.colors.panelAlt)
     mainFrame.minimumImportModal:Hide()
@@ -405,17 +405,62 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumImportStatusText = mainFrame.minimumImportStatusText or makeLabel(mainFrame.minimumImportModal, "", "GameFontHighlightSmall")
     mainFrame.minimumImportStatusText:SetPoint("TOPLEFT", mainFrame.minimumImportModalTitle, "BOTTOMLEFT", 0, -8)
     if type(mainFrame.minimumImportStatusText.SetWidth) == "function" then
-        mainFrame.minimumImportStatusText:SetWidth(480)
+        mainFrame.minimumImportStatusText:SetWidth(712)
     end
 
-    mainFrame.minimumImportInput = mainFrame.minimumImportInput or makeInput(mainFrame.minimumImportModal, 488, 120)
+    mainFrame.minimumImportInput = mainFrame.minimumImportInput or makeExportOutputInput(mainFrame.minimumImportModal, 728, 124)
     mainFrame.minimumImportInput:SetPoint("TOPLEFT", mainFrame.minimumImportStatusText, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumImportInput:EnableMouseWheel(true)
+    mainFrame.minimumImportInput.verticalScroll = mainFrame.minimumImportInput.verticalScroll or 0
+    mainFrame.minimumImportInput.verticalScrollRange = mainFrame.minimumImportInput.verticalScrollRange or 0
+    if type(mainFrame.minimumImportInput.SetVerticalScroll) ~= "function" then
+        function mainFrame.minimumImportInput:SetVerticalScroll(value)
+            local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+            self.verticalScroll = clamped
+        end
+    end
+    if type(mainFrame.minimumImportInput.SetBackdrop) == "function" then
+        mainFrame.minimumImportInput:SetBackdrop(nil)
+    end
+    mainFrame.minimumImportInputScrollFrame = mainFrame.minimumImportInput
+    mainFrame.minimumImportInputScrollChild = mainFrame.minimumImportInput.EditBox
+    if type(mainFrame.minimumImportInputScrollChild.SetBackdrop) == "function" then
+        mainFrame.minimumImportInputScrollChild:SetBackdrop(nil)
+    end
 
-    mainFrame.minimumImportReviewPanel = mainFrame.minimumImportReviewPanel or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
-    mainFrame.minimumImportReviewPanel:SetPoint("TOPLEFT", mainFrame.minimumImportInput, "BOTTOMLEFT", 0, -10)
-    mainFrame.minimumImportReviewPanel:SetPoint("RIGHT", mainFrame.minimumImportModal, "RIGHT", -16, 0)
-    mainFrame.minimumImportReviewPanel:SetHeight(150)
-    applyPanelStyle(mainFrame.minimumImportReviewPanel, theme.colors.panel)
+    mainFrame.minimumImportReviewViewport = mainFrame.minimumImportReviewViewport or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
+    mainFrame.minimumImportReviewViewport:SetPoint("TOPLEFT", mainFrame.minimumImportInput, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumImportReviewViewport:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportModal, "BOTTOMRIGHT", -16, 52)
+    applyPanelStyle(mainFrame.minimumImportReviewViewport, theme.colors.panel)
+
+    mainFrame.minimumImportReviewScrollFrame = mainFrame.minimumImportReviewScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.minimumImportReviewViewport, "BackdropTemplate")
+    mainFrame.minimumImportReviewScrollFrame:SetPoint("TOPLEFT", mainFrame.minimumImportReviewViewport, "TOPLEFT", 0, 0)
+    mainFrame.minimumImportReviewScrollFrame:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportReviewViewport, "BOTTOMRIGHT", 0, 0)
+    mainFrame.minimumImportReviewScrollFrame:EnableMouseWheel(true)
+    mainFrame.minimumImportReviewScrollFrame.verticalScroll = mainFrame.minimumImportReviewScrollFrame.verticalScroll or 0
+    mainFrame.minimumImportReviewScrollFrame.verticalScrollRange = mainFrame.minimumImportReviewScrollFrame.verticalScrollRange or 0
+    if type(mainFrame.minimumImportReviewScrollFrame.SetVerticalScroll) ~= "function" then
+        function mainFrame.minimumImportReviewScrollFrame:SetVerticalScroll(value)
+            local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+            self.verticalScroll = clamped
+        end
+    end
+    if type(mainFrame.minimumImportReviewScrollFrame.SetBackdrop) == "function" then
+        mainFrame.minimumImportReviewScrollFrame:SetBackdrop(nil)
+    end
+
+    mainFrame.minimumImportReviewScrollChild = mainFrame.minimumImportReviewScrollChild or _G.CreateFrame("Frame", nil, mainFrame.minimumImportReviewScrollFrame, "BackdropTemplate")
+    mainFrame.minimumImportReviewScrollChild:SetPoint("TOPLEFT", mainFrame.minimumImportReviewScrollFrame, "TOPLEFT", 0, 0)
+    if type(mainFrame.minimumImportReviewScrollChild.SetWidth) == "function" then
+        mainFrame.minimumImportReviewScrollChild:SetWidth(728)
+    end
+    mainFrame.minimumImportReviewScrollChild:SetHeight(1)
+    if type(mainFrame.minimumImportReviewScrollChild.SetBackdrop) == "function" then
+        mainFrame.minimumImportReviewScrollChild:SetBackdrop(nil)
+    end
+    mainFrame.minimumImportReviewScrollFrame:SetScrollChild(mainFrame.minimumImportReviewScrollChild)
+
+    mainFrame.minimumImportReviewPanel = mainFrame.minimumImportReviewViewport
     mainFrame.minimumImportReviewRowsFrames = mainFrame.minimumImportReviewRowsFrames or {}
 
     mainFrame.minimumImportApplyButton = mainFrame.minimumImportApplyButton or makeButton(mainFrame.minimumImportModal, 88, 28, "Apply")
@@ -1692,6 +1737,7 @@ function mainMinimumsController.Attach(mainFrame, options)
                 rowFrame.tabDropdownPanel:Hide()
             end
         end
+        self:RefreshMinimumImportInputScrollMetrics()
     end
 
     function mainFrame:UpdateMinimumImportApplyState()
@@ -1712,42 +1758,85 @@ function mainMinimumsController.Attach(mainFrame, options)
         return self:GetKnownMinimumBankTabs(row)
     end
 
+    function mainFrame:RefreshMinimumImportInputScrollMetrics()
+        local scrollFrame = self.minimumImportInputScrollFrame
+        local scrollChild = self.minimumImportInputScrollChild
+        local outputInput = self.minimumImportInput
+        if not scrollFrame or not scrollChild or not outputInput then
+            return
+        end
+
+        local lineHeight = 14
+        local padding = 16
+        local minimumInputHeight = 120
+        local lineCount = count_lines(outputInput:GetText() or "")
+        local contentHeight = math.max(minimumInputHeight, (lineCount * lineHeight) + 12)
+        local childHeight = math.max(scrollFrame:GetHeight(), contentHeight + padding)
+
+        if type(scrollChild.SetWidth) == "function" then
+            scrollChild:SetWidth(math.max(0, scrollFrame:GetWidth() - 12))
+        end
+        scrollChild:SetHeight(childHeight)
+        scrollFrame.verticalScrollRange = math.max(0, childHeight - scrollFrame:GetHeight())
+        scrollFrame:SetVerticalScroll(scrollFrame.verticalScroll or 0)
+    end
+
     function mainFrame:RefreshMinimumImportReviewRows()
         if self.isRefreshingMinimumImportReview == true then
             return
         end
         self.isRefreshingMinimumImportReview = true
-        local rowHeight = 48
+        local rowHeight = 56
         local visibleRows = #(self.minimumImportReviewRows or {})
-        self.minimumImportReviewPanel:SetHeight(math.max(48, (visibleRows * rowHeight) + 8))
+        local scrollChild = self.minimumImportReviewScrollChild or self.minimumImportReviewPanel
+        local childHeight = math.max(1, (visibleRows * rowHeight) + 8)
+        if scrollChild and type(scrollChild.SetHeight) == "function" then
+            scrollChild:SetHeight(childHeight)
+        end
+        if scrollChild and type(scrollChild.SetWidth) == "function" and self.minimumImportReviewScrollFrame then
+            scrollChild:SetWidth(math.max(0, self.minimumImportReviewScrollFrame:GetWidth() - 12))
+        end
+        if self.minimumImportReviewScrollFrame then
+            self.minimumImportReviewScrollFrame.verticalScrollRange = math.max(0, childHeight - self.minimumImportReviewScrollFrame:GetHeight())
+            self.minimumImportReviewScrollFrame:SetVerticalScroll(self.minimumImportReviewScrollFrame.verticalScroll or 0)
+        end
 
         for rowIndex, row in ipairs(self.minimumImportReviewRows or {}) do
             local rowFrame = self.minimumImportReviewRowsFrames[rowIndex]
             if not rowFrame then
-                rowFrame = _G.CreateFrame("Frame", nil, self.minimumImportReviewPanel, "BackdropTemplate")
+                rowFrame = _G.CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
                 applyPanelStyle(rowFrame, theme.colors.panelAlt)
+                rowFrame.itemQualityIcon = rowFrame.itemQualityIcon or rowFrame:CreateTexture()
+                rowFrame.itemQualityIcon:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -8)
+                if type(rowFrame.itemQualityIcon.SetWidth) == "function" then
+                    rowFrame.itemQualityIcon:SetWidth(16)
+                end
+                if type(rowFrame.itemQualityIcon.SetHeight) == "function" then
+                    rowFrame.itemQualityIcon:SetHeight(16)
+                end
+                rowFrame.itemQualityIcon:Hide()
                 rowFrame.itemText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
-                rowFrame.itemText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -6)
+                rowFrame.itemText:SetPoint("LEFT", rowFrame.itemQualityIcon, "RIGHT", 6, 0)
                 if type(rowFrame.itemText.SetWidth) == "function" then
-                    rowFrame.itemText:SetWidth(188)
+                    rowFrame.itemText:SetWidth(236)
                 end
 
                 rowFrame.importedTabText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
-                rowFrame.importedTabText:SetPoint("TOPLEFT", rowFrame.itemText, "BOTTOMLEFT", 0, -4)
+                rowFrame.importedTabText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -30)
                 if type(rowFrame.importedTabText.SetWidth) == "function" then
-                    rowFrame.importedTabText:SetWidth(188)
+                    rowFrame.importedTabText:SetWidth(252)
                 end
 
                 rowFrame.statusText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
-                rowFrame.statusText:SetPoint("LEFT", rowFrame, "LEFT", 206, 10)
+                rowFrame.statusText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 270, -8)
 
-                rowFrame.tabButton = makeButton(rowFrame, 116, 22, "Select Bank Tab")
-                rowFrame.tabButton:SetPoint("LEFT", rowFrame, "LEFT", 206, -10)
+                rowFrame.tabButton = makeButton(rowFrame, 140, 22, "Select Bank Tab")
+                rowFrame.tabButton:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 270, -28)
                 rowFrame.tabDropdownPanel = _G.CreateFrame("Frame", nil, rowFrame, "BackdropTemplate")
                 applyPanelStyle(rowFrame.tabDropdownPanel, theme.colors.panelAlt)
                 rowFrame.tabDropdownOptions = {}
 
-                rowFrame.quantityInput = makeInput(rowFrame, 48, 22)
+                rowFrame.quantityInput = makeInput(rowFrame, 56, 22)
                 rowFrame.quantityInput:SetPoint("LEFT", rowFrame.tabButton, "RIGHT", 8, 0)
 
                 rowFrame.enabledButton = makeButton(rowFrame, 68, 22, "Yes")
@@ -1761,8 +1850,8 @@ function mainMinimumsController.Attach(mainFrame, options)
             end
 
             rowFrame:ClearAllPoints()
-            rowFrame:SetPoint("TOPLEFT", self.minimumImportReviewPanel, "TOPLEFT", 4, -4 - ((rowIndex - 1) * rowHeight))
-            rowFrame:SetPoint("RIGHT", self.minimumImportReviewPanel, "RIGHT", -4, 0)
+            rowFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -4 - ((rowIndex - 1) * rowHeight))
+            rowFrame:SetPoint("RIGHT", scrollChild, "RIGHT", -4, 0)
             rowFrame:SetHeight(rowHeight - 2)
             rowFrame:Show()
 
@@ -1821,6 +1910,19 @@ function mainMinimumsController.Attach(mainFrame, options)
                 self:RefreshMinimumImportReviewRows()
             end)
             rowFrame.tabDropdownPanel:Hide()
+
+            local tierAtlas = row.craftedQualityPreferredAtlas or row.craftedQualityDisplayAtlas or row.craftedQualityIcon
+            local resolvedAtlas = non_inventory_atlas(tonumber(row.itemID), tierAtlas, tonumber(row.craftedQuality), tonumber(row.craftedQualityMax or row.craftedQualityFamilySize))
+            if tostring(resolvedAtlas or "") ~= "" then
+                if type(rowFrame.itemQualityIcon.SetAtlas) == "function" then
+                    rowFrame.itemQualityIcon:SetAtlas(resolvedAtlas)
+                else
+                    rowFrame.itemQualityIcon.atlas = resolvedAtlas
+                end
+                rowFrame.itemQualityIcon:Show()
+            else
+                rowFrame.itemQualityIcon:Hide()
+            end
         end
 
         for rowIndex = visibleRows + 1, #(self.minimumImportReviewRowsFrames or {}) do
@@ -2416,6 +2518,7 @@ function mainMinimumsController.Attach(mainFrame, options)
     end)
 
     mainFrame.minimumImportButton:SetScript("OnClick", function()
+        mainFrame:RefreshMinimumImportInputScrollMetrics()
         mainFrame.minimumImportModal:Show()
     end)
 
@@ -2434,6 +2537,18 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     mainFrame.minimumImportApplyButton:SetScript("OnClick", function()
         return mainFrame:ApplyReviewedImportedMinimums()
+    end)
+
+    mainFrame.minimumImportInput.EditBox:SetScript("OnTextChanged", function()
+        mainFrame:RefreshMinimumImportInputScrollMetrics()
+    end)
+
+    mainFrame.minimumImportInputScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
+    end)
+
+    mainFrame.minimumImportReviewScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
     end)
 
     mainFrame.minimumExportOutput.EditBox:SetScript("OnTextChanged", function()

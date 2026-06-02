@@ -266,9 +266,9 @@ onEvent(events, "PLAYER_LOGIN")
 
 assert.equal("GBankManager", _G.C_ChatInfo.registeredPrefixes[1], "player login should register the addon message prefix")
 assert.equal(1, #_G.C_ChatInfo.sentMessages, "player login should send a sync hello")
-assert.equal("SYNC_HELLO|0|Stormrage-SyncTester", _G.C_ChatInfo.sentMessages[1].payload, "sync hello should include the current player character key")
+assert.equal("SYNC_HELLO|0|SyncTester-Stormrage", _G.C_ChatInfo.sentMessages[1].payload, "sync hello should include the current player character key")
 local loginChatText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
-assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for Stormrage-SyncTester.", 1, true) == nil, "player login should not add self hello noise to chat")
+assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for SyncTester-Stormrage.", 1, true) == nil, "player login should not add self hello noise to chat")
 
 local db = ns.state.db
 db.requests = {}
@@ -291,7 +291,7 @@ local remoteHelloPayload = codec.EncodeTable({
     payload = "Stormrage-MemberOne",
 })
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "MemberOne")
-local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
 assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic alone should not mark the peer as synchronized")
 
@@ -351,11 +351,12 @@ local bootstrappedHelloPayload = codec.EncodeTable({
 })
 local bootstrappedHelloAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedHelloPayload, "GUILD", "MemberOne")
 local bootstrappedHelloDb = ns.modules.store.GetDatabase()
-local bootstrappedHelloPeer = ((((bootstrappedHelloDb.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+local bootstrappedHelloPeer = ((((bootstrappedHelloDb.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.truthy(bootstrappedHelloAccepted, "sync hello traffic should promote the active guild identity when the local root still points at Unknown")
 assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "sync hello traffic should promote the active guild root key from the live guild context")
+assert.equal("MemberOne-Stormrage", tostring(bootstrappedHelloPeer.characterKey or ""), "sync hello traffic should canonicalize stored peer keys to Character-Server order")
 assert.equal(91, tonumber(bootstrappedHelloPeer.lastSeen or 0), "sync hello traffic should record peers under the promoted live guild instead of Unknown")
-assert.equal(nil, ((((bootstrappedHelloDb.syncState or {}).peers or {})["Unknown"] or {})["Stormrage-MemberOne"]), "sync hello traffic should stop recording peers under the Unknown guild bucket once the live guild is known")
+assert.equal(nil, ((((bootstrappedHelloDb.syncState or {}).peers or {})["Unknown"] or {})["MemberOne-Stormrage"]), "sync hello traffic should stop recording peers under the Unknown guild bucket once the live guild is known")
 
 local unknownSnapshotRoot = ns.modules.defaults.CreateDatabaseRoot("Unknown Guild")
 _G.GBankManagerDB = unknownSnapshotRoot
@@ -368,7 +369,7 @@ local bootstrappedRequestsSnapshotPayload = codec.EncodeTable({
     payload = {
         guildKey = "Guild Testers",
         actorContext = {
-            characterKey = "Stormrage-OfficerOne",
+            characterKey = "OfficerOne-Stormrage",
             guildRankIndex = 1,
             guildRankName = "Officer",
             inGuild = true,
@@ -379,7 +380,7 @@ local bootstrappedRequestsSnapshotPayload = codec.EncodeTable({
             {
                 requestId = "req-bootstrap-snapshot-1",
                 requester = "MemberOne",
-                requesterCharacterKey = "Stormrage-MemberOne",
+                requesterCharacterKey = "MemberOne-Stormrage",
                 itemID = 2001,
                 itemName = "Bootstrap Snapshot Oil",
                 quantity = 2,
@@ -393,12 +394,14 @@ local bootstrappedRequestsSnapshotPayload = codec.EncodeTable({
         },
     },
 })
-local bootstrappedRequestsSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedRequestsSnapshotPayload, "GUILD", "OfficerOne")
+local bootstrappedRequestsSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", bootstrappedRequestsSnapshotPayload, "GUILD", "OfficerOne-Stormrage")
 local bootstrappedRequestsSnapshotDb = ns.modules.store.GetDatabase()
 assert.truthy(bootstrappedRequestsSnapshotAccepted, "request snapshot sync should promote the active guild identity before wrong-guild validation runs")
 assert.equal("Guild Testers", tostring((((bootstrappedRequestsSnapshotDb or {}).meta or {}).guildName) or ""), "request snapshot sync should promote the local database guild identity from the payload guild key")
 assert.equal("Guild Testers", tostring((((ns.state or {}).dbRoot or {}).activeGuildKey) or ""), "request snapshot sync should promote the active guild root key from the payload guild key")
 assert.equal(1, #(bootstrappedRequestsSnapshotDb.requests or {}), "request snapshot sync should still replace the local request cache after guild promotion")
+assert.equal("REQUEST_CREATED", ((bootstrappedRequestsSnapshotDb.auditLog or {})[#(bootstrappedRequestsSnapshotDb.auditLog or {})] or {}).type, "request snapshot sync should reconstruct created request history when the snapshot is what brings a client up to date")
+assert.equal("OfficerOne", ((bootstrappedRequestsSnapshotDb.auditLog or {})[#(bootstrappedRequestsSnapshotDb.auditLog or {})] or {}).actor, "request snapshot history reconstruction should use the remote actor name")
 
 _G.GBankManagerDB = runtimeBeforeGuildBootstrap
 ns.state.db = stateDbBeforeGuildBootstrap
@@ -489,7 +492,7 @@ assert.equal(1, #db.requests, "sync events should accept guild request-created p
 assert.equal("req-remote-1", db.requests[1].requestId, "sync events should persist synced request ids")
 assert.equal("REQUEST_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "accepted synced request creation should append local history")
 assert.equal("GBankManager: Synced request req-remote-1 from MemberOne.", last_chat_message(), "accepted synced request creation should report chat feedback")
-local syncedPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-MemberOne"] or {})
+local syncedPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.truthy(tonumber(syncedPeerEntry.lastSynchronizedAt or 0) >= 91, "accepted sync payloads should mark the peer as synchronized")
 
 local forgedRequestPayload = codec.EncodeTable({
@@ -683,7 +686,7 @@ local immutableFieldMutationPayload = codec.EncodeTable({
 local immutableMutationAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", immutableFieldMutationPayload, "GUILD", "OfficerOne")
 assert.truthy(not immutableMutationAccepted, "sync events should reject request updates that mutate immutable request identity fields")
 assert.equal("MemberOne", db.requests[1].requester, "invalid sync updates should not rewrite requester identity")
-assert.equal("Stormrage-MemberOne", db.requests[1].requesterCharacterKey, "invalid sync updates should not rewrite requester character keys")
+assert.equal("MemberOne-Stormrage", db.requests[1].requesterCharacterKey, "invalid sync updates should preserve canonical requester character keys")
 assert.equal(2002, db.requests[1].itemID, "invalid sync updates should not rewrite item identity")
 
 db.requests[2] = {

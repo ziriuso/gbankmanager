@@ -403,7 +403,7 @@ local function run_request_sync_contract(db)
         payload = {
             guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
-                characterKey = "Stormrage-MemberOne",
+                characterKey = "MemberOne-Stormrage",
                 guildRankIndex = 2,
                 guildRankName = "Raider",
                 inGuild = true,
@@ -413,14 +413,14 @@ local function run_request_sync_contract(db)
             request = {
                 requestId = "req-live-sync-1",
                 requester = "MemberOne",
-                requesterCharacterKey = "Stormrage-MemberOne",
+                requesterCharacterKey = "MemberOne-Stormrage",
                 itemID = 4004,
                 itemName = "Sync Smoke Flask",
                 quantity = 2,
                 approval = "PENDING",
                 fulfillment = "OPEN",
                 createdAt = 301,
-                createdBy = "Stormrage-MemberOne",
+                createdBy = "MemberOne-Stormrage",
                 updatedAt = 301,
             },
         },
@@ -438,7 +438,7 @@ local function run_request_sync_contract(db)
             action = "APPROVE",
             guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
             actorContext = {
-                characterKey = "Stormrage-OfficerOne",
+                characterKey = "OfficerOne-Stormrage",
                 guildRankIndex = 1,
                 guildRankName = "Officer",
                 inGuild = true,
@@ -448,14 +448,14 @@ local function run_request_sync_contract(db)
             request = {
                 requestId = "req-live-sync-1",
                 requester = "DifferentRequester",
-                requesterCharacterKey = "Stormrage-DifferentRequester",
+                requesterCharacterKey = "DifferentRequester-Stormrage",
                 itemID = 9999,
                 itemName = "Forged Sync Smoke",
                 quantity = 2,
                 approval = "APPROVED",
                 fulfillment = "OPEN",
                 createdAt = 301,
-                createdBy = "Stormrage-MemberOne",
+                createdBy = "MemberOne-Stormrage",
                 updatedAt = 302,
             },
         },
@@ -467,7 +467,7 @@ local function run_request_sync_contract(db)
     end
 
     local request = db.requests[1]
-    if request.requester ~= "MemberOne" or request.requesterCharacterKey ~= "Stormrage-MemberOne" or request.itemID ~= 4004 then
+    if request.requester ~= "MemberOne" or request.requesterCharacterKey ~= "MemberOne-Stormrage" or request.itemID ~= 4004 then
         return smoke_result("request_sync_contract", false, "forged request update mutated immutable request identity fields")
     end
 
