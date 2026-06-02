@@ -125,12 +125,32 @@ assert.truthy(type(mainFrame.optionsSyncTable) == "table", "options Sync should 
 assert.equal("Character", (((mainFrame.optionsSyncColumnHeaders or {})[1] or {}).text), "options Sync should show a Character column")
 assert.equal("Last Time Seen", (((mainFrame.optionsSyncColumnHeaders or {})[2] or {}).text), "options Sync should show a Last Time Seen column")
 assert.equal("Last Time Synchronized", (((mainFrame.optionsSyncColumnHeaders or {})[3] or {}).text), "options Sync should show a Last Time Synchronized column")
+assert.equal("", tostring((((mainFrame.optionsSyncColumnHeaders or {})[4] or {}).text) or ""), "options Sync should reserve a trailing action column for peer cleanup")
 assert.truthy(type(mainFrame.optionsSyncTableRowsData) == "table" and #mainFrame.optionsSyncTableRowsData >= 1, "options Sync should populate at least one peer row from persisted history")
 assert.truthy((mainFrame.optionsSyncTableScrollChild:GetWidth() or 0) > 0, "options Sync should size its scroll child to a real drawable width for live row rendering")
 local firstSyncRow = (mainFrame.optionsSyncTableRowsData or {})[1] or {}
 assert.equal("OfficerOne-Stormrage", tostring(firstSyncRow.character or ""), "sync rows should render Name-Realm values")
 assert.truthy(string.find(tostring(firstSyncRow.lastSeen or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSeen or "") ~= "", "sync rows should show a formatted last-seen timestamp")
 assert.truthy(string.find(tostring(firstSyncRow.lastSynchronized or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSynchronized or "") ~= "", "sync rows should show a formatted last-synchronized timestamp")
+local firstSyncRowFrame = ((mainFrame.optionsSyncTableRows or {})[1] or {})
+assert.truthy(type(firstSyncRowFrame.removeButton) == "table", "options Sync should expose an inline remove control for each stored peer row")
+assert.equal("danger", tostring(firstSyncRowFrame.removeButton.gbmButtonVariant or ""), "sync peer remove should use the destructive button styling")
+firstSyncRowFrame.removeButton:GetScript("OnClick")(firstSyncRowFrame.removeButton)
+assert.equal(0, #(mainFrame.optionsSyncTableRowsData or {}), "sync peer remove should immediately clear the deleted peer row from the Sync table")
+assert.truthy(string.find(mainFrame.optionsSyncStatusText:GetText() or "", "Removed sync peer", 1, true) ~= nil, "sync peer remove should report visible cleanup feedback")
+peerState.TouchPeer(current_db(), {
+    guildKey = "Guild Testers",
+    characterKey = "OfficerOne-Stormrage",
+    version = "0.9.0-beta.3",
+    messageType = "SYNC_HELLO",
+    seenAt = 1717000000,
+})
+peerState.MarkSynchronized(current_db(), {
+    guildKey = "Guild Testers",
+    characterKey = "OfficerOne-Stormrage",
+    synchronizedAt = 1717000300,
+})
+mainFrame:RefreshSyncControls()
 assert.equal("Sync Requests", mainFrame.optionsSyncRequestsButton.labelText:GetText(), "sync tab should expose a request sync action")
 assert.equal("Sync Minimums", mainFrame.optionsSyncMinimumsButton.labelText:GetText(), "sync tab should expose a minimums sync action")
 assert.equal("Sync Ledger", mainFrame.optionsSyncLedgerButton.labelText:GetText(), "sync tab should expose a ledger sync action")
@@ -142,7 +162,7 @@ assert.truthy(mainFrame.optionsSyncAllButton:IsEnabled(), "full-shell users shou
 local incomingHelloPayload = syncCodec.EncodeTable({
     type = "SYNC_HELLO",
     updatedAt = 1717000400,
-    payload = "Stormrage-MemberTwo",
+    payload = "MemberTwo-Stormrage",
 })
 local incomingHelloAccepted = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", incomingHelloPayload, "GUILD", "MemberTwo")
 assert.truthy(incomingHelloAccepted, "sync tab regression should accept guild hello traffic while the panel is already open")

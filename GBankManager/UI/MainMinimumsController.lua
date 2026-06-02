@@ -402,14 +402,29 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumImportModalTitle = mainFrame.minimumImportModalTitle or makeLabel(mainFrame.minimumImportModal, "Import Minimums", "GameFontHighlight")
     mainFrame.minimumImportModalTitle:SetPoint("TOPLEFT", mainFrame.minimumImportModal, "TOPLEFT", 16, -16)
 
+    mainFrame.minimumImportInstructionText = mainFrame.minimumImportInstructionText or makeLabel(
+        mainFrame.minimumImportModal,
+        "Paste your portable Minimums import string below, then click Preview to review and edit the rows before Apply.",
+        "GameFontHighlightSmall"
+    )
+    mainFrame.minimumImportInstructionText:SetPoint("TOPLEFT", mainFrame.minimumImportModalTitle, "BOTTOMLEFT", 0, -8)
+    if type(mainFrame.minimumImportInstructionText.SetWidth) == "function" then
+        mainFrame.minimumImportInstructionText:SetWidth(712)
+    end
+
     mainFrame.minimumImportStatusText = mainFrame.minimumImportStatusText or makeLabel(mainFrame.minimumImportModal, "", "GameFontHighlightSmall")
-    mainFrame.minimumImportStatusText:SetPoint("TOPLEFT", mainFrame.minimumImportModalTitle, "BOTTOMLEFT", 0, -8)
+    mainFrame.minimumImportStatusText:SetPoint("TOPLEFT", mainFrame.minimumImportInstructionText, "BOTTOMLEFT", 0, -8)
     if type(mainFrame.minimumImportStatusText.SetWidth) == "function" then
         mainFrame.minimumImportStatusText:SetWidth(712)
     end
 
-    mainFrame.minimumImportInput = mainFrame.minimumImportInput or makeExportOutputInput(mainFrame.minimumImportModal, 728, 124)
-    mainFrame.minimumImportInput:SetPoint("TOPLEFT", mainFrame.minimumImportStatusText, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumImportInputSurface = mainFrame.minimumImportInputSurface or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
+    mainFrame.minimumImportInputSurface:SetSize(728, 144)
+    mainFrame.minimumImportInputSurface:SetPoint("TOPLEFT", mainFrame.minimumImportStatusText, "BOTTOMLEFT", 0, -10)
+    applyPanelStyle(mainFrame.minimumImportInputSurface, theme.colors.panel)
+
+    mainFrame.minimumImportInput = mainFrame.minimumImportInput or makeExportOutputInput(mainFrame.minimumImportInputSurface, 712, 128)
+    mainFrame.minimumImportInput:SetPoint("TOPLEFT", mainFrame.minimumImportInputSurface, "TOPLEFT", 8, -8)
     mainFrame.minimumImportInput:EnableMouseWheel(true)
     mainFrame.minimumImportInput.verticalScroll = mainFrame.minimumImportInput.verticalScroll or 0
     mainFrame.minimumImportInput.verticalScrollRange = mainFrame.minimumImportInput.verticalScrollRange or 0
@@ -427,11 +442,13 @@ function mainMinimumsController.Attach(mainFrame, options)
     if type(mainFrame.minimumImportInputScrollChild.SetBackdrop) == "function" then
         mainFrame.minimumImportInputScrollChild:SetBackdrop(nil)
     end
+    mainFrame.minimumImportInput:SetTextInsets(4, 4, 4, 4)
 
     mainFrame.minimumImportReviewViewport = mainFrame.minimumImportReviewViewport or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
-    mainFrame.minimumImportReviewViewport:SetPoint("TOPLEFT", mainFrame.minimumImportInput, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumImportReviewViewport:SetPoint("TOPLEFT", mainFrame.minimumImportInputSurface, "BOTTOMLEFT", 0, -10)
     mainFrame.minimumImportReviewViewport:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportModal, "BOTTOMRIGHT", -16, 52)
     applyPanelStyle(mainFrame.minimumImportReviewViewport, theme.colors.panel)
+    mainFrame.minimumImportReviewViewport:Hide()
 
     mainFrame.minimumImportReviewScrollFrame = mainFrame.minimumImportReviewScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.minimumImportReviewViewport, "BackdropTemplate")
     mainFrame.minimumImportReviewScrollFrame:SetPoint("TOPLEFT", mainFrame.minimumImportReviewViewport, "TOPLEFT", 0, 0)
@@ -1729,7 +1746,10 @@ function mainMinimumsController.Attach(mainFrame, options)
             self.minimumImportApplyButton:SetEnabled(false)
         end
         if self.minimumImportStatusText then
-            self.minimumImportStatusText:SetText("")
+            self.minimumImportStatusText:SetText("Paste the portable Minimums payload, then click Preview.")
+        end
+        if self.minimumImportReviewViewport then
+            self.minimumImportReviewViewport:Hide()
         end
         for _, rowFrame in ipairs(self.minimumImportReviewRowsFrames or {}) do
             rowFrame:Hide()
@@ -1788,6 +1808,13 @@ function mainMinimumsController.Attach(mainFrame, options)
         self.isRefreshingMinimumImportReview = true
         local rowHeight = 56
         local visibleRows = #(self.minimumImportReviewRows or {})
+        if self.minimumImportReviewViewport then
+            if visibleRows > 0 then
+                self.minimumImportReviewViewport:Show()
+            else
+                self.minimumImportReviewViewport:Hide()
+            end
+        end
         local scrollChild = self.minimumImportReviewScrollChild or self.minimumImportReviewPanel
         local childHeight = math.max(1, (visibleRows * rowHeight) + 8)
         if scrollChild and type(scrollChild.SetHeight) == "function" then
@@ -2520,6 +2547,9 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumImportButton:SetScript("OnClick", function()
         mainFrame:RefreshMinimumImportInputScrollMetrics()
         mainFrame.minimumImportModal:Show()
+        if mainFrame.minimumImportInput and type(mainFrame.minimumImportInput.SetFocus) == "function" then
+            mainFrame.minimumImportInput:SetFocus()
+        end
     end)
 
     mainFrame.minimumExportButton:SetScript("OnClick", function()

@@ -26,6 +26,8 @@
   - accepted remote `MINIMUMS_SNAPSHOT` payloads now diff previous vs accepted rules and append equivalent local `MINIMUM_CREATED`, `MINIMUM_UPDATED`, `MINIMUM_ENABLED`, `MINIMUM_DISABLED`, and `MINIMUM_REMOVED` audit rows when those outcomes actually occurred
   - live/sync identity is now normalized to `Character-Server` at the builder and peer-storage layers, so login hello, `/gbm debug sync`, and Sync-tab peer rows no longer drift back to `Server-Character`
   - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
+  - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
+  - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line
 - Focused verification in this slice:
   - `.\tools\lua\lua.exe .\tests\spec\minimums_portability_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`

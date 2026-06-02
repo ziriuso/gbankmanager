@@ -531,6 +531,7 @@ local function build_sync_peer_rows(db)
     local rows = {}
     for _, entry in ipairs(syncPeerState.GetPeers(db, current_sync_guild_key(db)) or {}) do
         rows[#rows + 1] = {
+            characterKey = tostring(entry.characterKey or ""),
             character = display_character_key(entry.characterKey or "Unknown"),
             lastSeen = format_timestamp(entry.lastSeen),
             lastSynchronized = format_timestamp(entry.lastSynchronizedAt),
@@ -1650,8 +1651,8 @@ mainFrame.optionsSyncTable:SetHeight(200)
 apply_surface_variant(mainFrame.optionsSyncTable, "table-viewport-structured")
 
 mainFrame.optionsSyncColumnHeaders = mainFrame.optionsSyncColumnHeaders or {}
-local syncHeaderTitles = { "Character", "Last Time Seen", "Last Time Synchronized" }
-local syncHeaderWidths = { 200, 160, 200 }
+local syncHeaderTitles = { "Character", "Last Time Seen", "Last Time Synchronized", "" }
+local syncHeaderWidths = { 200, 160, 200, 28 }
 mainFrame.optionsSyncTableContentWidth = 8
 local previousSyncHeader = nil
 for index, title in ipairs(syncHeaderTitles) do
@@ -2472,6 +2473,10 @@ function mainFrame:RefreshSyncControls()
             rowFrame.lastSeenText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 216, -4)
             rowFrame.lastSynchronizedText = make_label(rowFrame, "", "GameFontNormal")
             rowFrame.lastSynchronizedText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 384, -4)
+            rowFrame.removeButton = make_button(rowFrame, 24, 18, "")
+            rowFrame.removeButton:SetPoint("TOPRIGHT", rowFrame, "TOPRIGHT", -6, -2)
+            apply_button_variant(rowFrame.removeButton, "danger")
+            set_button_icon(rowFrame.removeButton, "remove")
             self.optionsSyncTableRows[index] = rowFrame
         end
 
@@ -2483,6 +2488,23 @@ function mainFrame:RefreshSyncControls()
         rowFrame.characterText:SetText(tostring(row.character or ""))
         rowFrame.lastSeenText:SetText(tostring(row.lastSeen or ""))
         rowFrame.lastSynchronizedText:SetText(tostring(row.lastSynchronized or ""))
+        rowFrame.removeButton:SetScript("OnClick", function()
+            local syncPeerState = ns.modules.syncPeerState or {}
+            local guildKey = current_sync_guild_key(db)
+            local characterKey = tostring((rowFrame.rowData or {}).characterKey or "")
+            if characterKey == "" or type(syncPeerState.RemovePeer) ~= "function" then
+                self:SetOptionsSyncStatus("Sync peer removal is unavailable right now.")
+                return
+            end
+
+            local removed = syncPeerState.RemovePeer(db, guildKey, characterKey)
+            if removed then
+                self:SetOptionsSyncStatus(string.format("Removed sync peer %s.", display_character_key(characterKey)))
+            else
+                self:SetOptionsSyncStatus(string.format("Sync peer %s was already gone.", display_character_key(characterKey)))
+            end
+            self:RefreshSyncControls()
+        end)
         rowFrame:Show()
     end
 

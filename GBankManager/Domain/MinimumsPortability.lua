@@ -251,6 +251,15 @@ local function decode_json(text)
     return value
 end
 
+local function sanitize_parse_error(message)
+    local normalized = tostring(message or "invalid JSON payload")
+    local trimmed = normalized:match(":%d+:%s*(.+)$")
+    if trimmed and trimmed ~= "" then
+        return trimmed
+    end
+    return normalized
+end
+
 local function normalize_scope(value)
     local scope = tostring(value or "TAB")
     if scope == "" then
@@ -356,7 +365,7 @@ function portability.Parse(payloadText, availableTabs)
     if not ok then
         return {
             ok = false,
-            error = tostring(decoded or "invalid JSON payload"),
+            error = sanitize_parse_error(decoded),
             rows = {},
         }
     end
