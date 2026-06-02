@@ -26,7 +26,7 @@ function Get-TocInterfaceVersion {
     )
 
     foreach ($line in Get-Content -Path $Path) {
-        if ($line -match '^## Interface:\s*(\d{6})\s*$') {
+        if ($line -match '^## Interface:\s*(\d{6})(?:\s*,\s*\d{6})*\s*$') {
             return $Matches[1]
         }
     }

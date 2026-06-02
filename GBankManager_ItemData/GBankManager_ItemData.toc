@@ -1,4 +1,4 @@
-## Interface: 120005
+## Interface: 120007, 120005
 ## Title: GBankManager Item Data
 ## Notes: Bundled item search data for GBankManager
 ## Author: ziriuso

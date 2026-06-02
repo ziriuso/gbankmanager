@@ -27,16 +27,19 @@ function Get-TargetDefinition {
             Target = "Retail"
             Product = "wow"
             ClientFolder = "_retail_"
+            ClientFolders = @("_retail_")
         }
         PTR = [pscustomobject]@{
             Target = "PTR"
             Product = "wowt"
             ClientFolder = "_ptr_"
+            ClientFolders = @("_ptr_", "_xptr_")
         }
         Beta = [pscustomobject]@{
             Target = "Beta"
             Product = "wow_beta"
             ClientFolder = "_beta_"
+            ClientFolders = @("_beta_")
         }
     }
 
@@ -87,13 +90,14 @@ function Resolve-InstallRoot {
     param(
         [string]$RequestedRoot,
         [string]$RequestedClientDirectory,
-        [string]$ClientFolder
+        [string[]]$ClientFolders
     )
 
     if (-not [string]::IsNullOrWhiteSpace($RequestedRoot)) {
         return [pscustomobject]@{
             WoWRoot = [System.IO.Path]::GetFullPath($RequestedRoot)
             Source = "override"
+            ClientFolder = $null
         }
     }
 
@@ -101,6 +105,7 @@ function Resolve-InstallRoot {
         return [pscustomobject]@{
             WoWRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $RequestedClientDirectory))
             Source = "client-override"
+            ClientFolder = $null
         }
     }
 
@@ -110,11 +115,14 @@ function Resolve-InstallRoot {
         }
 
         try {
-            $candidateClientDirectory = Join-Path $candidate $ClientFolder
-            if (Test-Path -LiteralPath $candidateClientDirectory) {
-                return [pscustomobject]@{
-                    WoWRoot = [System.IO.Path]::GetFullPath($candidate)
-                    Source = "detected"
+            foreach ($clientFolder in $ClientFolders) {
+                $candidateClientDirectory = Join-Path $candidate $clientFolder
+                if (Test-Path -LiteralPath $candidateClientDirectory) {
+                    return [pscustomobject]@{
+                        WoWRoot = [System.IO.Path]::GetFullPath($candidate)
+                        Source = "detected"
+                        ClientFolder = $clientFolder
+                    }
                 }
             }
         } catch {
@@ -122,7 +130,7 @@ function Resolve-InstallRoot {
         }
     }
 
-    throw "Unable to locate a World of Warcraft install for target '$ClientFolder'. Pass -WoWRoot or set GBM_WOW_DEFAULT_ROOTS."
+    throw "Unable to locate a World of Warcraft install for target '$($ClientFolders[0])'. Pass -WoWRoot or set GBM_WOW_DEFAULT_ROOTS."
 }
 
 function Resolve-ClientDirectory {
@@ -140,8 +148,22 @@ function Resolve-ClientDirectory {
         }
     }
 
+    $resolvedClientFolder = [string]$InstallRoot.ClientFolder
+    if ([string]::IsNullOrWhiteSpace($resolvedClientFolder)) {
+        foreach ($candidateFolder in @($TargetDefinition.ClientFolders)) {
+            $candidateDirectory = Join-Path $InstallRoot.WoWRoot $candidateFolder
+            if (Test-Path -LiteralPath $candidateDirectory) {
+                $resolvedClientFolder = $candidateFolder
+                break
+            }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedClientFolder)) {
+        $resolvedClientFolder = [string]$TargetDefinition.ClientFolder
+    }
+
     return [pscustomobject]@{
-        ClientDirectory = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot.WoWRoot $TargetDefinition.ClientFolder))
+        ClientDirectory = [System.IO.Path]::GetFullPath((Join-Path $InstallRoot.WoWRoot $resolvedClientFolder))
         WoWRoot = $InstallRoot.WoWRoot
         InstallRootSource = $InstallRoot.Source
     }
@@ -152,7 +174,7 @@ if ($null -eq $targetDefinition) {
     throw "Unsupported target: $Target"
 }
 
-$installRoot = Resolve-InstallRoot -RequestedRoot $WoWRoot -RequestedClientDirectory $ClientDirectory -ClientFolder $targetDefinition.ClientFolder
+$installRoot = Resolve-InstallRoot -RequestedRoot $WoWRoot -RequestedClientDirectory $ClientDirectory -ClientFolders @($targetDefinition.ClientFolders)
 $clientResolution = Resolve-ClientDirectory -RequestedClientDirectory $ClientDirectory -InstallRoot $installRoot -TargetDefinition $targetDefinition
 
 $result = [pscustomobject]@{

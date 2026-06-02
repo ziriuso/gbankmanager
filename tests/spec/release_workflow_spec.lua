@@ -35,6 +35,7 @@ assert.truthy(string.find(publishScript, "upload-file", 1, true) ~= nil, "publis
 assert.truthy(string.find(publishScript, "gameVersions", 1, true) ~= nil, "publish script should submit CurseForge game version ids")
 assert.truthy(string.find(publishScript, "[object[]]@($versionIds)", 1, true) ~= nil, "publish script should force game version ids to serialize as an array even when only one id is present")
 assert.truthy(string.find(publishScript, "releaseType", 1, true) ~= nil, "publish script should submit the derived CurseForge release type")
+assert.truthy(string.find(publishScript, "(\\d{6})(?:\\s*,\\s*\\d{6})*", 1, true) ~= nil, "publish script should accept comma-separated interface values in the TOC and use the first one for CurseForge resolution")
 
 assert.truthy(string.find(releaseDoc, "CF_API_TOKEN", 1, true) ~= nil, "release workflow doc should explain which GitHub secret stores the CurseForge token")
 assert.truthy(string.find(releaseDoc, "CF_PROJECT_ID", 1, true) ~= nil, "release workflow doc should explain which GitHub variable stores the CurseForge project id")
