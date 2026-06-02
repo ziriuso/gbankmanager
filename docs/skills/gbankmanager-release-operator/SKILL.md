@@ -102,8 +102,8 @@ Use a commit message that describes the release-prep change truthfully. Do not c
 Examples:
 
 ```powershell
-git tag v0.9.0-beta.3
-git push origin v0.9.0-beta.3
+git tag v1.0.1-beta.1
+git push origin v1.0.1-beta.1
 ```
 
 Push the branch before the tag if the release fix is not already on origin.
@@ -188,8 +188,8 @@ Instead:
 Example:
 
 ```powershell
-git tag v0.9.0-beta.2
-git push origin v0.9.0-beta.2
+git tag v1.0.1-beta.2
+git push origin v1.0.1-beta.2
 ```
 
 Then repeat the workflow-watch and output-confirmation steps.

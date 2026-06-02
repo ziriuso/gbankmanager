@@ -128,9 +128,9 @@ Current UI ownership is intentionally split across:
 - A repo-local release skill lives at `docs/skills/gbankmanager-release-operator/SKILL.md` for normal publish handling plus failed-release follow-up.
 - The companion Wowless smoke lane lives in [ziriuso/GBankManager-wowless-smoke](https://github.com/ziriuso/GBankManager-wowless-smoke) and can be used alongside this repo for addon-load and smoke verification.
 - Tag naming controls the release channel:
-  - `v0.9.0-alpha.1` -> CurseForge `alpha`
-  - `v0.9.0-beta.1` -> CurseForge `beta`
-  - `v1.0.0` -> CurseForge `release`
+  - `v1.0.1-alpha.1` -> CurseForge `alpha`
+  - `v1.0.1-beta.1` -> CurseForge `beta`
+  - `v1.0.1` -> CurseForge `release`
 - Configure the release workflow with:
   - GitHub Actions secret `CF_API_TOKEN`
   - GitHub Actions variable `CF_PROJECT_ID`
@@ -138,11 +138,11 @@ Current UI ownership is intentionally split across:
 
 ## Next Roadmap
 
-The next planned work after the completed pre-polish workflow block is:
+The next planned work after the `v1.0.0` release is:
 
-1. Review addon communication and sync behavior end to end, including hello peer discovery, accepted updates, rejected forged payloads, request propagation, approval-created Minimums side effects, and guild-bank scan or ledger status noise.
-2. Do the release/install sanity pass for the current beta artifact flow, confirming the combined package installs both addon folders and the About/version text matches the package.
-3. After those two, return to the shelved UI polish refinement pass from [docs/ui-polish-suggestions.md](docs/ui-polish-suggestions.md) and the longer-term art-pack follow-up.
+1. Continue live validation around passive guild-bank ledger refresh, especially new item and money rows after `/reload` with the bank already open.
+2. Tackle sync UX backlog polish such as routine chat suppression, active-view refresh for accepted remote sync updates, and any future History sync design.
+3. Add portable Minimums export/import and then return to the shelved UI polish refinement pass from [docs/ui-polish-suggestions.md](docs/ui-polish-suggestions.md) plus the longer-term art-pack follow-up.
 
 ### Current Remaining Follow-Up
 
@@ -150,7 +150,7 @@ The next planned work after the completed pre-polish workflow block is:
 - `/gbm debug ledger` is available for ledger investigations; run it while the guild bank is open on `Log` and `Money Log` if live Blizzard rows are visible but GBankManager imports `0 item rows, 0 money rows`. If older local history or fingerprints are suspect, clear only `Guild Bank Log Data` from `Options -> Data` and rescan from a clean ledger.
 - `/gbm debug sync` is available for live sync investigations; run it on both clients after login hello, after `Sync Requests`, and after creating or approving a request when `Options -> Sync` stays empty or chat reports an ignored sync snapshot. Compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys` directly to confirm both clients are storing peers and actor context in `Character-Server` form.
 - If `/gbm debug sync` reports `wrong_guild` while the client is visibly in a guild, check whether the stored root key is `Unknown Guild`; the sync layer now treats that placeholder the same as `Unknown` and promotes the runtime root from the payload guild key or live guild before validating the message.
-- Live/manual sync sanity still needs a pass against real guild peers after install.
+- Live/manual sync sanity has now passed in a real guild; remaining sync follow-up is focused on backlog polish such as active-view refresh behavior and any future History sync design.
 
 ### Recently Completed
 

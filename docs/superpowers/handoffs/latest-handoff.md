@@ -2,6 +2,30 @@
 
 ## Resume Here
 
+### 2026-06-01 Post-1.0 Checkpoint
+
+- Current repo truth:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - HEAD: `c658dfd` (`chore: prepare 1.0.0 release metadata`)
+  - release tag: `v1.0.0`
+  - GitHub release: `GBankManager v1.0.0`
+  - branch is in sync with `origin/codex/gbankmanager-v1`
+  - only local noise should be untracked `.vscode/`
+- `v1.0.0` released successfully on 2026-06-01:
+  - tag `v1.0.0` pushed successfully
+  - `Release to CurseForge` workflow run `26788707133` completed successfully
+  - GitHub release asset: `GBankManager-1.0.0.zip`
+  - CurseForge upload step succeeded
+- Live/manual sync sanity has now passed in a real guild.
+- Older sections below this checkpoint are archival and intentionally preserve earlier beta-era resume context.
+- Current remaining follow-up is backlog polish, not a known release blocker:
+  - passive ledger refresh validation after `/reload` with the bank already open
+  - routine chat suppression option
+  - active-view auto-refresh for accepted sync updates
+  - portable Minimums export/import
+  - possible History sync design
+
 ### 2026-06-01 Sync Debug Follow-up
 
 - Current local troubleshooting checkpoint adds `/gbm debug sync`.
@@ -22,6 +46,10 @@
   - add active-view auto-refresh when accepted remote sync mutates Requests, Minimums, or Bank Ledger data
   - preferred scope: repaint only when the relevant view is currently open, while preserving filters, selected row, and scroll where possible
   - likely moderate effort because each view already has a refresh path, but Requests and Bank Ledger currently reset scroll or selection state during naive refreshes
+  - add History sync so audit and history-tab entries can propagate across clients the same way requests, minimums, and ledger data do
+  - likely moderate effort because history currently acts like local side-effect logging in several flows and would need a dedupe or merge contract before cross-client replay is safe
+  - add portable Minimums export/import so officers can back up one guild's stock-policy configuration and optionally apply it in a different guild without re-entering every rule by hand
+  - likely moderate effort because the format should preserve tab-scoped rows, enabled state, and crafted-quality item identity while making guild targeting an explicit import choice instead of a hardcoded source-guild lock
 - The new debug command prints:
   - local `name`, `characterKey`, `guild`, and active guild key
   - the last decoded sync envelope (`type`, `sender`, `distribution`, `guildKey`, `actorName`, `actorCharacterKey`)
@@ -39,9 +67,9 @@
   - `tests/spec/sync_spec.lua` now verifies closed-bank reload noise cannot arm an inventory scan from stale guild-bank tab or bag-slot events
   - `tests/spec/bank_ledger_scanner_spec.lua` now verifies ledger scans automatically publish one guild-scoped sync delta per merged item-log or money-log target while repeated no-change reruns stay quiet
   - `tests/spec/bank_ledger_spec.lua` still verifies a later local ledger scan does not duplicate a row that was already merged from remote sync traffic
-- Known live clue still under investigation:
-  - the login hello chat line reported `Stormrage-Zirleficent`, which suggests a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
-  - if live request sync still fails while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`
+- Historical live clue to revisit only if sync regresses:
+  - the login hello chat line once reported `Stormrage-Zirleficent`, which suggested a remaining `Server-Character` identity path even though peer storage is supposed to stay `Character-Server`
+  - if live request sync ever fails again while tests are green, start by running `/gbm debug sync` on both clients and compare `characterKey`, `actorCharacterKey`, `peerCharacterKey`, and `peerKeys`
 
 ### 2026-06-01 Local Troubleshooting Update
 
