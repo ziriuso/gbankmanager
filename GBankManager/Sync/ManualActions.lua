@@ -13,6 +13,7 @@ local COOLDOWN_SECONDS = 60
 local ACTION_ORDER = {
     "requests",
     "minimums",
+    "history",
     "ledger",
 }
 
@@ -42,7 +43,7 @@ local function normalize_action(action)
         return "minimums"
     end
 
-    if action == "all" or action == "requests" or action == "minimums" or action == "ledger" then
+    if action == "all" or action == "requests" or action == "minimums" or action == "history" or action == "ledger" then
         return action
     end
 
@@ -60,6 +61,7 @@ local function allowed_actions_for_profile(accessProfile)
     return {
         requests = true,
         minimums = true,
+        history = true,
         ledger = true,
         all = true,
     }
@@ -187,6 +189,24 @@ local function default_action_handlers()
                 },
             })
             return true, string.format("Requested minimums sync for %d rule(s).", #snapshot)
+        end,
+        history = function(db, options)
+            local historyView = ns.modules.historyView or {}
+            if type(transport.Send) ~= "function" or type(historyView.BuildSyncSnapshot) ~= "function" then
+                return false, "Manual sync is unavailable right now."
+            end
+
+            local snapshot = historyView.BuildSyncSnapshot((db or {}).auditLog or {})
+            transport.Send("GUILD", "GUILD", {
+                type = "HISTORY_SNAPSHOT",
+                updatedAt = tonumber(options.now or 0) or 0,
+                payload = {
+                    guildKey = current_guild_key(db),
+                    actorContext = current_context(db),
+                    entries = snapshot,
+                },
+            })
+            return true, string.format("Requested history sync for %d visible row(s).", #snapshot)
         end,
         ledger = function(db, options)
             if type(transport.Send) ~= "function" or type(bankLedger.EnsureState) ~= "function" then
@@ -318,6 +338,7 @@ function manualActions.Run(db, options)
     local action = normalize_action(options.action)
     local now = tonumber(options.now or (_G.time and _G.time() or 0)) or 0
     local allowed = allowed_actions_for_profile(accessProfile)
+    local skipCooldown = options.skipCooldown == true
 
     if not action then
         return {
@@ -337,23 +358,25 @@ function manualActions.Run(db, options)
 
     local targets, reportedAction = action_targets(action, accessProfile)
     local state = cooldown_state(db)
-    local actionCooldown = remaining_cooldown_seconds(state, action, now)
-    if actionCooldown > 0 then
-        return {
-            ok = false,
-            action = reportedAction,
-            message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", actionCooldown),
-        }
-    end
-
-    for _, targetAction in ipairs(targets) do
-        local remaining = remaining_cooldown_seconds(state, targetAction, now)
-        if remaining > 0 then
+    if not skipCooldown then
+        local actionCooldown = remaining_cooldown_seconds(state, action, now)
+        if actionCooldown > 0 then
             return {
                 ok = false,
                 action = reportedAction,
-                message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", remaining),
+                message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", actionCooldown),
             }
+        end
+
+        for _, targetAction in ipairs(targets) do
+            local remaining = remaining_cooldown_seconds(state, targetAction, now)
+            if remaining > 0 then
+                return {
+                    ok = false,
+                    action = reportedAction,
+                    message = string.format("This sync action is cooling down. Manual sync actions use a 60-second cooldown. Try again in %d seconds.", remaining),
+                }
+            end
         end
     end
 
@@ -377,9 +400,11 @@ function manualActions.Run(db, options)
         end
     end
 
-    mark_run(state, action, now)
-    for _, targetAction in ipairs(targets) do
-        mark_run(state, targetAction, now)
+    if not skipCooldown then
+        mark_run(state, action, now)
+        for _, targetAction in ipairs(targets) do
+            mark_run(state, targetAction, now)
+        end
     end
 
     local successMessage = action == "all"

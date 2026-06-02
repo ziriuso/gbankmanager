@@ -8,11 +8,15 @@ local craftedQualityUtil = ns.modules.craftedQuality or {}
 local itemDisplay = ns.modules.itemDisplay or {}
 local transport = ns.modules.syncTransport or {}
 local permissions = ns.modules.permissions or ns.modules.auth or {}
+local minimumsPortability = ns.modules.minimumsPortability or {}
 if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
 if itemDisplay.BuildDisplayPayload == nil and type(_G.dofile) == "function" then
     itemDisplay = _G.dofile("GBankManager/Domain/ItemDisplay.lua")
+end
+if minimumsPortability.Export == nil and type(_G.dofile) == "function" then
+    minimumsPortability = _G.dofile("GBankManager/Domain/MinimumsPortability.lua")
 end
 
 local function non_inventory_atlas(itemID, atlasName, craftedQuality, maxQuality)
@@ -116,12 +120,83 @@ local MINIMUM_DRAFT_ROW_COLORS = {
 
 local MINIMUM_ACTION_BUTTON_BOTTOM_INSET = 32
 
+local function count_lines(text)
+    local lineCount = 1
+    text = tostring(text or "")
+
+    for _ in string.gmatch(text, "\n") do
+        lineCount = lineCount + 1
+    end
+
+    return lineCount
+end
+
+local function pretty_print_json(text)
+    text = tostring(text or "")
+    if text == "" then
+        return ""
+    end
+
+    local parts = {}
+    local indentLevel = 0
+    local inString = false
+    local isEscaped = false
+
+    local function append_indent()
+        if indentLevel <= 0 then
+            return
+        end
+        parts[#parts + 1] = string.rep("  ", indentLevel)
+    end
+
+    for index = 1, #text do
+        local char = text:sub(index, index)
+
+        if inString then
+            parts[#parts + 1] = char
+            if isEscaped then
+                isEscaped = false
+            elseif char == "\\" then
+                isEscaped = true
+            elseif char == "\"" then
+                inString = false
+            end
+        else
+            if char == "\"" then
+                inString = true
+                parts[#parts + 1] = char
+            elseif char == "{" or char == "[" then
+                parts[#parts + 1] = char
+                indentLevel = indentLevel + 1
+                parts[#parts + 1] = "\n"
+                append_indent()
+            elseif char == "}" or char == "]" then
+                indentLevel = math.max(0, indentLevel - 1)
+                parts[#parts + 1] = "\n"
+                append_indent()
+                parts[#parts + 1] = char
+            elseif char == "," then
+                parts[#parts + 1] = char
+                parts[#parts + 1] = "\n"
+                append_indent()
+            elseif char == ":" then
+                parts[#parts + 1] = ": "
+            elseif char ~= " " and char ~= "\n" and char ~= "\r" and char ~= "\t" then
+                parts[#parts + 1] = char
+            end
+        end
+    end
+
+    return table.concat(parts)
+end
+
 function mainMinimumsController.Attach(mainFrame, options)
     options = options or {}
     local applyPanelStyle = options.applyPanelStyle
     local makeLabel = options.makeLabel
     local makeButton = options.makeButton
     local makeInput = options.makeInput
+    local makeExportOutputInput = options.makeExportOutputInput or makeInput
     local setButtonIcon = options.setButtonIcon
     local parseNumber = options.parseNumber
     local currentDb = options.currentDb
@@ -181,8 +256,14 @@ function mainMinimumsController.Attach(mainFrame, options)
     mainFrame.minimumSaveButton:SetPoint("LEFT", mainFrame.minimumNewButton, "RIGHT", 8, 0)
     mainFrame.minimumSaveButton.labelText:SetText("Save All")
 
+    mainFrame.minimumExportButton = mainFrame.minimumExportButton or makeButton(mainFrame.minimumsPanel, 70, 28, "Export")
+    mainFrame.minimumExportButton:SetPoint("LEFT", mainFrame.minimumSaveButton, "RIGHT", 8, 0)
+
+    mainFrame.minimumImportButton = mainFrame.minimumImportButton or makeButton(mainFrame.minimumsPanel, 70, 28, "Import")
+    mainFrame.minimumImportButton:SetPoint("LEFT", mainFrame.minimumExportButton, "RIGHT", 8, 0)
+
     mainFrame.minimumSaveAllButton = mainFrame.minimumSaveAllButton or makeButton(mainFrame.minimumsPanel, 84, 28, "Undo")
-    mainFrame.minimumSaveAllButton:SetPoint("LEFT", mainFrame.minimumSaveButton, "RIGHT", 8, 0)
+    mainFrame.minimumSaveAllButton:SetPoint("LEFT", mainFrame.minimumImportButton, "RIGHT", 8, 0)
     mainFrame.minimumSaveAllButton:Hide()
 
     mainFrame.minimumEditorPanel = mainFrame.minimumEditorPanel or _G.CreateFrame("Frame", nil, mainFrame.minimumsPanel, "BackdropTemplate")
@@ -308,6 +389,150 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     mainFrame.minimumAddCancelButton = mainFrame.minimumAddCancelButton or makeButton(mainFrame.minimumAddModal, 72, 28, "Cancel")
     mainFrame.minimumAddCancelButton:SetPoint("RIGHT", mainFrame.minimumAddButton, "LEFT", -8, 0)
+
+    mainFrame.minimumImportModal = mainFrame.minimumImportModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.minimumImportModal:SetSize(760, 560)
+    mainFrame.minimumImportModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+    applyPanelStyle(mainFrame.minimumImportModal, theme.colors.panelAlt)
+    mainFrame.minimumImportModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.minimumImportModal, 22, "FULLSCREEN_DIALOG")
+    end
+
+    mainFrame.minimumImportModalTitle = mainFrame.minimumImportModalTitle or makeLabel(mainFrame.minimumImportModal, "Import Minimums", "GameFontHighlight")
+    mainFrame.minimumImportModalTitle:SetPoint("TOPLEFT", mainFrame.minimumImportModal, "TOPLEFT", 16, -16)
+
+    mainFrame.minimumImportInstructionText = mainFrame.minimumImportInstructionText or makeLabel(
+        mainFrame.minimumImportModal,
+        "Paste your portable Minimums import string below, then click Preview to review and edit the rows before Apply.",
+        "GameFontHighlightSmall"
+    )
+    mainFrame.minimumImportInstructionText:SetPoint("TOPLEFT", mainFrame.minimumImportModalTitle, "BOTTOMLEFT", 0, -8)
+    if type(mainFrame.minimumImportInstructionText.SetWidth) == "function" then
+        mainFrame.minimumImportInstructionText:SetWidth(712)
+    end
+
+    mainFrame.minimumImportStatusText = mainFrame.minimumImportStatusText or makeLabel(mainFrame.minimumImportModal, "", "GameFontHighlightSmall")
+    mainFrame.minimumImportStatusText:SetPoint("TOPLEFT", mainFrame.minimumImportInstructionText, "BOTTOMLEFT", 0, -8)
+    if type(mainFrame.minimumImportStatusText.SetWidth) == "function" then
+        mainFrame.minimumImportStatusText:SetWidth(712)
+    end
+
+    mainFrame.minimumImportInputSurface = mainFrame.minimumImportInputSurface or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
+    mainFrame.minimumImportInputSurface:SetSize(728, 144)
+    mainFrame.minimumImportInputSurface:SetPoint("TOPLEFT", mainFrame.minimumImportStatusText, "BOTTOMLEFT", 0, -10)
+    applyPanelStyle(mainFrame.minimumImportInputSurface, theme.colors.panel)
+
+    mainFrame.minimumImportInput = mainFrame.minimumImportInput or makeExportOutputInput(mainFrame.minimumImportInputSurface, 712, 128)
+    mainFrame.minimumImportInput:SetPoint("TOPLEFT", mainFrame.minimumImportInputSurface, "TOPLEFT", 8, -8)
+    mainFrame.minimumImportInput:EnableMouseWheel(true)
+    mainFrame.minimumImportInput.verticalScroll = mainFrame.minimumImportInput.verticalScroll or 0
+    mainFrame.minimumImportInput.verticalScrollRange = mainFrame.minimumImportInput.verticalScrollRange or 0
+    if type(mainFrame.minimumImportInput.SetVerticalScroll) ~= "function" then
+        function mainFrame.minimumImportInput:SetVerticalScroll(value)
+            local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+            self.verticalScroll = clamped
+        end
+    end
+    if type(mainFrame.minimumImportInput.SetBackdrop) == "function" then
+        mainFrame.minimumImportInput:SetBackdrop(nil)
+    end
+    mainFrame.minimumImportInputScrollFrame = mainFrame.minimumImportInput
+    mainFrame.minimumImportInputScrollChild = mainFrame.minimumImportInput.EditBox
+    if type(mainFrame.minimumImportInputScrollChild.SetBackdrop) == "function" then
+        mainFrame.minimumImportInputScrollChild:SetBackdrop(nil)
+    end
+    mainFrame.minimumImportInput:SetTextInsets(4, 4, 4, 4)
+
+    mainFrame.minimumImportReviewViewport = mainFrame.minimumImportReviewViewport or _G.CreateFrame("Frame", nil, mainFrame.minimumImportModal, "BackdropTemplate")
+    mainFrame.minimumImportReviewViewport:SetPoint("TOPLEFT", mainFrame.minimumImportInputSurface, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumImportReviewViewport:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportModal, "BOTTOMRIGHT", -16, 52)
+    applyPanelStyle(mainFrame.minimumImportReviewViewport, theme.colors.panel)
+    mainFrame.minimumImportReviewViewport:Hide()
+
+    mainFrame.minimumImportReviewScrollFrame = mainFrame.minimumImportReviewScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.minimumImportReviewViewport, "BackdropTemplate")
+    mainFrame.minimumImportReviewScrollFrame:SetPoint("TOPLEFT", mainFrame.minimumImportReviewViewport, "TOPLEFT", 0, 0)
+    mainFrame.minimumImportReviewScrollFrame:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportReviewViewport, "BOTTOMRIGHT", 0, 0)
+    mainFrame.minimumImportReviewScrollFrame:EnableMouseWheel(true)
+    mainFrame.minimumImportReviewScrollFrame.verticalScroll = mainFrame.minimumImportReviewScrollFrame.verticalScroll or 0
+    mainFrame.minimumImportReviewScrollFrame.verticalScrollRange = mainFrame.minimumImportReviewScrollFrame.verticalScrollRange or 0
+    if type(mainFrame.minimumImportReviewScrollFrame.SetVerticalScroll) ~= "function" then
+        function mainFrame.minimumImportReviewScrollFrame:SetVerticalScroll(value)
+            local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+            self.verticalScroll = clamped
+        end
+    end
+    if type(mainFrame.minimumImportReviewScrollFrame.SetBackdrop) == "function" then
+        mainFrame.minimumImportReviewScrollFrame:SetBackdrop(nil)
+    end
+
+    mainFrame.minimumImportReviewScrollChild = mainFrame.minimumImportReviewScrollChild or _G.CreateFrame("Frame", nil, mainFrame.minimumImportReviewScrollFrame, "BackdropTemplate")
+    mainFrame.minimumImportReviewScrollChild:SetPoint("TOPLEFT", mainFrame.minimumImportReviewScrollFrame, "TOPLEFT", 0, 0)
+    if type(mainFrame.minimumImportReviewScrollChild.SetWidth) == "function" then
+        mainFrame.minimumImportReviewScrollChild:SetWidth(728)
+    end
+    mainFrame.minimumImportReviewScrollChild:SetHeight(1)
+    if type(mainFrame.minimumImportReviewScrollChild.SetBackdrop) == "function" then
+        mainFrame.minimumImportReviewScrollChild:SetBackdrop(nil)
+    end
+    mainFrame.minimumImportReviewScrollFrame:SetScrollChild(mainFrame.minimumImportReviewScrollChild)
+
+    mainFrame.minimumImportReviewPanel = mainFrame.minimumImportReviewViewport
+    mainFrame.minimumImportReviewRowsFrames = mainFrame.minimumImportReviewRowsFrames or {}
+
+    mainFrame.minimumImportApplyButton = mainFrame.minimumImportApplyButton or makeButton(mainFrame.minimumImportModal, 88, 28, "Apply")
+    mainFrame.minimumImportApplyButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumImportModal, "BOTTOMRIGHT", -16, 16)
+    mainFrame.minimumImportApplyButton:SetEnabled(false)
+
+    mainFrame.minimumImportPreviewButton = mainFrame.minimumImportPreviewButton or makeButton(mainFrame.minimumImportModal, 88, 28, "Preview")
+    mainFrame.minimumImportPreviewButton:SetPoint("RIGHT", mainFrame.minimumImportApplyButton, "LEFT", -8, 0)
+
+    mainFrame.minimumImportCancelButton = mainFrame.minimumImportCancelButton or makeButton(mainFrame.minimumImportModal, 72, 28, "Cancel")
+    mainFrame.minimumImportCancelButton:SetPoint("RIGHT", mainFrame.minimumImportPreviewButton, "LEFT", -8, 0)
+
+    mainFrame.minimumExportModal = mainFrame.minimumExportModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+    mainFrame.minimumExportModal:SetSize(520, 320)
+    mainFrame.minimumExportModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+    applyPanelStyle(mainFrame.minimumExportModal, theme.colors.panelAlt)
+    mainFrame.minimumExportModal:Hide()
+    if type(mainFrame.RegisterModalFrame) == "function" then
+        mainFrame:RegisterModalFrame(mainFrame.minimumExportModal, 23, "FULLSCREEN_DIALOG")
+    end
+
+    mainFrame.minimumExportModalTitle = mainFrame.minimumExportModalTitle or makeLabel(mainFrame.minimumExportModal, "Export Minimums", "GameFontHighlight")
+    mainFrame.minimumExportModalTitle:SetPoint("TOPLEFT", mainFrame.minimumExportModal, "TOPLEFT", 16, -16)
+
+    mainFrame.minimumExportStatusText = mainFrame.minimumExportStatusText or makeLabel(mainFrame.minimumExportModal, "Select all or copy the portable Minimums payload for later import.", "GameFontHighlightSmall")
+    mainFrame.minimumExportStatusText:SetPoint("TOPLEFT", mainFrame.minimumExportModalTitle, "BOTTOMLEFT", 0, -8)
+    if type(mainFrame.minimumExportStatusText.SetWidth) == "function" then
+        mainFrame.minimumExportStatusText:SetWidth(480)
+    end
+
+    mainFrame.minimumExportOutput = mainFrame.minimumExportOutput or makeExportOutputInput(mainFrame.minimumExportModal, 488, 200)
+    mainFrame.minimumExportOutput:SetPoint("TOPLEFT", mainFrame.minimumExportStatusText, "BOTTOMLEFT", 0, -10)
+    mainFrame.minimumExportOutput:EnableMouseWheel(true)
+    mainFrame.minimumExportOutput.verticalScroll = mainFrame.minimumExportOutput.verticalScroll or 0
+    mainFrame.minimumExportOutput.verticalScrollRange = mainFrame.minimumExportOutput.verticalScrollRange or 0
+    if type(mainFrame.minimumExportOutput.SetVerticalScroll) ~= "function" then
+        function mainFrame.minimumExportOutput:SetVerticalScroll(value)
+            local clamped = math.max(0, math.min(tonumber(value or 0) or 0, self.verticalScrollRange or 0))
+            self.verticalScroll = clamped
+        end
+    end
+    if type(mainFrame.minimumExportOutput.SetBackdrop) == "function" then
+        mainFrame.minimumExportOutput:SetBackdrop(nil)
+    end
+    mainFrame.minimumExportScrollFrame = mainFrame.minimumExportOutput
+    mainFrame.minimumExportScrollChild = mainFrame.minimumExportOutput.EditBox
+    if type(mainFrame.minimumExportScrollChild.SetBackdrop) == "function" then
+        mainFrame.minimumExportScrollChild:SetBackdrop(nil)
+    end
+
+    mainFrame.minimumExportSelectAllButton = mainFrame.minimumExportSelectAllButton or makeButton(mainFrame.minimumExportModal, 84, 28, "Select All")
+    mainFrame.minimumExportSelectAllButton:SetPoint("BOTTOMLEFT", mainFrame.minimumExportModal, "BOTTOMLEFT", 16, 16)
+
+    mainFrame.minimumExportCloseButton = mainFrame.minimumExportCloseButton or makeButton(mainFrame.minimumExportModal, 72, 28, "Close")
+    mainFrame.minimumExportCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.minimumExportModal, "BOTTOMRIGHT", -16, 16)
 
     mainFrame.minimumDetailsModal = mainFrame.minimumDetailsModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.minimumDetailsModal:SetSize(500, 260)
@@ -1512,6 +1737,423 @@ function mainMinimumsController.Attach(mainFrame, options)
         self:HideMinimumVariantButtons()
     end
 
+    function mainFrame:ResetMinimumImportReview()
+        self.minimumImportPayloadText = ""
+        self.minimumImportReviewRows = {}
+        self.minimumImportParsedPayload = nil
+        self.minimumImportDropdownOwner = nil
+        if self.minimumImportApplyButton then
+            self.minimumImportApplyButton:SetEnabled(false)
+        end
+        if self.minimumImportStatusText then
+            self.minimumImportStatusText:SetText("Paste the portable Minimums payload, then click Preview.")
+        end
+        if self.minimumImportReviewViewport then
+            self.minimumImportReviewViewport:Hide()
+        end
+        for _, rowFrame in ipairs(self.minimumImportReviewRowsFrames or {}) do
+            rowFrame:Hide()
+            if rowFrame.tabDropdownPanel then
+                rowFrame.tabDropdownPanel:Hide()
+            end
+        end
+        self:RefreshMinimumImportInputScrollMetrics()
+    end
+
+    function mainFrame:UpdateMinimumImportApplyState()
+        local ready = #(self.minimumImportReviewRows or {}) > 0
+        for _, row in ipairs(self.minimumImportReviewRows or {}) do
+            if tostring(row.status or "") == "needs_tab" or tostring(row.status or "") == "invalid" then
+                ready = false
+                break
+            end
+        end
+        if self.minimumImportApplyButton then
+            self.minimumImportApplyButton:SetEnabled(ready)
+        end
+        return ready
+    end
+
+    function mainFrame:GetMinimumImportTabOptions(row)
+        return self:GetKnownMinimumBankTabs(row)
+    end
+
+    function mainFrame:RefreshMinimumImportInputScrollMetrics()
+        local scrollFrame = self.minimumImportInputScrollFrame
+        local scrollChild = self.minimumImportInputScrollChild
+        local outputInput = self.minimumImportInput
+        if not scrollFrame or not scrollChild or not outputInput then
+            return
+        end
+
+        local lineHeight = 14
+        local padding = 16
+        local minimumInputHeight = 120
+        local lineCount = count_lines(outputInput:GetText() or "")
+        local contentHeight = math.max(minimumInputHeight, (lineCount * lineHeight) + 12)
+        local childHeight = math.max(scrollFrame:GetHeight(), contentHeight + padding)
+
+        if type(scrollChild.SetWidth) == "function" then
+            scrollChild:SetWidth(math.max(0, scrollFrame:GetWidth() - 12))
+        end
+        scrollChild:SetHeight(childHeight)
+        scrollFrame.verticalScrollRange = math.max(0, childHeight - scrollFrame:GetHeight())
+        scrollFrame:SetVerticalScroll(scrollFrame.verticalScroll or 0)
+    end
+
+    function mainFrame:RefreshMinimumImportReviewRows()
+        if self.isRefreshingMinimumImportReview == true then
+            return
+        end
+        self.isRefreshingMinimumImportReview = true
+        local rowHeight = 56
+        local visibleRows = #(self.minimumImportReviewRows or {})
+        if self.minimumImportReviewViewport then
+            if visibleRows > 0 then
+                self.minimumImportReviewViewport:Show()
+            else
+                self.minimumImportReviewViewport:Hide()
+            end
+        end
+        local scrollChild = self.minimumImportReviewScrollChild or self.minimumImportReviewPanel
+        local childHeight = math.max(1, (visibleRows * rowHeight) + 8)
+        if scrollChild and type(scrollChild.SetHeight) == "function" then
+            scrollChild:SetHeight(childHeight)
+        end
+        if scrollChild and type(scrollChild.SetWidth) == "function" and self.minimumImportReviewScrollFrame then
+            scrollChild:SetWidth(math.max(0, self.minimumImportReviewScrollFrame:GetWidth() - 12))
+        end
+        if self.minimumImportReviewScrollFrame then
+            self.minimumImportReviewScrollFrame.verticalScrollRange = math.max(0, childHeight - self.minimumImportReviewScrollFrame:GetHeight())
+            self.minimumImportReviewScrollFrame:SetVerticalScroll(self.minimumImportReviewScrollFrame.verticalScroll or 0)
+        end
+
+        for rowIndex, row in ipairs(self.minimumImportReviewRows or {}) do
+            local rowFrame = self.minimumImportReviewRowsFrames[rowIndex]
+            if not rowFrame then
+                rowFrame = _G.CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
+                applyPanelStyle(rowFrame, theme.colors.panelAlt)
+                rowFrame.itemQualityIcon = rowFrame.itemQualityIcon or rowFrame:CreateTexture()
+                rowFrame.itemQualityIcon:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -8)
+                if type(rowFrame.itemQualityIcon.SetWidth) == "function" then
+                    rowFrame.itemQualityIcon:SetWidth(16)
+                end
+                if type(rowFrame.itemQualityIcon.SetHeight) == "function" then
+                    rowFrame.itemQualityIcon:SetHeight(16)
+                end
+                rowFrame.itemQualityIcon:Hide()
+                rowFrame.itemText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
+                rowFrame.itemText:SetPoint("LEFT", rowFrame.itemQualityIcon, "RIGHT", 6, 0)
+                if type(rowFrame.itemText.SetWidth) == "function" then
+                    rowFrame.itemText:SetWidth(236)
+                end
+
+                rowFrame.importedTabText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
+                rowFrame.importedTabText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 8, -30)
+                if type(rowFrame.importedTabText.SetWidth) == "function" then
+                    rowFrame.importedTabText:SetWidth(252)
+                end
+
+                rowFrame.statusText = makeLabel(rowFrame, "", "GameFontHighlightSmall")
+                rowFrame.statusText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 270, -8)
+
+                rowFrame.tabButton = makeButton(rowFrame, 140, 22, "Select Bank Tab")
+                rowFrame.tabButton:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 270, -28)
+                rowFrame.tabDropdownPanel = _G.CreateFrame("Frame", nil, rowFrame, "BackdropTemplate")
+                applyPanelStyle(rowFrame.tabDropdownPanel, theme.colors.panelAlt)
+                rowFrame.tabDropdownOptions = {}
+
+                rowFrame.quantityInput = makeInput(rowFrame, 56, 22)
+                rowFrame.quantityInput:SetPoint("LEFT", rowFrame.tabButton, "RIGHT", 8, 0)
+
+                rowFrame.enabledButton = makeButton(rowFrame, 68, 22, "Yes")
+                rowFrame.enabledButton:SetPoint("LEFT", rowFrame.quantityInput, "RIGHT", 8, 0)
+
+                rowFrame.removeButton = makeButton(rowFrame, 26, 22, "")
+                rowFrame.removeButton:SetPoint("LEFT", rowFrame.enabledButton, "RIGHT", 8, 0)
+                setButtonIcon(rowFrame.removeButton, "remove")
+
+                self.minimumImportReviewRowsFrames[rowIndex] = rowFrame
+            end
+
+            rowFrame:ClearAllPoints()
+            rowFrame:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -4 - ((rowIndex - 1) * rowHeight))
+            rowFrame:SetPoint("RIGHT", scrollChild, "RIGHT", -4, 0)
+            rowFrame:SetHeight(rowHeight - 2)
+            rowFrame:Show()
+
+            rowFrame.itemText:SetText(build_item_display(row).visibleText)
+            rowFrame.importedTabText:SetText(string.format("Imported Tab: %s", tostring(row.importedTabName or "-")))
+            rowFrame.statusText:SetText(string.format("Status: %s", tostring(row.status or "invalid")))
+            rowFrame.tabButton.labelText:SetText((tostring(row.resolvedTabName or "") ~= "" and tostring(row.resolvedTabName)) or "Select Bank Tab")
+            rowFrame.quantityInput:SetText(tostring(tonumber(row.quantity or 0) or 0))
+            rowFrame.enabledButton.labelText:SetText(row.enabled ~= false and "Yes" or "No")
+            rowFrame.enabledButton.gbmButtonVariant = row.enabled ~= false and "primary" or "secondary"
+
+            local tabOptions = self:GetMinimumImportTabOptions(row)
+            local dropdownWidth = minimum_dropdown_width(tabOptions, 116, 180)
+            rowFrame.tabButton:SetWidth(dropdownWidth)
+            rowFrame.tabDropdownPanel:ClearAllPoints()
+            rowFrame.tabDropdownPanel:SetPoint("TOPLEFT", rowFrame.tabButton, "BOTTOMLEFT", 0, -2)
+            rowFrame.tabDropdownPanel:SetSize(dropdownWidth, math.max(28, (#tabOptions * 24) + 8))
+            for optionIndex, tabName in ipairs(tabOptions) do
+                local option = rowFrame.tabDropdownOptions[optionIndex] or makeButton(rowFrame.tabDropdownPanel, dropdownWidth - 8, 22, "")
+                option.value = tabName
+                option:ClearAllPoints()
+                option:SetPoint("TOPLEFT", rowFrame.tabDropdownPanel, "TOPLEFT", 4, -4 - ((optionIndex - 1) * 24))
+                option:SetWidth(dropdownWidth - 8)
+                option.labelText:SetText(tabName)
+                option:SetScript("OnClick", function()
+                    self:SetImportedMinimumRowTab(rowIndex, tabName)
+                    rowFrame.tabDropdownPanel:Hide()
+                    self:RefreshMinimumImportReviewRows()
+                end)
+                option:Show()
+                rowFrame.tabDropdownOptions[optionIndex] = option
+            end
+            for optionIndex = #tabOptions + 1, #(rowFrame.tabDropdownOptions or {}) do
+                rowFrame.tabDropdownOptions[optionIndex]:Hide()
+            end
+
+            rowFrame.tabButton:SetScript("OnClick", function()
+                if rowFrame.tabDropdownPanel:IsShown() then
+                    rowFrame.tabDropdownPanel:Hide()
+                else
+                    rowFrame.tabDropdownPanel:Show()
+                end
+            end)
+            rowFrame.quantityInput:SetScript("OnTextChanged", function(selfInput)
+                if self.isRefreshingMinimumImportReview == true then
+                    return
+                end
+                self:SetImportedMinimumRowQuantity(rowIndex, selfInput:GetText() or "")
+            end)
+            rowFrame.enabledButton:SetScript("OnClick", function()
+                self:SetImportedMinimumRowEnabled(rowIndex, row.enabled == false)
+                self:RefreshMinimumImportReviewRows()
+            end)
+            rowFrame.removeButton:SetScript("OnClick", function()
+                self:RemoveImportedMinimumRow(rowIndex)
+                self:RefreshMinimumImportReviewRows()
+            end)
+            rowFrame.tabDropdownPanel:Hide()
+
+            local tierAtlas = row.craftedQualityPreferredAtlas or row.craftedQualityDisplayAtlas or row.craftedQualityIcon
+            local resolvedAtlas = non_inventory_atlas(tonumber(row.itemID), tierAtlas, tonumber(row.craftedQuality), tonumber(row.craftedQualityMax or row.craftedQualityFamilySize))
+            if tostring(resolvedAtlas or "") ~= "" then
+                if type(rowFrame.itemQualityIcon.SetAtlas) == "function" then
+                    rowFrame.itemQualityIcon:SetAtlas(resolvedAtlas)
+                else
+                    rowFrame.itemQualityIcon.atlas = resolvedAtlas
+                end
+                rowFrame.itemQualityIcon:Show()
+            else
+                rowFrame.itemQualityIcon:Hide()
+            end
+        end
+
+        for rowIndex = visibleRows + 1, #(self.minimumImportReviewRowsFrames or {}) do
+            self.minimumImportReviewRowsFrames[rowIndex]:Hide()
+            if self.minimumImportReviewRowsFrames[rowIndex].tabDropdownPanel then
+                self.minimumImportReviewRowsFrames[rowIndex].tabDropdownPanel:Hide()
+            end
+        end
+        self.isRefreshingMinimumImportReview = false
+    end
+
+    function mainFrame:PreviewImportedMinimums(payloadText)
+        self.minimumImportPayloadText = tostring(payloadText or "")
+        local parsed = type(minimumsPortability.Parse) == "function"
+            and minimumsPortability.Parse(self.minimumImportPayloadText, self:GetKnownMinimumBankTabs())
+            or { ok = false, error = "minimum import parsing is unavailable", rows = {} }
+        self.minimumImportParsedPayload = parsed
+        self.minimumImportReviewRows = {}
+
+        if not parsed.ok then
+            if self.minimumImportStatusText then
+                self.minimumImportStatusText:SetText(tostring(parsed.error or "Unable to parse imported Minimums payload."))
+            end
+            self:RefreshMinimumImportReviewRows()
+            self:UpdateMinimumImportApplyState()
+            return parsed
+        end
+
+        for index, row in ipairs(parsed.rows or {}) do
+            local cloned = {}
+            for key, value in pairs(row or {}) do
+                cloned[key] = value
+            end
+            cloned.reviewRowIndex = index
+            self.minimumImportReviewRows[index] = cloned
+        end
+
+        if self.minimumImportStatusText then
+            self.minimumImportStatusText:SetText(string.format("Previewing %d imported Minimum row(s).", #(self.minimumImportReviewRows or {})))
+        end
+        self:RefreshMinimumImportReviewRows()
+        self:UpdateMinimumImportApplyState()
+        return parsed
+    end
+
+    function mainFrame:SetImportedMinimumRowTab(rowIndex, tabName)
+        local row = (self.minimumImportReviewRows or {})[rowIndex]
+        if not row then
+            return nil
+        end
+        row.resolvedTabName = tostring(tabName or "")
+        if row.scope == "TAB" then
+            row.status = row.resolvedTabName ~= "" and "ready" or "needs_tab"
+        end
+        self:RefreshMinimumImportReviewRows()
+        self:UpdateMinimumImportApplyState()
+        return row
+    end
+
+    function mainFrame:SetImportedMinimumRowQuantity(rowIndex, quantity)
+        local row = (self.minimumImportReviewRows or {})[rowIndex]
+        if not row then
+            return nil
+        end
+        row.quantity = parseNumber(tostring(quantity or "")) or tonumber(quantity)
+        if row.quantity == nil then
+            row.status = "invalid"
+        elseif row.scope ~= "TAB" or tostring(row.resolvedTabName or "") ~= "" then
+            row.status = "ready"
+        end
+        self:RefreshMinimumImportReviewRows()
+        self:UpdateMinimumImportApplyState()
+        return row
+    end
+
+    function mainFrame:SetImportedMinimumRowEnabled(rowIndex, enabled)
+        local row = (self.minimumImportReviewRows or {})[rowIndex]
+        if not row then
+            return nil
+        end
+        row.enabled = enabled == true
+        self:RefreshMinimumImportReviewRows()
+        self:UpdateMinimumImportApplyState()
+        return row
+    end
+
+    function mainFrame:RemoveImportedMinimumRow(rowIndex)
+        if type(self.minimumImportReviewRows) ~= "table" then
+            return false
+        end
+        table.remove(self.minimumImportReviewRows, rowIndex)
+        self:RefreshMinimumImportReviewRows()
+        self:UpdateMinimumImportApplyState()
+        return true
+    end
+
+    function mainFrame:BuildMinimumDraftFromImportedRow(row)
+        row = type(row) == "table" and row or {}
+        local itemID = tonumber(row.itemID)
+        local itemName = tostring(row.itemName or "")
+        local scope = tostring(row.scope or "TAB")
+        local tabName = scope == "TAB" and tostring(row.resolvedTabName or "") or tostring(row.importedTabName or "")
+        local quantity = tonumber(row.quantity)
+        if not itemID or itemName == "" or quantity == nil or (scope == "TAB" and tabName == "") then
+            return nil
+        end
+
+        return {
+            itemID = itemID,
+            itemName = itemName,
+            itemLink = row.itemLink,
+            itemString = row.itemString,
+            quantity = quantity,
+            scope = scope,
+            tabName = tabName,
+            enabled = row.enabled ~= false,
+            craftedQuality = row.craftedQuality,
+            craftedQualityIcon = row.craftedQualityIcon,
+            craftedQualityDisplayAtlas = row.craftedQualityDisplayAtlas,
+            craftedQualityPreferredAtlas = row.craftedQualityPreferredAtlas,
+            craftedQualityMax = row.craftedQualityMax,
+            isNewlyAdded = true,
+            draftKey = table.concat({ "import", tostring(itemID), scope, tabName, tostring(row.reviewRowIndex or 0) }, "|"),
+            originalItemID = itemID,
+            originalScope = scope,
+            originalTabName = tabName,
+        }
+    end
+
+    function mainFrame:BuildPortableMinimumsExportPayload()
+        local db = currentDb()
+        if type(minimumsPortability.Export) ~= "function" then
+            return ""
+        end
+        local exportMinimums = {}
+        for _, rule in ipairs(db.minimums or {}) do
+            exportMinimums[#exportMinimums + 1] = self:CloneMinimumRule(rule)
+        end
+        return minimumsPortability.Export({
+            guildName = active_guild_key(db),
+            exportedAt = _G.time and _G.time() or 0,
+            minimums = exportMinimums,
+        })
+    end
+
+    function mainFrame:RefreshMinimumExportScrollMetrics()
+        local scrollFrame = self.minimumExportScrollFrame
+        local scrollChild = self.minimumExportScrollChild
+        local outputInput = self.minimumExportOutput
+        if not scrollFrame or not scrollChild or not outputInput then
+            return
+        end
+
+        local lineHeight = 14
+        local padding = 16
+        local minimumInputHeight = 130
+        local lineCount = count_lines(outputInput:GetText() or "")
+        local contentHeight = math.max(minimumInputHeight, (lineCount * lineHeight) + 12)
+        local childHeight = math.max(scrollFrame:GetHeight(), contentHeight + padding)
+
+        if type(scrollChild.SetWidth) == "function" then
+            scrollChild:SetWidth(math.max(0, scrollFrame:GetWidth() - 12))
+        end
+        scrollChild:SetHeight(childHeight)
+        scrollFrame.verticalScrollRange = math.max(0, childHeight - scrollFrame:GetHeight())
+        scrollFrame:SetVerticalScroll(scrollFrame.verticalScroll or 0)
+    end
+
+    function mainFrame:ApplyReviewedImportedMinimums()
+        if not self:UpdateMinimumImportApplyState() then
+            return false
+        end
+
+        self.minimumPendingRules = self.minimumPendingRules or {}
+        self.minimumPendingDirty = self.minimumPendingDirty or {}
+        self.minimumPendingDeleted = self.minimumPendingDeleted or {}
+        for _, row in ipairs(self.minimumImportReviewRows or {}) do
+            local draftRule = self:BuildMinimumDraftFromImportedRow(row)
+            if draftRule then
+                self.minimumPendingRules[draftRule.draftKey] = draftRule
+                self.minimumPendingDirty[draftRule.draftKey] = true
+                self.minimumPendingDeleted[draftRule.draftKey] = nil
+            end
+        end
+
+        self.selectedMinimumKey = nil
+        self.minimumImportModal:Hide()
+        self:ResetMinimumImportReview()
+        self:ApplyMinimumFilters()
+        return true
+    end
+
+    function mainFrame:OpenMinimumExportModal()
+        if self.minimumExportOutput then
+            self.minimumExportOutput:SetText(pretty_print_json(self:BuildPortableMinimumsExportPayload()))
+        end
+        if self.minimumExportStatusText then
+            self.minimumExportStatusText:SetText("Select all or copy the portable Minimums payload for later import.")
+        end
+        self:RefreshMinimumExportScrollMetrics()
+        self.minimumExportModal:Show()
+        return self.minimumExportModal
+    end
+
     function mainFrame:OpenMinimumAddModal()
         self.minimumSearchSession = nil
         self:ResetMinimumAddRow()
@@ -1771,6 +2413,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
             local canPublish, actorContext = actor_can_manage_minimums(db)
             if canPublish and type(transport.Send) == "function" then
+                local historyView = ns.modules.historyView or {}
                 local minimumSnapshot = {}
                 for _, rule in ipairs(db.minimums or {}) do
                     minimumSnapshot[#minimumSnapshot + 1] = self:CloneMinimumRule(rule)
@@ -1784,6 +2427,17 @@ function mainMinimumsController.Attach(mainFrame, options)
                         minimums = minimumSnapshot,
                     },
                 })
+                if type(historyView.BuildSyncSnapshot) == "function" then
+                    transport.Send("GUILD", "GUILD", {
+                        type = "HISTORY_SNAPSHOT",
+                        updatedAt = _G.time and _G.time() or 0,
+                        payload = {
+                            guildKey = active_guild_key(db),
+                            actorContext = actorContext,
+                            entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
+                        },
+                    })
+                end
             end
         end
 
@@ -1900,6 +2554,66 @@ function mainMinimumsController.Attach(mainFrame, options)
 
     mainFrame.minimumAddCancelButton:SetScript("OnClick", function()
         mainFrame:HideMinimumAddModal()
+    end)
+
+    mainFrame.minimumImportButton:SetScript("OnClick", function()
+        mainFrame:RefreshMinimumImportInputScrollMetrics()
+        mainFrame.minimumImportModal:Show()
+        if mainFrame.minimumImportInput and type(mainFrame.minimumImportInput.SetFocus) == "function" then
+            mainFrame.minimumImportInput:SetFocus()
+        end
+    end)
+
+    mainFrame.minimumExportButton:SetScript("OnClick", function()
+        return mainFrame:OpenMinimumExportModal()
+    end)
+
+    mainFrame.minimumImportCancelButton:SetScript("OnClick", function()
+        mainFrame.minimumImportModal:Hide()
+        mainFrame:ResetMinimumImportReview()
+    end)
+
+    mainFrame.minimumImportPreviewButton:SetScript("OnClick", function()
+        return mainFrame:PreviewImportedMinimums((mainFrame.minimumImportInput and mainFrame.minimumImportInput:GetText()) or "")
+    end)
+
+    mainFrame.minimumImportApplyButton:SetScript("OnClick", function()
+        return mainFrame:ApplyReviewedImportedMinimums()
+    end)
+
+    mainFrame.minimumImportInput.EditBox:SetScript("OnTextChanged", function()
+        mainFrame:RefreshMinimumImportInputScrollMetrics()
+    end)
+
+    mainFrame.minimumImportInputScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
+    end)
+
+    mainFrame.minimumImportReviewScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
+    end)
+
+    mainFrame.minimumExportOutput.EditBox:SetScript("OnTextChanged", function()
+        mainFrame:RefreshMinimumExportScrollMetrics()
+    end)
+
+    mainFrame.minimumExportScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        self:SetVerticalScroll((self.verticalScroll or 0) - ((delta or 0) * 24))
+    end)
+
+    mainFrame.minimumExportSelectAllButton:SetScript("OnClick", function()
+        if type(mainFrame.minimumExportOutput.SetFocus) == "function" then
+            mainFrame.minimumExportOutput:SetFocus()
+        end
+        if type(mainFrame.minimumExportOutput.SetCursorPosition) == "function" then
+            mainFrame.minimumExportOutput:SetCursorPosition(0)
+        end
+        mainFrame.minimumExportOutput:HighlightText(0, -1)
+        mainFrame.minimumExportStatusText:SetText("Selected all output. Press Ctrl+C to copy.")
+    end)
+
+    mainFrame.minimumExportCloseButton:SetScript("OnClick", function()
+        mainFrame.minimumExportModal:Hide()
     end)
 
     mainFrame.minimumDetailsCancelButton:SetScript("OnClick", function()

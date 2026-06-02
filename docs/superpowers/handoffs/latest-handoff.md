@@ -2,6 +2,66 @@
 
 ## Resume Here
 
+### 2026-06-02 v1.1.0 Release Success
+
+- Current repo truth after release:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - release-prep commit used for the public tag: `b93de46` (`chore: prepare 1.1.0 release metadata`)
+  - pushed tag: `v1.1.0`
+  - release workflow run: `26851324160`
+  - GitHub release: `GBankManager v1.1.0`
+  - release asset: `GBankManager-1.1.0.zip`
+- Release result:
+  - `Release to CurseForge` completed successfully
+  - the full Lua suite passed inside the release workflow
+  - the combined package built successfully
+  - the CurseForge upload step succeeded
+  - the GitHub Release was created with the combined zip attached
+
+### 2026-06-02 Portable Minimums + History Sync + Peer Table Polish Slice
+
+- Current repo truth at resume:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - current stable release prep version in `GBankManager.toc`: `1.1.0`
+  - HEAD at session start of the backlog slice: `353c102`
+  - later pre-polish pushed checkpoint before this follow-up work: `cb06993` (`fix: stabilize minimum imports and sync peers`)
+  - only pre-existing local noise was untracked `.vscode/`
+- Exact GitHub backlog items resolved first before coding:
+  - `Add portable Minimums export and import`
+  - `Design History sync propagation`
+- Confirmed implementation scope from those exact items plus follow-up clarification:
+  - Minimums import/export is now a portable JSON payload flow
+  - import is review-first, not immediate apply
+  - review rows allow last-minute edits before acceptance, including remapping a missing imported Bank Tab to a local tab
+  - accepted remote sync should reconstruct the existing `History` tab categories already tracked today
+  - do not add new ledger-history or minimum-snapshot-only audit categories
+- Local implementation now in the worktree:
+  - new `GBankManager/Domain/MinimumsPortability.lua` module exports versioned `gbankmanager.minimums` payloads and parses them back into review rows
+  - `Minimums` now has `Export` and `Import` actions
+  - import opens a review modal, blocks rows whose imported tab does not exist locally until the user picks a local tab, allows quantity/enabled edits, and stages accepted rows through the existing draft workflow so `Save All` still controls the final write
+  - accepted remote `MINIMUMS_SNAPSHOT` payloads now diff previous vs accepted rules and append equivalent local `MINIMUM_CREATED`, `MINIMUM_UPDATED`, `MINIMUM_ENABLED`, `MINIMUM_DISABLED`, and `MINIMUM_REMOVED` audit rows when those outcomes actually occurred
+  - live/sync identity is now normalized to `Character-Server` at the builder and peer-storage layers, so login hello, `/gbm debug sync`, and Sync-tab peer rows no longer drift back to `Server-Character`
+  - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
+  - visible History rows now also have a dedicated `HISTORY_SNAPSHOT` sync family that merges only the same `History` page categories already shown today
+  - `Options -> Sync` now includes `Sync History`, and `Sync All` now includes that family too
+  - incoming guild hello now triggers the same catch-up family set as `Sync All` for the receiver's local access profile, so full-shell clients can republish Requests, Minimums, visible History rows, and ledger deltas automatically while request-only clients still collapse to Requests only
+  - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
+  - the Sync peer table now provisions its own slim scrollbar, keeps that scrollbar hidden until the peer list truly overflows, reserves a stable right-side gutter for it, and keeps the delete `X` inside a dedicated trailing action column instead of hugging the outer edge
+  - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line
+- Verification now green on the current local checkpoint:
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Local Retail deploy also completed from this checkpoint:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- If resuming from here, start with live/manual validation of `Sync History` and the refreshed `Options -> Sync` peer table behavior on two guild clients, then rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before the next code slice
+
 ### 2026-06-01 PTR Maintainer + 12.0.7 Support Checkpoint
 
 - Current local checkpoint:

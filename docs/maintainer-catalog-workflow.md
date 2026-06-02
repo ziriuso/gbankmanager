@@ -30,6 +30,32 @@ The maintainer window centers on four actions:
 
 The launcher intentionally stays thin. Extraction, merge, and generated-addon rebuild still live in the underlying scripts so the CLI and UI remain the same workflow.
 
+## Retail Fast Path
+
+For the common "put the current worktree into live Retail and sanity-check it" workflow on this machine:
+
+1. Verify the resolved Retail target and current status:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Get-ItemCatalogMaintainerStatus.ps1 -Target Retail -Json
+```
+
+2. Deploy the current repo state into Retail:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json
+```
+
+3. On this machine, the resolved Retail AddOns directory is expected to be:
+
+```text
+C:\Gaming\World of Warcraft\_retail_\Interface\AddOns
+```
+
+4. After deploy, `/reload` in game and run the focused live checks from `docs/testing.md` and `docs/manual-test-checklist.md`.
+
+The deploy helper copies both addon folders from the current worktree state, including local uncommitted changes, so be intentional about the branch and `git status -sb` before using it as a live-client build.
+
 ## CLI Equivalents
 
 Read status for a target:
@@ -110,6 +136,14 @@ Deployment copies both addon folders:
 
 - `GBankManager/`
 - `GBankManager_ItemData/`
+
+For go-forward local Retail deploys, prefer the repo helper over manual Explorer copy or drag/drop so the command history stays reproducible:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail
+```
+
+If you want the resolved path echoed back for logging or follow-up tooling, use `-Json`.
 
 The deployment helper is intentionally local-maintainer-only. It does not write runtime catalog assets into git, and it does not expose the fallback metadata flows as primary actions.
 

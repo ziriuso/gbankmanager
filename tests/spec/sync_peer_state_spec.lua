@@ -51,3 +51,9 @@ peerState.TouchPeer(db, {
 assert.equal(1717000000, tonumber((((db.syncState or {}).peers or {})["Guild Testers"]["Stormrage-OfficerOne"] or {}).lastSeen or 0), "touching a peer in another guild should not bleed over the active guild peer history")
 assert.equal(1717001111, tonumber((((db.syncState or {}).peers or {})["Bank Alts"]["Stormrage-OfficerOne"] or {}).lastSeen or 0), "peer state should keep independent per-guild peer history buckets")
 assert.equal(0, tonumber((((db.syncState or {}).peers or {})["Bank Alts"]["Stormrage-OfficerOne"] or {}).lastSynchronizedAt or 0), "other guild peer history should keep sync timestamps isolated as well")
+
+local removedPeer = peerState.RemovePeer(db, "Guild Testers", "Stormrage-OfficerOne")
+assert.truthy(type(removedPeer) == "table", "peer state should return the removed peer when deleting a stored sync peer")
+assert.equal(nil, ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["Stormrage-OfficerOne"]), "peer removal should clear the targeted peer from the requested guild bucket")
+assert.equal(1717001111, tonumber((((db.syncState or {}).peers or {})["Bank Alts"]["Stormrage-OfficerOne"] or {}).lastSeen or 0), "peer removal should not disturb same-character peer history stored for another guild")
+assert.truthy(peerState.RemovePeer(db, "Guild Testers", "Missing-Stormrage") == nil, "peer removal should report nil when the target peer does not exist")

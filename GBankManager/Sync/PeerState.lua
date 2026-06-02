@@ -93,6 +93,31 @@ function peerState.GetPeers(db, guildKey)
     return peers
 end
 
+function peerState.RemovePeer(db, guildKey, characterKey)
+    db = type(db) == "table" and db or {}
+    local syncState = peerState.EnsureState(db)
+    local resolvedGuildKey = trim(guildKey or (((db.meta or {}).guildName) or "Unknown"))
+    local resolvedCharacterKey = trim(characterKey)
+    if resolvedGuildKey == "" or resolvedCharacterKey == "" then
+        return nil
+    end
+
+    local guildPeers = ensure_table(syncState.peers[resolvedGuildKey])
+    local removed = guildPeers[resolvedCharacterKey]
+    if removed == nil then
+        return nil
+    end
+
+    guildPeers[resolvedCharacterKey] = nil
+    if next(guildPeers) == nil then
+        syncState.peers[resolvedGuildKey] = nil
+    else
+        syncState.peers[resolvedGuildKey] = guildPeers
+    end
+
+    return removed
+end
+
 ns.modules.syncPeerState = peerState
 
 return peerState

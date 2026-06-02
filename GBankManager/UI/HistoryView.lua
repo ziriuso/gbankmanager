@@ -36,6 +36,21 @@ local procurement_categories = {
     MINIMUM = true,
 }
 
+local SYNC_FIELDS = {
+    "category",
+    "type",
+    "actor",
+    "requestId",
+    "itemID",
+    "itemName",
+    "requester",
+    "quantity",
+    "oldValue",
+    "newValue",
+    "note",
+    "timestamp",
+}
+
 local function normalize_timestamp(timestamp)
     local numeric = tonumber(timestamp)
     if numeric ~= nil then
@@ -142,6 +157,90 @@ function historyView.FilterProcurementEntries(entries)
     end
 
     return filtered
+end
+
+function historyView.NormalizeSyncEntry(entry)
+    entry = type(entry) == "table" and entry or {}
+    if not (procurement_categories[entry.category] or (entry.category == "OPTIONS" and entry.type == "AUTH_POLICY_UPDATED")) then
+        return nil
+    end
+
+    local normalized = {}
+    for _, fieldName in ipairs(SYNC_FIELDS) do
+        normalized[fieldName] = entry[fieldName]
+    end
+    normalized.category = tostring(normalized.category or "")
+    normalized.type = tostring(normalized.type or "")
+    normalized.actor = tostring(normalized.actor or "Unknown")
+    normalized.requestId = normalized.requestId ~= nil and tostring(normalized.requestId) or nil
+    normalized.itemName = normalized.itemName ~= nil and tostring(normalized.itemName) or nil
+    normalized.requester = normalized.requester ~= nil and tostring(normalized.requester) or nil
+    normalized.oldValue = normalized.oldValue ~= nil and tostring(normalized.oldValue) or nil
+    normalized.newValue = normalized.newValue ~= nil and tostring(normalized.newValue) or nil
+    normalized.note = normalized.note ~= nil and tostring(normalized.note) or nil
+    normalized.itemID = normalized.itemID ~= nil and tonumber(normalized.itemID) or nil
+    normalized.quantity = normalized.quantity ~= nil and tonumber(normalized.quantity) or nil
+    normalized.timestamp = normalize_timestamp(normalized.timestamp)
+    return normalized
+end
+
+function historyView.BuildSyncFingerprint(entry)
+    entry = historyView.NormalizeSyncEntry(entry)
+    if not entry then
+        return nil
+    end
+
+    local parts = {}
+    for _, fieldName in ipairs(SYNC_FIELDS) do
+        parts[#parts + 1] = tostring(entry[fieldName] ~= nil and entry[fieldName] or "")
+    end
+    return table.concat(parts, "|")
+end
+
+function historyView.BuildSyncSnapshot(entries)
+    local snapshot = {}
+
+    for _, entry in ipairs(entries or {}) do
+        local normalized = historyView.NormalizeSyncEntry(entry)
+        if normalized then
+            snapshot[#snapshot + 1] = normalized
+        end
+    end
+
+    table.sort(snapshot, function(left, right)
+        local leftTimestamp = normalize_timestamp(left.timestamp)
+        local rightTimestamp = normalize_timestamp(right.timestamp)
+        if leftTimestamp == rightTimestamp then
+            return historyView.BuildSyncFingerprint(left) < historyView.BuildSyncFingerprint(right)
+        end
+        return leftTimestamp > rightTimestamp
+    end)
+
+    return snapshot
+end
+
+function historyView.MergeSyncSnapshot(auditLog, entries)
+    auditLog = type(auditLog) == "table" and auditLog or {}
+    local seen = {}
+    for _, existing in ipairs(auditLog) do
+        local fingerprint = historyView.BuildSyncFingerprint(existing)
+        if fingerprint then
+            seen[fingerprint] = true
+        end
+    end
+
+    local merged = 0
+    for _, entry in ipairs(entries or {}) do
+        local normalized = historyView.NormalizeSyncEntry(entry)
+        local fingerprint = normalized and historyView.BuildSyncFingerprint(normalized) or nil
+        if normalized and fingerprint and not seen[fingerprint] then
+            auditLog[#auditLog + 1] = normalized
+            seen[fingerprint] = true
+            merged = merged + 1
+        end
+    end
+
+    return merged
 end
 
 function historyView.BuildLines(entries, filters)

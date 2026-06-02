@@ -47,6 +47,54 @@ local function trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function current_realm_name()
+    return trim(type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
+end
+
+local function canonical_character_parts(value, realmName, nameHint)
+    local normalized = trim(value)
+    if normalized == "" then
+        return "", ""
+    end
+
+    local left, right = string.match(normalized, "^([^%-]+)%-(.+)$")
+    if not left or not right or left == "" or right == "" then
+        return normalized, trim(realmName)
+    end
+
+    local normalizedNameHint = trim(nameHint)
+    if normalizedNameHint ~= "" then
+        if left == normalizedNameHint then
+            return left, right
+        end
+        if right == normalizedNameHint then
+            return right, left
+        end
+    end
+
+    local normalizedRealm = trim(realmName)
+    if normalizedRealm ~= "" then
+        if right == normalizedRealm then
+            return left, right
+        end
+        if left == normalizedRealm then
+            return right, left
+        end
+    end
+
+    local currentRealm = current_realm_name()
+    if currentRealm ~= "" then
+        if right == currentRealm then
+            return left, right
+        end
+        if left == currentRealm then
+            return right, left
+        end
+    end
+
+    return left, right
+end
+
 local function build_blacklist_directory_entry(characterKey, entry, fallbackUpdatedAt)
     local normalizedCharacterKey = trim(characterKey)
     if normalizedCharacterKey == "" then
@@ -108,21 +156,28 @@ function permissions.BuildCharacterKey(name, realmName)
         return normalizedName
     end
 
-    return string.format("%s-%s", normalizedRealm, normalizedName)
+    return string.format("%s-%s", normalizedName, normalizedRealm)
 end
 
 function permissions.HashCharacterKey(characterKey)
     return type(authPolicyCodec.HashCharacterKey) == "function" and authPolicyCodec.HashCharacterKey(characterKey) or ""
 end
 
-function permissions.NormalizeCharacterKey(value, realmName)
+function permissions.NormalizeCharacterKey(value, realmName, nameHint)
     local normalized = trim(value)
     if normalized == "" then
         return ""
     end
 
     if string.find(normalized, "-", 1, true) then
-        return normalized
+        local name, resolvedRealm = canonical_character_parts(normalized, realmName, nameHint)
+        if name == "" then
+            return ""
+        end
+        if resolvedRealm == "" then
+            return name
+        end
+        return string.format("%s-%s", name, resolvedRealm)
     end
 
     return permissions.BuildCharacterKey(normalized, realmName)
@@ -134,9 +189,8 @@ function permissions.NormalizeEnteredCharacterKey(value, realmName)
         return ""
     end
 
-    local left, right = string.match(normalized, "^([^%-]+)%-(.+)$")
-    if left and right and left ~= "" and right ~= "" then
-        return string.format("%s-%s", left, right)
+    if string.find(normalized, "-", 1, true) then
+        return permissions.NormalizeCharacterKey(normalized, realmName)
     end
 
     local normalizedRealm = trim(realmName)
@@ -153,26 +207,17 @@ function permissions.DisplayCharacterKey(characterKey)
         return ""
     end
 
-    local delimiterIndex = string.find(normalized, "-", 1, true)
-    if not delimiterIndex then
-        return normalized
-    end
+    return permissions.NormalizeCharacterKey(normalized)
+end
 
-    local left = string.sub(normalized, 1, delimiterIndex - 1)
-    local right = string.sub(normalized, delimiterIndex + 1)
-    if right == "" or left == "" then
-        return normalized
-    end
+function permissions.GetCharacterNameFromKey(characterKey, realmName, nameHint)
+    local name = canonical_character_parts(characterKey, realmName, nameHint)
+    return name
+end
 
-    local currentRealm = trim(type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
-    if right == currentRealm then
-        return string.format("%s-%s", left, right)
-    end
-    if left == currentRealm then
-        return string.format("%s-%s", right, left)
-    end
-
-    return normalized
+function permissions.GetRealmNameFromKey(characterKey, realmName, nameHint)
+    local _, resolvedRealm = canonical_character_parts(characterKey, realmName, nameHint)
+    return resolvedRealm
 end
 
 function permissions.GetGuildRankMetadata()
@@ -234,11 +279,7 @@ function permissions.NormalizePolicy(policy, liveRankMetadata)
 
     local migratedBlacklist = {}
     for characterKey, entry in pairs(normalized.blacklist) do
-        local finalCharacterKey = characterKey
-        local left, right = string.match(tostring(characterKey or ""), "^([^%-]+)%-(.+)$")
-        if type(entry) == "table" and left and right and trim(entry.name or "") ~= "" and trim(entry.name or "") == right then
-            finalCharacterKey = string.format("%s-%s", right, left)
-        end
+        local finalCharacterKey = permissions.NormalizeCharacterKey(characterKey, nil, type(entry) == "table" and entry.name or nil)
         migratedBlacklist[finalCharacterKey] = entry
         if type(authPolicyCodec.HashCharacterKey) == "function" then
             normalized.blacklistHashes[authPolicyCodec.HashCharacterKey(characterKey)] = true

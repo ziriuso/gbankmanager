@@ -92,6 +92,18 @@ local function send_request_sync_message(db, transport, request, message)
     end
 
     transport.Send("GUILD", "GUILD", message)
+    local historyView = ns.modules.historyView or {}
+    if type(historyView.BuildSyncSnapshot) == "function" then
+        transport.Send("GUILD", "GUILD", {
+            type = "HISTORY_SNAPSHOT",
+            updatedAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+            payload = {
+                guildKey = active_guild_key(db),
+                actorContext = type(message.payload) == "table" and message.payload.actorContext or {},
+                entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
+            },
+        })
+    end
     return 1
 end
 
