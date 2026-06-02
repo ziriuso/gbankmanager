@@ -1075,6 +1075,63 @@ local duplicateMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankMa
 assert.truthy(duplicateMinimumSnapshotAccepted, "replayed minimum snapshots should still count as handled accepted messages")
 assert.equal(minimumAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change minimum snapshots should not append duplicate history rows")
 
+db.auditLog = {
+    { type = "LEDGER_IMPORTED", category = "LEDGER", itemName = "Hidden Ledger Row", actor = "Bank", timestamp = 150 },
+}
+local visibleHistorySnapshotPayload = codec.EncodeTable({
+    type = "HISTORY_SNAPSHOT",
+    updatedAt = 205,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        entries = {
+            {
+                category = "MINIMUM",
+                type = "MINIMUM_CREATED",
+                actor = "OfficerOne",
+                itemID = 243734,
+                itemName = "History Snapshot Oil",
+                newValue = "100",
+                timestamp = 205,
+            },
+            {
+                category = "REQUEST",
+                type = "REQUEST_CREATED",
+                actor = "MemberOne",
+                requestId = "req-history-snapshot-1",
+                itemID = 243735,
+                itemName = "History Snapshot Flask",
+                quantity = 2,
+                newValue = "PENDING",
+                timestamp = 204,
+            },
+            {
+                category = "LEDGER",
+                type = "LEDGER_IMPORTED",
+                actor = "Bank",
+                itemName = "Hidden Ledger Row",
+                timestamp = 203,
+            },
+        },
+    },
+})
+local historySnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", visibleHistorySnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(historySnapshotAccepted, "sync events should accept visible history snapshots from authorized guild peers")
+assert.equal(3, #(db.auditLog or {}), "accepted history snapshots should append only the visible history rows and preserve local hidden audit rows")
+assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[2] or {}).type, "accepted history snapshots should append visible minimum history rows")
+assert.equal("REQUEST_CREATED", ((db.auditLog or {})[3] or {}).type, "accepted history snapshots should append visible request history rows")
+local historyAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local duplicateHistorySnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", visibleHistorySnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(duplicateHistorySnapshotAccepted, "replayed history snapshots should still count as handled accepted messages")
+assert.equal(historyAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change history snapshots should not append duplicate visible history rows")
+
 local memberMinimumPayload = codec.EncodeTable({
     type = "MINIMUMS_SNAPSHOT",
     updatedAt = 206,

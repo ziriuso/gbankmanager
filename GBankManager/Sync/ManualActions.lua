@@ -13,6 +13,7 @@ local COOLDOWN_SECONDS = 60
 local ACTION_ORDER = {
     "requests",
     "minimums",
+    "history",
     "ledger",
 }
 
@@ -42,7 +43,7 @@ local function normalize_action(action)
         return "minimums"
     end
 
-    if action == "all" or action == "requests" or action == "minimums" or action == "ledger" then
+    if action == "all" or action == "requests" or action == "minimums" or action == "history" or action == "ledger" then
         return action
     end
 
@@ -60,6 +61,7 @@ local function allowed_actions_for_profile(accessProfile)
     return {
         requests = true,
         minimums = true,
+        history = true,
         ledger = true,
         all = true,
     }
@@ -187,6 +189,24 @@ local function default_action_handlers()
                 },
             })
             return true, string.format("Requested minimums sync for %d rule(s).", #snapshot)
+        end,
+        history = function(db, options)
+            local historyView = ns.modules.historyView or {}
+            if type(transport.Send) ~= "function" or type(historyView.BuildSyncSnapshot) ~= "function" then
+                return false, "Manual sync is unavailable right now."
+            end
+
+            local snapshot = historyView.BuildSyncSnapshot((db or {}).auditLog or {})
+            transport.Send("GUILD", "GUILD", {
+                type = "HISTORY_SNAPSHOT",
+                updatedAt = tonumber(options.now or 0) or 0,
+                payload = {
+                    guildKey = current_guild_key(db),
+                    actorContext = current_context(db),
+                    entries = snapshot,
+                },
+            })
+            return true, string.format("Requested history sync for %d visible row(s).", #snapshot)
         end,
         ledger = function(db, options)
             if type(transport.Send) ~= "function" or type(bankLedger.EnsureState) ~= "function" then

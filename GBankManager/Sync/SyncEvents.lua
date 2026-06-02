@@ -450,6 +450,36 @@ local function refresh_sync_peer_view()
     mainFrame:RefreshSyncControls()
 end
 
+local function refresh_visible_sync_views()
+    local mainFrame = ns.modules.mainFrame or {}
+    if type(mainFrame.RefreshView) ~= "function" then
+        return
+    end
+
+    local activeView = tostring(mainFrame.activeView or "")
+    if activeView == "HISTORY" or activeView == "REQUESTS" or activeView == "MINIMUMS" then
+        mainFrame:RefreshView()
+    end
+end
+
+local function send_visible_history_snapshot(db, actorContext, updatedAt)
+    local historyView = ns.modules.historyView or {}
+    if type(transport.Send) ~= "function" or type(historyView.BuildSyncSnapshot) ~= "function" then
+        return false
+    end
+
+    transport.Send("GUILD", "GUILD", {
+        type = "HISTORY_SNAPSHOT",
+        updatedAt = tonumber(updatedAt or (_G.time and _G.time() or 0)) or 0,
+        payload = {
+            guildKey = active_guild_key(db),
+            actorContext = type(actorContext) == "table" and actorContext or {},
+            entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
+        },
+    })
+    return true
+end
+
 local function append_audit_entry(db, entry)
     db.auditLog = db.auditLog or {}
     local lastEntry = db.auditLog[#db.auditLog]
@@ -959,6 +989,52 @@ local function handle_requests_snapshot(db, payload, sender)
     return true
 end
 
+local function actor_can_sync_history(context, policy)
+    return actor_can(context, "request_submit", policy)
+        or actor_can(context, "request_approve", policy)
+        or actor_can_manage_minimums(context, policy)
+        or actor_can(context, "auth_manage", policy)
+        or actor_can(context, "full_ui", policy)
+end
+
+local function handle_history_snapshot(db, payload, sender)
+    local historyView = ns.modules.historyView or {}
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local entries = type(payload.entries) == "table" and payload.entries or nil
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "wrong_guild")
+        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if entries == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", entries and "blacklisted" or "missing_history")
+        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "actor_sender_mismatch")
+        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not actor_can_sync_history(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "capability_denied")
+        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    local mergedCount = type(historyView.MergeSyncSnapshot) == "function" and historyView.MergeSyncSnapshot(db.auditLog or {}, entries) or 0
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "history_snapshot", mergedCount > 0 and "applied" or "no_change")
+    report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+    return true
+end
+
 local function handle_ledger_delta(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
@@ -1112,6 +1188,12 @@ function syncEvents.HandleEvent(event, ...)
             return false
         end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
+        if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
+            local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+            send_visible_history_snapshot(db, liveContext, ns.state.lastSyncMessage.updatedAt)
+            refresh_sync_peer_view()
+            return true
+        end
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
             remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "auth_policy_snapshot", "retired_message_type")
             report_sync_status("Ignored retired auth policy snapshot message.")
@@ -1121,24 +1203,35 @@ function syncEvents.HandleEvent(event, ...)
 
         if ns.state.lastSyncMessage.type == "REQUEST_CREATED" then
             local accepted = handle_request_created(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_visible_sync_views()
             refresh_sync_peer_view()
             return accepted
         end
 
         if ns.state.lastSyncMessage.type == "REQUEST_UPDATED" then
             local accepted = handle_request_updated(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_visible_sync_views()
             refresh_sync_peer_view()
             return accepted
         end
 
         if ns.state.lastSyncMessage.type == "MINIMUMS_SNAPSHOT" then
             local accepted = handle_minimums_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_visible_sync_views()
             refresh_sync_peer_view()
             return accepted
         end
 
         if ns.state.lastSyncMessage.type == "REQUESTS_SNAPSHOT" then
             local accepted = handle_requests_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_visible_sync_views()
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "HISTORY_SNAPSHOT" then
+            local accepted = handle_history_snapshot(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_visible_sync_views()
             refresh_sync_peer_view()
             return accepted
         end

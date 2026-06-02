@@ -132,6 +132,10 @@ local firstSyncRow = (mainFrame.optionsSyncTableRowsData or {})[1] or {}
 assert.equal("OfficerOne-Stormrage", tostring(firstSyncRow.character or ""), "sync rows should render Name-Realm values")
 assert.truthy(string.find(tostring(firstSyncRow.lastSeen or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSeen or "") ~= "", "sync rows should show a formatted last-seen timestamp")
 assert.truthy(string.find(tostring(firstSyncRow.lastSynchronized or ""), "2024%-", 1, false) ~= nil or tostring(firstSyncRow.lastSynchronized or "") ~= "", "sync rows should show a formatted last-synchronized timestamp")
+assert.truthy(type(mainFrame.optionsSyncTableScrollBar) == "table", "options Sync should provision a dedicated peer-table scrollbar")
+assert.truthy(not mainFrame.optionsSyncTableScrollBar:IsShown(), "sync peer scrollbar should stay hidden while the peer list fits in the viewport")
+assert.truthy((mainFrame.optionsSyncTableScrollFrame:GetWidth() or 0) < (mainFrame.optionsSyncTable:GetWidth() or 0), "sync peer rows should reserve a right-side gutter so the action column does not hug the table edge")
+local syncViewportWidth = mainFrame.optionsSyncTableScrollFrame:GetWidth() or 0
 local firstSyncRowFrame = ((mainFrame.optionsSyncTableRows or {})[1] or {})
 assert.truthy(type(firstSyncRowFrame.removeButton) == "table", "options Sync should expose an inline remove control for each stored peer row")
 assert.equal("danger", tostring(firstSyncRowFrame.removeButton.gbmButtonVariant or ""), "sync peer remove should use the destructive button styling")
@@ -153,10 +157,12 @@ peerState.MarkSynchronized(current_db(), {
 mainFrame:RefreshSyncControls()
 assert.equal("Sync Requests", mainFrame.optionsSyncRequestsButton.labelText:GetText(), "sync tab should expose a request sync action")
 assert.equal("Sync Minimums", mainFrame.optionsSyncMinimumsButton.labelText:GetText(), "sync tab should expose a minimums sync action")
+assert.equal("Sync History", mainFrame.optionsSyncHistoryButton.labelText:GetText(), "sync tab should expose a history sync action")
 assert.equal("Sync Ledger", mainFrame.optionsSyncLedgerButton.labelText:GetText(), "sync tab should expose a ledger sync action")
 assert.equal("Sync All", mainFrame.optionsSyncAllButton.labelText:GetText(), "sync tab should expose a Sync All action")
 assert.truthy(mainFrame.optionsSyncRequestsButton:IsEnabled(), "full-shell users should be able to trigger request sync from the Sync tab")
 assert.truthy(mainFrame.optionsSyncMinimumsButton:IsEnabled(), "full-shell users should be able to trigger minimums sync from the Sync tab")
+assert.truthy(mainFrame.optionsSyncHistoryButton:IsEnabled(), "full-shell users should be able to trigger history sync from the Sync tab")
 assert.truthy(mainFrame.optionsSyncLedgerButton:IsEnabled(), "full-shell users should be able to trigger ledger sync from the Sync tab")
 assert.truthy(mainFrame.optionsSyncAllButton:IsEnabled(), "full-shell users should be able to trigger Sync All from the Sync tab")
 local incomingHelloPayload = syncCodec.EncodeTable({
@@ -172,6 +178,27 @@ local firstVisibleSyncRow = ((mainFrame.optionsSyncTableRows or {})[1] or {})
 local firstVisibleSyncCharacter = firstVisibleSyncRow.characterText and firstVisibleSyncRow.characterText:GetText() or ""
 assert.truthy((firstVisibleSyncRow:GetWidth() or 0) > 0, "sync tab should size visible peer rows to a real width instead of relying on zero-width anchor resolution")
 assert.equal("MemberTwo-Stormrage", tostring(firstVisibleSyncCharacter or ""), "sync tab should repaint the visible first peer row after live sync traffic")
+assert.truthy(not mainFrame.optionsSyncTableScrollBar:IsShown(), "sync peer scrollbar should remain hidden while only a couple of peers are visible")
+for index = 3, 12 do
+    local characterKey = string.format("Member%02d-Stormrage", index)
+    peerState.TouchPeer(current_db(), {
+        guildKey = "Guild Testers",
+        characterKey = characterKey,
+        version = "0.9.0-beta.3",
+        messageType = "SYNC_HELLO",
+        seenAt = 1717000400 + index,
+    })
+    peerState.MarkSynchronized(current_db(), {
+        guildKey = "Guild Testers",
+        characterKey = characterKey,
+        synchronizedAt = 1717000500 + index,
+    })
+end
+mainFrame:RefreshSyncControls()
+assert.equal(12, #(mainFrame.optionsSyncTableRowsData or {}), "sync tab should keep rendering all known peers after more sync traffic is stored")
+assert.truthy(mainFrame.optionsSyncTableScrollBar:IsShown(), "sync peer scrollbar should appear once the peer list overflows the viewport")
+assert.truthy((mainFrame.optionsSyncTableScrollFrame.verticalScrollRange or 0) > 0, "sync peer scroll state should report a positive range after overflow")
+assert.equal(syncViewportWidth, mainFrame.optionsSyncTableScrollFrame:GetWidth() or 0, "sync peer columns should keep the same width when the scrollbar appears")
 mainFrame:SetOptionsTab("STOCK")
 assert.equal("STOCK", mainFrame.optionsActiveTab, "options should switch to the Stock Settings tab when clicked")
 assert.truthy(mainFrame.optionsStockSettingsPanel:IsShown(), "options should show the Stock Settings panel after tab switch")

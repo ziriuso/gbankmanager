@@ -29,6 +29,7 @@ local set_button_icon = mainFrameShell.SetButtonIcon
 local make_input = mainFrameShell.MakeInput
 local make_slider = mainFrameShell.MakeSlider
 local make_slim_scroll_bar = mainFrameShell.MakeSlimScrollBar
+local attach_scroll_behavior = mainFrameShell.AttachScrollBehavior
 local create_page_overflow_viewport = mainFrameShell.CreatePageOverflowViewport
 local set_frame_shown = mainFrameShell.SetFrameShown
 local apply_frame_layer = mainFrameShell.ApplyFrameLayer
@@ -1632,8 +1633,11 @@ mainFrame.optionsSyncRequestsButton:SetPoint("TOPLEFT", mainFrame.optionsSyncHin
 mainFrame.optionsSyncMinimumsButton = mainFrame.optionsSyncMinimumsButton or make_button(mainFrame.optionsSyncPanel, 112, 24, "Sync Minimums")
 mainFrame.optionsSyncMinimumsButton:SetPoint("LEFT", mainFrame.optionsSyncRequestsButton, "RIGHT", 8, 0)
 
+mainFrame.optionsSyncHistoryButton = mainFrame.optionsSyncHistoryButton or make_button(mainFrame.optionsSyncPanel, 104, 24, "Sync History")
+mainFrame.optionsSyncHistoryButton:SetPoint("LEFT", mainFrame.optionsSyncMinimumsButton, "RIGHT", 8, 0)
+
 mainFrame.optionsSyncLedgerButton = mainFrame.optionsSyncLedgerButton or make_button(mainFrame.optionsSyncPanel, 96, 24, "Sync Ledger")
-mainFrame.optionsSyncLedgerButton:SetPoint("LEFT", mainFrame.optionsSyncMinimumsButton, "RIGHT", 8, 0)
+mainFrame.optionsSyncLedgerButton:SetPoint("LEFT", mainFrame.optionsSyncHistoryButton, "RIGHT", 8, 0)
 
 mainFrame.optionsSyncAllButton = mainFrame.optionsSyncAllButton or make_button(mainFrame.optionsSyncPanel, 88, 24, "Sync All")
 mainFrame.optionsSyncAllButton:SetPoint("LEFT", mainFrame.optionsSyncLedgerButton, "RIGHT", 8, 0)
@@ -1647,6 +1651,7 @@ end
 mainFrame.optionsSyncTable = mainFrame.optionsSyncTable or _G.CreateFrame("Frame", nil, mainFrame.optionsSyncPanel, "BackdropTemplate")
 mainFrame.optionsSyncTable:SetPoint("TOPLEFT", mainFrame.optionsSyncStatusText, "BOTTOMLEFT", 0, -12)
 mainFrame.optionsSyncTable:SetPoint("TOPRIGHT", mainFrame.optionsSyncPanel, "TOPRIGHT", -16, 0)
+mainFrame.optionsSyncTable:SetWidth(680)
 mainFrame.optionsSyncTable:SetHeight(200)
 apply_surface_variant(mainFrame.optionsSyncTable, "table-viewport-structured")
 
@@ -1654,6 +1659,7 @@ mainFrame.optionsSyncColumnHeaders = mainFrame.optionsSyncColumnHeaders or {}
 local syncHeaderTitles = { "Character", "Last Time Seen", "Last Time Synchronized", "" }
 local syncHeaderWidths = { 200, 160, 200, 28 }
 mainFrame.optionsSyncTableContentWidth = 8
+mainFrame.optionsSyncTableScrollbarGutterWidth = 26
 local previousSyncHeader = nil
 for index, title in ipairs(syncHeaderTitles) do
     local header = mainFrame.optionsSyncColumnHeaders[index] or {}
@@ -1680,7 +1686,11 @@ end
 
 mainFrame.optionsSyncTableScrollFrame = mainFrame.optionsSyncTableScrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.optionsSyncTable, "BackdropTemplate")
 mainFrame.optionsSyncTableScrollFrame:SetPoint("TOPLEFT", mainFrame.optionsSyncTable, "TOPLEFT", 8, -36)
-mainFrame.optionsSyncTableScrollFrame:SetPoint("BOTTOMRIGHT", mainFrame.optionsSyncTable, "BOTTOMRIGHT", -8, 8)
+mainFrame.optionsSyncTableScrollFrame:SetPoint("BOTTOMRIGHT", mainFrame.optionsSyncTable, "BOTTOMRIGHT", -(8 + (tonumber(mainFrame.optionsSyncTableScrollbarGutterWidth or 26) or 26)), 8)
+mainFrame.optionsSyncTableScrollFrame:SetSize(
+    math.max(0, (mainFrame.optionsSyncTable:GetWidth() or 0) - 16 - (tonumber(mainFrame.optionsSyncTableScrollbarGutterWidth or 26) or 26)),
+    math.max(24, (mainFrame.optionsSyncTable:GetHeight() or 0) - 44)
+)
 if type(mainFrame.optionsSyncTableScrollFrame.SetBackdrop) == "function" then
     mainFrame.optionsSyncTableScrollFrame:SetBackdrop(nil)
 end
@@ -1691,6 +1701,15 @@ mainFrame.optionsSyncTableScrollChild:SetPoint("TOPRIGHT", mainFrame.optionsSync
 mainFrame.optionsSyncTableScrollChild:SetWidth(tonumber(mainFrame.optionsSyncTableContentWidth or 0) or 0)
 mainFrame.optionsSyncTableScrollChild:SetHeight(24)
 mainFrame.optionsSyncTableScrollFrame:SetScrollChild(mainFrame.optionsSyncTableScrollChild)
+mainFrame.optionsSyncTableScrollBar = mainFrame.optionsSyncTableScrollBar or make_slim_scroll_bar(mainFrame.optionsSyncTable, 14)
+mainFrame.optionsSyncTableScrollBar:ClearAllPoints()
+mainFrame.optionsSyncTableScrollBar:SetPoint("TOPRIGHT", mainFrame.optionsSyncTable, "TOPRIGHT", -8, -38)
+mainFrame.optionsSyncTableScrollBar:SetPoint("BOTTOMRIGHT", mainFrame.optionsSyncTable, "BOTTOMRIGHT", -8, 10)
+mainFrame.optionsSyncTableScrollController = mainFrame.optionsSyncTableScrollController
+    or (type(attach_scroll_behavior) == "function" and attach_scroll_behavior(mainFrame.optionsSyncTableScrollFrame, mainFrame.optionsSyncTableScrollBar, {
+        wheelStep = 26,
+    }) or nil)
+set_frame_shown(mainFrame.optionsSyncTableScrollBar, false)
 
 mainFrame.optionsSyncEmptyStateText = mainFrame.optionsSyncEmptyStateText or make_label(mainFrame.optionsSyncTableScrollChild, "No peers seen yet.", "GameFontNormal")
 mainFrame.optionsSyncEmptyStateText:SetPoint("TOPLEFT", mainFrame.optionsSyncTableScrollChild, "TOPLEFT", 0, 0)
@@ -2474,7 +2493,7 @@ function mainFrame:RefreshSyncControls()
             rowFrame.lastSynchronizedText = make_label(rowFrame, "", "GameFontNormal")
             rowFrame.lastSynchronizedText:SetPoint("TOPLEFT", rowFrame, "TOPLEFT", 384, -4)
             rowFrame.removeButton = make_button(rowFrame, 24, 18, "")
-            rowFrame.removeButton:SetPoint("TOPRIGHT", rowFrame, "TOPRIGHT", -6, -2)
+            rowFrame.removeButton:SetPoint("TOPRIGHT", rowFrame, "TOPRIGHT", -10, -2)
             apply_button_variant(rowFrame.removeButton, "danger")
             set_button_icon(rowFrame.removeButton, "remove")
             self.optionsSyncTableRows[index] = rowFrame
@@ -2521,6 +2540,17 @@ function mainFrame:RefreshSyncControls()
         self.optionsSyncTableScrollChild:SetHeight(math.max(24, #rows * 26))
     end
 
+    if self.optionsSyncTableScrollController then
+        self.optionsSyncTableScrollController:Refresh(
+            self.optionsSyncTableScrollChild and (self.optionsSyncTableScrollChild:GetHeight() or 0) or (#rows * 26),
+            self.optionsSyncTableScrollFrame and (self.optionsSyncTableScrollFrame:GetHeight() or 0) or 0
+        )
+    elseif self.optionsSyncTableScrollFrame then
+        self.optionsSyncTableScrollFrame.verticalScrollRange = math.max(0, (self.optionsSyncTableScrollChild and (self.optionsSyncTableScrollChild:GetHeight() or 0) or (#rows * 26)) - (self.optionsSyncTableScrollFrame:GetHeight() or 0))
+        self.optionsSyncTableScrollFrame.verticalScroll = math.max(0, math.min(self.optionsSyncTableScrollFrame.verticalScroll or 0, self.optionsSyncTableScrollFrame.verticalScrollRange or 0))
+        self.optionsSyncTableScrollFrame:SetVerticalScroll(self.optionsSyncTableScrollFrame.verticalScroll)
+    end
+
     set_frame_shown(self.optionsSyncEmptyStateText, #rows == 0)
 
     local manualActions = ns.modules.syncManualActions or {}
@@ -2532,6 +2562,9 @@ function mainFrame:RefreshSyncControls()
     end
     if self.optionsSyncMinimumsButton then
         self.optionsSyncMinimumsButton:SetEnabled(not requestOnly)
+    end
+    if self.optionsSyncHistoryButton then
+        self.optionsSyncHistoryButton:SetEnabled(not requestOnly)
     end
     if self.optionsSyncLedgerButton then
         self.optionsSyncLedgerButton:SetEnabled(not requestOnly)
@@ -2568,6 +2601,11 @@ function mainFrame:RefreshSyncControls()
     if self.optionsSyncMinimumsButton then
         self.optionsSyncMinimumsButton:SetScript("OnClick", function()
             run_sync_action("minimums")
+        end)
+    end
+    if self.optionsSyncHistoryButton then
+        self.optionsSyncHistoryButton:SetScript("OnClick", function()
+            run_sync_action("history")
         end)
     end
     if self.optionsSyncLedgerButton then

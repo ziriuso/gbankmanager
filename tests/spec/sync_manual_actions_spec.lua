@@ -35,6 +35,13 @@ ns.modules.syncManualActionHandlers = {
         }
         return true, "Triggered minimums sync."
     end,
+    history = function(_, options)
+        dispatchCalls[#dispatchCalls + 1] = {
+            action = "history",
+            now = options.now,
+        }
+        return true, "Triggered history sync."
+    end,
     ledger = function(_, options)
         dispatchCalls[#dispatchCalls + 1] = {
             action = "ledger",
@@ -97,6 +104,15 @@ local requestOnlyAll = manualActions.Run(db, {
 assert.equal(true, requestOnlyAll.ok, "request-only Sync All should resolve to the request sync path")
 assert.equal("requests", requestOnlyAll.action, "request-only Sync All should collapse to the requests action")
 
+local historyAllowed = manualActions.Run(db, {
+    action = "history",
+    accessProfile = "full_shell",
+    now = 1717000240,
+})
+
+assert.equal(true, historyAllowed.ok, "full-shell users should be allowed to trigger history sync")
+assert.equal("history", historyAllowed.action, "history sync should keep the history action label")
+
 local fullShellAll = manualActions.Run(db, {
     action = "all",
     accessProfile = "full_shell",
@@ -105,7 +121,7 @@ local fullShellAll = manualActions.Run(db, {
 
 assert.equal(true, fullShellAll.ok, "full-shell Sync All should run when all family cooldowns are clear")
 assert.equal("all", fullShellAll.action, "full-shell Sync All should report the all action label")
-assert.equal(7, #dispatchCalls, "full-shell Sync All should dispatch each eligible family once")
+assert.equal(9, #dispatchCalls, "full-shell Sync All should dispatch each eligible family once, including history")
 
 local fullShellAllCooldown = manualActions.Run(db, {
     action = "all",

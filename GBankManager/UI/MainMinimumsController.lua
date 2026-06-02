@@ -2413,6 +2413,7 @@ function mainMinimumsController.Attach(mainFrame, options)
 
             local canPublish, actorContext = actor_can_manage_minimums(db)
             if canPublish and type(transport.Send) == "function" then
+                local historyView = ns.modules.historyView or {}
                 local minimumSnapshot = {}
                 for _, rule in ipairs(db.minimums or {}) do
                     minimumSnapshot[#minimumSnapshot + 1] = self:CloneMinimumRule(rule)
@@ -2426,6 +2427,17 @@ function mainMinimumsController.Attach(mainFrame, options)
                         minimums = minimumSnapshot,
                     },
                 })
+                if type(historyView.BuildSyncSnapshot) == "function" then
+                    transport.Send("GUILD", "GUILD", {
+                        type = "HISTORY_SNAPSHOT",
+                        updatedAt = _G.time and _G.time() or 0,
+                        payload = {
+                            guildKey = active_guild_key(db),
+                            actorContext = actorContext,
+                            entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
+                        },
+                    })
+                end
             end
         end
 

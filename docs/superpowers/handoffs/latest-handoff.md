@@ -2,13 +2,13 @@
 
 ## Resume Here
 
-### 2026-06-02 Portable Minimums + History Sync Slice
+### 2026-06-02 Portable Minimums + History Sync + Peer Table Polish Slice
 
 - Current repo truth at resume:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - HEAD at session start: `353c102`
-  - branch was in sync with `origin/codex/gbankmanager-v1`
+  - HEAD at session start of the backlog slice: `353c102`
+  - later pre-polish pushed checkpoint before this follow-up work: `cb06993` (`fix: stabilize minimum imports and sync peers`)
   - only pre-existing local noise was untracked `.vscode/`
 - Exact GitHub backlog items resolved first before coding:
   - `Add portable Minimums export and import`
@@ -26,23 +26,23 @@
   - accepted remote `MINIMUMS_SNAPSHOT` payloads now diff previous vs accepted rules and append equivalent local `MINIMUM_CREATED`, `MINIMUM_UPDATED`, `MINIMUM_ENABLED`, `MINIMUM_DISABLED`, and `MINIMUM_REMOVED` audit rows when those outcomes actually occurred
   - live/sync identity is now normalized to `Character-Server` at the builder and peer-storage layers, so login hello, `/gbm debug sync`, and Sync-tab peer rows no longer drift back to `Server-Character`
   - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
+  - visible History rows now also have a dedicated `HISTORY_SNAPSHOT` sync family that merges only the same `History` page categories already shown today
+  - `Options -> Sync` now includes `Sync History`, and `Sync All` now includes that family too
+  - automatic visible-history catch-up now publishes on incoming guild hello plus local request and minimum publishes, so a reloaded client can converge its `History` tab without waiting for another fresh edit
   - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
+  - the Sync peer table now provisions its own slim scrollbar, keeps that scrollbar hidden until the peer list truly overflows, reserves a stable right-side gutter for it, and keeps the delete `X` inside a dedicated trailing action column instead of hugging the outer edge
   - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line
-- Focused verification in this slice:
-  - `.\tools\lua\lua.exe .\tests\spec\minimums_portability_spec.lua`
-  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`
-  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
-  - all three passed in this slice
-- Baseline warning before feature work and still important for the next session:
-  - `.\tools\lua\lua.exe .\tests\run_all.lua` was already failing before this slice in `tests/spec/item_catalog_target_spec.lua` with `fixture writer should open the target file`
-  - a fresh rerun at the end of this slice reproduced that same failure after the three focused Minimums/History specs passed
-  - do not misreport that failure as caused by the Minimums/History work unless new evidence says otherwise
+- Verification now green on the current local checkpoint:
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Local Retail deploy also completed from this checkpoint:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
 - Docs updated in this slice:
   - `README.md`
   - `docs/testing.md`
   - `docs/manual-test-checklist.md`
   - this handoff
-- If resuming from here, rerun the three focused specs above first, then rerun `.\tools\lua\lua.exe .\tests\run_all.lua` and treat any remaining `item_catalog_target_spec.lua` failure as a pre-existing baseline unless new evidence says otherwise
+- If resuming from here, start with live/manual validation of `Sync History` and the refreshed `Options -> Sync` peer table behavior on two guild clients, then rerun `.\tools\lua\lua.exe .\tests\run_all.lua` before the next code slice
 
 ### 2026-06-01 PTR Maintainer + 12.0.7 Support Checkpoint
 
