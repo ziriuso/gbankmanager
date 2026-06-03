@@ -795,6 +795,7 @@ local function append_ledger_sync_payload(db, target, mergedRows)
     local payload = {
         guildKey = current_guild_key(db),
         actorContext = current_context(db),
+        version = tostring(((ns.constants or {}).ADDON_VERSION) or ""),
         kind = target.kind,
         scanStartedAt = tonumber(scanner.ledgerScanStartedAt or 0) or 0,
         transactions = {},

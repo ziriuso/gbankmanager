@@ -244,6 +244,50 @@ local remoteMoneyBatchRepeat = bankLedger.MergeMoneyTransactions(remoteMoneyBatc
 assert.equal(1, remoteMoneyBatchRepeat, "a later local money scan remains the source of truth for repeated visible occurrences")
 assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "a later local money scan should be able to grow real repeated money rows")
 
+local itemReplayBridgeDb = fresh_db()
+local itemReplayBridgeInitial = bankLedger.MergeItemTransactions(itemReplayBridgeDb, {
+    scanStartedAt = 1716573600,
+    sourceTabIndex = 1,
+    sourceTabName = "Freebiez",
+    transactions = {
+        {
+            type = "deposit",
+            who = "Zirleficent",
+            itemID = 241305,
+            itemName = "Silvermoon Health Potion",
+            quantity = 80,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 36,
+        },
+    },
+})
+assert.equal(1, itemReplayBridgeInitial, "baseline item import should persist the visible Freebiez deposit")
+itemReplayBridgeDb.bankLedger.itemSourceSnapshots = {}
+local itemReplayBridgeRepeat = bankLedger.MergeItemTransactions(itemReplayBridgeDb, {
+    scanStartedAt = 1716573900,
+    sourceTabIndex = 1,
+    sourceTabName = "Freebiez",
+    transactions = {
+        {
+            type = "deposit",
+            who = "Zirleficent",
+            itemID = 241305,
+            itemName = "Silvermoon Health Potion",
+            quantity = 80,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 13,
+            minute = 54,
+        },
+    },
+})
+assert.equal(0, itemReplayBridgeRepeat, "item scans should not regrow a visible duplicate when source snapshots are empty and only the timestamp shifted")
+assert.equal(1, #itemReplayBridgeDb.bankLedger.itemLogs, "shifted item replay should leave the repaired item ledger clean")
+
 local pollutedRemoteMoneyDb = fresh_db()
 local pollutedRemoteMoneyInitial = bankLedger.MergeMoneyTransactions(pollutedRemoteMoneyDb, {
     scanStartedAt = 1716573600,
@@ -1273,6 +1317,18 @@ dedupePlanDb.bankLedger.itemLogs = {
         tabName = "Raid Buffet",
         fromTabName = "-",
     },
+    {
+        entryId = "item-remove-later-scan",
+        timestamp = 1717294500,
+        when = 1717294500,
+        who = "OfficerOne-Stormrage",
+        action = "Deposit",
+        itemID = 300001,
+        item = "Date-Less Flask",
+        quantity = 8,
+        tabName = "Raid Buffet",
+        fromTabName = "-",
+    },
 }
 dedupePlanDb.bankLedger.moneyLogs = {
     {
@@ -1316,15 +1372,15 @@ dedupePlanDb.bankLedger.moneyLogs = {
     },
 }
 local dedupePlan = bankLedger.BuildDedupePlan(dedupePlanDb)
-assert.equal(1, dedupePlan.itemDuplicateRowCount, "ledger dedupe planning should flag duplicate item rows that match within the same visible minute")
+assert.equal(2, dedupePlan.itemDuplicateRowCount, "ledger dedupe planning should flag duplicate item rows that match the same visible ledger date")
 assert.equal(2, dedupePlan.moneyDuplicateRowCount, "ledger dedupe planning should flag duplicate money rows that match the same visible ledger date, actor, action, and amount")
-assert.equal(3, dedupePlan.totalDuplicateRowCount, "ledger dedupe planning should total item and money duplicate removals")
-assert.equal(3, #dedupePlan.reviewRows, "ledger dedupe planning should expose review rows for every removable duplicate")
+assert.equal(4, dedupePlan.totalDuplicateRowCount, "ledger dedupe planning should total item and money duplicate removals")
+assert.equal(4, #dedupePlan.reviewRows, "ledger dedupe planning should expose review rows for every removable duplicate")
 local dedupeApplied = bankLedger.ApplyDedupePlan(dedupePlanDb, dedupePlan)
-assert.equal(1, dedupeApplied.itemRemoved, "ledger dedupe apply should remove duplicate item rows")
+assert.equal(2, dedupeApplied.itemRemoved, "ledger dedupe apply should remove duplicate item rows")
 assert.equal(2, dedupeApplied.moneyRemoved, "ledger dedupe apply should remove duplicate money rows")
-assert.equal(3, dedupeApplied.totalRemoved, "ledger dedupe apply should report the total removed duplicate count")
-assert.equal(1, #dedupePlanDb.bankLedger.itemLogs, "ledger dedupe apply should keep one canonical item row per duplicate minute group")
+assert.equal(4, dedupeApplied.totalRemoved, "ledger dedupe apply should report the total removed duplicate count")
+assert.equal(1, #dedupePlanDb.bankLedger.itemLogs, "ledger dedupe apply should keep one canonical item row per visible ledger row group")
 assert.equal(1, #dedupePlanDb.bankLedger.moneyLogs, "ledger dedupe apply should keep one canonical money row per visible ledger row group")
 
 local staleReadDb = fresh_db()

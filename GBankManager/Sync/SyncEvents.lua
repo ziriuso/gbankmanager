@@ -362,6 +362,68 @@ local function payload_version(payload)
     return ""
 end
 
+local function parse_version(value)
+    local text = tostring(value or ""):match("^%s*(.-)%s*$")
+    if text == "" then
+        return nil
+    end
+
+    local core, suffix = text:match("^[vV]?([0-9][0-9%.]*)(.*)$")
+    if not core then
+        return nil
+    end
+
+    local parts = {}
+    for part in string.gmatch(core, "(%d+)") do
+        parts[#parts + 1] = tonumber(part) or 0
+    end
+
+    if #parts == 0 then
+        return nil
+    end
+
+    local prerelease = tostring(suffix or ""):match("^%-([^+]+)") or ""
+    return {
+        major = parts[1] or 0,
+        minor = parts[2] or 0,
+        patch = parts[3] or 0,
+        prerelease = prerelease,
+    }
+end
+
+local function compare_versions(left, right)
+    left = parse_version(left)
+    right = parse_version(right)
+    if not left or not right then
+        return nil
+    end
+
+    for _, key in ipairs({ "major", "minor", "patch" }) do
+        if left[key] ~= right[key] then
+            return left[key] > right[key] and 1 or -1
+        end
+    end
+
+    if left.prerelease == right.prerelease then
+        return 0
+    end
+    if left.prerelease == "" then
+        return 1
+    end
+    if right.prerelease == "" then
+        return -1
+    end
+
+    return left.prerelease > right.prerelease and 1 or -1
+end
+
+local function ledger_version_is_compatible(message)
+    local remoteVersion = payload_version(message)
+    local localVersion = tostring(((ns.constants or {}).ADDON_VERSION) or "")
+    local comparison = compare_versions(remoteVersion, localVersion)
+    return comparison ~= nil and comparison >= 0
+end
+
 local function remember_sync_decision(message, sender, payload, accepted, category, reason)
     message = type(message) == "table" and message or {}
     payload = type(payload) == "table" and payload or {}
@@ -1046,6 +1108,12 @@ local function handle_ledger_delta(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "wrong_guild")
+        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "older_version")
         report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end

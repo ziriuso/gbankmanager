@@ -98,6 +98,10 @@ local function current_guild_key(db)
     return tostring(context.guildName or "Unknown")
 end
 
+local function current_addon_version()
+    return tostring(((ns.constants or {}).ADDON_VERSION) or "")
+end
+
 local function clone_array_records(records)
     local out = {}
     for _, record in ipairs(records or {}) do
@@ -250,6 +254,7 @@ local function default_action_handlers()
                 local payload = {
                     guildKey = current_guild_key(db),
                     actorContext = current_context(db),
+                    version = current_addon_version(),
                     kind = "item",
                     sourceTabIndex = group.tabIndex,
                     sourceTabName = group.tabName,
@@ -286,6 +291,7 @@ local function default_action_handlers()
                 local payload = {
                     guildKey = current_guild_key(db),
                     actorContext = current_context(db),
+                    version = current_addon_version(),
                     kind = "money",
                     scanStartedAt = tonumber(options.now or 0) or 0,
                     repairThresholdGold = tonumber((((db or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold or 5000) or 5000,

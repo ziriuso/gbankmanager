@@ -385,6 +385,28 @@ local function item_action_label(rawType)
     return "Withdrawal"
 end
 
+local function item_visible_date_key(values)
+    values = type(values) == "table" and values or {}
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+
+    if year and year >= 1000 and month and day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    local persistedTimeKey = timestamp_date_key(values.timestamp or values.when)
+    if persistedTimeKey then
+        return persistedTimeKey
+    end
+
+    if year or month or day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    return "unknown"
+end
+
 local function visible_money_action_label(values)
     values = type(values) == "table" and values or {}
     local action = string.lower(trim(values.action))
@@ -546,6 +568,19 @@ local function money_replay_bridge_base(values)
         trim(values.who or "Unknown"),
         money_identity_type(values.type or values.rawType or values.action),
         amountCopper,
+    })
+end
+
+local function item_replay_bridge_base(values)
+    values = type(values) == "table" and values or {}
+    return make_fingerprint({
+        item_visible_date_key(values),
+        trim(values.who or "Unknown"),
+        item_action_label(values.action or values.type),
+        tonumber(values.itemID or 0) or 0,
+        tonumber(values.quantity or values.count or 0) or 0,
+        trim(values.tabName or values.sourceTabName or ("Tab " .. tostring(tonumber(values.tabIndex or values.sourceTabIndex or 0) or 0))),
+        trim(values.fromTabName) ~= "" and trim(values.fromTabName) or "-",
     })
 end
 
@@ -1242,7 +1277,7 @@ end
 local function item_dedupe_key(entry)
     entry = type(entry) == "table" and entry or {}
     return make_fingerprint({
-        dedupe_bucket(entry.timestamp or entry.when),
+        item_visible_date_key(entry),
         trim(entry.who or "Unknown"),
         item_action_label(entry.action),
         tonumber(entry.itemID or 0) or 0,
@@ -1368,6 +1403,7 @@ function bankLedger.MergeItemTransactions(db, payload)
             allowSuspiciousUnknownAppend = payload.allowSuspiciousUnknownAppend == true,
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
+            replayBridgeBaseBuilder = item_replay_bridge_base,
         }
     )
     batchCounts[sourceKey] = currentBatchCounts
@@ -1427,7 +1463,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
             {
                 allowSuspiciousUnknownAppend = true,
                 skipSourceSnapshotUpdate = true,
-                replayBridgeBaseBuilder = money_replay_bridge_base,
+                replayBridgeBaseBuilder = item_replay_bridge_base,
             }
         )
         reconcile_remote_batch_counts(ledger, "item", sourceKey, ledger.itemSourceSnapshots, normalizedRows)
