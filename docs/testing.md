@@ -31,7 +31,7 @@
   - sync transport chunking/reassembly coverage for oversized addon-message payloads so request, minimum, and ledger sync traffic stay within WoW's base addon-message size limit
   - guild-scoped request routing, including request-management broadcasts that no longer whisper resolved roster recipients, officer-authoritative minimum snapshot acceptance or rejection, remote ledger-delta merge coverage that preserves local scan freshness and rejects visible duplicate rows from polluted peer caches before they can match either the remote batch or already-repaired receiver rows, persisted peer-history buckets keyed by guild, and the retired auth-policy addon-comm path staying disabled
   - dashboard ranking and ledger-withdrawal-only coverage for the `Top 10 Most Used` card
-  - routine chat suppression coverage through the shared chat-output helper, including muted routine sync or scan chatter while errors and explicit debug output remain visible
+  - routine chat suppression coverage through the shared chat-output helper, including default-on muted routine sync or scan chatter while errors and explicit debug output remain visible
   - migration/default-shape coverage, including the persisted live-smoke result container
 - `ui`
   - shell layout, shared table behavior, requests, exports, minimums, and options/auth ownership specs
@@ -52,7 +52,7 @@
   - confirms shell open/close, options scroll wiring, opacity controls, request-only vs full-shell access, current Minimums modal staging/save, and scan gating
   - confirms appearance sliders support both direct slider interaction and plus/minus stepping
   - confirms the shell-polish pass keeps header scan metadata readable with timezone abbreviation, preserves structured tables under flatter content sections, and keeps modal content readable while floating-sheet surfaces update
-  - confirms local appearance controls cover the token-backed theme presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), a single linked `UI Scale` slider with a 90%-120% range, shell opacity, modal opacity, active-nav glow, collapsed-nav icons, the minimap-button toggle, and the routine chat suppression toggle
+  - confirms local appearance controls cover the token-backed theme presets (`Default`, `High Contrast`, `Alliance`, `Horde`, `Legion`, `Nature`, `Pride`, `Void`), a single linked `UI Scale` slider with a 90%-120% range, shell opacity, modal opacity, active-nav glow, collapsed-nav icons, the minimap-button toggle, the default-on routine chat suppression toggle, and enough panel chrome behind every Appearance control
   - confirms the shell yields behind other dragged UI until clicked back to the front again
   - confirms the manual shopping list can stay open across tab switches or shell close, remembers its moved position, and keeps low-tier crafted icons normalized even when the source row has no live stock snapshot
   - auth policy publishing is manual in Retail: use `Save`, use `Select All` or mouse selection on the `Policy String`, paste it into `Guild Information`, press `Accept`, then use `Refresh Guild Info` to verify the live string
@@ -154,7 +154,7 @@ Completed on 2026-05-28: the item-hyperlink and crafted-quality live regression 
 - `tests/spec/ui_dashboard_spec.lua` now also verifies metric-card icon slots so the dashboard fidelity pass keeps visual anchors on each card.
 - `tests/spec/ui_dashboard_spec.lua` also verifies `Critical Shortages` now honors the configurable threshold percentage from `Options -> Stock Settings`.
 - `tests/spec/ui_options_spec.lua` now also verifies `UI Scale` resizes dashboard cards and support panels instead of only scaling the shell frame and shared table density.
-- `tests/spec/ui_options_spec.lua` also verifies the latest Appearance/Data relayout: `UI Scale` now lives in the right-hand slider column above shell and modal opacity, the minimap toggle sits directly under the theme presets, the `Data` dropdown labels stay aligned on one row inside the panel chrome, and the repair-threshold plus mute controls persist alongside the ledger scan settings.
+- `tests/spec/ui_options_spec.lua` also verifies the latest Appearance/Data relayout: `UI Scale` now lives in the right-hand slider column above shell and modal opacity, the minimap toggle sits directly under the theme presets, the Appearance panel background chrome grows with newly added controls, the `Data` dropdown labels stay aligned on one row inside the panel chrome, and the repair-threshold plus mute controls persist alongside the ledger scan settings.
 - `tests/spec/slash_commands_spec.lua` verifies `/gbm` now opens the accessible UI instead of scanning, request-only access lands on the request-only `Requests` shell without auto-opening the request wizard, and `/gbm help` prints the supported slash-command list in chat.
 - `tests/spec/slash_commands_spec.lua` also verifies `/gbm debug ledger` prints copy-friendly scanner state plus raw Blizzard item-log and money-log counts/sample rows for live ledger import investigations.
 - `tests/spec/slash_commands_spec.lua` also verifies `/gbm debug sync` prints the local player identity, last decoded sync envelope, last accept or reject reason, and stored peer keys so live request-sync investigations can compare client state without adding ad hoc chat prints.

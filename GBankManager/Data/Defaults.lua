@@ -110,7 +110,7 @@ function defaults.CreateDatabase(guildName)
                 muteSilvermoonCitizen = false,
             },
             chatSettings = {
-                suppressRoutineMessages = false,
+                suppressRoutineMessages = true,
             },
             minimumItemCatalog = {},
             exportSettings = {

@@ -310,13 +310,15 @@ scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 1750
 queriedTabs = {}
 _G.DEFAULT_CHAT_FRAME.messages = {}
+ns.state.db.ui.chatSettings.suppressRoutineMessages = false
 scanner.BeginScan()
 assert.equal(1, queriedTabs[1], "manual scan should still run even inside the auto-scan throttle window")
-assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status")
+assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status when routine chat is enabled")
 assert.truthy(_G.DEFAULT_CHAT_FRAME.messages[2] == nil, "scanner should not spam per-tab progress into chat")
 
 _G.time = originalTime
 _G.DEFAULT_CHAT_FRAME.messages = originalMessages
+ns.state.db.ui.chatSettings.suppressRoutineMessages = true
 
 local timedOutTabs = {}
 scanner.scanInProgress = true
@@ -361,7 +363,7 @@ _G.C_Timer.RunPending()
 assert.equal(1, #timedOutTabs, "scanner timeout fallback should read the waited tab when no guild bank slot event arrives")
 _G.C_Timer.RunPending()
 assert.equal(3, queriedTabs[2], "scanner timeout fallback should continue requesting queued tabs after a missed event")
-assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[2], "timeout fallback should report a chat-visible recovery message")
+assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[1], "timeout fallback should report a chat-visible recovery message even while routine chat is suppressed")
 
 local snapshotDb = ns.modules.store.CreateFreshDatabase("My Guild")
 scanner.rawTabs = {

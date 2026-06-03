@@ -17,6 +17,8 @@
   - scanner warnings and failures bypass the routine mute
   - explicit slash debug and test output remains visible
   - `Options -> Appearance` now has an immediate-save `Suppress Routine Chat` toggle beside the existing local appearance toggles
+  - follow-up default changed `Suppress Routine Chat` to on for missing or fresh settings while preserving an explicit saved off state
+  - follow-up Appearance chrome now extends behind the added toggle stack and onboarding replay control; future Options expansion should grow the owning panel background with the new controls
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`
@@ -31,7 +33,7 @@
   - `docs/manual-test-checklist.md`
   - this handoff
 - Recommended next manual verification before release or deploy:
-  1. In Retail, toggle `Options -> Appearance -> Suppress Routine Chat`, run a manual scan plus a two-client routine sync update, and confirm routine scan/sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible.
+  1. In Retail, confirm `Options -> Appearance -> Suppress Routine Chat` starts checked, run a manual scan plus a two-client routine sync update, and confirm routine scan/sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible; then toggle it off and confirm routine chat feedback returns.
 
 ### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
 

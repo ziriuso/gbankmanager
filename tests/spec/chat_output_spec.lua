@@ -25,9 +25,10 @@ local db = ns.state.db
 assert.truthy(type(chatOutput) == "table", "chat output module should load from the toc")
 assert.truthy(type(chatOutput.Send) == "function", "chat output module should expose a shared Send helper")
 assert.truthy(type(db.ui.chatSettings) == "table", "database defaults should include persisted chat settings")
-assert.truthy(db.ui.chatSettings.suppressRoutineMessages ~= true, "routine chat suppression should default off")
+assert.equal(true, db.ui.chatSettings.suppressRoutineMessages, "routine chat suppression should default on")
 
 _G.DEFAULT_CHAT_FRAME.messages = {}
+db.ui.chatSettings.suppressRoutineMessages = false
 chatOutput.Send("GBankManager: Routine scan line.", { category = "routine" })
 assert.equal("GBankManager: Routine scan line.", _G.DEFAULT_CHAT_FRAME.messages[1], "routine chat should remain visible by default")
 
