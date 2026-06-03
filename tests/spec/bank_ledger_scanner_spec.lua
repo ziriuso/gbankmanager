@@ -227,8 +227,8 @@ assert.equal("LEDGER_DELTA", tostring(publishedLedgerDeltaOne.type or ""), "ledg
 assert.equal("item", tostring(((publishedLedgerDeltaOne.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for item-log targets")
 assert.equal("item", tostring(((publishedLedgerDeltaTwo.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for each visible item-log target")
 assert.equal("money", tostring(((publishedLedgerDeltaThree.payload or {}).kind) or ""), "ledger scan should publish one money ledger delta when money rows merged")
-assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.0"), tostring(((publishedLedgerDeltaOne.payload or {}).version) or ""), "ledger scan should stamp item ledger deltas with the addon version")
-assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.0"), tostring(((publishedLedgerDeltaThree.payload or {}).version) or ""), "ledger scan should stamp money ledger deltas with the addon version")
+assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.1"), tostring(((publishedLedgerDeltaOne.payload or {}).version) or ""), "ledger scan should stamp item ledger deltas with the addon version")
+assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.1"), tostring(((publishedLedgerDeltaThree.payload or {}).version) or ""), "ledger scan should stamp money ledger deltas with the addon version")
 
 queriedLogs = {}
 assert.truthy(not scanner.BeginLedgerScan(), "ledger scan should throttle inside the configured interval")

@@ -7,7 +7,7 @@
 - Current local checkpoint in the v1.1.0 line:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - base public release remains `v1.1.0`
+  - base public release remains `v1.1.0`; current patch release prep targets `v1.1.1`
   - issue under investigation came from live duplicate `Bank Ledger -> Money Log` rows after sync replay
 - Root cause narrowed and covered locally:
   - a local money-log source window could stay at an older same-identity batch count after remote ledger sync appended an extra repeated occurrence
@@ -25,7 +25,7 @@
   - remote ledger sync now sanitizes outbound manual/scanner `LEDGER_DELTA` payloads and inbound remote merge batches so a peer cache that still contains duplicate visible rows cannot re-contaminate a repaired client
   - follow-up live finding: older clients can still send a polluted payload whose first remaining visible duplicate has a different timestamp than the repaired receiver's kept row; inbound remote merge now seeds the visible-dedupe filter from existing receiver rows before applying the remote batch
   - latest local source-data check found the active Retail cache had `1068` item ledger rows, `0` `itemSourceSnapshots`, and `186` same-visible-date item duplicate groups covering `999` rows; item replay protection now bridges legacy item rows by visible date so shifted timestamps do not regrow the same displayed row
-  - this version now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
+  - `v1.1.1` now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
   - outbound manual and scanner `LEDGER_DELTA` payloads now include the addon version, and inbound ledger deltas are accepted only when the remote version is the same or newer; missing-version or older-version ledger deltas are rejected as `older_version`
   - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
   - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; they do not currently prune inventory snapshots, Minimums, Requests, or sync-peer history
