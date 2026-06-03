@@ -179,6 +179,53 @@ assert.same(persistedDb.ui.exportSettings, store.GetExportSettings(persisted), "
 assert.same(persistedDb.ui.appearance, store.GetAppearanceSettings(persisted), "store should return the normalized appearance-settings table")
 assert.same(persistedDb.snapshots["scan-old"], store.GetCurrentSnapshot(persisted), "store current snapshot accessor should resolve the active snapshot row")
 
+local resetRoot = store.Normalize({
+    activeGuildKey = "Reset Guild",
+    guilds = {
+        ["Reset Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Reset Guild",
+            },
+            bankLedger = {
+                itemLogs = {
+                    { entryId = "item-polluted", timestamp = 1716500000 },
+                },
+                moneyLogs = {
+                    { entryId = "money-polluted", timestamp = 1716500000 },
+                },
+                itemFingerprints = {
+                    ["polluted-item"] = true,
+                },
+                moneyFingerprints = {
+                    ["polluted-money"] = true,
+                },
+                itemSourceSnapshots = {
+                    ["item:1"] = { "polluted-source" },
+                },
+                moneySourceSnapshots = {
+                    money = { "polluted-money-source" },
+                },
+                nextEntrySequence = 99,
+                lastScanAt = 1716500000,
+                lastItemScanAt = 1716500000,
+                lastMoneyScanAt = 1716500000,
+            },
+        },
+    },
+}, "Reset Guild")
+local resetDb = (resetRoot.guilds or {})["Reset Guild"] or {}
+assert.equal(0, #(resetDb.bankLedger.itemLogs or {}), "store normalization should clear polluted item ledger rows once for the configured addon version")
+assert.equal(0, #(resetDb.bankLedger.moneyLogs or {}), "store normalization should clear polluted money ledger rows once for the configured addon version")
+assert.equal(ns.constants.LEDGER_FORCE_CLEAR_VERSION, ((resetDb.meta or {}).ledgerClearedForVersion), "store normalization should mark the ledger clear version")
+
+resetDb.bankLedger.itemLogs = {
+    { entryId = "item-after-reset", timestamp = 1716600000 },
+}
+local resetRootRepeat = store.Normalize(resetRoot, "Reset Guild")
+local resetDbRepeat = (resetRootRepeat.guilds or {})["Reset Guild"] or {}
+assert.equal(1, #(resetDbRepeat.bankLedger.itemLogs or {}), "store normalization should not clear ledger rows again once the version marker is present")
+
 persistedDb.requests = {
     {
         requestId = "scan-fulfill-1",

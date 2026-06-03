@@ -2,6 +2,52 @@
 
 ## Resume Here
 
+### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
+
+- Current local checkpoint in the v1.1.0 line:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base public release remains `v1.1.0`
+  - issue under investigation came from live duplicate `Bank Ledger -> Money Log` rows after sync replay
+- Root cause narrowed and covered locally:
+  - a local money-log source window could stay at an older same-identity batch count after remote ledger sync appended an extra repeated occurrence
+  - the next local guild-bank money-log read could then treat that already-synced repeated row as new and append it again
+  - older locally stored money rows could also be "known" only through the coarse legacy fingerprint while still counting as zero exact hour-level matches, which let a later local money-log replay append a third copy even with no peer online
+- Local fix now in the worktree:
+  - remote ledger merge now reconciles same-source batch counts for matching visible ledger identities so a later local scan does not reappend the same repeated money row just because it arrived through sync first
+  - `Options -> Data` now adds `Dedupe Ledger`
+  - `Dedupe Ledger` is review-first: preview counts first, then a `Review Rows` modal with the exact rows to remove, then `Clean Up`
+  - cleanup now targets item rows with the same visible ledger date, actor, action, item, quantity, tab, and moved-from values, plus money rows with the same visible ledger date, actor, action, and amount
+  - the `Review Rows` modal now provisions a slim scrollbar and expands its text content height so long cleanup lists can be reviewed before applying
+  - latest live-cache evidence showed cleanup could keep an older money duplicate whose hour no longer matched `moneySourceSnapshots`; after cleanup cleared transient state, the next money scan could reimport the current Blizzard row
+  - cleanup now keeps a source-stable money row when the current money source snapshot can identify a matching visible hour, removes the extras, rebuilds ledger fingerprints, and clears transient batch-count state so the next scan does not regrow the cleaned row
+  - local money scans now also bridge legacy coarse money-row precision when the same Blizzard hour-level row is seen again, so older polluted rows do not keep growing by one more copy on each new local scan
+  - remote ledger sync now sanitizes outbound manual/scanner `LEDGER_DELTA` payloads and inbound remote merge batches so a peer cache that still contains duplicate visible rows cannot re-contaminate a repaired client
+  - follow-up live finding: older clients can still send a polluted payload whose first remaining visible duplicate has a different timestamp than the repaired receiver's kept row; inbound remote merge now seeds the visible-dedupe filter from existing receiver rows before applying the remote batch
+  - latest local source-data check found the active Retail cache had `1068` item ledger rows, `0` `itemSourceSnapshots`, and `186` same-visible-date item duplicate groups covering `999` rows; item replay protection now bridges legacy item rows by visible date so shifted timestamps do not regrow the same displayed row
+  - this version now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
+  - outbound manual and scanner `LEDGER_DELTA` payloads now include the addon version, and inbound ledger deltas are accepted only when the remote version is the same or newer; missing-version or older-version ledger deltas are rejected as `older_version`
+  - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
+  - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; they do not currently prune inventory snapshots, Minimums, Requests, or sync-peer history
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+- Full suite status:
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passes; the older `tests/spec/item_catalog_target_spec.lua` fixture-writer blocker is not reproducing under the approved run
+- Local Retail deploy completed after the current changes:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+  - deployed `GBankManager` and `GBankManager_ItemData` into `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
+- Recommended next live pass:
+  1. Reproduce the old two-client ledger sync path that used to create duplicate money rows.
+  2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
+  3. With one older client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows even when the older sender's copy has a different timestamp.
+  4. Confirm a missing-version or older-version client cannot repopulate ledger rows through `LEDGER_DELTA`; same-version and newer clients should still sync ledger rows normally.
+  5. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-visible-date item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
+
 ### 2026-06-02 v1.1.0 Release Success
 
 - Current repo truth after release:

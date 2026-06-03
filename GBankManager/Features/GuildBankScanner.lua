@@ -795,6 +795,7 @@ local function append_ledger_sync_payload(db, target, mergedRows)
     local payload = {
         guildKey = current_guild_key(db),
         actorContext = current_context(db),
+        version = tostring(((ns.constants or {}).ADDON_VERSION) or ""),
         kind = target.kind,
         scanStartedAt = tonumber(scanner.ledgerScanStartedAt or 0) or 0,
         transactions = {},
@@ -831,6 +832,14 @@ local function append_ledger_sync_payload(db, target, mergedRows)
             end
             payload.transactions[#payload.transactions + 1] = transaction
         end
+    end
+
+    if #(payload.transactions or {}) == 0 then
+        return false
+    end
+
+    if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
+        payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
     end
 
     if #(payload.transactions or {}) == 0 then

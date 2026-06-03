@@ -266,11 +266,94 @@ assert.equal(16, (mainFrame.optionsRepairThresholdTitle.points[1] or {})[4], "re
 assert.truthy(type(mainFrame.optionsRepairThresholdHint) == "table", "data settings should expose helper text for repair threshold classification")
 assert.truthy(string.find(mainFrame.optionsRepairThresholdHint:GetText() or "", "equal to or under", 1, true) ~= nil, "repair threshold helper text should explain repair-vs-withdrawal classification")
 assert.equal("Clear Data", mainFrame.optionsClearDataTitle:GetText(), "data settings should expose a clear-data section")
+assert.equal("Dedupe Ledger", mainFrame.optionsDedupeLedgerButton.labelText:GetText(), "data settings should expose a ledger dedupe action")
+assert.equal("secondary", mainFrame.optionsDedupeLedgerButton.gbmButtonVariant, "ledger dedupe should use the same themed secondary button variant as the other data actions")
 assert.equal("Clear Guild Bank Log Data", mainFrame.optionsClearBankLedgerButton.labelText:GetText(), "data settings should expose a clear guild-bank log action")
 assert.equal(mainFrame.optionsClearInventoryDataButton:GetWidth(), mainFrame.optionsClearBankLedgerButton:GetWidth(), "data settings should size the clear guild-bank log action like the sibling destructive controls so its text stays centered")
 assert.equal(mainFrame.optionsClearCompletedRequestsButton:GetWidth(), mainFrame.optionsClearBankLedgerButton:GetWidth(), "data settings should keep all clear-data buttons the same width")
 assert.equal("Clear Guild Bank Inventory Data", mainFrame.optionsClearInventoryDataButton.labelText:GetText(), "data settings should expose a clear guild-bank inventory action")
 assert.equal("Clear Completed Request History", mainFrame.optionsClearCompletedRequestsButton.labelText:GetText(), "data settings should expose a clear completed request-history action")
+current_db().bankLedger.itemLogs = {
+    {
+        entryId = "item-keep",
+        timestamp = 1717287300,
+        when = 1717287300,
+        who = "OfficerOne-Stormrage",
+        action = "Deposit",
+        itemID = 300001,
+        item = "Date-Less Flask",
+        quantity = 8,
+        tabName = "Raid Buffet",
+        fromTabName = "-",
+    },
+    {
+        entryId = "item-remove",
+        timestamp = 1717287330,
+        when = 1717287330,
+        who = "OfficerOne-Stormrage",
+        action = "Deposit",
+        itemID = 300001,
+        item = "Date-Less Flask",
+        quantity = 8,
+        tabName = "Raid Buffet",
+        fromTabName = "-",
+    },
+}
+current_db().bankLedger.moneyLogs = {
+    {
+        entryId = "money-keep",
+        timestamp = 1717287300,
+        when = 1717287300,
+        who = "Unholy-Skullcrusher",
+        action = "Repair",
+        amountCopper = 839240066,
+        amount = 839240066,
+        year = 2024,
+        month = 6,
+        day = 2,
+        hour = 11,
+    },
+    {
+        entryId = "money-remove",
+        timestamp = 1717287355,
+        when = 1717287355,
+        who = "Unholy-Skullcrusher",
+        action = "Repair",
+        amountCopper = 839240066,
+        amount = 839240066,
+        year = 2024,
+        month = 6,
+        day = 2,
+        hour = 11,
+    },
+}
+mainFrame.optionsDedupeLedgerButton:GetScript("OnClick")(mainFrame.optionsDedupeLedgerButton)
+assert.truthy(mainFrame.ledgerDedupePreviewModal and mainFrame.ledgerDedupePreviewModal:IsShown(), "ledger dedupe should open a preview modal instead of deleting rows immediately")
+assert.truthy(string.find(mainFrame.ledgerDedupePreviewSummaryText:GetText() or "", "2 duplicate row", 1, true) ~= nil, "ledger dedupe preview should summarize the duplicate rows it plans to remove")
+mainFrame.ledgerDedupePreviewReviewButton:GetScript("OnClick")(mainFrame.ledgerDedupePreviewReviewButton)
+assert.truthy(mainFrame.ledgerDedupeReviewModal and mainFrame.ledgerDedupeReviewModal:IsShown(), "ledger dedupe preview should open a full review modal on demand")
+assert.truthy(string.find(mainFrame.ledgerDedupeReviewOutput:GetText() or "", "Unholy-Skullcrusher", 1, true) ~= nil, "ledger dedupe review should list the duplicate rows that will be removed")
+assert.truthy(type(mainFrame.ledgerDedupeReviewScrollBar) == "table", "ledger dedupe review should provide a reusable slim scrollbar for long row reviews")
+mainFrame.ledgerDedupeReviewApplyButton:GetScript("OnClick")(mainFrame.ledgerDedupeReviewApplyButton)
+assert.equal(1, #((((current_db() or {}).bankLedger or {}).itemLogs or {})), "confirmed ledger dedupe should keep one canonical item row")
+assert.equal(1, #((((current_db() or {}).bankLedger or {}).moneyLogs or {})), "confirmed ledger dedupe should keep one canonical money row")
+local overflowReviewRows = {}
+for index = 1, 40 do
+    overflowReviewRows[index] = {
+        summary = string.format("2026-06-02 | Money | Duplicate-%02d | Repair | 839g 24s 66c", index),
+        timestamp = 1780440000 + index,
+    }
+end
+mainFrame:OpenLedgerDedupePreviewModal({
+    totalDuplicateRowCount = #overflowReviewRows,
+    totalDuplicateGroupCount = 1,
+    itemDuplicateRowCount = 0,
+    moneyDuplicateRowCount = #overflowReviewRows,
+    reviewRows = overflowReviewRows,
+})
+mainFrame.ledgerDedupePreviewReviewButton:GetScript("OnClick")(mainFrame.ledgerDedupePreviewReviewButton)
+assert.truthy(mainFrame.ledgerDedupeReviewScrollBar:IsShown(), "ledger dedupe review should show the scrollbar when the duplicate review list overflows")
+mainFrame.ledgerDedupeReviewCancelButton:GetScript("OnClick")(mainFrame.ledgerDedupeReviewCancelButton)
 mainFrame.optionsClearBankLedgerButton:GetScript("OnClick")(mainFrame.optionsClearBankLedgerButton)
 assert.equal("GBM_CONFIRM_CLEAR_BANK_LEDGER", (_G.LastStaticPopup or {}).which, "clearing guild-bank log data should require confirmation")
 assert.truthy(string.find((((_G.StaticPopupCalls or {})[#(_G.StaticPopupCalls or {})] or {}).text_arg1 or ""), "irreversible", 1, true) ~= nil, "clear-data confirmation should warn that the action is irreversible")

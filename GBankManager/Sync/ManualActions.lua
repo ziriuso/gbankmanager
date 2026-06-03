@@ -98,6 +98,10 @@ local function current_guild_key(db)
     return tostring(context.guildName or "Unknown")
 end
 
+local function current_addon_version()
+    return tostring(((ns.constants or {}).ADDON_VERSION) or "")
+end
+
 local function clone_array_records(records)
     local out = {}
     for _, record in ipairs(records or {}) do
@@ -247,19 +251,24 @@ local function default_action_handlers()
 
             local itemCount = 0
             for _, group in pairs(itemGroups) do
-                itemCount = itemCount + #(group.transactions or {})
+                local payload = {
+                    guildKey = current_guild_key(db),
+                    actorContext = current_context(db),
+                    version = current_addon_version(),
+                    kind = "item",
+                    sourceTabIndex = group.tabIndex,
+                    sourceTabName = group.tabName,
+                    scanStartedAt = tonumber(options.now or 0) or 0,
+                    transactions = group.transactions,
+                }
+                if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
+                    payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
+                end
+                itemCount = itemCount + #(payload.transactions or {})
                 transport.Send("GUILD", "GUILD", {
                     type = "LEDGER_DELTA",
                     updatedAt = tonumber(options.now or 0) or 0,
-                    payload = {
-                        guildKey = current_guild_key(db),
-                        actorContext = current_context(db),
-                        kind = "item",
-                        sourceTabIndex = group.tabIndex,
-                        sourceTabName = group.tabName,
-                        scanStartedAt = tonumber(options.now or 0) or 0,
-                        transactions = group.transactions,
-                    },
+                    payload = payload,
                 })
             end
 
@@ -277,22 +286,31 @@ local function default_action_handlers()
                 moneyTransactions[#moneyTransactions + 1] = transaction
             end
 
+            local moneyCount = #moneyTransactions
             if #moneyTransactions > 0 then
-                transport.Send("GUILD", "GUILD", {
-                    type = "LEDGER_DELTA",
-                    updatedAt = tonumber(options.now or 0) or 0,
-                    payload = {
-                        guildKey = current_guild_key(db),
-                        actorContext = current_context(db),
-                        kind = "money",
-                        scanStartedAt = tonumber(options.now or 0) or 0,
-                        repairThresholdGold = tonumber((((db or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold or 5000) or 5000,
-                        transactions = moneyTransactions,
-                    },
-                })
+                local payload = {
+                    guildKey = current_guild_key(db),
+                    actorContext = current_context(db),
+                    version = current_addon_version(),
+                    kind = "money",
+                    scanStartedAt = tonumber(options.now or 0) or 0,
+                    repairThresholdGold = tonumber((((db or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold or 5000) or 5000,
+                    transactions = moneyTransactions,
+                }
+                if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
+                    payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
+                end
+                moneyCount = #(payload.transactions or {})
+                if moneyCount > 0 then
+                    transport.Send("GUILD", "GUILD", {
+                        type = "LEDGER_DELTA",
+                        updatedAt = tonumber(options.now or 0) or 0,
+                        payload = payload,
+                    })
+                end
             end
 
-            return true, string.format("Requested ledger sync for %d item row(s) and %d money row(s).", itemCount, #moneyTransactions)
+            return true, string.format("Requested ledger sync for %d item row(s) and %d money row(s).", itemCount, moneyCount)
         end,
     }
 end

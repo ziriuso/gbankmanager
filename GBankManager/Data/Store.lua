@@ -8,6 +8,7 @@ local store = ns.data.store or ns.modules.store or {}
 
 local defaults = ns.data.defaults or ns.modules.defaults
 local migrations = ns.data.migrations or ns.modules.migrations
+local constants = ns.constants or {}
 
 local function trim(value)
     return tostring(value or ""):match("^%s*(.-)%s*$")
@@ -113,6 +114,72 @@ local function resolve_active_database(db, guildName)
     return db, nil
 end
 
+local function fresh_bank_ledger(guildName)
+    local freshLedger = (((defaults or {}).CreateDatabase and defaults.CreateDatabase(guildName) or {}).bankLedger) or {}
+    if migrations and type(migrations.ApplyDatabase) == "function" then
+        local normalizedLedgerDb = migrations.ApplyDatabase({
+            meta = {
+                guildName = guildName,
+            },
+            bankLedger = freshLedger,
+        }, guildName)
+        return normalizedLedgerDb.bankLedger or freshLedger
+    end
+
+    return freshLedger
+end
+
+local function versioned_ledger_reset_token()
+    local resetVersion = trim(constants.LEDGER_FORCE_CLEAR_VERSION)
+    local addonVersion = trim(constants.ADDON_VERSION)
+    if resetVersion == "" or addonVersion ~= resetVersion then
+        return nil
+    end
+
+    return resetVersion
+end
+
+local function apply_versioned_ledger_reset_to_database(db)
+    if type(db) ~= "table" then
+        return db
+    end
+
+    local resetVersion = versioned_ledger_reset_token()
+    if not resetVersion then
+        return db
+    end
+
+    db.meta = db.meta or {}
+    local schemaVersion = tonumber(db.meta.schemaVersion or 0) or 0
+    local currentSchemaVersion = tonumber(constants.SCHEMA_VERSION or 0) or 0
+    if currentSchemaVersion > 0 and schemaVersion > currentSchemaVersion then
+        return db
+    end
+
+    if tostring(db.meta.ledgerClearedForVersion or "") == resetVersion then
+        return db
+    end
+
+    db.bankLedger = fresh_bank_ledger(db.meta.guildName or "Unknown")
+    db.meta.ledgerClearedForVersion = resetVersion
+    return db
+end
+
+local function apply_versioned_ledger_reset(db)
+    if looks_like_root(db) then
+        for guildKey, guildDb in pairs(db.guilds or {}) do
+            if type(guildDb) == "table" then
+                guildDb.meta = guildDb.meta or {}
+                guildDb.meta.guildName = guildDb.meta.guildName or tostring(guildKey)
+                apply_versioned_ledger_reset_to_database(guildDb)
+            end
+        end
+        return db
+    end
+
+    return apply_versioned_ledger_reset_to_database(db)
+end
+
 local function select_runtime_source(guildName)
     local runtime = _G.GBankManagerDB
     if type(runtime) == "table" and next(runtime) ~= nil then
@@ -139,10 +206,10 @@ end
 function store.CreateFreshDatabase(guildName)
     local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName))
     if migrations and type(migrations.ApplyDatabase) == "function" then
-        return migrations.ApplyDatabase(defaults.CreateDatabase(resolvedGuild), resolvedGuild)
+        return apply_versioned_ledger_reset(migrations.ApplyDatabase(defaults.CreateDatabase(resolvedGuild), resolvedGuild))
     end
 
-    return defaults.CreateDatabase(resolvedGuild)
+    return apply_versioned_ledger_reset(defaults.CreateDatabase(resolvedGuild))
 end
 
 function store.IsPlaceholderGuildName(guildName)
@@ -152,13 +219,13 @@ end
 function store.Normalize(db, guildName)
     if db == nil then
         if defaults and type(defaults.CreateDatabaseRoot) == "function" then
-            return migrations.Apply(defaults.CreateDatabaseRoot(resolve_guild_name(guildName)), guildName)
+            return apply_versioned_ledger_reset(migrations.Apply(defaults.CreateDatabaseRoot(resolve_guild_name(guildName)), guildName))
         end
 
-        return migrations.Apply({}, guildName)
+        return apply_versioned_ledger_reset(migrations.Apply({}, guildName))
     end
 
-    return migrations.Apply(db, resolve_guild_name(guildName, db))
+    return apply_versioned_ledger_reset(migrations.Apply(db, resolve_guild_name(guildName, db)))
 end
 
 function store.GetDatabase(guildName)
@@ -222,14 +289,7 @@ end
 function store.ClearGuildBankLogData(db)
     db = resolve_active_database(db or store.GetDatabase())
     local guildName = (((db or {}).meta or {}).guildName) or "Unknown"
-    local freshLedger = (((defaults or {}).CreateDatabase and defaults.CreateDatabase(guildName) or {}).bankLedger) or {}
-    local normalizedLedgerDb = migrations.ApplyDatabase({
-        meta = {
-            guildName = guildName,
-        },
-        bankLedger = freshLedger,
-    }, guildName)
-    db.bankLedger = normalizedLedgerDb.bankLedger or freshLedger
+    db.bankLedger = fresh_bank_ledger(guildName)
     return db.bankLedger
 end
 

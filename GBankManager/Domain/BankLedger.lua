@@ -188,6 +188,21 @@ local function format_export_timestamp(timestamp)
     return tostring(baseText or timestamp)
 end
 
+local function format_copper(amount)
+    amount = tonumber(amount or 0) or 0
+    local gold = math.floor(amount / 10000)
+    local silver = math.floor((amount % 10000) / 100)
+    local copper = amount % 100
+
+    if gold > 0 then
+        return string.format("%dg %02ds %02dc", gold, silver, copper)
+    end
+    if silver > 0 then
+        return string.format("%ds %02dc", silver, copper)
+    end
+    return string.format("%dc", copper)
+end
+
 local function contains_text(haystack, needle)
     haystack = string.lower(tostring(haystack or ""))
     needle = string.lower(trim(needle))
@@ -320,6 +335,44 @@ local function stable_time_key(values, forceUnknownTimeKey)
     return "unknown"
 end
 
+local function timestamp_hour_key(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return nil
+    end
+
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
+    if type(formatter) ~= "function" then
+        return nil
+    end
+
+    local dateTable = formatter("*t", timestamp)
+    if type(dateTable) ~= "table" then
+        return nil
+    end
+
+    return raw_time_key(dateTable.year, dateTable.month, dateTable.day, dateTable.hour, nil)
+end
+
+local function timestamp_date_key(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return nil
+    end
+
+    local formatter = type(_G.date) == "function" and _G.date or (type(os) == "table" and type(os.date) == "function" and os.date or nil)
+    if type(formatter) ~= "function" then
+        return nil
+    end
+
+    local dateTable = formatter("*t", timestamp)
+    if type(dateTable) ~= "table" then
+        return nil
+    end
+
+    return raw_time_key(dateTable.year, dateTable.month, dateTable.day, nil, nil)
+end
+
 local function item_action_label(rawType)
     rawType = string.lower(trim(rawType))
     if rawType == "deposit" then
@@ -330,6 +383,55 @@ local function item_action_label(rawType)
     end
 
     return "Withdrawal"
+end
+
+local function item_visible_date_key(values)
+    values = type(values) == "table" and values or {}
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+
+    if year and year >= 1000 and month and day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    local persistedTimeKey = timestamp_date_key(values.timestamp or values.when)
+    if persistedTimeKey then
+        return persistedTimeKey
+    end
+
+    if year or month or day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    return "unknown"
+end
+
+local function visible_money_action_label(values)
+    values = type(values) == "table" and values or {}
+    local action = string.lower(trim(values.action))
+    if action == "deposit" then
+        return "Deposit"
+    end
+    if action == "repair" then
+        return "Repair"
+    end
+    if action == "withdrawal" or action == "withdraw" then
+        return "Withdrawal"
+    end
+
+    local rawType = string.lower(trim(values.type or values.rawType))
+    if rawType == "deposit" then
+        return "Deposit"
+    end
+    if rawType == "repair" then
+        return "Repair"
+    end
+    if rawType == "withdrawal" or rawType == "withdraw" then
+        return "Withdrawal"
+    end
+
+    return trim(values.action) ~= "" and trim(values.action) or "Withdrawal"
 end
 
 local function money_action_label(rawType, amountCopper, repairThresholdGold)
@@ -363,6 +465,51 @@ local function money_identity_type(rawType)
         return rawType
     end
     return "withdraw"
+end
+
+local function money_visible_hour_key(values)
+    values = type(values) == "table" and values or {}
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+    local hour = tonumber(values.hour)
+
+    if year and year >= 1000 and month and day then
+        return raw_time_key(year, month, day, hour, nil)
+    end
+
+    local persistedTimeKey = timestamp_hour_key(values.timestamp or values.when)
+    if persistedTimeKey then
+        return persistedTimeKey
+    end
+
+    if year or month or day or hour then
+        return raw_time_key(year, month, day, hour, nil)
+    end
+
+    return "unknown"
+end
+
+local function money_visible_date_key(values)
+    values = type(values) == "table" and values or {}
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+
+    if year and year >= 1000 and month and day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    local persistedTimeKey = timestamp_date_key(values.timestamp or values.when)
+    if persistedTimeKey then
+        return persistedTimeKey
+    end
+
+    if year or month or day then
+        return raw_time_key(year, month, day, nil, nil)
+    end
+
+    return "unknown"
 end
 
 local function ensure_settings(db)
@@ -411,6 +558,70 @@ local function money_fingerprint_bases(values, repairThresholdGold, forceUnknown
         money_identity_type(values.type or values.rawType or values.action),
         amountCopper,
     })
+end
+
+local function money_replay_bridge_base(values)
+    values = type(values) == "table" and values or {}
+    local amountCopper = tonumber(values.amountCopper or values.amount or 0) or 0
+    return make_fingerprint({
+        money_visible_hour_key(values),
+        trim(values.who or "Unknown"),
+        money_identity_type(values.type or values.rawType or values.action),
+        amountCopper,
+    })
+end
+
+local function item_replay_bridge_base(values)
+    values = type(values) == "table" and values or {}
+    return make_fingerprint({
+        item_visible_date_key(values),
+        trim(values.who or "Unknown"),
+        item_action_label(values.action or values.type),
+        tonumber(values.itemID or 0) or 0,
+        tonumber(values.quantity or values.count or 0) or 0,
+        trim(values.tabName or values.sourceTabName or ("Tab " .. tostring(tonumber(values.tabIndex or values.sourceTabIndex or 0) or 0))),
+        trim(values.fromTabName) ~= "" and trim(values.fromTabName) or "-",
+    })
+end
+
+local function split_fingerprint(fingerprint)
+    local parts = {}
+    for part in string.gmatch(tostring(fingerprint or ""), "([^|]+)") do
+        parts[#parts + 1] = part
+    end
+    return parts
+end
+
+local function money_replay_bridge_base_from_fingerprint(fingerprint)
+    local parts = split_fingerprint(fingerprint_base(fingerprint))
+    local actorIndex = #parts - 2
+    local year = tonumber(parts[1])
+    local month = tonumber(parts[2])
+    local day = tonumber(parts[3])
+    local hour = tonumber(parts[4])
+    if not (year and year >= 1000 and month and day and actorIndex > 4) then
+        return ""
+    end
+
+    return make_fingerprint({
+        raw_time_key(year, month, day, hour, nil),
+        parts[actorIndex],
+        parts[actorIndex + 1],
+        parts[actorIndex + 2],
+    })
+end
+
+local function money_source_bridge_bases(sourceSnapshots)
+    local bridgeBases = {}
+    for _, fingerprints in pairs(sourceSnapshots or {}) do
+        for _, fingerprint in ipairs(fingerprints or {}) do
+            local bridgeBase = money_replay_bridge_base_from_fingerprint(fingerprint)
+            if bridgeBase ~= "" then
+                bridgeBases[bridgeBase] = true
+            end
+        end
+    end
+    return bridgeBases
 end
 
 local function assign_occurrence_fingerprints(rows)
@@ -748,6 +959,47 @@ local function describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     }
 end
 
+local function count_snapshot_bases(fingerprints)
+    local counts = {}
+    for _, fingerprint in ipairs(fingerprints or {}) do
+        local base = fingerprint_base(fingerprint)
+        if base ~= "" then
+            counts[base] = (tonumber(counts[base] or 0) or 0) + 1
+        end
+    end
+    return counts
+end
+
+local function count_normalized_bases(rows)
+    local counts = {}
+    for _, row in ipairs(rows or {}) do
+        local base = tostring(row.fingerprintBase or fingerprint_base(row.fingerprint) or "")
+        if base ~= "" then
+            counts[base] = (tonumber(counts[base] or 0) or 0) + 1
+        end
+    end
+    return counts
+end
+
+local function reconcile_remote_batch_counts(ledger, kind, sourceKey, sourceSnapshots, normalizedRows)
+    local snapshotBaseCounts = count_snapshot_bases((sourceSnapshots or {})[sourceKey] or {})
+    if next(snapshotBaseCounts) == nil then
+        return
+    end
+
+    local batchCounts = session_batch_counts(ledger)[kind]
+    batchCounts[sourceKey] = ensure_table(batchCounts[sourceKey])
+    local currentBatchCounts = batchCounts[sourceKey]
+    local normalizedBaseCounts = count_normalized_bases(normalizedRows)
+
+    for base in pairs(snapshotBaseCounts) do
+        local normalizedCount = tonumber(normalizedBaseCounts[base] or 0) or 0
+        if normalizedCount > (tonumber(currentBatchCounts[base] or 0) or 0) then
+            currentBatchCounts[base] = normalizedCount
+        end
+    end
+end
+
 local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix, options)
     options = type(options) == "table" and options or {}
     local delta = describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
@@ -759,6 +1011,9 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     local groupOrder = {}
     local previousBatchCounts = type(options.previousBatchCounts) == "table" and options.previousBatchCounts or nil
     local nextOccurrences = {}
+    local replayBridgeBaseBuilder = type(options.replayBridgeBaseBuilder) == "function" and options.replayBridgeBaseBuilder or nil
+    local replayBridgeStoredCounts = {}
+    local replayBridgeLegacyKnownCounts = {}
 
     local function is_known_row(row, includeLegacy)
         if fingerprintIndex[tostring((row or {}).fingerprint or "")] then
@@ -773,10 +1028,19 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
         if base ~= "" then
             storedCounts[base] = (tonumber(storedCounts[base] or 0) or 0) + 1
         end
+
+        if replayBridgeBaseBuilder ~= nil then
+            local replayBase = tostring(replayBridgeBaseBuilder(entry) or "")
+            if replayBase ~= "" then
+                replayBridgeStoredCounts[replayBase] = (tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0) + 1
+            end
+        end
     end
 
     for _, row in ipairs(normalizedRows or {}) do
-        if is_known_row(row, true) then
+        local exactKnown = fingerprintIndex[tostring((row or {}).fingerprint or "")] == true
+        local legacyKnown = fingerprintIndex[tostring((row or {}).legacyFingerprint or "")] == true
+        if exactKnown or legacyKnown then
             knownFingerprintCount = knownFingerprintCount + 1
         end
 
@@ -788,6 +1052,13 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             end
             groups[base][#groups[base] + 1] = row
             currentCounts[base] = (tonumber(currentCounts[base] or 0) or 0) + 1
+
+            if replayBridgeBaseBuilder ~= nil and exactKnown ~= true and legacyKnown == true then
+                local replayBase = tostring(row.replayBridgeBase or replayBridgeBaseBuilder(row) or "")
+                if replayBase ~= "" then
+                    replayBridgeLegacyKnownCounts[base] = tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0
+                end
+            end
         end
     end
 
@@ -854,6 +1125,9 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             alreadyKnown = tonumber(previousBatchCounts[base] or 0) or 0
         else
             alreadyKnown = tonumber(storedCounts[base] or 0) or 0
+        end
+        if alreadyKnown == 0 and replayBridgeBaseBuilder ~= nil then
+            alreadyKnown = tonumber(replayBridgeLegacyKnownCounts[base] or 0) or 0
         end
         local newCount = math.max(0, #group - alreadyKnown)
 
@@ -961,12 +1235,28 @@ local function normalize_money_rows(payload)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
+            year = raw.year,
+            month = raw.month,
+            day = raw.day,
+            hour = raw.hour,
+            minute = raw.minute,
             who = trim(raw.who or "Unknown"),
             action = action,
             amountCopper = amountCopper,
             amount = amountCopper,
             fingerprintBase = fingerprintBase,
             legacyFingerprintBase = legacyFingerprintBase,
+            replayBridgeBase = money_replay_bridge_base({
+                timestamp = timestamp,
+                year = raw.year,
+                month = raw.month,
+                day = raw.day,
+                hour = raw.hour,
+                minute = raw.minute,
+                who = raw.who,
+                action = action,
+                amountCopper = amountCopper,
+            }),
             sourceIndex = index,
         }
     end
@@ -974,6 +1264,105 @@ local function normalize_money_rows(payload)
     assign_occurrence_fingerprints(normalizedRows)
 
     return sourceKey, normalizedRows
+end
+
+local function dedupe_bucket(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return 0
+    end
+    return math.floor(timestamp / 60)
+end
+
+local function item_dedupe_key(entry)
+    entry = type(entry) == "table" and entry or {}
+    return make_fingerprint({
+        item_visible_date_key(entry),
+        trim(entry.who or "Unknown"),
+        item_action_label(entry.action),
+        tonumber(entry.itemID or 0) or 0,
+        tonumber(entry.quantity or 0) or 0,
+        trim(entry.tabName or "-"),
+        trim(entry.fromTabName or "-"),
+    })
+end
+
+local function money_dedupe_key(entry)
+    entry = type(entry) == "table" and entry or {}
+    return make_fingerprint({
+        money_visible_date_key(entry),
+        trim(entry.who or "Unknown"),
+        visible_money_action_label(entry),
+        tonumber(entry.amountCopper or entry.amount or 0) or 0,
+    })
+end
+
+local function visible_dedupe_key(kind, entry)
+    if kind == "money" then
+        return money_dedupe_key(entry)
+    end
+
+    return item_dedupe_key(entry)
+end
+
+local function filter_visible_duplicate_rows(kind, normalizedRows, existingEntries)
+    local seen = {}
+    local filtered = {}
+
+    for _, entry in ipairs(existingEntries or {}) do
+        local key = visible_dedupe_key(kind, entry)
+        if key ~= "" then
+            seen[key] = true
+        end
+    end
+
+    for _, row in ipairs(normalizedRows or {}) do
+        local key = visible_dedupe_key(kind, row)
+        if key == "" or seen[key] ~= true then
+            if key ~= "" then
+                seen[key] = true
+            end
+            filtered[#filtered + 1] = row
+        end
+    end
+
+    return filtered
+end
+
+local function clone_payload_record(record)
+    local copy = {}
+    for key, value in pairs(type(record) == "table" and record or {}) do
+        copy[key] = value
+    end
+    return copy
+end
+
+function bankLedger.SanitizeRemoteDeltaPayload(payload)
+    payload = type(payload) == "table" and payload or {}
+    local kind = tostring(payload.kind or "")
+    if kind ~= "item" and kind ~= "money" then
+        return clone_payload_record(payload)
+    end
+
+    local _, normalizedRows
+    if kind == "money" then
+        _, normalizedRows = normalize_money_rows(payload)
+    else
+        _, normalizedRows = normalize_item_rows(payload)
+    end
+
+    local filteredRows = filter_visible_duplicate_rows(kind, normalizedRows)
+    local sanitizedTransactions = {}
+    for _, row in ipairs(filteredRows) do
+        local original = (payload.transactions or {})[tonumber(row.sourceIndex or 0) or 0]
+        if type(original) == "table" then
+            sanitizedTransactions[#sanitizedTransactions + 1] = clone_payload_record(original)
+        end
+    end
+
+    local sanitized = clone_payload_record(payload)
+    sanitized.transactions = sanitizedTransactions
+    return sanitized
 end
 
 function bankLedger.DescribeItemDelta(db, payload)
@@ -1014,6 +1403,7 @@ function bankLedger.MergeItemTransactions(db, payload)
             allowSuspiciousUnknownAppend = payload.allowSuspiciousUnknownAppend == true,
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
+            replayBridgeBaseBuilder = item_replay_bridge_base,
         }
     )
     batchCounts[sourceKey] = currentBatchCounts
@@ -1044,6 +1434,7 @@ function bankLedger.MergeMoneyTransactions(db, payload)
             allowSuspiciousUnknownAppend = true,
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
+            replayBridgeBaseBuilder = money_replay_bridge_base,
         }
     )
     batchCounts[sourceKey] = currentBatchCounts
@@ -1059,7 +1450,8 @@ function bankLedger.MergeRemoteDelta(db, payload)
     local kind = tostring(payload.kind or "")
     if kind == "item" then
         local sourceKey, normalizedRows = normalize_item_rows(payload)
-        return append_delta_rows(
+        normalizedRows = filter_visible_duplicate_rows("item", normalizedRows, ledger.itemLogs)
+        local mergedCount = append_delta_rows(
             ledger,
             ledger.itemLogs,
             ledger.itemFingerprints,
@@ -1071,14 +1463,18 @@ function bankLedger.MergeRemoteDelta(db, payload)
             {
                 allowSuspiciousUnknownAppend = true,
                 skipSourceSnapshotUpdate = true,
+                replayBridgeBaseBuilder = item_replay_bridge_base,
             }
         )
+        reconcile_remote_batch_counts(ledger, "item", sourceKey, ledger.itemSourceSnapshots, normalizedRows)
+        return mergedCount
     end
 
     if kind == "money" then
         payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
         local sourceKey, normalizedRows = normalize_money_rows(payload)
-        return append_delta_rows(
+        normalizedRows = filter_visible_duplicate_rows("money", normalizedRows, ledger.moneyLogs)
+        local mergedCount = append_delta_rows(
             ledger,
             ledger.moneyLogs,
             ledger.moneyFingerprints,
@@ -1092,9 +1488,193 @@ function bankLedger.MergeRemoteDelta(db, payload)
                 skipSourceSnapshotUpdate = true,
             }
         )
+        reconcile_remote_batch_counts(ledger, "money", sourceKey, ledger.moneySourceSnapshots, normalizedRows)
+        return mergedCount
     end
 
     return 0
+end
+
+local function build_dedupe_review_row(kind, entry)
+    entry = type(entry) == "table" and entry or {}
+    local timestamp = tonumber(entry.timestamp or entry.when or 0) or 0
+    if kind == "money" then
+        return {
+            kind = "money",
+            timestamp = timestamp,
+            entryId = tostring(entry.entryId or ""),
+            summary = string.format(
+                "%s | Money | %s | %s | %s",
+                format_export_timestamp(timestamp),
+                trim(entry.who or "Unknown"),
+                trim(entry.action or "Unknown"),
+                format_copper(entry.amountCopper or entry.amount or 0)
+            ),
+        }
+    end
+
+    return {
+        kind = "item",
+        timestamp = timestamp,
+        entryId = tostring(entry.entryId or ""),
+        summary = string.format(
+            "%s | Item | %s | %s | %s x%d | %s",
+            format_export_timestamp(timestamp),
+            trim(entry.who or "Unknown"),
+            trim(entry.action or "Unknown"),
+            trim(entry.item or entry.itemName or "Unknown"),
+            tonumber(entry.quantity or 0) or 0,
+            trim(entry.tabName or "-")
+        ),
+    }
+end
+
+local function dedupe_keep_index(group, kind, options)
+    if kind ~= "money" then
+        return 1
+    end
+
+    options = type(options) == "table" and options or {}
+    local sourceBridgeBases = type(options.sourceBridgeBases) == "table" and options.sourceBridgeBases or {}
+    local bestIndex = 1
+    local bestScore = 0
+    for index, entry in ipairs(group or {}) do
+        local score = 0
+        local bridgeBase = money_replay_bridge_base(entry)
+        if bridgeBase ~= "" and sourceBridgeBases[bridgeBase] == true then
+            score = 1
+        end
+        if score > bestScore then
+            bestScore = score
+            bestIndex = index
+        end
+    end
+    return bestIndex
+end
+
+local function build_dedupe_plan_for_entries(entries, kind, options)
+    local groups = {}
+    local groupOrder = {}
+
+    for _, entry in ipairs(entries or {}) do
+        local key = kind == "money" and money_dedupe_key(entry) or item_dedupe_key(entry)
+        if key ~= "" then
+            if not groups[key] then
+                groups[key] = {}
+                groupOrder[#groupOrder + 1] = key
+            end
+            groups[key][#groups[key] + 1] = entry
+        end
+    end
+
+    local removableEntryIds = {}
+    local reviewRows = {}
+    local duplicateGroupCount = 0
+    local duplicateRowCount = 0
+
+    for _, key in ipairs(groupOrder) do
+        local group = groups[key] or {}
+        if #group > 1 then
+            duplicateGroupCount = duplicateGroupCount + 1
+            local keepIndex = dedupe_keep_index(group, kind, options)
+            for index = 1, #group do
+                local entry = group[index]
+                if index ~= keepIndex then
+                    local entryId = tostring(entry.entryId or "")
+                    removableEntryIds[entryId] = true
+                    reviewRows[#reviewRows + 1] = build_dedupe_review_row(kind, entry)
+                    duplicateRowCount = duplicateRowCount + 1
+                end
+            end
+        end
+    end
+
+    return {
+        duplicateGroupCount = duplicateGroupCount,
+        duplicateRowCount = duplicateRowCount,
+        removableEntryIds = removableEntryIds,
+        reviewRows = reviewRows,
+    }
+end
+
+function bankLedger.BuildDedupePlan(db)
+    db = db or {}
+    local ledger = bankLedger.EnsureState(db)
+    local itemPlan = build_dedupe_plan_for_entries(ledger.itemLogs, "item")
+    local moneyPlan = build_dedupe_plan_for_entries(ledger.moneyLogs, "money", {
+        sourceBridgeBases = money_source_bridge_bases(ledger.moneySourceSnapshots),
+    })
+    local reviewRows = {}
+
+    for _, row in ipairs(itemPlan.reviewRows or {}) do
+        reviewRows[#reviewRows + 1] = row
+    end
+    for _, row in ipairs(moneyPlan.reviewRows or {}) do
+        reviewRows[#reviewRows + 1] = row
+    end
+
+    table.sort(reviewRows, function(left, right)
+        local leftStamp = tonumber(left.timestamp or 0) or 0
+        local rightStamp = tonumber(right.timestamp or 0) or 0
+        if leftStamp == rightStamp then
+            return tostring(left.summary or "") < tostring(right.summary or "")
+        end
+        return leftStamp > rightStamp
+    end)
+
+    return {
+        itemDuplicateGroupCount = tonumber(itemPlan.duplicateGroupCount or 0) or 0,
+        itemDuplicateRowCount = tonumber(itemPlan.duplicateRowCount or 0) or 0,
+        moneyDuplicateGroupCount = tonumber(moneyPlan.duplicateGroupCount or 0) or 0,
+        moneyDuplicateRowCount = tonumber(moneyPlan.duplicateRowCount or 0) or 0,
+        totalDuplicateGroupCount = (tonumber(itemPlan.duplicateGroupCount or 0) or 0) + (tonumber(moneyPlan.duplicateGroupCount or 0) or 0),
+        totalDuplicateRowCount = (tonumber(itemPlan.duplicateRowCount or 0) or 0) + (tonumber(moneyPlan.duplicateRowCount or 0) or 0),
+        itemRemovableEntryIds = itemPlan.removableEntryIds,
+        moneyRemovableEntryIds = moneyPlan.removableEntryIds,
+        reviewRows = reviewRows,
+    }
+end
+
+local function remove_entries_by_id(entries, removableEntryIds)
+    local kept = {}
+    local removed = 0
+    removableEntryIds = type(removableEntryIds) == "table" and removableEntryIds or {}
+    for _, entry in ipairs(entries or {}) do
+        if removableEntryIds[tostring(entry.entryId or "")] == true then
+            removed = removed + 1
+        else
+            kept[#kept + 1] = entry
+        end
+    end
+    return kept, removed
+end
+
+function bankLedger.ApplyDedupePlan(db, plan)
+    db = db or {}
+    local ledger = bankLedger.EnsureState(db)
+    plan = type(plan) == "table" and plan or bankLedger.BuildDedupePlan(db)
+
+    local itemLogs, itemRemoved = remove_entries_by_id(ledger.itemLogs, plan.itemRemovableEntryIds)
+    local moneyLogs, moneyRemoved = remove_entries_by_id(ledger.moneyLogs, plan.moneyRemovableEntryIds)
+    ledger.itemLogs = itemLogs
+    ledger.moneyLogs = moneyLogs
+    ledger.itemSourceSnapshots = {}
+    ledger.moneySourceSnapshots = {}
+
+    local batchCounts = session_batch_counts(ledger)
+    batchCounts.item = {}
+    batchCounts.money = {}
+
+    rebuild_fingerprint_index(ledger.itemLogs, ledger.itemFingerprints, legacy_item_row_bases)
+    rebuild_fingerprint_index(ledger.moneyLogs, ledger.moneyFingerprints, function(entry)
+        return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
+    end)
+
+    return {
+        itemRemoved = itemRemoved,
+        moneyRemoved = moneyRemoved,
+        totalRemoved = itemRemoved + moneyRemoved,
+    }
 end
 
 local function filtered_item_logs(db, filters)

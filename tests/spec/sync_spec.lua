@@ -1363,6 +1363,44 @@ db.bankLedger = db.bankLedger or {}
 db.bankLedger.itemLogs = {}
 db.bankLedger.moneyLogs = {}
 db.bankLedger.lastScanAt = 999
+local currentAddonVersion = tostring((ns.constants or {}).ADDON_VERSION or "1.1.0")
+local oldLedgerDeltaPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        kind = "item",
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "MemberOne-Stormrage",
+                itemID = 243734,
+                itemName = "Old Client Ledger Oil",
+                quantity = 4,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local oldLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", oldLedgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(not oldLedgerAccepted, "sync events should reject ledger deltas from older clients that do not advertise a compatible version")
+assert.equal(0, #(db.bankLedger.itemLogs or {}), "older-client ledger deltas should not append remote item-log rows")
+assert.equal("older_version", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "older-client ledger rejection should record the version reason")
+
 local ledgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
     updatedAt = 207,
@@ -1377,6 +1415,7 @@ local ledgerDeltaPayload = codec.EncodeTable({
             name = "MemberOne",
         },
         kind = "item",
+        version = currentAddonVersion,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
@@ -1419,6 +1458,7 @@ local wrongDistributionLedgerPayload = codec.EncodeTable({
             name = "MemberOne",
         },
         kind = "item",
+        version = currentAddonVersion,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
@@ -1455,6 +1495,7 @@ local localLedgerPayload = codec.EncodeTable({
             name = "SyncTester",
         },
         kind = "item",
+        version = currentAddonVersion,
         scanStartedAt = 1716573610,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
