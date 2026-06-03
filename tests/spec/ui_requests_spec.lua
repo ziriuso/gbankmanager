@@ -574,6 +574,7 @@ assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "opening a new reques
 mainFrame.tableRows[1]:GetScript("OnClick")(mainFrame.tableRows[1])
 assert.truthy(not mainFrame.requestDetailsModal:IsShown(), "request table row clicks should be ignored while the new request wizard is open")
 assert.equal("Step 1 of 3: Choose Item", mainFrame.requestWizardStepText:GetText(), "request wizard should start on the item selection step")
+assert.equal("Search for the item you would like stocked. Current expansion items only, no gear.", mainFrame.requestWizardStatusText:GetText(), "request wizard should explain current-expansion non-gear request scope")
 assert.equal("Search Item ID", mainFrame.requestCreateItemIDLabel:GetText(), "requests view should clearly label the item-id search box")
 assert.equal("Search Item Name", mainFrame.requestCreateItemNameLabel:GetText(), "requests view should clearly label the item-name search box")
 assert.equal("Selected Item", mainFrame.requestCreateSelectedItemLabel:GetText(), "requests view should clearly label the selected item display")

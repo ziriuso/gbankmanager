@@ -33,9 +33,31 @@ local function theme_minimap_icon()
     return "Interface\\ICONS\\INV_Misc_Map_01"
 end
 
-local function angle_to_offset(angleDegrees)
+local function frame_dimension(frame, key, getterName)
+    if type(frame) ~= "table" then
+        return 0
+    end
+
+    local value
+    if type(frame[getterName]) == "function" then
+        value = frame[getterName](frame)
+    end
+
+    return tonumber(value or frame[key] or 0) or 0
+end
+
+local function angle_to_offset(angleDegrees, minimap, button)
     local angleRadians = math.rad(tonumber(angleDegrees or 315) or 315)
-    local radius = 76
+    local minimapWidth = frame_dimension(minimap, "width", "GetWidth")
+    local minimapHeight = frame_dimension(minimap, "height", "GetHeight")
+    local buttonWidth = frame_dimension(button, "width", "GetWidth")
+    local buttonHeight = frame_dimension(button, "height", "GetHeight")
+    local minimapRadius = math.min(minimapWidth, minimapHeight) / 2
+    local buttonRadius = math.max(buttonWidth, buttonHeight) / 2
+    if minimapRadius <= 0 then
+        minimapRadius = 64
+    end
+    local radius = minimapRadius + buttonRadius
     return math.cos(angleRadians) * radius, math.sin(angleRadians) * radius
 end
 
@@ -47,7 +69,7 @@ function minimapButton.UpdatePosition()
     end
 
     local appearance = current_appearance()
-    local x, y = angle_to_offset(appearance.minimapAngle)
+    local x, y = angle_to_offset(appearance.minimapAngle, minimap, button)
     if type(button.ClearAllPoints) == "function" then
         button:ClearAllPoints()
     end

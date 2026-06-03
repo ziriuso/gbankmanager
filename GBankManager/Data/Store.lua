@@ -132,10 +132,29 @@ end
 local function versioned_ledger_reset_token()
     local resetVersion = trim(constants.LEDGER_FORCE_CLEAR_VERSION)
     local addonVersion = trim(constants.ADDON_VERSION)
-    if resetVersion == "" or addonVersion ~= resetVersion then
+    if resetVersion == "" then
         return nil
     end
 
+    local function parse_version(value)
+        local major, minor, patch = string.match(trim(value), "^(%d+)%.(%d+)%.(%d+)")
+        return tonumber(major), tonumber(minor), tonumber(patch)
+    end
+
+    local resetMajor, resetMinor, resetPatch = parse_version(resetVersion)
+    local addonMajor, addonMinor, addonPatch = parse_version(addonVersion)
+    if not resetMajor or not addonMajor then
+        return addonVersion == resetVersion and resetVersion or nil
+    end
+    if addonMajor < resetMajor then
+        return nil
+    end
+    if addonMajor == resetMajor and addonMinor < resetMinor then
+        return nil
+    end
+    if addonMajor == resetMajor and addonMinor == resetMinor and addonPatch < resetPatch then
+        return nil
+    end
     return resetVersion
 end
 

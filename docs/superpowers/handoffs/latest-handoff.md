@@ -7,7 +7,7 @@
 - Current local checkpoint:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - base release in the worktree remains `v1.1.1`
+  - base release in the worktree is being prepared as `v1.1.2`
   - issue under implementation: `https://github.com/ziriuso/gbankmanager/issues/11`
 - Scope implemented:
   - added persisted `ui.chatSettings.suppressRoutineMessages`, defaulting off and normalized through database migrations
@@ -19,6 +19,9 @@
   - `Options -> Appearance` now has an immediate-save `Suppress Routine Chat` toggle beside the existing local appearance toggles
   - follow-up default changed `Suppress Routine Chat` to on for missing or fresh settings while preserving an explicit saved off state
   - follow-up Appearance chrome now extends behind the added toggle stack and onboarding replay control; future Options expansion should grow the owning panel background with the new controls
+  - follow-up minimap launcher positioning now derives its radius from the minimap and launcher sizes so the icon sits on the minimap edge instead of inside the map
+  - follow-up New Request wizard copy now says `Search for the item you would like stocked. Current expansion items only, no gear.`
+  - `GBankManager.toc` now advertises `1.1.2` / `v1.1.2`; `ADDON_VERSION` fallback matches `1.1.2` while the ledger clear marker remains `1.1.1`
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`

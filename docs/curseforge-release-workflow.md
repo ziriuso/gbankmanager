@@ -52,6 +52,75 @@ Behavior:
 5. creates or updates the matching GitHub Release
 6. attaches the same zip to the GitHub Release
 
+## Maintainer Release Checklist
+
+Use this checklist when cutting a stable release yourself.
+
+1. Start from the release worktree and confirm the branch:
+
+```powershell
+cd C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1
+git status -sb
+git rev-parse --abbrev-ref HEAD
+git rev-parse --short HEAD
+```
+
+2. Update the release version surfaces before tagging:
+
+- `GBankManager/GBankManager.toc`: update `## Version:` to the semantic version without `v`, for example `1.1.2`.
+- `GBankManager/GBankManager.toc`: update `## X-Release-Tag:` to the matching tag, for example `v1.1.2`.
+- `GBankManager/Core/Constants.lua`: update the fallback `ADDON_VERSION` string to the same semantic version. The live addon normally reads the TOC value, but the fallback should stay aligned for tests and unusual load paths.
+- `GBankManager/Core/Constants.lua`: do not bump `LEDGER_FORCE_CLEAR_VERSION` as routine release metadata. Change it only when the release intentionally needs a new one-time Bank Ledger reset. The current marker remains `1.1.1` so users who already cleared that ledger baseline are not cleared again.
+- `tests/spec/toc_spec.lua`: update the expected `## Version:` and `## X-Release-Tag:` lines.
+- `tests/spec/ui_about_spec.lua`: update the expected visible release tag.
+- User-facing docs that mention the release behavior, usually `README.md`, `docs/testing.md`, `docs/manual-test-checklist.md`, and `docs/superpowers/handoffs/latest-handoff.md` when the current checkpoint changes.
+
+`GBankManager_ItemData/GBankManager_ItemData.toc` currently has no `## Version:` metadata. Only update its `## Interface:` line when supported WoW client interface numbers change, and keep `tests/spec/toc_spec.lua` aligned.
+
+3. Run the full release gate:
+
+```powershell
+.\tools\lua\lua.exe .\tests\run_all.lua
+```
+
+4. Commit and push the release-prep checkpoint:
+
+```powershell
+git add GBankManager README.md docs tests
+git commit -m "chore: prepare 1.1.2 release"
+git push origin codex/gbankmanager-v1
+```
+
+5. Create and push the release tag:
+
+```powershell
+git tag v1.1.2
+git push origin v1.1.2
+```
+
+6. Watch the tag-triggered workflow:
+
+```powershell
+gh run list --workflow release-curseforge.yml --limit 5
+gh run watch <run-id>
+```
+
+7. Confirm the release and artifact:
+
+```powershell
+gh release view v1.1.2 --json name,tagName,isPrerelease,assets,url
+```
+
+The stable release should have `isPrerelease: false`, a `GBankManager-1.1.2.zip` asset, and a successful CurseForge upload step in the workflow log.
+
+8. Deploy the same committed worktree locally after the release gate is green:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json
+```
+
+After deploying, `/reload` in game and open `About` to confirm the visible release tag matches the tag you pushed.
+
 ## Required GitHub Repository Settings
 
 ### Repository secret
