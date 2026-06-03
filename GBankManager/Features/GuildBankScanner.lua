@@ -837,6 +837,14 @@ local function append_ledger_sync_payload(db, target, mergedRows)
         return false
     end
 
+    if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
+        payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
+    end
+
+    if #(payload.transactions or {}) == 0 then
+        return false
+    end
+
     scanner.pendingLedgerSyncPayloads = scanner.pendingLedgerSyncPayloads or {}
     scanner.pendingLedgerSyncPayloads[#scanner.pendingLedgerSyncPayloads + 1] = payload
     return true

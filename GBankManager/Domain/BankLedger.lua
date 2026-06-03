@@ -1231,6 +1231,98 @@ local function normalize_money_rows(payload)
     return sourceKey, normalizedRows
 end
 
+local function dedupe_bucket(timestamp)
+    timestamp = tonumber(timestamp or 0) or 0
+    if timestamp <= 0 then
+        return 0
+    end
+    return math.floor(timestamp / 60)
+end
+
+local function item_dedupe_key(entry)
+    entry = type(entry) == "table" and entry or {}
+    return make_fingerprint({
+        dedupe_bucket(entry.timestamp or entry.when),
+        trim(entry.who or "Unknown"),
+        item_action_label(entry.action),
+        tonumber(entry.itemID or 0) or 0,
+        tonumber(entry.quantity or 0) or 0,
+        trim(entry.tabName or "-"),
+        trim(entry.fromTabName or "-"),
+    })
+end
+
+local function money_dedupe_key(entry)
+    entry = type(entry) == "table" and entry or {}
+    return make_fingerprint({
+        money_visible_date_key(entry),
+        trim(entry.who or "Unknown"),
+        visible_money_action_label(entry),
+        tonumber(entry.amountCopper or entry.amount or 0) or 0,
+    })
+end
+
+local function visible_dedupe_key(kind, entry)
+    if kind == "money" then
+        return money_dedupe_key(entry)
+    end
+
+    return item_dedupe_key(entry)
+end
+
+local function filter_visible_duplicate_rows(kind, normalizedRows)
+    local seen = {}
+    local filtered = {}
+
+    for _, row in ipairs(normalizedRows or {}) do
+        local key = visible_dedupe_key(kind, row)
+        if key == "" or seen[key] ~= true then
+            if key ~= "" then
+                seen[key] = true
+            end
+            filtered[#filtered + 1] = row
+        end
+    end
+
+    return filtered
+end
+
+local function clone_payload_record(record)
+    local copy = {}
+    for key, value in pairs(type(record) == "table" and record or {}) do
+        copy[key] = value
+    end
+    return copy
+end
+
+function bankLedger.SanitizeRemoteDeltaPayload(payload)
+    payload = type(payload) == "table" and payload or {}
+    local kind = tostring(payload.kind or "")
+    if kind ~= "item" and kind ~= "money" then
+        return clone_payload_record(payload)
+    end
+
+    local _, normalizedRows
+    if kind == "money" then
+        _, normalizedRows = normalize_money_rows(payload)
+    else
+        _, normalizedRows = normalize_item_rows(payload)
+    end
+
+    local filteredRows = filter_visible_duplicate_rows(kind, normalizedRows)
+    local sanitizedTransactions = {}
+    for _, row in ipairs(filteredRows) do
+        local original = (payload.transactions or {})[tonumber(row.sourceIndex or 0) or 0]
+        if type(original) == "table" then
+            sanitizedTransactions[#sanitizedTransactions + 1] = clone_payload_record(original)
+        end
+    end
+
+    local sanitized = clone_payload_record(payload)
+    sanitized.transactions = sanitizedTransactions
+    return sanitized
+end
+
 function bankLedger.DescribeItemDelta(db, payload)
     db = db or {}
     local ledger = bankLedger.EnsureState(db)
@@ -1315,6 +1407,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
     local kind = tostring(payload.kind or "")
     if kind == "item" then
         local sourceKey, normalizedRows = normalize_item_rows(payload)
+        normalizedRows = filter_visible_duplicate_rows("item", normalizedRows)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.itemLogs,
@@ -1337,6 +1430,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
     if kind == "money" then
         payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
         local sourceKey, normalizedRows = normalize_money_rows(payload)
+        normalizedRows = filter_visible_duplicate_rows("money", normalizedRows)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.moneyLogs,
@@ -1356,37 +1450,6 @@ function bankLedger.MergeRemoteDelta(db, payload)
     end
 
     return 0
-end
-
-local function dedupe_bucket(timestamp)
-    timestamp = tonumber(timestamp or 0) or 0
-    if timestamp <= 0 then
-        return 0
-    end
-    return math.floor(timestamp / 60)
-end
-
-local function item_dedupe_key(entry)
-    entry = type(entry) == "table" and entry or {}
-    return make_fingerprint({
-        dedupe_bucket(entry.timestamp or entry.when),
-        trim(entry.who or "Unknown"),
-        item_action_label(entry.action),
-        tonumber(entry.itemID or 0) or 0,
-        tonumber(entry.quantity or 0) or 0,
-        trim(entry.tabName or "-"),
-        trim(entry.fromTabName or "-"),
-    })
-end
-
-local function money_dedupe_key(entry)
-    entry = type(entry) == "table" and entry or {}
-    return make_fingerprint({
-        money_visible_date_key(entry),
-        trim(entry.who or "Unknown"),
-        visible_money_action_label(entry),
-        tonumber(entry.amountCopper or entry.amount or 0) or 0,
-    })
 end
 
 local function build_dedupe_review_row(kind, entry)

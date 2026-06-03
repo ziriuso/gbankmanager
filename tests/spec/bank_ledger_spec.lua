@@ -214,8 +214,8 @@ local remoteMoneyBatchMerged = bankLedger.MergeRemoteDelta(remoteMoneyBatchDb, {
         },
     },
 })
-assert.equal(1, remoteMoneyBatchMerged, "remote money deltas should append only the unseen repeated occurrence")
-assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "remote money deltas should persist the repeated visible occurrence exactly once")
+assert.equal(0, remoteMoneyBatchMerged, "remote money deltas should not trust duplicate visible occurrences from a peer cache")
+assert.equal(1, #remoteMoneyBatchDb.bankLedger.moneyLogs, "remote money deltas should leave a cleaned receiver with one visible row")
 local remoteMoneyBatchRepeat = bankLedger.MergeMoneyTransactions(remoteMoneyBatchDb, {
     scanStartedAt = 1716574200,
     transactions = {
@@ -241,8 +241,128 @@ local remoteMoneyBatchRepeat = bankLedger.MergeMoneyTransactions(remoteMoneyBatc
         },
     },
 })
-assert.equal(0, remoteMoneyBatchRepeat, "a later local money scan should not duplicate repeated rows that already arrived through remote sync")
-assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "a later local money scan should leave the repeated remote-synced money rows unchanged")
+assert.equal(1, remoteMoneyBatchRepeat, "a later local money scan remains the source of truth for repeated visible occurrences")
+assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "a later local money scan should be able to grow real repeated money rows")
+
+local pollutedRemoteMoneyDb = fresh_db()
+local pollutedRemoteMoneyInitial = bankLedger.MergeMoneyTransactions(pollutedRemoteMoneyDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 11,
+            minute = 55,
+        },
+    },
+})
+assert.equal(1, pollutedRemoteMoneyInitial, "baseline clean receiver should already have the visible money row")
+local pollutedRemoteMoneyMerged = bankLedger.MergeRemoteDelta(pollutedRemoteMoneyDb, {
+    kind = "money",
+    scanStartedAt = 1716573900,
+    repairThresholdGold = 5000,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 11,
+            minute = 55,
+        },
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 27,
+        },
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 55,
+        },
+    },
+})
+assert.equal(0, pollutedRemoteMoneyMerged, "polluted remote money payloads should not re-contaminate a cleaned receiver")
+assert.equal(1, #pollutedRemoteMoneyDb.bankLedger.moneyLogs, "polluted remote money payloads should not append visible duplicates")
+
+local sanitizedRemoteMoneyPayload = bankLedger.SanitizeRemoteDeltaPayload({
+    kind = "money",
+    scanStartedAt = 1716573900,
+    repairThresholdGold = 5000,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 11,
+            minute = 55,
+        },
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 27,
+        },
+    },
+})
+assert.equal(1, #(sanitizedRemoteMoneyPayload.transactions or {}), "outbound money ledger sync should collapse dirty visible duplicates")
+
+local sanitizedRemoteItemPayload = bankLedger.SanitizeRemoteDeltaPayload({
+    kind = "item",
+    scanStartedAt = 1716573900,
+    sourceTabIndex = 2,
+    sourceTabName = "Freebiez",
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            itemID = 244559,
+            itemName = "Void-Touched Augment Rune",
+            quantity = 1,
+            year = 2026,
+            month = 5,
+            day = 29,
+            hour = 17,
+            minute = 52,
+        },
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            itemID = 244559,
+            itemName = "Void-Touched Augment Rune",
+            quantity = 1,
+            year = 2026,
+            month = 5,
+            day = 29,
+            hour = 17,
+            minute = 52,
+        },
+    },
+})
+assert.equal(1, #(sanitizedRemoteItemPayload.transactions or {}), "outbound item ledger sync should collapse dirty visible duplicates")
 
 local relogStableItemDb = fresh_db()
 _G.GetServerTime = function()

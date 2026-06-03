@@ -22,19 +22,24 @@
   - latest live-cache evidence showed cleanup could keep an older money duplicate whose hour no longer matched `moneySourceSnapshots`; after cleanup cleared transient state, the next money scan could reimport the current Blizzard row
   - cleanup now keeps a source-stable money row when the current money source snapshot can identify a matching visible hour, removes the extras, rebuilds ledger fingerprints, and clears transient batch-count state so the next scan does not regrow the cleaned row
   - local money scans now also bridge legacy coarse money-row precision when the same Blizzard hour-level row is seen again, so older polluted rows do not keep growing by one more copy on each new local scan
+  - remote ledger sync now sanitizes outbound manual/scanner `LEDGER_DELTA` payloads and inbound remote merge batches so a peer cache that still contains duplicate visible rows cannot re-contaminate a repaired client
+  - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
 - Full suite status:
-  - `.\tools\lua\lua.exe .\tests\run_all.lua` still stops at the pre-existing `tests/spec/item_catalog_target_spec.lua` failure: `fixture writer should open the target file`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passes; the older `tests/spec/item_catalog_target_spec.lua` fixture-writer blocker is not reproducing under the approved run
 - Local Retail deploy completed after the current changes:
   - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
   - deployed `GBankManager` and `GBankManager_ItemData` into `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
 - Recommended next live pass:
   1. Reproduce the old two-client ledger sync path that used to create duplicate money rows.
   2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
-  3. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
+  3. With one client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows.
+  4. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
 
 ### 2026-06-02 v1.1.0 Release Success
 
