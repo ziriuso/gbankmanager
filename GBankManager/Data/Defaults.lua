@@ -109,6 +109,9 @@ function defaults.CreateDatabase(guildName)
                 repairThresholdGold = 5000,
                 muteSilvermoonCitizen = false,
             },
+            chatSettings = {
+                suppressRoutineMessages = false,
+            },
             minimumItemCatalog = {},
             exportSettings = {
                 selectedPreset = "Spreadsheet",

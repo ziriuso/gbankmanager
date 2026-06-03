@@ -2,6 +2,37 @@
 
 ## Resume Here
 
+### 2026-06-03 Routine Addon Chat Suppression Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base release in the worktree remains `v1.1.1`
+  - issue under implementation: `https://github.com/ziriuso/gbankmanager/issues/11`
+- Scope implemented:
+  - added persisted `ui.chatSettings.suppressRoutineMessages`, defaulting off and normalized through database migrations
+  - added reusable `Core/ChatOutput.lua` and loaded it early in `GBankManager.toc`
+  - `Sync/Transport.lua` now treats accepted sync status output as routine by default
+  - guild-bank scanner start/finish/progress chat now flows through the routine output gate while still updating visible scanner status text
+  - scanner warnings and failures bypass the routine mute
+  - explicit slash debug and test output remains visible
+  - `Options -> Appearance` now has an immediate-save `Suppress Routine Chat` toggle beside the existing local appearance toggles
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_unit.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- Recommended next manual verification before release or deploy:
+  1. In Retail, toggle `Options -> Appearance -> Suppress Routine Chat`, run a manual scan plus a two-client routine sync update, and confirm routine scan/sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible.
+
 ### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
 
 - Current local checkpoint in the v1.1.0 line:
@@ -152,7 +183,6 @@
 - Older sections below this checkpoint are archival and intentionally preserve earlier beta-era resume context.
 - Current remaining follow-up is backlog polish, not a known release blocker:
   - passive ledger refresh validation after `/reload` with the bank already open
-  - routine chat suppression option
   - active-view auto-refresh for accepted sync updates
   - portable Minimums export/import
   - possible History sync design
@@ -169,11 +199,10 @@
 - The current local follow-up now also fixes the live `Options -> Sync` peer list rendering bug: the Sync subtable now assigns a concrete scroll-child and row width instead of relying on anchor-only width resolution that left the peer rows clipped away in the real WoW client.
 - The current local follow-up also brings the Minimums add-item modal back into line with the New Request wizard: both now enable the shared selector's crafted-quality icon path, so crafted search results and the selected-item summary show the same quality icons in both surfaces.
 - The current local follow-up also fixes two Minimums add-flow regressions: the typed `Minimum` value now carries from the add-search modal into `Minimum Details` instead of resetting to the default, and the lower add-search controls no longer jump right when a crafted-quality selected-item icon appears.
-- Possible future feature note:
-  - add a global `Suppress routine addon chat messages` option
-  - default scope: mute routine status or progress messages only
-  - keep `/gbm debug ...` output and real error messages visible
-  - likely low-to-moderate effort because most chat already flows through shared status helpers
+- Completed feature note:
+  - global `Suppress Routine Chat` option now lives under `Options -> Appearance`
+  - default scope mutes routine scan/sync status or progress messages only
+  - `/gbm debug ...`, in-game test output, warnings, and real error messages remain visible
   - add active-view auto-refresh when accepted remote sync mutates Requests, Minimums, or Bank Ledger data
   - preferred scope: repaint only when the relevant view is currently open, while preserving filters, selected row, and scroll where possible
   - likely moderate effort because each view already has a refresh path, but Requests and Bank Ledger currently reset scroll or selection state during naive refreshes

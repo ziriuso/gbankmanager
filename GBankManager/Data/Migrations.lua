@@ -136,6 +136,8 @@ local function ensure_v1_shape(db, guildName)
     db.ui.logsHistorySettings.ledgerScanIntervalSeconds = math.max(300, tonumber(db.ui.logsHistorySettings.ledgerScanIntervalSeconds or 300) or 300)
     db.ui.logsHistorySettings.repairThresholdGold = math.max(0, tonumber(db.ui.logsHistorySettings.repairThresholdGold or 5000) or 5000)
     db.ui.logsHistorySettings.muteSilvermoonCitizen = db.ui.logsHistorySettings.muteSilvermoonCitizen == true
+    db.ui.chatSettings = ensure_table(db.ui.chatSettings)
+    db.ui.chatSettings.suppressRoutineMessages = db.ui.chatSettings.suppressRoutineMessages == true
     db.ui.minimumItemCatalog = ensure_table(db.ui.minimumItemCatalog)
     db.ui.exportSettings = ensure_table(db.ui.exportSettings)
     db.ui.exportSettings.selectedPreset = db.ui.exportSettings.selectedPreset or "Spreadsheet"

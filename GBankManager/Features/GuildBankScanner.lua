@@ -170,7 +170,11 @@ local function ledger_scan_allowed(db)
     return false
 end
 
-local function report_status(message)
+local function report_status(message, options)
+    options = type(options) == "table" and options or {}
+    if options.category == nil then
+        options.category = "routine"
+    end
     scanner.statusText = tostring(message or "")
     local mainFrame = ns.modules.mainFrame
     if mainFrame and type(mainFrame.SetScanStatus) == "function" then
@@ -181,7 +185,14 @@ local function report_status(message)
 
     local syncTransport = ns.modules.syncTransport or {}
     if type(syncTransport.ReportStatus) == "function" then
-        return syncTransport.ReportStatus(message)
+        return syncTransport.ReportStatus(message, options)
+    end
+
+    if tostring(options.category or "") == "routine" then
+        local chatOutput = ns.modules.chatOutput or {}
+        if type(chatOutput.IsRoutineMuted) == "function" and chatOutput.IsRoutineMuted(current_db()) then
+            return false
+        end
     end
 
     if type(_G.DEFAULT_CHAT_FRAME) == "table" and type(_G.DEFAULT_CHAT_FRAME.AddMessage) == "function" then
@@ -220,7 +231,7 @@ local function schedule_after(delaySeconds, callback)
                 return tostring(problem)
             end)
             if not ok then
-                report_status(string.format("Guild bank ledger scan failed: %s", tostring(err or "unknown error")))
+                report_status(string.format("Guild bank ledger scan failed: %s", tostring(err or "unknown error")), { category = "error" })
             end
         end)
         return true
@@ -254,7 +265,7 @@ local function begin_tab_wait(tabIndex)
             return
         end
 
-        report_status(string.format("Guild bank scan timed out waiting for tab %d. Capturing current tab contents.", tabIndex))
+        report_status(string.format("Guild bank scan timed out waiting for tab %d. Capturing current tab contents.", tabIndex), { category = "warning" })
         scanner.OnGuildBankSlotsChanged(tabIndex, "timeout")
     end)
 end
@@ -1372,7 +1383,7 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
         scanner.pendingLedgerScanAfterInventory = false
         scanner.pendingLedgerScanOptions = nil
         finish_auto_scan_setup()
-        report_status("Guild bank auto-scan ignored a partial snapshot; run Scan Bank to refresh.")
+        report_status("Guild bank auto-scan ignored a partial snapshot; run Scan Bank to refresh.", { category = "warning" })
         if shouldBeginLedgerScan then
             scanner.BeginLedgerScan(pendingLedgerScanOptions)
         end

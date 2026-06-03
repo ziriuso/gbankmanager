@@ -16,6 +16,7 @@ Libs/AceComm-3.0/ChatThrottleLib.lua
 Libs/AceComm-3.0/AceComm-3.0.lua
 Core/Namespace.lua
 Core/Constants.lua
+Core/ChatOutput.lua
 Data/Defaults.lua
 Data/Migrations.lua
 Data/Store.lua

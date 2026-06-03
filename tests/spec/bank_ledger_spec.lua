@@ -24,6 +24,8 @@ assert.equal("indefinite", db.ui.logsHistorySettings.historyRetention, "history 
 assert.equal(300, db.ui.logsHistorySettings.ledgerScanIntervalSeconds, "ledger scan interval should default to five minutes")
 assert.equal(5000, db.ui.logsHistorySettings.repairThresholdGold, "ledger repair classification threshold should default to five thousand gold")
 assert.truthy(not db.ui.logsHistorySettings.muteSilvermoonCitizen, "Silvermoon Citizen chat mute should default off")
+assert.truthy(type(db.ui.chatSettings) == "table", "database defaults should include reusable chat settings")
+assert.truthy(not db.ui.chatSettings.suppressRoutineMessages, "routine addon chat suppression should default off")
 
 local mergedItemCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716573600,

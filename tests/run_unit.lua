@@ -15,6 +15,7 @@ local specs = {
     "tests/spec/exports_spec.lua",
     "tests/spec/history_spec.lua",
     "tests/spec/dashboard_spec.lua",
+    "tests/spec/chat_output_spec.lua",
     "tests/spec/inventory_quality_spec.lua",
     "tests/spec/minimums_portability_spec.lua",
     "tests/spec/planning_spec.lua",
