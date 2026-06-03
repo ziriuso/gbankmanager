@@ -1270,9 +1270,16 @@ local function visible_dedupe_key(kind, entry)
     return item_dedupe_key(entry)
 end
 
-local function filter_visible_duplicate_rows(kind, normalizedRows)
+local function filter_visible_duplicate_rows(kind, normalizedRows, existingEntries)
     local seen = {}
     local filtered = {}
+
+    for _, entry in ipairs(existingEntries or {}) do
+        local key = visible_dedupe_key(kind, entry)
+        if key ~= "" then
+            seen[key] = true
+        end
+    end
 
     for _, row in ipairs(normalizedRows or {}) do
         local key = visible_dedupe_key(kind, row)
@@ -1407,7 +1414,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
     local kind = tostring(payload.kind or "")
     if kind == "item" then
         local sourceKey, normalizedRows = normalize_item_rows(payload)
-        normalizedRows = filter_visible_duplicate_rows("item", normalizedRows)
+        normalizedRows = filter_visible_duplicate_rows("item", normalizedRows, ledger.itemLogs)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.itemLogs,
@@ -1430,7 +1437,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
     if kind == "money" then
         payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
         local sourceKey, normalizedRows = normalize_money_rows(payload)
-        normalizedRows = filter_visible_duplicate_rows("money", normalizedRows)
+        normalizedRows = filter_visible_duplicate_rows("money", normalizedRows, ledger.moneyLogs)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.moneyLogs,

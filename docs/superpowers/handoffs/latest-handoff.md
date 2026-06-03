@@ -23,6 +23,7 @@
   - cleanup now keeps a source-stable money row when the current money source snapshot can identify a matching visible hour, removes the extras, rebuilds ledger fingerprints, and clears transient batch-count state so the next scan does not regrow the cleaned row
   - local money scans now also bridge legacy coarse money-row precision when the same Blizzard hour-level row is seen again, so older polluted rows do not keep growing by one more copy on each new local scan
   - remote ledger sync now sanitizes outbound manual/scanner `LEDGER_DELTA` payloads and inbound remote merge batches so a peer cache that still contains duplicate visible rows cannot re-contaminate a repaired client
+  - follow-up live finding: older clients can still send a polluted payload whose first remaining visible duplicate has a different timestamp than the repaired receiver's kept row; inbound remote merge now seeds the visible-dedupe filter from existing receiver rows before applying the remote batch
   - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
@@ -38,7 +39,7 @@
 - Recommended next live pass:
   1. Reproduce the old two-client ledger sync path that used to create duplicate money rows.
   2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
-  3. With one client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows.
+  3. With one older client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows even when the older sender's copy has a different timestamp.
   4. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
 
 ### 2026-06-02 v1.1.0 Release Success

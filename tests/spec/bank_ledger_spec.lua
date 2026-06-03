@@ -301,6 +301,53 @@ local pollutedRemoteMoneyMerged = bankLedger.MergeRemoteDelta(pollutedRemoteMone
 assert.equal(0, pollutedRemoteMoneyMerged, "polluted remote money payloads should not re-contaminate a cleaned receiver")
 assert.equal(1, #pollutedRemoteMoneyDb.bankLedger.moneyLogs, "polluted remote money payloads should not append visible duplicates")
 
+local pollutedRemoteMoneyDifferentFirstDb = fresh_db()
+local pollutedRemoteMoneyDifferentFirstInitial = bankLedger.MergeMoneyTransactions(pollutedRemoteMoneyDifferentFirstDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 11,
+            minute = 55,
+        },
+    },
+})
+assert.equal(1, pollutedRemoteMoneyDifferentFirstInitial, "baseline clean receiver should have one visible money row before older-client sync")
+local pollutedRemoteMoneyDifferentFirstMerged = bankLedger.MergeRemoteDelta(pollutedRemoteMoneyDifferentFirstDb, {
+    kind = "money",
+    scanStartedAt = 1716573900,
+    repairThresholdGold = 5000,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 27,
+        },
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 11,
+            minute = 55,
+        },
+    },
+})
+assert.equal(0, pollutedRemoteMoneyDifferentFirstMerged, "older-client sync should not append a visible duplicate when its first kept row has a different timestamp")
+assert.equal(1, #pollutedRemoteMoneyDifferentFirstDb.bankLedger.moneyLogs, "older-client sync should leave the repaired receiver clean")
+
 local sanitizedRemoteMoneyPayload = bankLedger.SanitizeRemoteDeltaPayload({
     kind = "money",
     scanStartedAt = 1716573900,
