@@ -1192,7 +1192,7 @@ mainFrame:RegisterModalFrame(mainFrame.ledgerDedupeReviewModal, 24, "FULLSCREEN_
 mainFrame.ledgerDedupeReviewTitle = mainFrame.ledgerDedupeReviewTitle or make_label(mainFrame.ledgerDedupeReviewModal, "Ledger Dedupe Review", "GameFontHighlight")
 mainFrame.ledgerDedupeReviewTitle:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewModal, "TOPLEFT", 16, -16)
 
-mainFrame.ledgerDedupeReviewHintText = mainFrame.ledgerDedupeReviewHintText or make_label(mainFrame.ledgerDedupeReviewModal, "Review the duplicate rows that will be removed. Item cleanup keeps the first same-minute row; money cleanup keeps the first matching visible ledger row.", "GameFontHighlightSmall")
+mainFrame.ledgerDedupeReviewHintText = mainFrame.ledgerDedupeReviewHintText or make_label(mainFrame.ledgerDedupeReviewModal, "Review the duplicate rows that will be removed. Item cleanup keeps the first same-minute row; money cleanup keeps a source-stable matching visible ledger row when available.", "GameFontHighlightSmall")
 mainFrame.ledgerDedupeReviewHintText:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewTitle, "BOTTOMLEFT", 0, -12)
 if type(mainFrame.ledgerDedupeReviewHintText.SetWidth) == "function" then
     mainFrame.ledgerDedupeReviewHintText:SetWidth(684)

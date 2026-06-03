@@ -1350,6 +1350,69 @@ local stalePersistedMoneySnapshotCount = bankLedger.MergeMoneyTransactions(stale
 assert.equal(1, stalePersistedMoneySnapshotCount, "stale persisted money source snapshots should not block a real new leading row after reload")
 assert.equal(2, #stalePersistedMoneySnapshotDb.bankLedger.moneyLogs, "money merges should still append the unseen row when persisted source snapshots are stale")
 
+local dedupeSourceStableMoneyDb = fresh_db()
+dedupeSourceStableMoneyDb.bankLedger.moneySourceSnapshots = {
+    money = {
+        "2026|6|2|12|51|Zirleficent|withdraw|1500000000|1",
+    },
+}
+dedupeSourceStableMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-old-visible-duplicate",
+        timestamp = 1780415704,
+        when = 1780415704,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|11|55|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+    {
+        entryId = "money-current-source-hour-duplicate",
+        timestamp = 1780417641,
+        when = 1780417641,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|12|27|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+    {
+        entryId = "money-later-visible-duplicate",
+        timestamp = 1780422900,
+        when = 1780422900,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|12|55|0|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+}
+local sourceStableDedupePlan = bankLedger.BuildDedupePlan(dedupeSourceStableMoneyDb)
+assert.equal(2, sourceStableDedupePlan.moneyDuplicateRowCount, "money cleanup should flag same visible ledger rows before protecting source stability")
+local sourceStableDedupeResult = bankLedger.ApplyDedupePlan(dedupeSourceStableMoneyDb, sourceStableDedupePlan)
+assert.equal(2, sourceStableDedupeResult.moneyRemoved, "money cleanup should remove repeated visible rows")
+assert.equal("money-current-source-hour-duplicate", dedupeSourceStableMoneyDb.bankLedger.moneyLogs[1].entryId, "money cleanup should keep the row whose hour still matches the current source snapshot")
+assert.equal(0, bankLedger.MergeMoneyTransactions(dedupeSourceStableMoneyDb, {
+    scanStartedAt = 1780453860,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 51,
+        },
+    },
+}), "a money scan after cleanup should not reimport the same visible source row")
+assert.equal(1, #dedupeSourceStableMoneyDb.bankLedger.moneyLogs, "money cleanup should stay stable after the next scan")
+
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {
     action = "withdraw",
 })

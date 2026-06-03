@@ -549,6 +549,46 @@ local function money_replay_bridge_base(values)
     })
 end
 
+local function split_fingerprint(fingerprint)
+    local parts = {}
+    for part in string.gmatch(tostring(fingerprint or ""), "([^|]+)") do
+        parts[#parts + 1] = part
+    end
+    return parts
+end
+
+local function money_replay_bridge_base_from_fingerprint(fingerprint)
+    local parts = split_fingerprint(fingerprint_base(fingerprint))
+    local actorIndex = #parts - 2
+    local year = tonumber(parts[1])
+    local month = tonumber(parts[2])
+    local day = tonumber(parts[3])
+    local hour = tonumber(parts[4])
+    if not (year and year >= 1000 and month and day and actorIndex > 4) then
+        return ""
+    end
+
+    return make_fingerprint({
+        raw_time_key(year, month, day, hour, nil),
+        parts[actorIndex],
+        parts[actorIndex + 1],
+        parts[actorIndex + 2],
+    })
+end
+
+local function money_source_bridge_bases(sourceSnapshots)
+    local bridgeBases = {}
+    for _, fingerprints in pairs(sourceSnapshots or {}) do
+        for _, fingerprint in ipairs(fingerprints or {}) do
+            local bridgeBase = money_replay_bridge_base_from_fingerprint(fingerprint)
+            if bridgeBase ~= "" then
+                bridgeBases[bridgeBase] = true
+            end
+        end
+    end
+    return bridgeBases
+end
+
 local function assign_occurrence_fingerprints(rows)
     local exactCounts = {}
     local legacyCounts = {}
@@ -1383,7 +1423,30 @@ local function build_dedupe_review_row(kind, entry)
     }
 end
 
-local function build_dedupe_plan_for_entries(entries, kind)
+local function dedupe_keep_index(group, kind, options)
+    if kind ~= "money" then
+        return 1
+    end
+
+    options = type(options) == "table" and options or {}
+    local sourceBridgeBases = type(options.sourceBridgeBases) == "table" and options.sourceBridgeBases or {}
+    local bestIndex = 1
+    local bestScore = 0
+    for index, entry in ipairs(group or {}) do
+        local score = 0
+        local bridgeBase = money_replay_bridge_base(entry)
+        if bridgeBase ~= "" and sourceBridgeBases[bridgeBase] == true then
+            score = 1
+        end
+        if score > bestScore then
+            bestScore = score
+            bestIndex = index
+        end
+    end
+    return bestIndex
+end
+
+local function build_dedupe_plan_for_entries(entries, kind, options)
     local groups = {}
     local groupOrder = {}
 
@@ -1407,12 +1470,15 @@ local function build_dedupe_plan_for_entries(entries, kind)
         local group = groups[key] or {}
         if #group > 1 then
             duplicateGroupCount = duplicateGroupCount + 1
-            for index = 2, #group do
+            local keepIndex = dedupe_keep_index(group, kind, options)
+            for index = 1, #group do
                 local entry = group[index]
-                local entryId = tostring(entry.entryId or "")
-                removableEntryIds[entryId] = true
-                reviewRows[#reviewRows + 1] = build_dedupe_review_row(kind, entry)
-                duplicateRowCount = duplicateRowCount + 1
+                if index ~= keepIndex then
+                    local entryId = tostring(entry.entryId or "")
+                    removableEntryIds[entryId] = true
+                    reviewRows[#reviewRows + 1] = build_dedupe_review_row(kind, entry)
+                    duplicateRowCount = duplicateRowCount + 1
+                end
             end
         end
     end
@@ -1429,7 +1495,9 @@ function bankLedger.BuildDedupePlan(db)
     db = db or {}
     local ledger = bankLedger.EnsureState(db)
     local itemPlan = build_dedupe_plan_for_entries(ledger.itemLogs, "item")
-    local moneyPlan = build_dedupe_plan_for_entries(ledger.moneyLogs, "money")
+    local moneyPlan = build_dedupe_plan_for_entries(ledger.moneyLogs, "money", {
+        sourceBridgeBases = money_source_bridge_bases(ledger.moneySourceSnapshots),
+    })
     local reviewRows = {}
 
     for _, row in ipairs(itemPlan.reviewRows or {}) do

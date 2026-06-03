@@ -19,7 +19,8 @@
   - `Dedupe Ledger` is review-first: preview counts first, then a `Review Rows` modal with the exact rows to remove, then `Clean Up`
   - cleanup now targets exact visible duplicates within the same displayed minute for item rows and the same visible ledger date, actor, action, and amount for money rows
   - the `Review Rows` modal now provisions a slim scrollbar and expands its text content height so long cleanup lists can be reviewed before applying
-  - cleanup keeps the first stored row in each duplicate group, removes the extras, rebuilds ledger fingerprints, and clears transient source-snapshot/batch-count state so later scans start from a clean dedupe baseline
+  - latest live-cache evidence showed cleanup could keep an older money duplicate whose hour no longer matched `moneySourceSnapshots`; after cleanup cleared transient state, the next money scan could reimport the current Blizzard row
+  - cleanup now keeps a source-stable money row when the current money source snapshot can identify a matching visible hour, removes the extras, rebuilds ledger fingerprints, and clears transient batch-count state so the next scan does not regrow the cleaned row
   - local money scans now also bridge legacy coarse money-row precision when the same Blizzard hour-level row is seen again, so older polluted rows do not keep growing by one more copy on each new local scan
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
@@ -33,7 +34,7 @@
 - Recommended next live pass:
   1. Reproduce the old two-client ledger sync path that used to create duplicate money rows.
   2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
-  3. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount.
+  3. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
 
 ### 2026-06-02 v1.1.0 Release Success
 
