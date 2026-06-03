@@ -1155,6 +1155,74 @@ function mainFrame:OpenHistoryDetailsModal(row)
     return self.historyDetailsModal
 end
 
+mainFrame.ledgerDedupePreviewModal = mainFrame.ledgerDedupePreviewModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.ledgerDedupePreviewModal:SetSize(476, 232)
+mainFrame.ledgerDedupePreviewModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+mainFrame.ledgerDedupePreviewModal:EnableMouse(true)
+apply_surface_variant(mainFrame.ledgerDedupePreviewModal, "modal-sheet")
+mainFrame.ledgerDedupePreviewModal:Hide()
+mainFrame:RegisterModalFrame(mainFrame.ledgerDedupePreviewModal, 24, "FULLSCREEN_DIALOG")
+
+mainFrame.ledgerDedupePreviewTitle = mainFrame.ledgerDedupePreviewTitle or make_label(mainFrame.ledgerDedupePreviewModal, "Dedupe Ledger", "GameFontHighlight")
+mainFrame.ledgerDedupePreviewTitle:SetPoint("TOPLEFT", mainFrame.ledgerDedupePreviewModal, "TOPLEFT", 16, -16)
+
+mainFrame.ledgerDedupePreviewSummaryText = mainFrame.ledgerDedupePreviewSummaryText or make_label(mainFrame.ledgerDedupePreviewModal, "", "GameFontHighlightSmall")
+mainFrame.ledgerDedupePreviewSummaryText:SetPoint("TOPLEFT", mainFrame.ledgerDedupePreviewTitle, "BOTTOMLEFT", 0, -18)
+if type(mainFrame.ledgerDedupePreviewSummaryText.SetWidth) == "function" then
+    mainFrame.ledgerDedupePreviewSummaryText:SetWidth(436)
+end
+
+mainFrame.ledgerDedupePreviewReviewButton = mainFrame.ledgerDedupePreviewReviewButton or make_button(mainFrame.ledgerDedupePreviewModal, 108, 28, "Review Rows")
+mainFrame.ledgerDedupePreviewReviewButton:SetPoint("BOTTOMLEFT", mainFrame.ledgerDedupePreviewModal, "BOTTOMLEFT", 16, 16)
+
+mainFrame.ledgerDedupePreviewApplyButton = mainFrame.ledgerDedupePreviewApplyButton or make_button(mainFrame.ledgerDedupePreviewModal, 92, 28, "Clean Up")
+mainFrame.ledgerDedupePreviewApplyButton:SetPoint("BOTTOMRIGHT", mainFrame.ledgerDedupePreviewModal, "BOTTOMRIGHT", -96, 16)
+
+mainFrame.ledgerDedupePreviewCancelButton = mainFrame.ledgerDedupePreviewCancelButton or make_button(mainFrame.ledgerDedupePreviewModal, 72, 28, "Cancel")
+mainFrame.ledgerDedupePreviewCancelButton:SetPoint("LEFT", mainFrame.ledgerDedupePreviewApplyButton, "RIGHT", 8, 0)
+
+mainFrame.ledgerDedupeReviewModal = mainFrame.ledgerDedupeReviewModal or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
+mainFrame.ledgerDedupeReviewModal:SetSize(724, 436)
+mainFrame.ledgerDedupeReviewModal:SetPoint("CENTER", mainFrame.content, "CENTER", 0, 0)
+mainFrame.ledgerDedupeReviewModal:EnableMouse(true)
+apply_surface_variant(mainFrame.ledgerDedupeReviewModal, "modal-sheet")
+mainFrame.ledgerDedupeReviewModal:Hide()
+mainFrame:RegisterModalFrame(mainFrame.ledgerDedupeReviewModal, 24, "FULLSCREEN_DIALOG")
+
+mainFrame.ledgerDedupeReviewTitle = mainFrame.ledgerDedupeReviewTitle or make_label(mainFrame.ledgerDedupeReviewModal, "Ledger Dedupe Review", "GameFontHighlight")
+mainFrame.ledgerDedupeReviewTitle:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewModal, "TOPLEFT", 16, -16)
+
+mainFrame.ledgerDedupeReviewHintText = mainFrame.ledgerDedupeReviewHintText or make_label(mainFrame.ledgerDedupeReviewModal, "Review the duplicate rows that will be removed. Item cleanup keeps the first same-minute row; money cleanup keeps the first matching visible ledger row.", "GameFontHighlightSmall")
+mainFrame.ledgerDedupeReviewHintText:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewTitle, "BOTTOMLEFT", 0, -12)
+if type(mainFrame.ledgerDedupeReviewHintText.SetWidth) == "function" then
+    mainFrame.ledgerDedupeReviewHintText:SetWidth(684)
+end
+
+mainFrame.ledgerDedupeReviewOutput = mainFrame.ledgerDedupeReviewOutput or make_export_output_input(mainFrame.ledgerDedupeReviewModal, 684, 286)
+mainFrame.ledgerDedupeReviewOutput:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewHintText, "BOTTOMLEFT", 0, -14)
+mainFrame.ledgerDedupeReviewOutput:SetTextInsets(4, 4, 4, 4)
+
+mainFrame.ledgerDedupeReviewScrollBar = mainFrame.ledgerDedupeReviewScrollBar or make_slim_scroll_bar(mainFrame.ledgerDedupeReviewModal, 14)
+if type(mainFrame.ledgerDedupeReviewScrollBar.ClearAllPoints) == "function" then
+    mainFrame.ledgerDedupeReviewScrollBar:ClearAllPoints()
+end
+mainFrame.ledgerDedupeReviewScrollBar:SetPoint("TOPLEFT", mainFrame.ledgerDedupeReviewOutput, "TOPRIGHT", 4, 0)
+mainFrame.ledgerDedupeReviewScrollBar:SetPoint("BOTTOMLEFT", mainFrame.ledgerDedupeReviewOutput, "BOTTOMRIGHT", 4, 0)
+mainFrame.ledgerDedupeReviewScrollController = mainFrame.ledgerDedupeReviewScrollController
+    or (type(attach_scroll_behavior) == "function" and attach_scroll_behavior(mainFrame.ledgerDedupeReviewOutput, mainFrame.ledgerDedupeReviewScrollBar, {
+        wheelStep = 24,
+    }))
+set_frame_shown(mainFrame.ledgerDedupeReviewScrollBar, false)
+
+mainFrame.ledgerDedupeReviewBackButton = mainFrame.ledgerDedupeReviewBackButton or make_button(mainFrame.ledgerDedupeReviewModal, 72, 28, "Back")
+mainFrame.ledgerDedupeReviewBackButton:SetPoint("BOTTOMLEFT", mainFrame.ledgerDedupeReviewModal, "BOTTOMLEFT", 16, 16)
+
+mainFrame.ledgerDedupeReviewApplyButton = mainFrame.ledgerDedupeReviewApplyButton or make_button(mainFrame.ledgerDedupeReviewModal, 92, 28, "Clean Up")
+mainFrame.ledgerDedupeReviewApplyButton:SetPoint("BOTTOMRIGHT", mainFrame.ledgerDedupeReviewModal, "BOTTOMRIGHT", -96, 16)
+
+mainFrame.ledgerDedupeReviewCancelButton = mainFrame.ledgerDedupeReviewCancelButton or make_button(mainFrame.ledgerDedupeReviewModal, 72, 28, "Cancel")
+mainFrame.ledgerDedupeReviewCancelButton:SetPoint("LEFT", mainFrame.ledgerDedupeReviewApplyButton, "RIGHT", 8, 0)
+
 mainFrame.bankLedgerMode = mainFrame.bankLedgerMode or "ITEM"
 mainFrame.bankLedgerActionFilter = mainFrame.bankLedgerActionFilter or ""
 
@@ -1403,7 +1471,7 @@ apply_surface_variant(mainFrame.optionsBlacklistPanel, "panel-alt")
 mainFrame.optionsLogsHistoryPanel = mainFrame.optionsLogsHistoryPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsLogsHistoryPanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsLogsHistoryPanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsLogsHistoryPanel:SetHeight(452)
+mainFrame.optionsLogsHistoryPanel:SetHeight(492)
 apply_surface_variant(mainFrame.optionsLogsHistoryPanel, "panel-alt")
 
 mainFrame.optionsSyncPanel = mainFrame.optionsSyncPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1775,8 +1843,11 @@ if type(mainFrame.optionsClearDataHint.SetWidth) == "function" then
     mainFrame.optionsClearDataHint:SetWidth(640)
 end
 
+mainFrame.optionsDedupeLedgerButton = mainFrame.optionsDedupeLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Dedupe Ledger")
+mainFrame.optionsDedupeLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
+
 mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Log Data")
-mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
+mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsDedupeLedgerButton, "BOTTOMLEFT", 0, -10)
 
 mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Inventory Data")
 mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)
@@ -2797,6 +2868,110 @@ function mainFrame:SaveLogsHistorySettings()
     return settings
 end
 
+function mainFrame:CloseLedgerDedupeModals()
+    if self.ledgerDedupePreviewModal then
+        self.ledgerDedupePreviewModal:Hide()
+    end
+    if self.ledgerDedupeReviewModal then
+        self.ledgerDedupeReviewModal:Hide()
+    end
+end
+
+function mainFrame:BuildLedgerDedupeReviewText(plan)
+    plan = type(plan) == "table" and plan or {}
+    local lines = {
+        string.format("Duplicate rows to remove: %d", tonumber(plan.totalDuplicateRowCount or 0) or 0),
+        string.format("Duplicate groups: %d", tonumber(plan.totalDuplicateGroupCount or 0) or 0),
+        string.format("Item duplicates: %d", tonumber(plan.itemDuplicateRowCount or 0) or 0),
+        string.format("Money duplicates: %d", tonumber(plan.moneyDuplicateRowCount or 0) or 0),
+        "",
+    }
+
+    for _, row in ipairs(plan.reviewRows or {}) do
+        lines[#lines + 1] = tostring(row.summary or "")
+    end
+
+    return table.concat(lines, "\n")
+end
+
+function mainFrame:RefreshLedgerDedupeReviewScrollMetrics(text)
+    local output = self.ledgerDedupeReviewOutput
+    if not output then
+        return nil
+    end
+
+    local viewportHeight = tonumber(output:GetHeight() or 0) or 0
+    local contentHeight = math.max(viewportHeight, (count_lines(text or output:GetText()) * 15) + 16)
+    local editBox = output.EditBox
+    if editBox and type(editBox.SetHeight) == "function" then
+        editBox:SetHeight(contentHeight)
+    end
+
+    output.verticalScroll = 0
+    if type(output.SetVerticalScroll) == "function" then
+        output:SetVerticalScroll(0)
+    end
+    if self.ledgerDedupeReviewScrollController and type(self.ledgerDedupeReviewScrollController.Refresh) == "function" then
+        self.ledgerDedupeReviewScrollController:Refresh(contentHeight, viewportHeight)
+    end
+    return contentHeight
+end
+
+function mainFrame:OpenLedgerDedupePreviewModal(plan)
+    plan = type(plan) == "table" and plan or {}
+    self.pendingLedgerDedupePlan = plan
+    self.ledgerDedupePreviewSummaryText:SetText(string.format(
+        "Found %d duplicate row(s) across %d group(s).\nItem duplicates: %d\nMoney duplicates: %d\nUse Review Rows to inspect the exact rows before cleanup.",
+        tonumber(plan.totalDuplicateRowCount or 0) or 0,
+        tonumber(plan.totalDuplicateGroupCount or 0) or 0,
+        tonumber(plan.itemDuplicateRowCount or 0) or 0,
+        tonumber(plan.moneyDuplicateRowCount or 0) or 0
+    ))
+    self.ledgerDedupeReviewModal:Hide()
+    self.ledgerDedupePreviewModal:Show()
+    self:BringToFront(self.ledgerDedupePreviewModal)
+    return self.ledgerDedupePreviewModal
+end
+
+function mainFrame:OpenLedgerDedupeReviewModal()
+    local plan = type(self.pendingLedgerDedupePlan) == "table" and self.pendingLedgerDedupePlan or nil
+    if not plan then
+        return nil
+    end
+
+    local reviewText = self:BuildLedgerDedupeReviewText(plan)
+    self.ledgerDedupeReviewOutput:SetText(reviewText)
+    self:RefreshLedgerDedupeReviewScrollMetrics(reviewText)
+    self.ledgerDedupeReviewOutput:SetFocus()
+    self.ledgerDedupeReviewOutput:SetCursorPosition(0)
+    self.ledgerDedupePreviewModal:Hide()
+    self.ledgerDedupeReviewModal:Show()
+    self:BringToFront(self.ledgerDedupeReviewModal)
+    return self.ledgerDedupeReviewModal
+end
+
+function mainFrame:ApplyLedgerDedupePlan()
+    local ledgerModule = ns.modules.bankLedger or {}
+    local plan = type(self.pendingLedgerDedupePlan) == "table" and self.pendingLedgerDedupePlan or nil
+    if type(ledgerModule.ApplyDedupePlan) ~= "function" or not plan then
+        return nil
+    end
+
+    local result = ledgerModule.ApplyDedupePlan(current_db(), plan)
+    self.pendingLedgerDedupePlan = nil
+    self:CloseLedgerDedupeModals()
+    if type(self.RefreshView) == "function" then
+        self:RefreshView()
+    end
+    if self.optionsLogsHistoryStatusText then
+        self.optionsLogsHistoryStatusText:SetText(string.format(
+            "Removed %d duplicate ledger row(s).",
+            tonumber((result or {}).totalRemoved or 0) or 0
+        ))
+    end
+    return result
+end
+
 local function ensure_clear_data_popups()
     _G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
     local popupDefinitions = {
@@ -2852,6 +3027,23 @@ mainFrame.optionsLogsHistorySaveButton:SetScript("OnClick", function()
     mainFrame:SaveLogsHistorySettings()
 end)
 
+mainFrame.optionsDedupeLedgerButton:SetScript("OnClick", function()
+    local ledgerModule = ns.modules.bankLedger or {}
+    if type(ledgerModule.BuildDedupePlan) ~= "function" then
+        return
+    end
+
+    local plan = ledgerModule.BuildDedupePlan(current_db())
+    if (tonumber((plan or {}).totalDuplicateRowCount or 0) or 0) <= 0 then
+        if mainFrame.optionsLogsHistoryStatusText then
+            mainFrame.optionsLogsHistoryStatusText:SetText("No duplicate ledger rows found.")
+        end
+        return
+    end
+
+    mainFrame:OpenLedgerDedupePreviewModal(plan)
+end)
+
 mainFrame.optionsClearBankLedgerButton:SetScript("OnClick", function()
     show_clear_popup("GBM_CONFIRM_CLEAR_BANK_LEDGER", function()
         local store = ns.modules.store or {}
@@ -2895,6 +3087,37 @@ mainFrame.optionsClearCompletedRequestsButton:SetScript("OnClick", function()
             mainFrame.optionsLogsHistoryStatusText:SetText("Cleared completed request history.")
         end
     end)
+end)
+
+mainFrame.ledgerDedupePreviewReviewButton:SetScript("OnClick", function()
+    mainFrame:OpenLedgerDedupeReviewModal()
+end)
+
+mainFrame.ledgerDedupePreviewApplyButton:SetScript("OnClick", function()
+    mainFrame:ApplyLedgerDedupePlan()
+end)
+
+mainFrame.ledgerDedupePreviewCancelButton:SetScript("OnClick", function()
+    mainFrame.pendingLedgerDedupePlan = nil
+    mainFrame:CloseLedgerDedupeModals()
+end)
+
+mainFrame.ledgerDedupeReviewBackButton:SetScript("OnClick", function()
+    local plan = type(mainFrame.pendingLedgerDedupePlan) == "table" and mainFrame.pendingLedgerDedupePlan or nil
+    if plan then
+        mainFrame:OpenLedgerDedupePreviewModal(plan)
+    else
+        mainFrame:CloseLedgerDedupeModals()
+    end
+end)
+
+mainFrame.ledgerDedupeReviewApplyButton:SetScript("OnClick", function()
+    mainFrame:ApplyLedgerDedupePlan()
+end)
+
+mainFrame.ledgerDedupeReviewCancelButton:SetScript("OnClick", function()
+    mainFrame.pendingLedgerDedupePlan = nil
+    mainFrame:CloseLedgerDedupeModals()
 end)
 
 function mainFrame:GetOptionsCanvasPanel()
@@ -4530,6 +4753,7 @@ function mainFrame:ApplyTheme()
     apply_button_variant(self.optionsHistoryRetentionButton, "select")
     apply_button_variant(self.optionsLedgerScanIntervalButton, "select")
     apply_button_variant(self.optionsLogsHistorySaveButton, "primary")
+    apply_button_variant(self.optionsDedupeLedgerButton, "secondary")
     apply_button_variant(self.optionsClearBankLedgerButton, "secondary")
     apply_button_variant(self.optionsClearInventoryDataButton, "secondary")
     apply_button_variant(self.optionsClearCompletedRequestsButton, "secondary")

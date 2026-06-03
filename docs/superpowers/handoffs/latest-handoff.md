@@ -2,6 +2,39 @@
 
 ## Resume Here
 
+### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
+
+- Current local checkpoint in the v1.1.0 line:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base public release remains `v1.1.0`
+  - issue under investigation came from live duplicate `Bank Ledger -> Money Log` rows after sync replay
+- Root cause narrowed and covered locally:
+  - a local money-log source window could stay at an older same-identity batch count after remote ledger sync appended an extra repeated occurrence
+  - the next local guild-bank money-log read could then treat that already-synced repeated row as new and append it again
+  - older locally stored money rows could also be "known" only through the coarse legacy fingerprint while still counting as zero exact hour-level matches, which let a later local money-log replay append a third copy even with no peer online
+- Local fix now in the worktree:
+  - remote ledger merge now reconciles same-source batch counts for matching visible ledger identities so a later local scan does not reappend the same repeated money row just because it arrived through sync first
+  - `Options -> Data` now adds `Dedupe Ledger`
+  - `Dedupe Ledger` is review-first: preview counts first, then a `Review Rows` modal with the exact rows to remove, then `Clean Up`
+  - cleanup now targets exact visible duplicates within the same displayed minute for item rows and the same visible ledger date, actor, action, and amount for money rows
+  - the `Review Rows` modal now provisions a slim scrollbar and expands its text content height so long cleanup lists can be reviewed before applying
+  - cleanup keeps the first stored row in each duplicate group, removes the extras, rebuilds ledger fingerprints, and clears transient source-snapshot/batch-count state so later scans start from a clean dedupe baseline
+  - local money scans now also bridge legacy coarse money-row precision when the same Blizzard hour-level row is seen again, so older polluted rows do not keep growing by one more copy on each new local scan
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+- Full suite status:
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` still stops at the pre-existing `tests/spec/item_catalog_target_spec.lua` failure: `fixture writer should open the target file`
+- Local Retail deploy completed after the current changes:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+  - deployed `GBankManager` and `GBankManager_ItemData` into `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
+- Recommended next live pass:
+  1. Reproduce the old two-client ledger sync path that used to create duplicate money rows.
+  2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
+  3. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-minute item rows or money rows with the same visible ledger date, actor, action, and amount.
+
 ### 2026-06-02 v1.1.0 Release Success
 
 - Current repo truth after release:

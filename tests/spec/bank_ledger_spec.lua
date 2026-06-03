@@ -170,6 +170,80 @@ local laterVisibleScanMergedCount = bankLedger.MergeItemTransactions(remoteLedge
 assert.equal(0, laterVisibleScanMergedCount, "a later local ledger scan of the same visible row should not duplicate a row that already arrived through remote sync")
 assert.equal(1, #remoteLedgerDb.bankLedger.itemLogs, "a later local ledger scan of the same visible row should leave the remote-synced ledger row count unchanged")
 
+local remoteMoneyBatchDb = fresh_db()
+local remoteMoneyBatchInitial = bankLedger.MergeMoneyTransactions(remoteMoneyBatchDb, {
+    scanStartedAt = 1716573600,
+    transactions = {
+        {
+            type = "repair",
+            who = "Unholy-Skullcrusher",
+            amount = 839240066,
+            year = 2026,
+            month = 6,
+            day = 1,
+            hour = 11,
+            minute = 15,
+        },
+    },
+})
+assert.equal(1, remoteMoneyBatchInitial, "baseline local money import should persist the first visible repair row")
+local remoteMoneyBatchMerged = bankLedger.MergeRemoteDelta(remoteMoneyBatchDb, {
+    kind = "money",
+    scanStartedAt = 1716573900,
+    repairThresholdGold = 5000,
+    transactions = {
+        {
+            type = "repair",
+            who = "Unholy-Skullcrusher",
+            amount = 839240066,
+            year = 2026,
+            month = 6,
+            day = 1,
+            hour = 11,
+            minute = 15,
+        },
+        {
+            type = "repair",
+            who = "Unholy-Skullcrusher",
+            amount = 839240066,
+            year = 2026,
+            month = 6,
+            day = 1,
+            hour = 11,
+            minute = 15,
+        },
+    },
+})
+assert.equal(1, remoteMoneyBatchMerged, "remote money deltas should append only the unseen repeated occurrence")
+assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "remote money deltas should persist the repeated visible occurrence exactly once")
+local remoteMoneyBatchRepeat = bankLedger.MergeMoneyTransactions(remoteMoneyBatchDb, {
+    scanStartedAt = 1716574200,
+    transactions = {
+        {
+            type = "repair",
+            who = "Unholy-Skullcrusher",
+            amount = 839240066,
+            year = 2026,
+            month = 6,
+            day = 1,
+            hour = 11,
+            minute = 15,
+        },
+        {
+            type = "repair",
+            who = "Unholy-Skullcrusher",
+            amount = 839240066,
+            year = 2026,
+            month = 6,
+            day = 1,
+            hour = 11,
+            minute = 15,
+        },
+    },
+})
+assert.equal(0, remoteMoneyBatchRepeat, "a later local money scan should not duplicate repeated rows that already arrived through remote sync")
+assert.equal(2, #remoteMoneyBatchDb.bankLedger.moneyLogs, "a later local money scan should leave the repeated remote-synced money rows unchanged")
+
 local relogStableItemDb = fresh_db()
 _G.GetServerTime = function()
     return 1716577200
@@ -968,6 +1042,123 @@ local missingDateMoneyDuplicate = bankLedger.MergeMoneyTransactions(missingDateM
 })
 assert.equal(0, missingDateMoneyDuplicate, "money rows without explicit date parts should not duplicate across later scans that use a different fallback timestamp")
 assert.equal(1, #missingDateMoneyDb.bankLedger.moneyLogs, "date-less money rows should remain append-only across repeated scans")
+
+local legacyMoneyReplayDb = fresh_db()
+local legacyMoneyTimestamp = os.time({
+    year = 2026,
+    month = 6,
+    day = 2,
+    hour = 15,
+    min = 5,
+    sec = 0,
+})
+legacyMoneyReplayDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-legacy-1",
+        timestamp = legacyMoneyTimestamp,
+        when = legacyMoneyTimestamp,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+    },
+}
+local legacyMoneyReplayCount = bankLedger.MergeMoneyTransactions(legacyMoneyReplayDb, {
+    scanStartedAt = legacyMoneyTimestamp + 300,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amount = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 15,
+        },
+    },
+})
+assert.equal(0, legacyMoneyReplayCount, "money rescans should not append a duplicate when a legacy stored row only differs by missing explicit minute precision")
+assert.equal(1, #legacyMoneyReplayDb.bankLedger.moneyLogs, "legacy money rows should stay stable across later hour-precision rescans of the same visible Blizzard row")
+
+local dedupePlanDb = fresh_db()
+dedupePlanDb.bankLedger.itemLogs = {
+    {
+        entryId = "item-keep",
+        timestamp = 1717287300,
+        when = 1717287300,
+        who = "OfficerOne-Stormrage",
+        action = "Deposit",
+        itemID = 300001,
+        item = "Date-Less Flask",
+        quantity = 8,
+        tabName = "Raid Buffet",
+        fromTabName = "-",
+    },
+    {
+        entryId = "item-remove",
+        timestamp = 1717287330,
+        when = 1717287330,
+        who = "OfficerOne-Stormrage",
+        action = "Deposit",
+        itemID = 300001,
+        item = "Date-Less Flask",
+        quantity = 8,
+        tabName = "Raid Buffet",
+        fromTabName = "-",
+    },
+}
+dedupePlanDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-keep",
+        timestamp = 1717287300,
+        when = 1717287300,
+        who = "Unholy-Skullcrusher",
+        action = "Repair",
+        amountCopper = 839240066,
+        amount = 839240066,
+        year = 2024,
+        month = 6,
+        day = 2,
+        hour = 11,
+    },
+    {
+        entryId = "money-remove",
+        timestamp = 1717287355,
+        when = 1717287355,
+        who = "Unholy-Skullcrusher",
+        action = "Repair",
+        amountCopper = 839240066,
+        amount = 839240066,
+        year = 2024,
+        month = 6,
+        day = 2,
+        hour = 11,
+    },
+    {
+        entryId = "money-remove-later-scan",
+        timestamp = 1717294500,
+        when = 1717294500,
+        who = "Unholy-Skullcrusher",
+        action = "Repair",
+        amountCopper = 839240066,
+        amount = 839240066,
+        year = 2024,
+        month = 6,
+        day = 2,
+        hour = 13,
+    },
+}
+local dedupePlan = bankLedger.BuildDedupePlan(dedupePlanDb)
+assert.equal(1, dedupePlan.itemDuplicateRowCount, "ledger dedupe planning should flag duplicate item rows that match within the same visible minute")
+assert.equal(2, dedupePlan.moneyDuplicateRowCount, "ledger dedupe planning should flag duplicate money rows that match the same visible ledger date, actor, action, and amount")
+assert.equal(3, dedupePlan.totalDuplicateRowCount, "ledger dedupe planning should total item and money duplicate removals")
+assert.equal(3, #dedupePlan.reviewRows, "ledger dedupe planning should expose review rows for every removable duplicate")
+local dedupeApplied = bankLedger.ApplyDedupePlan(dedupePlanDb, dedupePlan)
+assert.equal(1, dedupeApplied.itemRemoved, "ledger dedupe apply should remove duplicate item rows")
+assert.equal(2, dedupeApplied.moneyRemoved, "ledger dedupe apply should remove duplicate money rows")
+assert.equal(3, dedupeApplied.totalRemoved, "ledger dedupe apply should report the total removed duplicate count")
+assert.equal(1, #dedupePlanDb.bankLedger.itemLogs, "ledger dedupe apply should keep one canonical item row per duplicate minute group")
+assert.equal(1, #dedupePlanDb.bankLedger.moneyLogs, "ledger dedupe apply should keep one canonical money row per visible ledger row group")
 
 local staleReadDb = fresh_db()
 bankLedger.MergeItemTransactions(staleReadDb, {
