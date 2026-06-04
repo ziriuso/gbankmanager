@@ -2,6 +2,42 @@
 
 ## Resume Here
 
+### 2026-06-04 Ledger Engine 1.2.0 Implementation Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - latest commit before docs pass: `5f87f99`
+  - target release line: `v1.2.0`
+  - local branch is ahead of origin; only expected local noise is untracked `.vscode/`
+- Scope implemented:
+  - `GBankManager.toc`, `ADDON_VERSION`, and About metadata now target `1.2.0` / `v1.2.0`
+  - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0` intentionally forces one clean Bank Ledger reset while preserving inventory, Minimums, Requests, auth, blacklist, UI settings, and general sync peers
+  - `LEDGER_PROTOCOL_VERSION = 2` gates the new manifest, bucket-request, and bucket-reply payload families; old or missing ledger protocols are rejected as `old_ledger_protocol`
+  - ledger row identity now uses durable occurrence IDs and count metadata so repeated same-hour activity can be represented without relying on remote row positions
+  - `LedgerManifest.lua` builds deterministic global and six-hour bucket hashes, compares manifests, and selects rows for requested buckets
+  - `LedgerScanner.lua` owns ledger log target planning, fixed money-log query id, raw item/money log reads, and scanner diagnostics
+  - native ledger scans now publish a single `LEDGER_MANIFEST` only after local native row writes; no-change scans do not publish row payloads
+  - manual `Sync Ledger` now announces the local manifest instead of sending digest/delta row bursts
+  - peers request only differing buckets and reply with bucket rows targeted to the requesting client
+  - `MergeBucketRows` appends only valid bucket rows, rejects malformed row payloads before they can create synthetic ledger entries, is idempotent on replay, and does not echo outbound sync
+  - `/gbm debug ledger` now includes ledger protocol, reset marker, global hash, bucket count, and recent manifest/request/reply state
+- Focused verification green during implementation:
+  - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_manifest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\slash_commands_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_unit.lua`
+- Manual validation still needed before release:
+  1. With two 1.2.0 clients online, create a new guild-bank item or money-log row on client A, wait for client A to scan, and confirm client B receives missing rows through manifest/bucket sync exactly once.
+  2. Repeat the scan or `Sync Ledger` with no further bank-log changes and confirm no row payload or chat line repeats.
+  3. Run `/gbm debug sync` and `/gbm debug ledger` and confirm the last ledger manifest is matched or lists only differing buckets.
+  4. Keep an older addon client online if available, trigger its ledger sync, and confirm the 1.2.0 client rejects the payload as an old ledger protocol without importing rows.
+
 ### 2026-06-04 Ledger Sync Noise Stabilization Checkpoint
 
 - Current local checkpoint:

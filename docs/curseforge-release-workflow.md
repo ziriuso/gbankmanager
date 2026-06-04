@@ -67,10 +67,10 @@ git rev-parse --short HEAD
 
 2. Update the release version surfaces before tagging:
 
-- `GBankManager/GBankManager.toc`: update `## Version:` to the semantic version without `v`, for example `1.1.2`.
-- `GBankManager/GBankManager.toc`: update `## X-Release-Tag:` to the matching tag, for example `v1.1.2`.
+- `GBankManager/GBankManager.toc`: update `## Version:` to the semantic version without `v`, for example `1.2.0`.
+- `GBankManager/GBankManager.toc`: update `## X-Release-Tag:` to the matching tag, for example `v1.2.0`.
 - `GBankManager/Core/Constants.lua`: update the fallback `ADDON_VERSION` string to the same semantic version. The live addon normally reads the TOC value, but the fallback should stay aligned for tests and unusual load paths.
-- `GBankManager/Core/Constants.lua`: do not bump `LEDGER_FORCE_CLEAR_VERSION` as routine release metadata. Change it only when the release intentionally needs a new one-time Bank Ledger reset. The current marker remains `1.1.1` so users who already cleared that ledger baseline are not cleared again.
+- `GBankManager/Core/Constants.lua`: do not bump `LEDGER_FORCE_CLEAR_VERSION` as routine release metadata. Change it only when the release intentionally needs a new one-time Bank Ledger reset. For 1.2.0, confirm `LEDGER_FORCE_CLEAR_VERSION` matches `1.2.0` and `LEDGER_PROTOCOL_VERSION` is bumped to `2` before tagging.
 - `tests/spec/toc_spec.lua`: update the expected `## Version:` and `## X-Release-Tag:` lines.
 - `tests/spec/ui_about_spec.lua`: update the expected visible release tag.
 - User-facing docs that mention the release behavior, usually `README.md`, `docs/testing.md`, `docs/manual-test-checklist.md`, and `docs/superpowers/handoffs/latest-handoff.md` when the current checkpoint changes.
@@ -87,15 +87,15 @@ git rev-parse --short HEAD
 
 ```powershell
 git add GBankManager README.md docs tests
-git commit -m "chore: prepare 1.1.2 release"
+git commit -m "chore: prepare 1.2.0 release"
 git push origin codex/gbankmanager-v1
 ```
 
 5. Create and push the release tag:
 
 ```powershell
-git tag v1.1.2
-git push origin v1.1.2
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 6. Watch the tag-triggered workflow:
@@ -108,10 +108,10 @@ gh run watch <run-id>
 7. Confirm the release and artifact:
 
 ```powershell
-gh release view v1.1.2 --json name,tagName,isPrerelease,assets,url
+gh release view v1.2.0 --json name,tagName,isPrerelease,assets,url
 ```
 
-The stable release should have `isPrerelease: false`, a `GBankManager-1.1.2.zip` asset, and a successful CurseForge upload step in the workflow log.
+The stable release should have `isPrerelease: false`, a `GBankManager-1.2.0.zip` asset, and a successful CurseForge upload step in the workflow log.
 
 8. Deploy the same committed worktree locally after the release gate is green:
 
