@@ -7,7 +7,7 @@
 - Current local checkpoint:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - latest commit before docs pass: `5f87f99`
+  - latest commit is the current `fix: recover stale ledger manifest sync` checkpoint
   - target release line: `v1.2.0`
   - local branch is ahead of origin; only expected local noise is untracked `.vscode/`
 - Scope implemented:
@@ -20,6 +20,7 @@
   - native ledger scans now publish a single `LEDGER_MANIFEST` only after local native row writes; no-change scans do not publish row payloads
   - manual `Sync Ledger` now announces the local manifest instead of sending digest/delta row bursts
   - peers request only differing buckets and reply with bucket rows targeted to the requesting client
+  - when a stale or empty client announces a behind ledger manifest, fuller peers can reply directly with the local missing bucket rows instead of asking the stale client for rows it does not have
   - `MergeBucketRows` appends only valid bucket rows, rejects malformed row payloads before they can create synthetic ledger entries, is idempotent on replay, and does not echo outbound sync
   - `/gbm debug ledger` now includes ledger protocol, reset marker, global hash, bucket count, and recent manifest/request/reply state
 - Focused verification green during implementation:
@@ -34,9 +35,10 @@
   - `.\tools\lua\lua.exe .\tests\run_unit.lua`
 - Manual validation still needed before release:
   1. With two 1.2.0 clients online, create a new guild-bank item or money-log row on client A, wait for client A to scan, and confirm client B receives missing rows through manifest/bucket sync exactly once.
-  2. Repeat the scan or `Sync Ledger` with no further bank-log changes and confirm no row payload or chat line repeats.
-  3. Run `/gbm debug sync` and `/gbm debug ledger` and confirm the last ledger manifest is matched or lists only differing buckets.
-  4. Keep an older addon client online if available, trigger its ledger sync, and confirm the 1.2.0 client rejects the payload as an old ledger protocol without importing rows.
+  2. On a stale or empty client that missed the original manifest, run `Sync Ledger` and confirm the fuller online peer sends back missing bucket rows.
+  3. Repeat the scan or `Sync Ledger` with no further bank-log changes and confirm no row payload or chat line repeats.
+  4. Run `/gbm debug sync` and `/gbm debug ledger` and confirm the last ledger manifest is matched or lists only differing buckets.
+  5. Keep an older addon client online if available, trigger its ledger sync, and confirm the 1.2.0 client rejects the payload as an old ledger protocol without importing rows.
 
 ### 2026-06-04 Ledger Sync Noise Stabilization Checkpoint
 

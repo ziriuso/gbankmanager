@@ -190,6 +190,16 @@ local function sent_sync_messages()
     return messages
 end
 
+local function sent_sync_messages_by_type(messageType)
+    local messages = {}
+    for _, message in ipairs(sent_sync_messages()) do
+        if tostring((message or {}).type or "") == tostring(messageType or "") then
+            messages[#messages + 1] = message
+        end
+    end
+    return messages
+end
+
 local function fire_sync_message(message, sender)
     return syncEvents.HandleEvent(
         "CHAT_MSG_ADDON",
@@ -265,6 +275,42 @@ assert.equal(2, tonumber(((bucketRequests[1].payload or {}).ledgerProtocol) or 0
 assert.equal("MemberOne", tostring(((bucketRequests[1].payload or {}).target) or ""), "bucket requests should target the manifest sender")
 assert.equal(1, #(((bucketRequests[1].payload or {}).buckets) or {}), "bucket requests should include only differing buckets")
 assert.equal(2, tonumber((((bucketRequests[1].payload or {}).buckets) or {})[1] or 0), "bucket request should ask for the differing bucket")
+
+reset_sync_output()
+local staleManifestAccepted = fire_sync_message({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 301,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = tostring((ns.constants or {}).ADDON_VERSION or ""),
+        ledgerProtocol = 2,
+        manifest = {
+            ledgerProtocol = 2,
+            version = tostring((ns.constants or {}).ADDON_VERSION or ""),
+            totalCount = 0,
+            itemCount = 0,
+            moneyCount = 0,
+            globalHash = "empty-stale-ledger",
+            buckets = {},
+        },
+    },
+}, "MemberOne")
+local staleBucketRequests = sent_sync_messages_by_type("LEDGER_BUCKET_REQUEST")
+local staleBucketReplies = sent_sync_messages_by_type("LEDGER_BUCKET_REPLY")
+assert.truthy(staleManifestAccepted, "stale ledger manifests should be accepted")
+assert.equal(0, #staleBucketRequests, "clients with rows should not ask stale peers for buckets the stale peer does not have")
+assert.equal(1, #staleBucketReplies, "clients with rows should push missing bucket rows back to a stale manifest sender")
+assert.equal("MemberOne", tostring(((staleBucketReplies[1].payload or {}).target) or ""), "stale manifest replies should target the manifest sender")
+assert.equal(2, #((((staleBucketReplies[1].payload or {}).rows or {}).item) or {}), "stale manifest replies should include local item rows")
+assert.equal(1, #((((staleBucketReplies[1].payload or {}).rows or {}).money) or {}), "stale manifest replies should include local money rows")
 
 reset_sync_output()
 local bucketRequestAccepted = fire_sync_message({

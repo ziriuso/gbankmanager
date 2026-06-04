@@ -1134,6 +1134,41 @@ local function payload_targets_local_player(db, payload)
     return sender_matches_context(liveContext, target)
 end
 
+local function manifest_bucket_count(manifest, bucketKey)
+    local buckets = type((manifest or {}).buckets) == "table" and manifest.buckets or {}
+    local bucket = buckets[bucketKey]
+        or buckets[tonumber(bucketKey)]
+        or buckets[tostring(bucketKey)]
+    if type(bucket) == "table" then
+        return tonumber(bucket.count or 0) or 0
+    end
+
+    return bucket ~= nil and 1 or 0
+end
+
+local function rows_have_entries(rows)
+    rows = type(rows) == "table" and rows or {}
+    return #(rows.item or {}) > 0 or #(rows.money or {}) > 0
+end
+
+local function split_ledger_buckets_for_peer(localManifest, remoteManifest, differentBuckets)
+    local requestBuckets = {}
+    local replyBuckets = {}
+
+    for _, bucketKey in ipairs(differentBuckets or {}) do
+        local localCount = manifest_bucket_count(localManifest, bucketKey)
+        local remoteCount = manifest_bucket_count(remoteManifest, bucketKey)
+        if remoteCount > 0 then
+            requestBuckets[#requestBuckets + 1] = bucketKey
+        end
+        if localCount > remoteCount then
+            replyBuckets[#replyBuckets + 1] = bucketKey
+        end
+    end
+
+    return requestBuckets, replyBuckets
+end
+
 local function handle_ledger_manifest(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
@@ -1159,6 +1194,9 @@ local function handle_ledger_manifest(db, payload, sender)
         return false
     end
 
+    local localManifest = type(bankLedger.BuildLedgerManifest) == "function"
+        and bankLedger.BuildLedgerManifest(db)
+        or {}
     local compare = type(bankLedger.CompareLedgerManifest) == "function"
         and bankLedger.CompareLedgerManifest(db, payload.manifest or {})
         or { matched = false, differentBuckets = {} }
@@ -1177,6 +1215,30 @@ local function handle_ledger_manifest(db, payload, sender)
 
     local differentBuckets = type(compare.differentBuckets) == "table" and compare.differentBuckets or {}
     if type(transport.Send) == "function" and #differentBuckets > 0 then
+        local requestBuckets, replyBuckets = split_ledger_buckets_for_peer(localManifest, payload.manifest or {}, differentBuckets)
+        if #replyBuckets > 0 and type(bankLedger.RowsForLedgerBuckets) == "function" then
+            local rows = bankLedger.RowsForLedgerBuckets(db, replyBuckets)
+            if rows_have_entries(rows) then
+                transport.Send("GUILD", "GUILD", {
+                    type = "LEDGER_BUCKET_REPLY",
+                    updatedAt = current_timestamp(),
+                    payload = {
+                        guildKey = active_guild_key(db),
+                        actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                        version = current_addon_version(),
+                        ledgerProtocol = current_ledger_protocol(),
+                        target = sender,
+                        buckets = replyBuckets,
+                        rows = rows,
+                    },
+                })
+            end
+        end
+
+        if #requestBuckets == 0 then
+            return true
+        end
+
         transport.Send("GUILD", "GUILD", {
             type = "LEDGER_BUCKET_REQUEST",
             updatedAt = current_timestamp(),
@@ -1186,7 +1248,7 @@ local function handle_ledger_manifest(db, payload, sender)
                 version = current_addon_version(),
                 ledgerProtocol = current_ledger_protocol(),
                 target = sender,
-                buckets = differentBuckets,
+                buckets = requestBuckets,
             },
         })
     end
