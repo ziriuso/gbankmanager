@@ -2,7 +2,7 @@
 
 ## Resume Here
 
-### 2026-06-04 Ledger Sync Digest Stabilization Checkpoint
+### 2026-06-04 Ledger Sync Noise Stabilization Checkpoint
 
 - Current local checkpoint:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
@@ -15,12 +15,16 @@
   - same-hash ledger delta sends are suppressed for a short burst window while digest announcements remain available for convergence/debug state
   - scanner-ledger publishing still stays quiet when the scan produced no pending ledger payloads
   - inbound `LEDGER_DIGEST` traffic is validated with the same guild, version, blacklist, and sender checks as ledger deltas, stores the peer digest, and records `matched` or `different` in the existing sync decision surface
+  - inbound `SYNC_HELLO` is now presence-only: it updates last-seen peer state and refreshes the Sync tab without running the same catch-up family set as `Sync All`
+  - accepted remote `LEDGER_DELTA` payloads only print `Synced ledger delta ...` when they merge actual new rows; no-change and rejected ledger deltas stay quiet in chat while `/gbm debug sync` still records the decision
+  - native local ledger writes from manual, bank-open, or passive scans remain the trigger for automatic ledger sync publication
   - sync tests that expect routine chat now explicitly opt out of the default-on routine chat suppression setting
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_digest_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
-  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
 - Docs updated in this slice:
   - `README.md`
   - `docs/testing.md`
@@ -28,7 +32,8 @@
   - this handoff
 - Recommended next manual verification:
   1. In a live guild with two addon clients, perform a new guild-bank item or money-log action, let client A publish the ledger update, and confirm client B imports the row once.
-  2. Repeat `Sync Ledger` or a scan burst with no further ledger changes and confirm client B does not receive duplicate rows; `/gbm debug sync` should show ledger digest convergence instead of repeated applied deltas.
+  2. Repeat `Sync Ledger` or a scan burst with no further ledger changes and confirm client B does not receive duplicate rows or another `Synced ledger delta ...` line; `/gbm debug sync` should show ledger digest convergence instead of repeated applied deltas.
+  3. `/reload` one client with another online and confirm login hello updates peer last-seen state without dispatching Requests, Minimums, History, or Ledger catch-up payloads until a manual sync action or native local write occurs.
 
 ### 2026-06-03 Routine Addon Chat Suppression Checkpoint
 
@@ -156,7 +161,7 @@
   - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
   - visible History rows now also have a dedicated `HISTORY_SNAPSHOT` sync family that merges only the same `History` page categories already shown today
   - `Options -> Sync` now includes `Sync History`, and `Sync All` now includes that family too
-  - incoming guild hello now triggers the same catch-up family set as `Sync All` for the receiver's local access profile, so full-shell clients can republish Requests, Minimums, visible History rows, and ledger deltas automatically while request-only clients still collapse to Requests only
+  - this older checkpoint originally made incoming guild hello trigger the same catch-up family set as `Sync All`; the 2026-06-04 ledger sync noise checkpoint supersedes that behavior and makes hello presence-only again
   - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
   - the Sync peer table now provisions its own slim scrollbar, keeps that scrollbar hidden until the peer list truly overflows, reserves a stable right-side gutter for it, and keeps the delete `X` inside a dedicated trailing action column instead of hugging the outer edge
   - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line

@@ -368,8 +368,8 @@ _G.C_ChatInfo.sentMessages = {}
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "MemberOne")
 local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
-assert.equal(90, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic should mark the peer as synchronized when it triggers outbound catch-up")
-assert.equal("requests,minimums,history,ledger", table.concat(helloDispatches, ","), "sync hello should trigger the same sync families as Sync All for full-shell users")
+assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark a peer synchronized without an actual sync payload")
+assert.equal("", table.concat(helloDispatches, ","), "sync hello should not fan out catch-up sync families")
 
 local originalFullUi = db.auth.capabilities.full_ui
 local originalGetGuildInfo = _G.GetGuildInfo
@@ -385,8 +385,8 @@ local requestOnlyHelloPayload = codec.EncodeTable({
 })
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", requestOnlyHelloPayload, "GUILD", "MemberTwo")
 local requestOnlyPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberTwo-Stormrage"] or {})
-assert.equal(91, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello should still update peer sync time for request-only users")
-assert.equal("requests", table.concat(helloDispatches, ","), "sync hello should collapse to request sync only for request-only users")
+assert.equal(0, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark request-only peers synchronized without an actual sync payload")
+assert.equal("", table.concat(helloDispatches, ","), "sync hello should stay presence-only for request-only users")
 db.auth.capabilities.full_ui = originalFullUi
 _G.GetGuildInfo = originalGetGuildInfo
 ns.modules.syncManualActionHandlers = originalManualSyncHandlers
@@ -1399,10 +1399,12 @@ local oldLedgerDeltaPayload = codec.EncodeTable({
         },
     },
 })
+local ledgerRejectChatCount = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local oldLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", oldLedgerDeltaPayload, "GUILD", "MemberOne")
 assert.truthy(not oldLedgerAccepted, "sync events should reject ledger deltas from older clients that do not advertise a compatible version")
 assert.equal(0, #(db.bankLedger.itemLogs or {}), "older-client ledger deltas should not append remote item-log rows")
 assert.equal("older_version", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "older-client ledger rejection should record the version reason")
+assert.equal(ledgerRejectChatCount, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "rejected ledger deltas should not add routine ledger chat noise")
 
 local ledgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
@@ -1441,6 +1443,7 @@ local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDelt
 assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
 assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
+assert.equal("GBankManager: Synced ledger delta from MemberOne.", last_chat_message(), "ledger deltas should report only when they write actual new rows")
 local ledgerChatCountBeforeDuplicate = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
 assert.truthy(duplicateLedgerAccepted, "duplicate ledger deltas should still be accepted for peer bookkeeping")

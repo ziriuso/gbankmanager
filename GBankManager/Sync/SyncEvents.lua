@@ -14,7 +14,6 @@ local authPolicyCodec = ns.modules.authPolicyCodec or {}
 local requestsModule = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
 local peerState = ns.modules.syncPeerState or {}
-local manualActions = ns.modules.syncManualActions or {}
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -526,24 +525,6 @@ local function refresh_visible_sync_views()
     if activeView == "HISTORY" or activeView == "REQUESTS" or activeView == "MINIMUMS" then
         mainFrame:RefreshView()
     end
-end
-
-local function send_visible_history_snapshot(db, actorContext, updatedAt)
-    local historyView = ns.modules.historyView or {}
-    if type(transport.Send) ~= "function" or type(historyView.BuildSyncSnapshot) ~= "function" then
-        return false
-    end
-
-    transport.Send("GUILD", "GUILD", {
-        type = "HISTORY_SNAPSHOT",
-        updatedAt = tonumber(updatedAt or (_G.time and _G.time() or 0)) or 0,
-        payload = {
-            guildKey = active_guild_key(db),
-            actorContext = type(actorContext) == "table" and actorContext or {},
-            entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
-        },
-    })
-    return true
 end
 
 local function append_audit_entry(db, entry)
@@ -1108,25 +1089,21 @@ local function handle_ledger_delta(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "wrong_guild")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "older_version")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "blacklisted")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1311,31 +1288,7 @@ function syncEvents.HandleEvent(event, ...)
         end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
-            local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
-            local manualSyncActions = ns.modules.syncManualActions or manualActions or {}
-            local accessProfile = type(permissions.GetEffectiveAccessProfile) == "function"
-                and permissions.GetEffectiveAccessProfile(liveContext, current_policy(db))
-                or "full_shell"
-            local defaultAction = type(manualSyncActions.ResolveDefaultAction) == "function"
-                and manualSyncActions.ResolveDefaultAction(accessProfile)
-                or (accessProfile == "request_only" and "requests" or "all")
-            local syncTriggered = false
-            if accessProfile ~= "blocked" and type(manualSyncActions.Run) == "function" then
-                local result = manualSyncActions.Run(db, {
-                    action = defaultAction,
-                    accessProfile = accessProfile,
-                    now = tonumber(ns.state.lastSyncMessage.updatedAt or (_G.time and _G.time() or 0)) or 0,
-                    skipCooldown = true,
-                })
-                syncTriggered = type(result) == "table" and result.ok == true
-            end
-            if not syncTriggered and accessProfile ~= "blocked" then
-                send_visible_history_snapshot(db, liveContext, ns.state.lastSyncMessage.updatedAt)
-                syncTriggered = true
-            end
-            if syncTriggered then
-                mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-            end
+            remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, true, "sync_hello", "presence")
             refresh_sync_peer_view()
             return true
         end

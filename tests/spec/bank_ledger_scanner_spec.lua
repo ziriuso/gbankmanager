@@ -219,10 +219,12 @@ assert.equal("Withdrawal", current_db().bankLedger.itemLogs[2].action, "ledger s
 assert.equal("Repair", current_db().bankLedger.moneyLogs[1].action, "ledger scan should preserve repair actions from money logs")
 assert.equal(1716577200, current_db().bankLedger.lastScanAt, "ledger scan should stamp the combined scan time")
 assert.equal("Guild bank ledger scan finished (2 item rows, 2 money rows).", scanner:GetStatusText(), "ledger scan should report a visible completion summary with merged row counts")
-assert.equal(3, #(outboundLedgerSyncMessages or {}), "ledger scan should automatically publish one addon sync delta per merged ledger target")
-local publishedLedgerDeltaOne = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
-local publishedLedgerDeltaTwo = ((outboundLedgerSyncMessages or {})[2] or {}).message or {}
-local publishedLedgerDeltaThree = ((outboundLedgerSyncMessages or {})[3] or {}).message or {}
+assert.equal(4, #(outboundLedgerSyncMessages or {}), "ledger scan should announce one digest plus one addon sync delta per merged ledger target")
+local publishedLedgerDigest = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
+local publishedLedgerDeltaOne = ((outboundLedgerSyncMessages or {})[2] or {}).message or {}
+local publishedLedgerDeltaTwo = ((outboundLedgerSyncMessages or {})[3] or {}).message or {}
+local publishedLedgerDeltaThree = ((outboundLedgerSyncMessages or {})[4] or {}).message or {}
+assert.equal("LEDGER_DIGEST", tostring(publishedLedgerDigest.type or ""), "ledger scan should publish a compact digest before row deltas")
 assert.equal("LEDGER_DELTA", tostring(publishedLedgerDeltaOne.type or ""), "ledger scan should publish encoded ledger delta messages")
 assert.equal("item", tostring(((publishedLedgerDeltaOne.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for item-log targets")
 assert.equal("item", tostring(((publishedLedgerDeltaTwo.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for each visible item-log target")
