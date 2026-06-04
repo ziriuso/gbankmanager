@@ -1367,6 +1367,57 @@ db.bankLedger.itemLogs = {}
 db.bankLedger.moneyLogs = {}
 db.bankLedger.lastScanAt = 999
 local currentAddonVersion = tostring((ns.constants or {}).ADDON_VERSION or "1.1.1")
+local oldLedgerManifestPayload = codec.EncodeTable({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = currentAddonVersion,
+        ledgerProtocol = 1,
+        manifest = {
+            ledgerProtocol = 1,
+            totalCount = 0,
+            buckets = {},
+        },
+    },
+})
+local oldLedgerManifestAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", oldLedgerManifestPayload, "GUILD", "MemberOne")
+assert.truthy(not oldLedgerManifestAccepted, "sync events should reject ledger manifests from older ledger protocols")
+assert.equal("ledger_manifest", tostring(((ns.state or {}).lastSyncDecision or {}).category or ""), "old-protocol manifest rejection should record the manifest decision category")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "old-protocol manifest rejection should record the protocol reason")
+
+local missingProtocolManifestPayload = codec.EncodeTable({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = currentAddonVersion,
+        manifest = {
+            totalCount = 0,
+            buckets = {},
+        },
+    },
+})
+local missingProtocolManifestAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", missingProtocolManifestPayload, "GUILD", "MemberOne")
+assert.truthy(not missingProtocolManifestAccepted, "sync events should reject ledger manifests that do not advertise a ledger protocol")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "missing-protocol manifest rejection should record the protocol reason")
+
 local oldLedgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
     updatedAt = 207,

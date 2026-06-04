@@ -423,6 +423,12 @@ local function ledger_version_is_compatible(message)
     return comparison ~= nil and comparison >= 0
 end
 
+local function ledger_protocol_is_compatible(payload)
+    local expected = tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
+    local actual = tonumber((payload or {}).ledgerProtocol or 0) or 0
+    return expected > 0 and actual >= expected
+end
+
 local function remember_sync_decision(message, sender, payload, accepted, category, reason)
     message = type(message) == "table" and message or {}
     payload = type(payload) == "table" and payload or {}
@@ -1082,6 +1088,179 @@ local function handle_history_snapshot(db, payload, sender)
     return true
 end
 
+local function current_addon_version()
+    return tostring(((ns.constants or {}).ADDON_VERSION) or "")
+end
+
+local function current_ledger_protocol()
+    return tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
+end
+
+local function current_timestamp()
+    return tonumber(type(_G.time) == "function" and _G.time() or 0) or 0
+end
+
+local function payload_targets_local_player(db, payload)
+    local target = tostring((payload or {}).target or "")
+    if target == "" then
+        return false
+    end
+
+    local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    return sender_matches_context(liveContext, target)
+end
+
+local function handle_ledger_manifest(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "old_ledger_protocol")
+        return false
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "actor_sender_mismatch")
+        return false
+    end
+
+    local compare = type(bankLedger.CompareLedgerManifest) == "function"
+        and bankLedger.CompareLedgerManifest(db, payload.manifest or {})
+        or { matched = false, differentBuckets = {} }
+    local matched = compare.matched == true
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_manifest", matched and "matched" or "different")
+    if matched then
+        mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+        return true
+    end
+
+    local differentBuckets = type(compare.differentBuckets) == "table" and compare.differentBuckets or {}
+    if type(transport.Send) == "function" and #differentBuckets > 0 then
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_BUCKET_REQUEST",
+            updatedAt = current_timestamp(),
+            payload = {
+                guildKey = active_guild_key(db),
+                actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                version = current_addon_version(),
+                ledgerProtocol = current_ledger_protocol(),
+                target = sender,
+                buckets = differentBuckets,
+            },
+        })
+    end
+
+    return true
+end
+
+local function handle_ledger_bucket_request(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "old_ledger_protocol")
+        return false
+    end
+
+    if not payload_targets_local_player(db, payload) then
+        return true
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "actor_sender_mismatch")
+        return false
+    end
+
+    local buckets = type(payload.buckets) == "table" and payload.buckets or {}
+    local rows = type(bankLedger.RowsForLedgerBuckets) == "function"
+        and bankLedger.RowsForLedgerBuckets(db, buckets)
+        or { item = {}, money = {} }
+
+    if type(transport.Send) == "function" then
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_BUCKET_REPLY",
+            updatedAt = current_timestamp(),
+            payload = {
+                guildKey = active_guild_key(db),
+                actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                version = current_addon_version(),
+                ledgerProtocol = current_ledger_protocol(),
+                target = sender,
+                buckets = buckets,
+                rows = rows,
+            },
+        })
+    end
+
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_request", "replied")
+    return true
+end
+
+local function handle_ledger_bucket_reply(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "old_ledger_protocol")
+        return false
+    end
+
+    if not payload_targets_local_player(db, payload) then
+        return true
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "actor_sender_mismatch")
+        return false
+    end
+
+    if type(bankLedger.MergeBucketRows) ~= "function" then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", "merge_unavailable")
+        return true
+    end
+
+    local mergedCount = tonumber(bankLedger.MergeBucketRows(db, payload) or 0) or 0
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", mergedCount > 0 and "applied" or "no_change")
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d ledger bucket row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
+    return true
+end
+
 local function handle_ledger_delta(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
@@ -1330,6 +1509,24 @@ function syncEvents.HandleEvent(event, ...)
         if ns.state.lastSyncMessage.type == "HISTORY_SNAPSHOT" then
             local accepted = handle_history_snapshot(db, ns.state.lastSyncMessage.payload, sender)
             refresh_visible_sync_views()
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_MANIFEST" then
+            local accepted = handle_ledger_manifest(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_BUCKET_REQUEST" then
+            local accepted = handle_ledger_bucket_request(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_BUCKET_REPLY" then
+            local accepted = handle_ledger_bucket_reply(db, ns.state.lastSyncMessage.payload, sender)
             refresh_sync_peer_view()
             return accepted
         end
