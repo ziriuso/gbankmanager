@@ -37,6 +37,7 @@ Domain/LedgerIdentity.lua
 Domain/LedgerManifest.lua
 Domain/BankLedger.lua
 Bootstrap.lua
+Features/LedgerScanner.lua
 Features/GuildBankScanner.lua
 Features/GuildBankScannerEvents.lua
 Features/ChatFilters.lua
