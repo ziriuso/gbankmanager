@@ -48,7 +48,7 @@ local differentEntryId = manifest.Build({
     },
     moneyLogs = {},
 }, { ledgerProtocol = 2, version = "1.2.0" })
-assert.equal(sameFingerprint.globalHash, differentEntryId.globalHash, "manifest hashes should prefer shared row fingerprints over local entry IDs")
+assert.truthy(sameFingerprint.globalHash ~= differentEntryId.globalHash, "manifest hashes should prefer entry IDs over shared row fingerprints")
 
 local matching = manifest.Compare(built, manifest.Build(ledger, { ledgerProtocol = 2, version = "1.2.0" }))
 assert.truthy(matching.matched == true, "matching manifests should report matched")
