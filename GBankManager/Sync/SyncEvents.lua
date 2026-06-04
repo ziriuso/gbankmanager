@@ -1144,6 +1144,56 @@ local function handle_ledger_delta(db, payload, sender)
     return true
 end
 
+local function handle_ledger_digest(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "wrong_guild")
+        return false
+    end
+
+    if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "older_version")
+        return false
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "actor_sender_mismatch")
+        return false
+    end
+
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState.ledgerPeerDigests = type(db.syncState.ledgerPeerDigests) == "table" and db.syncState.ledgerPeerDigests or {}
+    local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
+    if characterKey == "" then
+        characterKey = normalize_character_key(sender)
+    end
+
+    local remoteDigest = type(payload.digest) == "table" and payload.digest or {}
+    db.syncState.ledgerPeerDigests[characterKey] = {
+        hash = tostring(remoteDigest.hash or ""),
+        itemCount = tonumber(remoteDigest.itemCount or 0) or 0,
+        moneyCount = tonumber(remoteDigest.moneyCount or 0) or 0,
+        seenAt = tonumber(ns.state.lastSyncMessage.updatedAt or (_G.time and _G.time() or 0)) or 0,
+        version = payload_version(ns.state.lastSyncMessage),
+    }
+
+    local localDigest = type(bankLedger.BuildSyncDigest) == "function" and bankLedger.BuildSyncDigest(db) or {}
+    local matched = tostring(remoteDigest.hash or "") ~= "" and tostring(remoteDigest.hash or "") == tostring(localDigest.hash or "")
+    if matched then
+        mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    end
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_digest", matched and "matched" or "different")
+    return true
+end
+
 function syncEvents.HandleEvent(event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddonName = ...
@@ -1333,6 +1383,12 @@ function syncEvents.HandleEvent(event, ...)
 
         if ns.state.lastSyncMessage.type == "LEDGER_DELTA" then
             local accepted = handle_ledger_delta(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_DIGEST" then
+            local accepted = handle_ledger_digest(db, ns.state.lastSyncMessage.payload, sender)
             refresh_sync_peer_view()
             return accepted
         end

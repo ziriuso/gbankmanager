@@ -30,6 +30,8 @@ local SCAN_INTERVAL_LABELS = {
     [3600] = "1 Hour",
 }
 
+local LEDGER_DELTA_REPEAT_WINDOW_SECONDS = 30
+
 local RETENTION_LABELS = {
     ["1_week"] = "1 Week",
     ["1_month"] = "1 Month",
@@ -236,6 +238,15 @@ local function make_fingerprint(parts)
         encoded[index] = tostring(part or "")
     end
     return table.concat(encoded, "|")
+end
+
+local function stable_hash(value)
+    value = tostring(value or "")
+    local hash = 5381
+    for index = 1, #value do
+        hash = ((hash * 33) + string.byte(value, index)) % 2147483647
+    end
+    return tostring(hash)
 end
 
 local function make_occurrence_fingerprint(base, occurrence)
@@ -770,6 +781,138 @@ function bankLedger.EnsureState(db)
     end)
 
     return db.bankLedger
+end
+
+local function row_digest_token(kind, row)
+    row = type(row) == "table" and row or {}
+    local fingerprint = trim(row.fingerprint)
+    if fingerprint ~= "" then
+        return make_fingerprint({ kind, fingerprint })
+    end
+
+    if kind == "money" then
+        return make_fingerprint({
+            kind,
+            tonumber(row.timestamp or row.when or 0) or 0,
+            trim(row.who or "Unknown"),
+            trim(row.action or row.type or "Unknown"),
+            tonumber(row.amountCopper or row.amount or 0) or 0,
+        })
+    end
+
+    return make_fingerprint({
+        kind,
+        tonumber(row.timestamp or row.when or 0) or 0,
+        trim(row.who or "Unknown"),
+        trim(row.action or row.type or "Unknown"),
+        tonumber(row.itemID or 0) or 0,
+        tonumber(row.quantity or row.count or 0) or 0,
+        trim(row.tabName or "-"),
+        trim(row.fromTabName or "-"),
+    })
+end
+
+local function add_digest_bucket(buckets, bucketKey, token)
+    bucketKey = tostring(bucketKey or "")
+    if bucketKey == "" then
+        bucketKey = "unknown"
+    end
+
+    local bucket = buckets[bucketKey]
+    if type(bucket) ~= "table" then
+        bucket = {
+            key = bucketKey,
+            count = 0,
+            tokens = {},
+        }
+        buckets[bucketKey] = bucket
+    end
+
+    bucket.count = (tonumber(bucket.count or 0) or 0) + 1
+    bucket.tokens[#bucket.tokens + 1] = tostring(token or "")
+end
+
+local function digest_bucket_rows(buckets)
+    local rows = {}
+    for key, bucket in pairs(buckets or {}) do
+        local tokens = bucket.tokens or {}
+        table.sort(tokens)
+        rows[#rows + 1] = {
+            key = key,
+            count = tonumber(bucket.count or 0) or 0,
+            hash = stable_hash(table.concat(tokens, "\n")),
+        }
+    end
+
+    table.sort(rows, function(left, right)
+        return tostring(left.key or "") < tostring(right.key or "")
+    end)
+    return rows
+end
+
+function bankLedger.BuildSyncDigest(db)
+    local ledger = bankLedger.EnsureState(db or {})
+    local buckets = {}
+    local itemCount = 0
+    local moneyCount = 0
+
+    for _, row in ipairs(ledger.itemLogs or {}) do
+        itemCount = itemCount + 1
+        local token = row_digest_token("item", row)
+        local tabIndex = tonumber((row or {}).tabIndex or 0) or 0
+        add_digest_bucket(buckets, "item:" .. tostring(tabIndex), token)
+    end
+
+    for _, row in ipairs(ledger.moneyLogs or {}) do
+        moneyCount = moneyCount + 1
+        add_digest_bucket(buckets, "money", row_digest_token("money", row))
+    end
+
+    local bucketRows = digest_bucket_rows(buckets)
+    local hashParts = {}
+    for index, bucket in ipairs(bucketRows) do
+        hashParts[index] = make_fingerprint({ bucket.key, bucket.count, bucket.hash })
+    end
+
+    return {
+        version = tostring(((ns.constants or {}).ADDON_VERSION) or ""),
+        itemCount = itemCount,
+        moneyCount = moneyCount,
+        totalCount = itemCount + moneyCount,
+        hash = stable_hash(table.concat(hashParts, "\n")),
+        buckets = bucketRows,
+    }
+end
+
+function bankLedger.ShouldPublishSyncDeltas(db, digest, now, options)
+    db = type(db) == "table" and db or {}
+    digest = type(digest) == "table" and digest or bankLedger.BuildSyncDigest(db)
+    options = type(options) == "table" and options or {}
+    if options.force == true then
+        return true
+    end
+
+    local hash = tostring(digest.hash or "")
+    if hash == "" then
+        return true
+    end
+
+    db.syncState = ensure_table(db.syncState)
+    db.syncState.ledgerDigest = ensure_table(db.syncState.ledgerDigest)
+    local state = db.syncState.ledgerDigest
+    local currentTime = tonumber(now or (_G.time and _G.time() or 0)) or 0
+    local lastHash = tostring(state.lastDeltaHash or "")
+    local lastAt = tonumber(state.lastDeltaAt or 0) or 0
+    local elapsed = math.max(0, currentTime - lastAt)
+
+    if lastHash == hash and elapsed < LEDGER_DELTA_REPEAT_WINDOW_SECONDS then
+        state.lastDigestOnlyAt = currentTime
+        return false
+    end
+
+    state.lastDeltaHash = hash
+    state.lastDeltaAt = currentTime
+    return true
 end
 
 function bankLedger.GetRetentionChoices()

@@ -862,18 +862,44 @@ local function append_ledger_sync_payload(db, target, mergedRows)
     return true
 end
 
-local function publish_pending_ledger_sync_payloads(updatedAt)
+local function publish_pending_ledger_sync_payloads(db, updatedAt)
     local transport = ns.modules.syncTransport or {}
     if type(transport.Send) ~= "function" then
         scanner.pendingLedgerSyncPayloads = {}
         return false
     end
 
+    if #(scanner.pendingLedgerSyncPayloads or {}) == 0 then
+        return false
+    end
+
+    local now = tonumber(updatedAt or 0) or 0
+    local digest = type(bankLedger.BuildSyncDigest) == "function" and bankLedger.BuildSyncDigest(db) or nil
+    if digest then
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_DIGEST",
+            updatedAt = now,
+            payload = {
+                guildKey = current_guild_key(db),
+                actorContext = current_context(db),
+                version = tostring(((ns.constants or {}).ADDON_VERSION) or ""),
+                digest = digest,
+            },
+        })
+
+        if type(bankLedger.ShouldPublishSyncDeltas) == "function"
+            and not bankLedger.ShouldPublishSyncDeltas(db, digest, now)
+        then
+            scanner.pendingLedgerSyncPayloads = {}
+            return true
+        end
+    end
+
     local published = false
     for _, payload in ipairs(scanner.pendingLedgerSyncPayloads or {}) do
         transport.Send("GUILD", "GUILD", {
             type = "LEDGER_DELTA",
-            updatedAt = tonumber(updatedAt or 0) or 0,
+            updatedAt = now,
             payload = payload,
         })
         published = true
@@ -992,7 +1018,7 @@ finish_ledger_scan = function(db)
         local now = type(_G.time) == "function" and (_G.time() or 0) or 0
         bankLedger.PruneRetention(db, now)
     end
-    publish_pending_ledger_sync_payloads(publishedLedgerSyncAt)
+    publish_pending_ledger_sync_payloads(db, publishedLedgerSyncAt)
     if silentScan then
         if mergedItemRows > 0 or mergedMoneyRows > 0 then
             report_status(string.format("Guild bank ledger auto-refresh found %d item rows and %d money rows.", mergedItemRows, mergedMoneyRows))

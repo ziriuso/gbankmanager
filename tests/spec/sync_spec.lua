@@ -271,6 +271,9 @@ local loginChatText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for SyncTester-Stormrage.", 1, true) == nil, "player login should not add self hello noise to chat")
 
 local db = ns.state.db
+db.ui = db.ui or {}
+db.ui.chatSettings = db.ui.chatSettings or {}
+db.ui.chatSettings.suppressRoutineMessages = false
 db.requests = {}
 db.auth.capabilities.request_submit = {}
 db.auth.capabilities.request_approve = { [1] = true }

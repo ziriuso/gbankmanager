@@ -2,6 +2,34 @@
 
 ## Resume Here
 
+### 2026-06-04 Ledger Sync Digest Stabilization Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base release in the worktree is `v1.1.2`
+  - local work is a follow-up to live guild reports of repeated ledger delta chatter during high activity
+- Scope implemented:
+  - `BankLedger.BuildSyncDigest` now produces a compact ledger digest with stable hash, item count, money count, total count, and per-bucket hashes
+  - manual `Sync Ledger` and scanner-published ledger updates now announce `LEDGER_DIGEST` before `LEDGER_DELTA`
+  - same-hash ledger delta sends are suppressed for a short burst window while digest announcements remain available for convergence/debug state
+  - scanner-ledger publishing still stays quiet when the scan produced no pending ledger payloads
+  - inbound `LEDGER_DIGEST` traffic is validated with the same guild, version, blacklist, and sender checks as ledger deltas, stores the peer digest, and records `matched` or `different` in the existing sync decision surface
+  - sync tests that expect routine chat now explicitly opt out of the default-on routine chat suppression setting
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_digest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- Recommended next manual verification:
+  1. In a live guild with two addon clients, perform a new guild-bank item or money-log action, let client A publish the ledger update, and confirm client B imports the row once.
+  2. Repeat `Sync Ledger` or a scan burst with no further ledger changes and confirm client B does not receive duplicate rows; `/gbm debug sync` should show ledger digest convergence instead of repeated applied deltas.
+
 ### 2026-06-03 Routine Addon Chat Suppression Checkpoint
 
 - Current local checkpoint:

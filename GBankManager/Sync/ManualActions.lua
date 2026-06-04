@@ -217,6 +217,31 @@ local function default_action_handlers()
                 return false, "Manual sync is unavailable right now."
             end
 
+            local now = tonumber(options.now or 0) or 0
+            local digest = type(bankLedger.BuildSyncDigest) == "function" and bankLedger.BuildSyncDigest(db) or nil
+            if digest then
+                transport.Send("GUILD", "GUILD", {
+                    type = "LEDGER_DIGEST",
+                    updatedAt = now,
+                    payload = {
+                        guildKey = current_guild_key(db),
+                        actorContext = current_context(db),
+                        version = current_addon_version(),
+                        digest = digest,
+                    },
+                })
+
+                if type(bankLedger.ShouldPublishSyncDeltas) == "function"
+                    and not bankLedger.ShouldPublishSyncDeltas(db, digest, now)
+                then
+                    return true, string.format(
+                        "Announced ledger digest for %d item row(s) and %d money row(s).",
+                        tonumber(digest.itemCount or 0) or 0,
+                        tonumber(digest.moneyCount or 0) or 0
+                    )
+                end
+            end
+
             local ledgerState = bankLedger.EnsureState(db)
             local itemGroups = {}
             for _, row in ipairs((ledgerState or {}).itemLogs or {}) do
@@ -258,7 +283,7 @@ local function default_action_handlers()
                     kind = "item",
                     sourceTabIndex = group.tabIndex,
                     sourceTabName = group.tabName,
-                    scanStartedAt = tonumber(options.now or 0) or 0,
+                    scanStartedAt = now,
                     transactions = group.transactions,
                 }
                 if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
@@ -267,7 +292,7 @@ local function default_action_handlers()
                 itemCount = itemCount + #(payload.transactions or {})
                 transport.Send("GUILD", "GUILD", {
                     type = "LEDGER_DELTA",
-                    updatedAt = tonumber(options.now or 0) or 0,
+                    updatedAt = now,
                     payload = payload,
                 })
             end
@@ -293,7 +318,7 @@ local function default_action_handlers()
                     actorContext = current_context(db),
                     version = current_addon_version(),
                     kind = "money",
-                    scanStartedAt = tonumber(options.now or 0) or 0,
+                    scanStartedAt = now,
                     repairThresholdGold = tonumber((((db or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold or 5000) or 5000,
                     transactions = moneyTransactions,
                 }
@@ -304,7 +329,7 @@ local function default_action_handlers()
                 if moneyCount > 0 then
                     transport.Send("GUILD", "GUILD", {
                         type = "LEDGER_DELTA",
-                        updatedAt = tonumber(options.now or 0) or 0,
+                        updatedAt = now,
                         payload = payload,
                     })
                 end
