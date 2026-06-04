@@ -5,6 +5,7 @@ ns.modules = ns.modules or {}
 
 local bankLedger = ns.modules.bankLedger or {}
 local ledgerIdentity = ns.modules.ledgerIdentity
+local ledgerManifest = ns.modules.ledgerManifest
 
 if type(ledgerIdentity) ~= "table" and type(_G.dofile) == "function" then
     local ok, loaded = pcall(_G.dofile, "GBankManager/Domain/LedgerIdentity.lua")
@@ -14,6 +15,15 @@ if type(ledgerIdentity) ~= "table" and type(_G.dofile) == "function" then
 end
 
 ledgerIdentity = type(ledgerIdentity) == "table" and ledgerIdentity or {}
+
+if type(ledgerManifest) ~= "table" and type(_G.dofile) == "function" then
+    local ok, loaded = pcall(_G.dofile, "GBankManager/Domain/LedgerManifest.lua")
+    if ok and type(loaded) == "table" then
+        ledgerManifest = loaded
+    end
+end
+
+ledgerManifest = type(ledgerManifest) == "table" and ledgerManifest or {}
 
 local RETENTION_WINDOWS = {
     ["1_week"] = 7 * 24 * 60 * 60,
@@ -895,6 +905,28 @@ function bankLedger.BuildSyncDigest(db)
         hash = stable_hash(table.concat(hashParts, "\n")),
         buckets = bucketRows,
     }
+end
+
+function bankLedger.BuildLedgerManifest(db)
+    local ledger = bankLedger.EnsureState(db or {})
+    return type(ledgerManifest.Build) == "function" and ledgerManifest.Build(ledger, {
+        ledgerProtocol = (ns.constants or {}).LEDGER_PROTOCOL_VERSION,
+        version = (ns.constants or {}).ADDON_VERSION,
+    }) or {}
+end
+
+function bankLedger.CompareLedgerManifest(db, remoteManifest)
+    local localManifest = bankLedger.BuildLedgerManifest(db)
+    return type(ledgerManifest.Compare) == "function"
+        and ledgerManifest.Compare(localManifest, remoteManifest)
+        or { matched = false, differentBuckets = {} }
+end
+
+function bankLedger.RowsForLedgerBuckets(db, bucketKeys)
+    local ledger = bankLedger.EnsureState(db or {})
+    return type(ledgerManifest.RowsForBuckets) == "function"
+        and ledgerManifest.RowsForBuckets(ledger, bucketKeys)
+        or { item = {}, money = {} }
 end
 
 function bankLedger.ShouldPublishSyncDeltas(db, digest, now, options)
