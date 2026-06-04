@@ -158,6 +158,17 @@ local function versioned_ledger_reset_token()
     return resetVersion
 end
 
+local function clear_ledger_sync_state(db)
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState.ledgerDigest = nil
+    db.syncState.ledgerPeerDigests = nil
+    db.syncState.ledgerBucketManifests = nil
+    db.syncState.ledgerPendingBucketRequests = nil
+    db.syncState.ledgerLastManifest = nil
+    db.syncState.ledgerLastBucketRequest = nil
+    db.syncState.ledgerLastBucketReply = nil
+end
+
 local function apply_versioned_ledger_reset_to_database(db)
     if type(db) ~= "table" then
         return db
@@ -180,6 +191,7 @@ local function apply_versioned_ledger_reset_to_database(db)
     end
 
     db.bankLedger = fresh_bank_ledger(db.meta.guildName or "Unknown")
+    clear_ledger_sync_state(db)
     db.meta.ledgerClearedForVersion = resetVersion
     return db
 end

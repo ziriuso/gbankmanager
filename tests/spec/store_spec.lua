@@ -59,6 +59,7 @@ assert.truthy(type(ns.modules) == "table", "namespace should expose module table
 assert.truthy(type(ns.state) == "table", "namespace should expose state table")
 assert.truthy(type(ns.constants) == "table", "constants should populate the shared namespace")
 assert.equal(1, ns.constants.SCHEMA_VERSION, "constants should expose schema version")
+assert.equal(2, ns.constants.LEDGER_PROTOCOL_VERSION, "constants should expose the 1.2.0 ledger protocol version")
 assert.truthy(type(ns.modules.events) == "table", "events module should populate the shared namespace")
 assert.truthy(type(ns.modules.slash) == "table", "slash module should populate the shared namespace")
 assert.same(ns, loadedByPath["GBankManager/Core/Namespace.lua"], "namespace chunk should return the shared namespace table")
@@ -211,13 +212,29 @@ local resetRoot = store.Normalize({
                 lastItemScanAt = 1716500000,
                 lastMoneyScanAt = 1716500000,
             },
+            syncState = {
+                peers = {
+                    ["Guild Testers"] = {
+                        ["MemberOne-Stormrage"] = { lastSeen = 10 },
+                    },
+                },
+                ledgerDigest = { hash = "old-hash" },
+                ledgerPeerDigests = { ["MemberOne-Stormrage"] = { hash = "old-peer-hash" } },
+                ledgerBucketManifests = { ["MemberOne-Stormrage"] = { globalHash = "old-global" } },
+                ledgerPendingBucketRequests = { ["request-1"] = true },
+            },
         },
     },
 }, "Reset Guild")
 local resetDb = (resetRoot.guilds or {})["Reset Guild"] or {}
-assert.equal(0, #(resetDb.bankLedger.itemLogs or {}), "store normalization should clear polluted item ledger rows once for the configured addon version")
-assert.equal(0, #(resetDb.bankLedger.moneyLogs or {}), "store normalization should clear polluted money ledger rows once for the configured addon version")
-assert.equal(ns.constants.LEDGER_FORCE_CLEAR_VERSION, ((resetDb.meta or {}).ledgerClearedForVersion), "store normalization should mark the ledger clear version")
+assert.equal("1.2.0", tostring((resetDb.meta or {}).ledgerClearedForVersion or ""), "1.2.0 should stamp the ledger reset marker")
+assert.equal(0, #(resetDb.bankLedger.itemLogs or {}), "1.2.0 reset should clear old item ledger rows")
+assert.equal(0, #(resetDb.bankLedger.moneyLogs or {}), "1.2.0 reset should clear old money ledger rows")
+assert.truthy(((resetDb.syncState or {}).peers or {})["Guild Testers"], "general sync peers should survive the ledger reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerDigest), "ledger digest sync state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerPeerDigests), "peer ledger digest sync state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerBucketManifests), "ledger bucket manifest state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerPendingBucketRequests), "ledger bucket request state should reset")
 
 resetDb.bankLedger.itemLogs = {
     { entryId = "item-after-reset", timestamp = 1716600000 },
