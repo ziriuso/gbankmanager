@@ -1691,7 +1691,7 @@ local function bucket_item_transaction(row)
         type = row.type or row.rawType or row.action,
         who = row.who,
         itemID = row.itemID,
-        itemName = row.itemName or row.item,
+        itemName = row.itemName or row.item or row.itemLink,
         craftedQuality = row.craftedQuality or row.qualityTier,
         qualityTier = row.qualityTier or row.craftedQuality,
         craftedQualityIcon = row.craftedQualityIcon or row.qualityTierIcon,
@@ -1720,6 +1720,30 @@ local function bucket_money_transaction(row)
     }
 end
 
+local function bucket_row_action(row)
+    row = type(row) == "table" and row or {}
+    return trim(row.type or row.rawType or row.action)
+end
+
+local function bucket_item_row_is_valid(row)
+    if type(row) ~= "table" or bucket_row_action(row) == "" then
+        return false
+    end
+
+    local itemID = tonumber(row.itemID or 0) or 0
+    local itemText = trim(row.itemName or row.item or row.itemLink)
+    return itemID > 0 or itemText ~= ""
+end
+
+local function bucket_money_row_is_valid(row)
+    if type(row) ~= "table" or bucket_row_action(row) == "" then
+        return false
+    end
+
+    local amountCopper = tonumber(row.amountCopper or row.amount or 0) or 0
+    return amountCopper ~= 0
+end
+
 function bankLedger.MergeBucketRows(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}
@@ -1727,7 +1751,7 @@ function bankLedger.MergeBucketRows(db, payload)
     local mergedCount = 0
 
     for _, row in ipairs(type(rows.item) == "table" and rows.item or {}) do
-        if type(row) == "table" then
+        if bucket_item_row_is_valid(row) then
             mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
                 scanStartedAt = row_timestamp(row),
                 sourceTabIndex = row.tabIndex or row.sourceTabIndex,
@@ -1739,7 +1763,7 @@ function bankLedger.MergeBucketRows(db, payload)
     end
 
     for _, row in ipairs(type(rows.money) == "table" and rows.money or {}) do
-        if type(row) == "table" then
+        if bucket_money_row_is_valid(row) then
             mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
                 scanStartedAt = row_timestamp(row),
                 repairThresholdGold = 0,

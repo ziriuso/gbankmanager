@@ -142,6 +142,17 @@ assert.equal(0, malformedBucketCount, "ledger bucket merge should ignore malform
 assert.equal(0, #malformedBucketDb.bankLedger.itemLogs, "malformed item bucket rows should not append synthetic item rows")
 assert.equal(0, #malformedBucketDb.bankLedger.moneyLogs, "malformed money bucket rows should not append synthetic money rows")
 
+local emptyBucketRowDb = fresh_db()
+local emptyBucketRowCount = bankLedger.MergeBucketRows(emptyBucketRowDb, {
+    rows = {
+        item = { {} },
+        money = { {} },
+    },
+})
+assert.equal(0, emptyBucketRowCount, "ledger bucket merge should ignore empty table bucket rows")
+assert.equal(0, #emptyBucketRowDb.bankLedger.itemLogs, "empty item bucket rows should not append synthetic item rows")
+assert.equal(0, #emptyBucketRowDb.bankLedger.moneyLogs, "empty money bucket rows should not append synthetic money rows")
+
 local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716574200,
     sourceTabIndex = 1,
