@@ -1727,22 +1727,26 @@ function bankLedger.MergeBucketRows(db, payload)
     local mergedCount = 0
 
     for _, row in ipairs(type(rows.item) == "table" and rows.item or {}) do
-        mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
-            scanStartedAt = row_timestamp(row),
-            sourceTabIndex = row.tabIndex or row.sourceTabIndex,
-            sourceTabName = row.tabName or row.sourceTabName,
-            allowSuspiciousUnknownAppend = true,
-            transactions = { bucket_item_transaction(row) },
-        }) or 0) or 0)
+        if type(row) == "table" then
+            mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
+                scanStartedAt = row_timestamp(row),
+                sourceTabIndex = row.tabIndex or row.sourceTabIndex,
+                sourceTabName = row.tabName or row.sourceTabName,
+                allowSuspiciousUnknownAppend = true,
+                transactions = { bucket_item_transaction(row) },
+            }) or 0) or 0)
+        end
     end
 
     for _, row in ipairs(type(rows.money) == "table" and rows.money or {}) do
-        mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
-            scanStartedAt = row_timestamp(row),
-            repairThresholdGold = 0,
-            allowSuspiciousUnknownAppend = true,
-            transactions = { bucket_money_transaction(row) },
-        }) or 0) or 0)
+        if type(row) == "table" then
+            mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
+                scanStartedAt = row_timestamp(row),
+                repairThresholdGold = 0,
+                allowSuspiciousUnknownAppend = true,
+                transactions = { bucket_money_transaction(row) },
+            }) or 0) or 0)
+        end
     end
 
     return mergedCount

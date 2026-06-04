@@ -131,6 +131,17 @@ assert.equal(0, bucketMergeReplayCount, "ledger bucket merge should skip duplica
 assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket replay should not duplicate item rows")
 assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket replay should not duplicate money rows")
 
+local malformedBucketDb = fresh_db()
+local malformedBucketCount = bankLedger.MergeBucketRows(malformedBucketDb, {
+    rows = {
+        item = { "bad" },
+        money = { "bad" },
+    },
+})
+assert.equal(0, malformedBucketCount, "ledger bucket merge should ignore malformed non-table bucket rows")
+assert.equal(0, #malformedBucketDb.bankLedger.itemLogs, "malformed item bucket rows should not append synthetic item rows")
+assert.equal(0, #malformedBucketDb.bankLedger.moneyLogs, "malformed money bucket rows should not append synthetic money rows")
+
 local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716574200,
     sourceTabIndex = 1,
