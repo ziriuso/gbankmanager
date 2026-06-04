@@ -89,6 +89,48 @@ local duplicateItemCount = bankLedger.MergeItemTransactions(db, {
 assert.equal(0, duplicateItemCount, "ledger item merge should skip duplicate transactions during later scans")
 assert.equal(2, #db.bankLedger.itemLogs, "ledger item merge should stay append-only when no deltas appear")
 
+local bucketMergeDb = fresh_db()
+local bucketPayload = {
+    rows = {
+        item = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                itemID = 211878,
+                item = "Flask of Tempered Swiftness",
+                quantity = 5,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+            },
+        },
+        money = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                amountCopper = 2500000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+            },
+        },
+    },
+}
+local bucketMergeInitialCount = bankLedger.MergeBucketRows(bucketMergeDb, bucketPayload)
+assert.equal(2, bucketMergeInitialCount, "ledger bucket merge should append item and money bucket rows")
+assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket merge should persist item bucket rows")
+assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket merge should persist money bucket rows")
+assert.equal(3, bucketMergeDb.bankLedger.itemLogs[1].tabIndex, "ledger bucket merge should preserve source tab index metadata")
+assert.equal("Raid Supplies", bucketMergeDb.bankLedger.itemLogs[1].tabName, "ledger bucket merge should preserve source tab name metadata")
+local bucketMergeReplayCount = bankLedger.MergeBucketRows(bucketMergeDb, bucketPayload)
+assert.equal(0, bucketMergeReplayCount, "ledger bucket merge should skip duplicate bucket payload rows")
+assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket replay should not duplicate item rows")
+assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket replay should not duplicate money rows")
+
 local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716574200,
     sourceTabIndex = 1,

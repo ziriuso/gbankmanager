@@ -1680,6 +1680,74 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     return mergedCount
 end
 
+local function row_timestamp(row)
+    row = type(row) == "table" and row or {}
+    return tonumber(row.timestamp or row.when or row.scanStartedAt or 0) or 0
+end
+
+local function bucket_item_transaction(row)
+    row = type(row) == "table" and row or {}
+    return {
+        type = row.type or row.rawType or row.action,
+        who = row.who,
+        itemID = row.itemID,
+        itemName = row.itemName or row.item,
+        craftedQuality = row.craftedQuality or row.qualityTier,
+        qualityTier = row.qualityTier or row.craftedQuality,
+        craftedQualityIcon = row.craftedQualityIcon or row.qualityTierIcon,
+        quantity = row.quantity or row.count,
+        fromTabName = row.fromTabName,
+        year = row.year,
+        month = row.month,
+        day = row.day,
+        hour = row.hour,
+        minute = row.minute,
+    }
+end
+
+local function bucket_money_transaction(row)
+    row = type(row) == "table" and row or {}
+    return {
+        type = row.type or row.rawType or row.action,
+        who = row.who,
+        amountCopper = row.amountCopper or row.amount,
+        amount = row.amount or row.amountCopper,
+        year = row.year,
+        month = row.month,
+        day = row.day,
+        hour = row.hour,
+        minute = row.minute,
+    }
+end
+
+function bankLedger.MergeBucketRows(db, payload)
+    db = db or {}
+    payload = type(payload) == "table" and payload or {}
+    local rows = type(payload.rows) == "table" and payload.rows or {}
+    local mergedCount = 0
+
+    for _, row in ipairs(type(rows.item) == "table" and rows.item or {}) do
+        mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
+            scanStartedAt = row_timestamp(row),
+            sourceTabIndex = row.tabIndex or row.sourceTabIndex,
+            sourceTabName = row.tabName or row.sourceTabName,
+            allowSuspiciousUnknownAppend = true,
+            transactions = { bucket_item_transaction(row) },
+        }) or 0) or 0)
+    end
+
+    for _, row in ipairs(type(rows.money) == "table" and rows.money or {}) do
+        mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
+            scanStartedAt = row_timestamp(row),
+            repairThresholdGold = 0,
+            allowSuspiciousUnknownAppend = true,
+            transactions = { bucket_money_transaction(row) },
+        }) or 0) or 0)
+    end
+
+    return mergedCount
+end
+
 function bankLedger.MergeRemoteDelta(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}

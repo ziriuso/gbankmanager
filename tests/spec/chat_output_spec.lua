@@ -69,3 +69,66 @@ assert.truthy(string.find(debugText, "GBankManager: sync debug local", 1, true) 
 
 db.ui.chatSettings.suppressRoutineMessages = false
 _G.DEFAULT_CHAT_FRAME.messages = {}
+
+local codec = ns.modules.syncCodec
+local syncEvents = ns.modules.syncEvents
+local bankLedger = ns.modules.bankLedger
+local originalMergeBucketRows = bankLedger.MergeBucketRows
+local function clone_table(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for key, nested in pairs(value) do
+        copy[key] = clone_table(nested)
+    end
+    return copy
+end
+
+local originalSyncState = clone_table(db.syncState)
+local originalLastSyncMessage = clone_table(ns.state.lastSyncMessage)
+local originalLastSyncDecision = clone_table(ns.state.lastSyncDecision)
+local function fire_bucket_reply(mergedCount)
+    bankLedger.MergeBucketRows = function()
+        return mergedCount
+    end
+
+    return syncEvents.HandleEvent(
+        "CHAT_MSG_ADDON",
+        "GBankManager",
+        codec.EncodeTable({
+            type = "LEDGER_BUCKET_REPLY",
+            updatedAt = 700,
+            payload = {
+                guildKey = "Guild Testers",
+                actorContext = {
+                    characterKey = "Stormrage-MemberOne",
+                    guildRankIndex = 2,
+                    guildRankName = "Raider",
+                    inGuild = true,
+                    isGuildMaster = false,
+                    name = "MemberOne",
+                },
+                version = tostring((ns.constants or {}).ADDON_VERSION or ""),
+                ledgerProtocol = 2,
+                target = "GuildLead",
+                buckets = { 3 },
+                rows = { item = {}, money = {} },
+            },
+        }),
+        "GUILD",
+        "MemberOne"
+    )
+end
+
+fire_bucket_reply(0)
+assert.equal(0, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "zero-row bucket replies should not emit routine chat")
+
+_G.DEFAULT_CHAT_FRAME.messages = {}
+fire_bucket_reply(1)
+assert.truthy(string.find(((_G.DEFAULT_CHAT_FRAME.messages or {})[1]) or "", "Synced 1 ledger bucket row", 1, true) ~= nil, "positive bucket replies may emit one useful routine status line")
+bankLedger.MergeBucketRows = originalMergeBucketRows
+db.syncState = originalSyncState
+ns.state.lastSyncMessage = originalLastSyncMessage
+ns.state.lastSyncDecision = originalLastSyncDecision

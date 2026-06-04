@@ -80,6 +80,30 @@ local function sender_display_name(sender)
     return fullSender:match("^([^%-]+)") or fullSender
 end
 
+local function current_message_updated_at(payload)
+    local envelopeUpdatedAt = tonumber(((ns.state or {}).lastSyncMessage or {}).updatedAt or 0) or 0
+    if envelopeUpdatedAt > 0 then
+        return envelopeUpdatedAt
+    end
+
+    local payloadUpdatedAt = tonumber((payload or {}).updatedAt or 0) or 0
+    if payloadUpdatedAt > 0 then
+        return payloadUpdatedAt
+    end
+
+    if type(_G.time) == "function" then
+        return tonumber(_G.time() or 0) or 0
+    end
+
+    return 0
+end
+
+local function remember_ledger_debug_state(db, key, state)
+    db = type(db) == "table" and db or {}
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState[key] = state
+end
+
 local function normalize_character_key(value, realmName, nameHint)
     if type(permissions.NormalizeCharacterKey) == "function" then
         return permissions.NormalizeCharacterKey(value, realmName, nameHint)
@@ -1140,6 +1164,12 @@ local function handle_ledger_manifest(db, payload, sender)
         or { matched = false, differentBuckets = {} }
     local matched = compare.matched == true
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_manifest", matched and "matched" or "different")
+    remember_ledger_debug_state(db, "ledgerLastManifest", {
+        sender = sender,
+        reason = matched and "matched" or "different",
+        updatedAt = current_message_updated_at(payload),
+        buckets = type(compare.differentBuckets) == "table" and compare.differentBuckets or {},
+    })
     if matched then
         mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
         return true
@@ -1194,6 +1224,11 @@ local function handle_ledger_bucket_request(db, payload, sender)
     end
 
     local buckets = type(payload.buckets) == "table" and payload.buckets or {}
+    remember_ledger_debug_state(db, "ledgerLastBucketRequest", {
+        sender = sender,
+        updatedAt = current_message_updated_at(payload),
+        buckets = buckets,
+    })
     local rows = type(bankLedger.RowsForLedgerBuckets) == "function"
         and bankLedger.RowsForLedgerBuckets(db, buckets)
         or { item = {}, money = {} }
@@ -1253,6 +1288,12 @@ local function handle_ledger_bucket_reply(db, payload, sender)
     end
 
     local mergedCount = tonumber(bankLedger.MergeBucketRows(db, payload) or 0) or 0
+    remember_ledger_debug_state(db, "ledgerLastBucketReply", {
+        sender = sender,
+        updatedAt = current_message_updated_at(payload),
+        buckets = type(payload.buckets) == "table" and payload.buckets or {},
+        merged = mergedCount,
+    })
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
