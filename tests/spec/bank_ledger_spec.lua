@@ -824,6 +824,33 @@ local regrownBatchMoneyNext = bankLedger.MergeMoneyTransactions(regrownBatchMone
 assert.equal(1, regrownBatchMoneyNext, "GBL-style session batch counts should append a same-identity money row when the visible batch regrows")
 assert.equal(3, #regrownBatchMoneyDb.bankLedger.moneyLogs, "regrown same-identity money batches should preserve every distinct event")
 
+local durableCountMoneyDb = fresh_db()
+local durableCountMoneyPayload = {
+    scanStartedAt = 1718300000,
+    transactions = {
+        { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 },
+        { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 },
+    },
+}
+local durableCountMoneyFirstMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(2, durableCountMoneyFirstMerge, "first full money batch should append both same-hour occurrences")
+
+local durableCountMoneyLedger = bankLedger.EnsureState(durableCountMoneyDb)
+assert.truthy(type(((durableCountMoneyLedger.eventCounts or {}).money)) == "table", "money merge should persist durable event count metadata")
+local durableCountMoneyHighWater = 0
+for _, entry in pairs(durableCountMoneyLedger.eventCounts.money or {}) do
+    durableCountMoneyHighWater = math.max(durableCountMoneyHighWater, tonumber((entry or {}).count or 0) or 0)
+end
+assert.equal(2, durableCountMoneyHighWater, "money durable event counts should remember both same-hour occurrences")
+durableCountMoneyLedger.sessionBatchCounts = nil
+bankLedger = dofile("GBankManager/Domain/BankLedger.lua")
+local durableCountMoneyReplayMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(0, durableCountMoneyReplayMerge, "persisted money event counts should prevent reload-time duplicate appends")
+
+durableCountMoneyPayload.transactions[#durableCountMoneyPayload.transactions + 1] = { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 }
+local durableCountMoneyLaterMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(1, durableCountMoneyLaterMerge, "one extra visible money occurrence should append exactly one row")
+
 local regrownBatchItemDb = fresh_db()
 local regrownBatchItemInitial = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
     scanStartedAt = 1716573600,
@@ -905,6 +932,37 @@ local regrownBatchItemNext = bankLedger.MergeItemTransactions(regrownBatchItemDb
 })
 assert.equal(1, regrownBatchItemNext, "GBL-style session batch counts should append a same-identity item row when the visible batch regrows")
 assert.equal(3, #regrownBatchItemDb.bankLedger.itemLogs, "regrown same-identity item batches should preserve every distinct event")
+
+local durableCountItemDb = fresh_db()
+local durableCountItemPayload = {
+    kind = "item",
+    sourceTabIndex = 2,
+    sourceTabName = "Extra Stuff",
+    scanStartedAt = 1718300000,
+    transactions = {
+        { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 },
+        { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 },
+    },
+}
+
+local durableCountItemFirstMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(2, durableCountItemFirstMerge, "first full batch should append both same-hour occurrences")
+
+local durableCountItemLedger = bankLedger.EnsureState(durableCountItemDb)
+assert.truthy(type(((durableCountItemLedger.eventCounts or {}).item)) == "table", "item merge should persist durable event count metadata")
+local durableCountItemHighWater = 0
+for _, entry in pairs(durableCountItemLedger.eventCounts.item or {}) do
+    durableCountItemHighWater = math.max(durableCountItemHighWater, tonumber((entry or {}).count or 0) or 0)
+end
+assert.equal(2, durableCountItemHighWater, "item durable event counts should remember both same-hour occurrences")
+durableCountItemLedger.sessionBatchCounts = nil
+bankLedger = dofile("GBankManager/Domain/BankLedger.lua")
+local durableCountItemReplayMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(0, durableCountItemReplayMerge, "persisted event counts should prevent reload-time duplicate appends")
+
+durableCountItemPayload.transactions[#durableCountItemPayload.transactions + 1] = { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 }
+local durableCountItemLaterMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(1, durableCountItemLaterMerge, "one extra visible occurrence should append exactly one row")
 
 local thresholdStableFingerprintDb = fresh_db()
 local thresholdStableFingerprintInitial = bankLedger.MergeMoneyTransactions(thresholdStableFingerprintDb, {

@@ -33,6 +33,7 @@ Domain/ItemDisplay.lua
 Domain/MinimumsPortability.lua
 Domain/Exports.lua
 Domain/Requests.lua
+Domain/LedgerIdentity.lua
 Domain/BankLedger.lua
 Bootstrap.lua
 Features/GuildBankScanner.lua

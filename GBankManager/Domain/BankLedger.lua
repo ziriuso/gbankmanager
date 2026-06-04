@@ -4,6 +4,16 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local bankLedger = ns.modules.bankLedger or {}
+local ledgerIdentity = ns.modules.ledgerIdentity
+
+if type(ledgerIdentity) ~= "table" and type(_G.dofile) == "function" then
+    local ok, loaded = pcall(_G.dofile, "GBankManager/Domain/LedgerIdentity.lua")
+    if ok and type(loaded) == "table" then
+        ledgerIdentity = loaded
+    end
+end
+
+ledgerIdentity = type(ledgerIdentity) == "table" and ledgerIdentity or {}
 
 local RETENTION_WINDOWS = {
     ["1_week"] = 7 * 24 * 60 * 60,
@@ -769,6 +779,9 @@ function bankLedger.EnsureState(db)
     db.bankLedger.moneyFingerprints = ensure_table(db.bankLedger.moneyFingerprints)
     db.bankLedger.itemSourceSnapshots = ensure_table(db.bankLedger.itemSourceSnapshots)
     db.bankLedger.moneySourceSnapshots = ensure_table(db.bankLedger.moneySourceSnapshots)
+    db.bankLedger.eventCounts = ensure_table(db.bankLedger.eventCounts)
+    db.bankLedger.eventCounts.item = ensure_table(db.bankLedger.eventCounts.item)
+    db.bankLedger.eventCounts.money = ensure_table(db.bankLedger.eventCounts.money)
     db.bankLedger.nextEntrySequence = tonumber(db.bankLedger.nextEntrySequence or 0) or 0
     db.bankLedger.lastScanAt = tonumber(db.bankLedger.lastScanAt or 0) or 0
     db.bankLedger.lastItemScanAt = tonumber(db.bankLedger.lastItemScanAt or 0) or 0
@@ -1143,11 +1156,40 @@ local function reconcile_remote_batch_counts(ledger, kind, sourceKey, sourceSnap
     end
 end
 
+local function update_event_counts(ledger, kind, currentCounts, now)
+    ledger = type(ledger) == "table" and ledger or {}
+    ledger.eventCounts = ensure_table(ledger.eventCounts)
+    ledger.eventCounts[kind] = ensure_table(ledger.eventCounts[kind])
+    local asOf = tonumber(now or server_timestamp_now()) or server_timestamp_now()
+
+    for base, count in pairs(currentCounts or {}) do
+        count = tonumber(count or 0) or 0
+        local entry = ledger.eventCounts[kind][base]
+        if type(entry) ~= "table" or count > (tonumber(entry.count or 0) or 0) then
+            ledger.eventCounts[kind][base] = {
+                count = count,
+                asOf = asOf,
+            }
+        end
+    end
+end
+
+local function event_count_for_base(ledger, kind, base)
+    local entry = ((((ledger or {}).eventCounts or {})[kind] or {})[base])
+    if type(entry) == "table" then
+        return tonumber(entry.count or 0) or 0
+    end
+
+    return tonumber(entry or 0) or 0
+end
+
 local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapshots, sourceKey, normalizedRows, mergedCount, entryPrefix, options)
     options = type(options) == "table" and options or {}
     local delta = describe_source_delta(sourceSnapshots, sourceKey, normalizedRows)
     local currentFingerprints = delta.currentFingerprints
     local currentCounts = {}
+    local currentEventCounts = {}
+    local groupPersistedEventCounts = {}
     local knownFingerprintCount = 0
     local storedCounts = {}
     local groups = {}
@@ -1157,6 +1199,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     local replayBridgeBaseBuilder = type(options.replayBridgeBaseBuilder) == "function" and options.replayBridgeBaseBuilder or nil
     local replayBridgeStoredCounts = {}
     local replayBridgeLegacyKnownCounts = {}
+    local eventBaseBuilder = type(options.eventBaseBuilder) == "function" and options.eventBaseBuilder or nil
 
     local function is_known_row(row, includeLegacy)
         if fingerprintIndex[tostring((row or {}).fingerprint or "")] then
@@ -1196,6 +1239,17 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             groups[base][#groups[base] + 1] = row
             currentCounts[base] = (tonumber(currentCounts[base] or 0) or 0) + 1
 
+            if eventBaseBuilder ~= nil then
+                local eventBase = tostring(eventBaseBuilder(row) or "")
+                if eventBase ~= "" then
+                    currentEventCounts[eventBase] = (tonumber(currentEventCounts[eventBase] or 0) or 0) + 1
+                    groupPersistedEventCounts[base] = math.max(
+                        tonumber(groupPersistedEventCounts[base] or 0) or 0,
+                        event_count_for_base(ledger, entryPrefix, eventBase)
+                    )
+                end
+            end
+
             if replayBridgeBaseBuilder ~= nil and exactKnown ~= true and legacyKnown == true then
                 local replayBase = tostring(row.replayBridgeBase or replayBridgeBaseBuilder(row) or "")
                 if replayBase ~= "" then
@@ -1213,6 +1267,10 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             for key, count in pairs(currentCounts) do
                 options.currentBatchCounts[key] = count
             end
+        end
+
+        if eventBaseBuilder ~= nil then
+            update_event_counts(ledger, entryPrefix, currentEventCounts, options.now)
         end
 
         if options.skipSourceSnapshotUpdate ~= true then
@@ -1267,7 +1325,10 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
         if previousBatchCounts ~= nil and previousBatchCounts[base] ~= nil then
             alreadyKnown = tonumber(previousBatchCounts[base] or 0) or 0
         else
-            alreadyKnown = tonumber(storedCounts[base] or 0) or 0
+            alreadyKnown = math.max(
+                tonumber(storedCounts[base] or 0) or 0,
+                tonumber(groupPersistedEventCounts[base] or 0) or 0
+            )
         end
         if alreadyKnown == 0 and replayBridgeBaseBuilder ~= nil then
             alreadyKnown = tonumber(replayBridgeLegacyKnownCounts[base] or 0) or 0
@@ -1546,6 +1607,7 @@ function bankLedger.MergeItemTransactions(db, payload)
             allowSuspiciousUnknownAppend = payload.allowSuspiciousUnknownAppend == true,
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
+            eventBaseBuilder = type(ledgerIdentity.ItemBase) == "function" and ledgerIdentity.ItemBase or nil,
             replayBridgeBaseBuilder = item_replay_bridge_base,
         }
     )
@@ -1577,6 +1639,7 @@ function bankLedger.MergeMoneyTransactions(db, payload)
             allowSuspiciousUnknownAppend = true,
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
+            eventBaseBuilder = type(ledgerIdentity.MoneyBase) == "function" and ledgerIdentity.MoneyBase or nil,
             replayBridgeBaseBuilder = money_replay_bridge_base,
         }
     )
