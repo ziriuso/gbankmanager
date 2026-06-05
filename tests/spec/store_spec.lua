@@ -4,6 +4,35 @@ _G.GBankManagerItemCatalogData = nil
 _G.GBankManagerDB = {
     meta = {
         guildName = "Existing Guild",
+        schemaVersion = 1,
+        ledgerClearedForVersion = "1.2.0",
+    },
+    bankLedger = {
+        itemLogs = {
+            { entryId = "item-preserved", timestamp = 1780540000 },
+        },
+        moneyLogs = {
+            {
+                entryId = "money-preload-original",
+                timestamp = 1780540360,
+                who = "Zerobrews",
+                action = "Repair",
+                amountCopper = 1874304,
+                amount = 1874304,
+                hour = 21,
+                legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+            },
+            {
+                entryId = "money-preload-duplicate",
+                timestamp = 1780594903,
+                who = "Zerobrews",
+                action = "Repair",
+                amountCopper = 1874304,
+                amount = 1874304,
+                hour = 22,
+                legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+            },
+        },
     },
 }
 
@@ -91,6 +120,10 @@ assert.truthy(type(store.GetExportSettings) == "function", "store should expose 
 assert.truthy(type(store.GetAppearanceSettings) == "function", "store should expose appearance-settings access")
 assert.truthy(type(itemCatalog) == "table", "item catalog module should load from the toc")
 assert.truthy(itemCatalog.IsBundledDataLoaded() ~= true, "bundled item data should remain unloaded until a search path requests it")
+local preloadedDb = (((_G.GBankManagerDB or {}).guilds or {})["Existing Guild"] or {})
+assert.equal("1.2.3-money-v2", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
+assert.equal(1, #(((preloadedDb.bankLedger or {}).itemLogs) or {}), "bootstrap money cleanup should preserve preloaded item ledger rows")
+assert.equal(1, #(((preloadedDb.bankLedger or {}).moneyLogs) or {}), "bootstrap money cleanup should dedupe preloaded raw-relative money rows")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
@@ -319,7 +352,7 @@ local moneyCleanupRoot = store.Normalize({
     },
 }, "Money Cleanup Guild")
 local moneyCleanupDb = (moneyCleanupRoot.guilds or {})["Money Cleanup Guild"] or {}
-assert.equal("1.2.3", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3 should stamp the money-ledger cleanup marker")
+assert.equal("1.2.3-money-v2", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v2 should stamp the money-ledger cleanup marker")
 assert.equal(2, #(moneyCleanupDb.bankLedger.itemLogs or {}), "money-ledger cleanup should preserve item ledger rows")
 assert.equal(2, #(moneyCleanupDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should remove only duplicate money rows")
 assert.equal("money-relative-original", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "money-ledger cleanup should keep the first matching visible money row")

@@ -43,7 +43,7 @@
   - `Dedupe Ledger` now flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount so old polluted saved variables can be reviewed and cleaned
   - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
   - `GBankManager.toc` and the addon version fallback now advertise `1.2.3` / `v1.2.3`
-  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v2`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
 - Verification completed:
   - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\toc_spec.lua`

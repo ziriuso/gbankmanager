@@ -248,6 +248,11 @@ local function money_cleanup_key(row)
         return ""
     end
 
+    local legacyFingerprint = trim(row.legacyFingerprint)
+    if legacyFingerprint:match("^unknown|") then
+        return table.concat({ "legacy", legacyFingerprint }, "|")
+    end
+
     return table.concat({
         timeKey,
         trim(row.who or "Unknown"),

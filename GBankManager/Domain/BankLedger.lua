@@ -1574,6 +1574,11 @@ end
 
 local function money_dedupe_key(entry)
     entry = type(entry) == "table" and entry or {}
+    local legacyFingerprint = trim(entry.legacyFingerprint)
+    if has_relative_time_parts(entry) and legacyFingerprint:match("^unknown|") then
+        return make_fingerprint({ "legacy", legacyFingerprint })
+    end
+
     return make_fingerprint({
         money_dedupe_time_key(entry),
         trim(entry.who or "Unknown"),

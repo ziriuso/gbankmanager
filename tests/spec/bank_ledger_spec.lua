@@ -1837,6 +1837,45 @@ local relativeMoneyDedupeResult = bankLedger.ApplyDedupePlan(dedupeRelativeMoney
 assert.equal(1, relativeMoneyDedupeResult.moneyRemoved, "money cleanup should remove duplicated raw relative Blizzard money rows")
 assert.equal(1, #dedupeRelativeMoneyDb.bankLedger.moneyLogs, "money cleanup should leave one canonical raw relative Blizzard money row")
 
+local dedupeDriftedRelativeMoneyDb = fresh_db()
+dedupeDriftedRelativeMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-hour",
+        timestamp = 1780626109,
+        when = 1780626109,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 12,
+        fingerprint = "2026|6|4|22|21|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+    {
+        entryId = "money-drifted-relative-hour",
+        timestamp = 1780624777,
+        when = 1780624777,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 15,
+        fingerprint = "2026|6|4|21|59|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+}
+local driftedRelativeMoneyDedupePlan = bankLedger.BuildDedupePlan(dedupeDriftedRelativeMoneyDb)
+assert.equal(1, driftedRelativeMoneyDedupePlan.moneyDuplicateRowCount, "money cleanup should flag raw relative rows whose bridged visible hour drifted")
+local driftedRelativeMoneyDedupeResult = bankLedger.ApplyDedupePlan(dedupeDriftedRelativeMoneyDb, driftedRelativeMoneyDedupePlan)
+assert.equal(1, driftedRelativeMoneyDedupeResult.moneyRemoved, "money cleanup should remove relative rows that still share the same legacy source fingerprint")
+assert.equal(1, #dedupeDriftedRelativeMoneyDb.bankLedger.moneyLogs, "money cleanup should leave one canonical drifted raw relative money row")
+
 local dedupeTimezoneStableMoneyDb = fresh_db()
 dedupeTimezoneStableMoneyDb.bankLedger.moneySourceSnapshots = {
     money = {
