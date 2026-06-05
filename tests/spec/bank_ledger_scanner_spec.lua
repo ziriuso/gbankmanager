@@ -242,6 +242,35 @@ assert.truthy(scanner.BeginLedgerScan({
 }), "forced ledger scan should still run when we want to verify no-change publish suppression")
 run_all_pending()
 assert.equal(autoPublishCountBeforeNoChangeRepeat, #(outboundLedgerSyncMessages or {}), "re-reading the same visible ledger windows should not auto-publish duplicate no-op ledger manifests")
+
+current_db().syncState = current_db().syncState or {}
+current_db().syncState.peers = current_db().syncState.peers or {}
+current_db().syncState.peers["Guild Testers"] = {
+    ["OfficerTwo-Stormrage"] = {
+        characterKey = "OfficerTwo-Stormrage",
+        guildKey = "Guild Testers",
+        lastSeen = 1716577210,
+    },
+}
+_G.time = function()
+    return 1716577325
+end
+local peerCatchupPublishCountBefore = #(outboundLedgerSyncMessages or {})
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "forced ledger scans should still run when existing ledger rows need to be advertised to known peers")
+run_all_pending()
+assert.equal(peerCatchupPublishCountBefore + 1, #(outboundLedgerSyncMessages or {}), "a no-change ledger scan should still announce a throttled manifest when known peers may be stale")
+assert.equal("LEDGER_MANIFEST", tostring(((outboundLedgerSyncMessages or {})[#outboundLedgerSyncMessages] or {}).message.type or ""), "peer catch-up scans should announce a manifest rather than row payloads")
+local peerCatchupRepeatCountBefore = #(outboundLedgerSyncMessages or {})
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "a repeated no-change ledger scan should still complete")
+run_all_pending()
+assert.equal(peerCatchupRepeatCountBefore, #(outboundLedgerSyncMessages or {}), "peer catch-up manifests should be throttled so repeated no-change scans stay quiet")
+_G.time = function()
+    return 1716577200
+end
 transport.Send = originalTransportSend
 
 local manualLedgerStartCalls = 0

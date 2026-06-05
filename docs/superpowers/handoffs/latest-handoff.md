@@ -13,6 +13,10 @@
   - Client B saved variables showed three visible sets of duplicate Bank Ledger money rows, while Client A showed two sets; item logs looked accurate
   - the duplicate money rows shared Blizzard's raw relative fields (`year/month/day = 0/0/0` plus the same visible hour), actor, action, and amount, but had different addon-minted absolute timestamps and fingerprints from later scans or sync
   - current timestamp-date fallback therefore hid the duplicates from the existing visible-dedupe and cleanup grouping
+- Additional live item-ledger catch-up report:
+  - after Client B had item ledger rows that Client A lacked, the rows did not arrive on A until `Sync Ledger` was pressed on B
+  - comparing the later SavedVariables showed A had the rows after the forced sync, confirming manifest/bucket transfer worked once B announced its manifest
+  - root cause: a fuller client that already had the rows locally could complete a no-change ledger scan without publishing a manifest, so stale peers had nothing to compare against until manual or later periodic ledger sync
 - Live problem report:
   - passive bank-open ledger refresh was repeatedly reporting row counts while no ledger-log rows were actually changing
   - a stale online client did not reliably receive newer ledger rows from a fuller peer through login, manual `Sync Ledger`, reload, or relog
@@ -36,6 +40,7 @@
   - money replay bridging now prefers raw relative Blizzard time fields before minted timestamps, so the same visible `0/0/0` money row does not append again just because a later scan or sync minted a new absolute timestamp
   - remote money delta merge now uses the same replay bridge as local money scans
   - `Dedupe Ledger` now flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount so old polluted saved variables can be reviewed and cleaned
+  - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
 - Verification completed:
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`

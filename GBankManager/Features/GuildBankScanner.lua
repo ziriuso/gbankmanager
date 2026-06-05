@@ -37,6 +37,7 @@ local scanner = ns.modules.scanner or {
     passiveLedgerRefreshToken = 0,
     passiveLedgerRefreshActive = false,
     ledgerScanSilent = false,
+    ledgerLastManifestPublishedAt = 0,
 }
 
 local AUTO_SCAN_RETRY_DELAY_SECONDS = 0.25
@@ -47,6 +48,7 @@ local LEDGER_QUERY_SETTLE_DELAY_SECONDS = 0.5
 local LEDGER_QUERY_SETTLE_PASSES = 3
 local LEDGER_TARGET_TIMEOUT_SECONDS = 2.0
 local PASSIVE_LEDGER_RESCAN_SECONDS = 3.0
+local LEDGER_PEER_CATCHUP_MANIFEST_COOLDOWN_SECONDS = 60
 
 local finish_ledger_scan
 local cancel_ledger_scan
@@ -714,7 +716,40 @@ local function publish_ledger_manifest(db, updatedAt)
             manifest = manifestLedger.BuildLedgerManifest(db),
         },
     })
+    scanner.ledgerLastManifestPublishedAt = tonumber(updatedAt or 0) or 0
     return true
+end
+
+local function has_known_ledger_sync_peers(db)
+    db = type(db) == "table" and db or {}
+    local guildKey = current_guild_key(db)
+    local peers = (((db.syncState or {}).peers or {})[guildKey])
+    if type(peers) ~= "table" then
+        return false
+    end
+
+    for _, peer in pairs(peers) do
+        if type(peer) == "table" and tonumber(peer.lastSeen or 0) and tonumber(peer.lastSeen or 0) > 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function ledger_has_rows(db)
+    local ledger = type((db or {}).bankLedger) == "table" and db.bankLedger or {}
+    return #(ledger.itemLogs or {}) > 0 or #(ledger.moneyLogs or {}) > 0
+end
+
+local function should_publish_peer_catchup_manifest(db, now)
+    now = tonumber(now or 0) or 0
+    if now <= 0 or not ledger_has_rows(db) or not has_known_ledger_sync_peers(db) then
+        return false
+    end
+
+    local lastPublishedAt = tonumber(scanner.ledgerLastManifestPublishedAt or 0) or 0
+    return lastPublishedAt <= 0 or (now - lastPublishedAt) >= LEDGER_PEER_CATCHUP_MANIFEST_COOLDOWN_SECONDS
 end
 
 local function merge_target_transactions(db, target, transactions)
@@ -792,6 +827,8 @@ finish_ledger_scan = function(db)
         bankLedger.PruneRetention(db, now)
     end
     if mergedItemRows > 0 or mergedMoneyRows > 0 then
+        publish_ledger_manifest(db, publishedLedgerSyncAt)
+    elseif should_publish_peer_catchup_manifest(db, publishedLedgerSyncAt) then
         publish_ledger_manifest(db, publishedLedgerSyncAt)
     end
     if not silentScan then
