@@ -129,33 +129,42 @@ local function fresh_bank_ledger(guildName)
     return freshLedger
 end
 
-local function versioned_ledger_reset_token()
-    local resetVersion = trim(constants.LEDGER_FORCE_CLEAR_VERSION)
-    local addonVersion = trim(constants.ADDON_VERSION)
-    if resetVersion == "" then
-        return nil
-    end
+local function parse_version(value)
+    local major, minor, patch = string.match(trim(value), "^(%d+)%.(%d+)%.(%d+)")
+    return tonumber(major), tonumber(minor), tonumber(patch)
+end
 
-    local function parse_version(value)
-        local major, minor, patch = string.match(trim(value), "^(%d+)%.(%d+)%.(%d+)")
-        return tonumber(major), tonumber(minor), tonumber(patch)
-    end
-
-    local resetMajor, resetMinor, resetPatch = parse_version(resetVersion)
+local function version_at_least(addonVersion, targetVersion)
+    local targetMajor, targetMinor, targetPatch = parse_version(targetVersion)
     local addonMajor, addonMinor, addonPatch = parse_version(addonVersion)
-    if not resetMajor or not addonMajor then
-        return addonVersion == resetVersion and resetVersion or nil
+    if not targetMajor or not addonMajor then
+        return addonVersion == targetVersion
     end
-    if addonMajor < resetMajor then
+    if addonMajor ~= targetMajor then
+        return addonMajor > targetMajor
+    end
+    if addonMinor ~= targetMinor then
+        return addonMinor > targetMinor
+    end
+    return addonPatch >= targetPatch
+end
+
+local function versioned_token(configuredVersion)
+    local tokenVersion = trim(configuredVersion)
+    local addonVersion = trim(constants.ADDON_VERSION)
+    if tokenVersion == "" then
         return nil
     end
-    if addonMajor == resetMajor and addonMinor < resetMinor then
-        return nil
-    end
-    if addonMajor == resetMajor and addonMinor == resetMinor and addonPatch < resetPatch then
-        return nil
-    end
-    return resetVersion
+
+    return version_at_least(addonVersion, tokenVersion) and tokenVersion or nil
+end
+
+local function versioned_ledger_reset_token()
+    return versioned_token(constants.LEDGER_FORCE_CLEAR_VERSION)
+end
+
+local function versioned_money_ledger_dedupe_token()
+    return versioned_token(constants.MONEY_LEDGER_DEDUPE_VERSION)
 end
 
 local function clear_ledger_sync_state(db)
@@ -167,6 +176,136 @@ local function clear_ledger_sync_state(db)
     db.syncState.ledgerLastManifest = nil
     db.syncState.ledgerLastBucketRequest = nil
     db.syncState.ledgerLastBucketReply = nil
+end
+
+local function raw_time_key(year, month, day, hour, minute)
+    local values = {
+        trim(year),
+        trim(month),
+        trim(day),
+        trim(hour),
+        trim(minute),
+    }
+
+    for _, value in ipairs(values) do
+        if value ~= "" then
+            return table.concat(values, "|")
+        end
+    end
+
+    return "unknown"
+end
+
+local function has_time_parts(row)
+    row = type(row) == "table" and row or {}
+    return row.year ~= nil or row.month ~= nil or row.day ~= nil or row.hour ~= nil or row.minute ~= nil
+end
+
+local function has_relative_time_parts(row)
+    row = type(row) == "table" and row or {}
+    if not has_time_parts(row) then
+        return false
+    end
+
+    local year = tonumber(row.year)
+    local month = tonumber(row.month)
+    local day = tonumber(row.day)
+    return not (year and year >= 1000 and month and day)
+end
+
+local function money_cleanup_time_key(row)
+    row = type(row) == "table" and row or {}
+    local year = tonumber(row.year)
+    local month = tonumber(row.month)
+    local day = tonumber(row.day)
+    local hour = tonumber(row.hour)
+    if has_relative_time_parts(row) then
+        return raw_time_key(year, month, day, hour, nil)
+    end
+
+    return ""
+end
+
+local function visible_money_action(row)
+    local rawAction = string.lower(trim((row or {}).action or (row or {}).type or (row or {}).rawType))
+    if rawAction == "deposit" then
+        return "Deposit"
+    end
+    if rawAction == "repair" then
+        return "Repair"
+    end
+    if rawAction == "withdraw" or rawAction == "withdrawal" then
+        return "Withdrawal"
+    end
+
+    return trim((row or {}).action) ~= "" and trim((row or {}).action) or "Withdrawal"
+end
+
+local function money_cleanup_key(row)
+    row = type(row) == "table" and row or {}
+    local timeKey = money_cleanup_time_key(row)
+    if timeKey == "" then
+        return ""
+    end
+
+    return table.concat({
+        timeKey,
+        trim(row.who or "Unknown"),
+        visible_money_action(row),
+        tostring(tonumber(row.amountCopper or row.amount or 0) or 0),
+    }, "|")
+end
+
+local function apply_versioned_money_ledger_dedupe_to_database(db)
+    if type(db) ~= "table" then
+        return db
+    end
+
+    local cleanupVersion = versioned_money_ledger_dedupe_token()
+    if not cleanupVersion then
+        return db
+    end
+
+    db.meta = db.meta or {}
+    local schemaVersion = tonumber(db.meta.schemaVersion or 0) or 0
+    local currentSchemaVersion = tonumber(constants.SCHEMA_VERSION or 0) or 0
+    if currentSchemaVersion > 0 and schemaVersion > currentSchemaVersion then
+        return db
+    end
+
+    if tostring(db.meta.moneyLedgerDedupedForVersion or "") == cleanupVersion then
+        return db
+    end
+
+    local ledger = type(db.bankLedger) == "table" and db.bankLedger or nil
+    if ledger and type(ledger.moneyLogs) == "table" then
+        local seen = {}
+        local cleaned = {}
+        local removed = 0
+        for _, row in ipairs(ledger.moneyLogs or {}) do
+            local key = money_cleanup_key(row)
+            if key == "" or seen[key] ~= true then
+                if key ~= "" then
+                    seen[key] = true
+                end
+                cleaned[#cleaned + 1] = row
+            else
+                removed = removed + 1
+            end
+        end
+
+        if removed > 0 then
+            ledger.moneyLogs = cleaned
+            ledger.moneyFingerprints = {}
+            ledger.moneySourceSnapshots = {}
+            ledger.eventCounts = type(ledger.eventCounts) == "table" and ledger.eventCounts or {}
+            ledger.eventCounts.money = {}
+            clear_ledger_sync_state(db)
+        end
+    end
+
+    db.meta.moneyLedgerDedupedForVersion = cleanupVersion
+    return db
 end
 
 local function apply_versioned_ledger_reset_to_database(db)
@@ -203,12 +342,13 @@ local function apply_versioned_ledger_reset(db)
                 guildDb.meta = guildDb.meta or {}
                 guildDb.meta.guildName = guildDb.meta.guildName or tostring(guildKey)
                 apply_versioned_ledger_reset_to_database(guildDb)
+                apply_versioned_money_ledger_dedupe_to_database(guildDb)
             end
         end
         return db
     end
 
-    return apply_versioned_ledger_reset_to_database(db)
+    return apply_versioned_money_ledger_dedupe_to_database(apply_versioned_ledger_reset_to_database(db))
 end
 
 local function select_runtime_source(guildName)

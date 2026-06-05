@@ -243,6 +243,96 @@ local resetRootRepeat = store.Normalize(resetRoot, "Reset Guild")
 local resetDbRepeat = (resetRootRepeat.guilds or {})["Reset Guild"] or {}
 assert.equal(1, #(resetDbRepeat.bankLedger.itemLogs or {}), "store normalization should not clear ledger rows again once the version marker is present")
 
+local moneyCleanupRoot = store.Normalize({
+    activeGuildKey = "Money Cleanup Guild",
+    guilds = {
+        ["Money Cleanup Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Money Cleanup Guild",
+                ledgerClearedForVersion = "1.2.0",
+            },
+            bankLedger = {
+                itemLogs = {
+                    { entryId = "item-keep-1", timestamp = 1780540000 },
+                    { entryId = "item-keep-2", timestamp = 1780543600 },
+                },
+                moneyLogs = {
+                    {
+                        entryId = "money-relative-original",
+                        timestamp = 1780540360,
+                        when = 1780540360,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 21,
+                    },
+                    {
+                        entryId = "money-relative-duplicate",
+                        timestamp = 1780594903,
+                        when = 1780594903,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 21,
+                    },
+                    {
+                        entryId = "money-real-later",
+                        timestamp = 1780598503,
+                        when = 1780598503,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 20,
+                    },
+                },
+                moneyFingerprints = {
+                    ["polluted-money"] = true,
+                },
+                moneySourceSnapshots = {
+                    money = { "polluted-money-source" },
+                },
+            },
+            syncState = {
+                peers = {
+                    ["Money Cleanup Guild"] = {
+                        ["MemberOne-Stormrage"] = { lastSeen = 10 },
+                    },
+                },
+                ledgerLastManifest = { reason = "different" },
+                ledgerLastBucketRequest = { buckets = { 1 } },
+                ledgerLastBucketReply = { merged = 1 },
+            },
+        },
+    },
+}, "Money Cleanup Guild")
+local moneyCleanupDb = (moneyCleanupRoot.guilds or {})["Money Cleanup Guild"] or {}
+assert.equal("1.2.3", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3 should stamp the money-ledger cleanup marker")
+assert.equal(2, #(moneyCleanupDb.bankLedger.itemLogs or {}), "money-ledger cleanup should preserve item ledger rows")
+assert.equal(2, #(moneyCleanupDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should remove only duplicate money rows")
+assert.equal("money-relative-original", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "money-ledger cleanup should keep the first matching visible money row")
+assert.equal("money-real-later", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[2] or {}).entryId or ""), "money-ledger cleanup should preserve a different visible relative-hour money row")
+assert.equal(nil, next((moneyCleanupDb.bankLedger.moneyFingerprints or {})), "money-ledger cleanup should clear polluted money fingerprints so they rebuild from kept rows")
+assert.equal(nil, next((moneyCleanupDb.bankLedger.moneySourceSnapshots or {})), "money-ledger cleanup should clear polluted money source snapshots")
+assert.truthy(((moneyCleanupDb.syncState or {}).peers or {})["Money Cleanup Guild"], "money-ledger cleanup should preserve general sync peers")
+assert.equal(nil, (moneyCleanupDb.syncState or {}).ledgerLastManifest, "money-ledger cleanup should clear stale ledger manifest debug state")
+
+local moneyCleanupRepeatRoot = store.Normalize(moneyCleanupRoot, "Money Cleanup Guild")
+local moneyCleanupRepeatDb = (moneyCleanupRepeatRoot.guilds or {})["Money Cleanup Guild"] or {}
+assert.equal(2, #(moneyCleanupRepeatDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should not run again after the marker is stamped")
+
 persistedDb.requests = {
     {
         requestId = "scan-fulfill-1",
