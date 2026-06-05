@@ -704,6 +704,10 @@ local function money_replay_bridge_base_for_entry(entry)
     return money_replay_bridge_base(entry)
 end
 
+local function money_legacy_fingerprint_is_withdrawal(value)
+    return trim(value):match("^unknown|.*|withdraw|") ~= nil
+end
+
 local function assign_occurrence_fingerprints(rows)
     local exactCounts = {}
     local legacyCounts = {}
@@ -1280,6 +1284,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     local replayBridgeBaseBuilder = type(options.replayBridgeBaseBuilder) == "function" and options.replayBridgeBaseBuilder or nil
     local replayBridgeStoredCounts = {}
     local replayBridgeLegacyKnownCounts = {}
+    local legacyStoredCounts = {}
     local eventBaseBuilder = type(options.eventBaseBuilder) == "function" and options.eventBaseBuilder or nil
 
     local function is_known_row(row, includeLegacy)
@@ -1301,6 +1306,11 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             if replayBase ~= "" then
                 replayBridgeStoredCounts[replayBase] = (tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0) + 1
             end
+        end
+
+        local legacyFingerprint = trim(entry and entry.legacyFingerprint)
+        if legacyFingerprint ~= "" then
+            legacyStoredCounts[legacyFingerprint] = (tonumber(legacyStoredCounts[legacyFingerprint] or 0) or 0) + 1
         end
     end
 
@@ -1333,9 +1343,16 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
 
             if replayBridgeBaseBuilder ~= nil and exactKnown ~= true and legacyKnown == true then
                 local replayBase = tostring(row.replayBridgeBase or replayBridgeBaseBuilder(row) or "")
-                if replayBase ~= "" then
-                    replayBridgeLegacyKnownCounts[base] = tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0
-                end
+                local legacyFingerprint = trim(row.legacyFingerprint)
+                local legacyKnownCount = money_legacy_fingerprint_is_withdrawal(legacyFingerprint)
+                    and (tonumber(legacyStoredCounts[legacyFingerprint] or 0) or 0)
+                    or 0
+                local replayKnownCount = replayBase ~= "" and (tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0) or 0
+                replayBridgeLegacyKnownCounts[base] = math.max(
+                    tonumber(replayBridgeLegacyKnownCounts[base] or 0) or 0,
+                    legacyKnownCount,
+                    replayKnownCount
+                )
             end
         end
     end

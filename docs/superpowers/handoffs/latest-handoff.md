@@ -43,9 +43,10 @@
   - internal ledger dedupe planning still flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount for regression coverage, but the manual `Options -> Data -> Dedupe Ledger` button is hidden
   - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
   - `GBankManager.toc` and the addon version fallback now advertise `1.2.3` / `v1.2.3`
-  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v3`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v4`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - local money scans now apply the visible duplicate filter before appending rows, so raw-relative Blizzard money rows whose visible relative hour drifts cannot regrow duplicates after cleanup
   - `LEDGER_PROTOCOL_VERSION = 3` rejects older same-version protocol-2 ledger manifest, bucket, and direct delta payloads as `old_ledger_protocol`, preventing older 1.2.3 builds from re-poisoning cleaned money ledgers
-  - load-time SavedVariables compaction now records `meta.savedVariablesCompactedForVersion = 1.2.3-snapshot-v1` after removing generated snapshot `searchCatalog` tables, while Requests and Minimums build search catalogs in memory instead of persisting them back onto scan snapshots
+  - SavedVariables compaction now records `meta.savedVariablesCompactedForVersion = 1.2.3-snapshot-v2` after removing generated snapshot `searchCatalog` tables and pruning inventory snapshots to the active snapshot plus two recent backups; fresh scans also enforce that rolling snapshot window, while Requests and Minimums build search catalogs in memory instead of persisting them back onto scan snapshots
 - Verification completed:
   - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\toc_spec.lua`
@@ -213,7 +214,7 @@
   - `v1.1.1` now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
   - outbound manual and scanner `LEDGER_DELTA` payloads now include the addon version, and inbound ledger deltas are accepted only when the remote version is the same or newer; missing-version or older-version ledger deltas are rejected as `older_version`
   - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
-  - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; they do not currently prune inventory snapshots, Minimums, Requests, or sync-peer history
+  - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; inventory snapshots are separately compacted to the active snapshot plus two recent backups, while Minimums, Requests, and sync-peer history are not pruned by those retention settings
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`

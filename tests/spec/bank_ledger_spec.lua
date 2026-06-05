@@ -813,6 +813,42 @@ local relativeMoneyReplayRepeat = bankLedger.MergeMoneyTransactions(relativeMone
 assert.equal(0, relativeMoneyReplayRepeat, "money replay should not duplicate the same raw relative Blizzard row when a later scan mints a new absolute timestamp")
 assert.equal(1, #relativeMoneyReplayDb.bankLedger.moneyLogs, "money replay should keep one row for the same raw relative Blizzard money entry")
 
+local driftedRelativeMoneyReplayDb = fresh_db()
+driftedRelativeMoneyReplayDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-hour",
+        timestamp = 1780626109,
+        when = 1780626109,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 12,
+        fingerprint = "2026|6|4|22|21|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+}
+bankLedger.EnsureState(driftedRelativeMoneyReplayDb)
+local driftedRelativeMoneyReplayRepeat = bankLedger.MergeMoneyTransactions(driftedRelativeMoneyReplayDb, {
+    scanStartedAt = 1780625759,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amountCopper = 5779554,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 17,
+        },
+    },
+})
+assert.equal(0, driftedRelativeMoneyReplayRepeat, "money replay should not duplicate the same raw relative Blizzard row when its visible relative hour drifts")
+assert.equal(1, #driftedRelativeMoneyReplayDb.bankLedger.moneyLogs, "drifted relative money replay should leave one canonical row")
+
 local repeatedRealItemDb = fresh_db()
 _G.GetServerTime = function()
     return 1779998400

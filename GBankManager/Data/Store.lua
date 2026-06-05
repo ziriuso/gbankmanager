@@ -317,6 +317,81 @@ local function apply_versioned_money_ledger_dedupe_to_database(db)
     return db
 end
 
+local function snapshot_timestamp(snapshot, scanId)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    local timestamp = tonumber(snapshot.scannedAt or snapshot.timestamp or 0) or 0
+    if timestamp > 0 then
+        return timestamp
+    end
+
+    return tonumber(tostring(scanId or ""):match("^(%d+)") or 0) or 0
+end
+
+local function compact_inventory_snapshots(db, options)
+    if type(db) ~= "table" or type(db.snapshots) ~= "table" then
+        return db
+    end
+
+    options = type(options) == "table" and options or {}
+    local retentionLimit = tonumber(options.retentionLimit or constants.INVENTORY_SNAPSHOT_RETENTION_LIMIT or 3) or 3
+    if retentionLimit <= 0 then
+        retentionLimit = 1
+    end
+
+    local keep = {}
+    local kept = 0
+    local currentSnapshotId = db.currentSnapshotId
+    if currentSnapshotId ~= nil and type(db.snapshots[currentSnapshotId]) == "table" then
+        keep[currentSnapshotId] = true
+        kept = kept + 1
+    end
+
+    local ordered = {}
+    for scanId, snapshot in pairs(db.snapshots or {}) do
+        if type(snapshot) == "table" then
+            snapshot.searchCatalog = nil
+            if keep[scanId] ~= true then
+                ordered[#ordered + 1] = {
+                    scanId = scanId,
+                    scannedAt = snapshot_timestamp(snapshot, scanId),
+                }
+            end
+        end
+    end
+
+    table.sort(ordered, function(left, right)
+        if left.scannedAt ~= right.scannedAt then
+            return left.scannedAt > right.scannedAt
+        end
+        return tostring(left.scanId or "") > tostring(right.scanId or "")
+    end)
+
+    for _, entry in ipairs(ordered) do
+        if kept >= retentionLimit then
+            break
+        end
+        keep[entry.scanId] = true
+        kept = kept + 1
+    end
+
+    for scanId in pairs(db.snapshots or {}) do
+        if keep[scanId] ~= true then
+            db.snapshots[scanId] = nil
+        end
+    end
+
+    if currentSnapshotId ~= nil and db.snapshots[currentSnapshotId] == nil then
+        local firstKept = next(db.snapshots or {})
+        db.currentSnapshotId = firstKept
+    end
+
+    return db
+end
+
+function store.CompactInventorySnapshots(db, options)
+    return compact_inventory_snapshots(resolve_active_database(db or store.GetDatabase()), options)
+end
+
 local function apply_versioned_saved_variables_compaction_to_database(db)
     if type(db) ~= "table" then
         return db
@@ -334,16 +409,7 @@ local function apply_versioned_saved_variables_compaction_to_database(db)
         return db
     end
 
-    if tostring(db.meta.savedVariablesCompactedForVersion or "") == compactVersion then
-        return db
-    end
-
-    for _, snapshot in pairs(db.snapshots or {}) do
-        if type(snapshot) == "table" then
-            snapshot.searchCatalog = nil
-        end
-    end
-
+    compact_inventory_snapshots(db)
     db.meta.savedVariablesCompactedForVersion = compactVersion
     return db
 end

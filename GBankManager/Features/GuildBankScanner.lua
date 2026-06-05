@@ -104,6 +104,13 @@ local function current_db()
     return runtime
 end
 
+local function compact_inventory_snapshots(db)
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.CompactInventorySnapshots) == "function" then
+        store.CompactInventorySnapshots(db)
+    end
+end
+
 local function clone_array_records(records)
     local out = {}
     for _, record in ipairs(records or {}) do
@@ -1232,6 +1239,7 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
     db.currentSnapshotId = currentSnapshot.scanId
     db.meta.updatedAt = currentSnapshot.scannedAt
     db.meta.guildName = guildName or db.meta.guildName or "Unknown Guild"
+    compact_inventory_snapshots(db)
 
     for _, change in ipairs(changes) do
         change.scanId = currentSnapshot.scanId
