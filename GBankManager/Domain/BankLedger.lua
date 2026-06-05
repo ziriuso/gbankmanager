@@ -655,6 +655,21 @@ local function money_source_bridge_bases(sourceSnapshots)
     return bridgeBases
 end
 
+local function money_replay_bridge_base_for_entry(entry)
+    entry = type(entry) == "table" and entry or {}
+    local bridgeBase = money_replay_bridge_base_from_fingerprint(entry.fingerprint)
+    if bridgeBase ~= "" then
+        return bridgeBase
+    end
+
+    bridgeBase = money_replay_bridge_base_from_fingerprint(entry.legacyFingerprint)
+    if bridgeBase ~= "" then
+        return bridgeBase
+    end
+
+    return money_replay_bridge_base(entry)
+end
+
 local function assign_occurrence_fingerprints(rows)
     local exactCounts = {}
     local legacyCounts = {}
@@ -1874,7 +1889,7 @@ local function dedupe_keep_index(group, kind, options)
     local bestScore = 0
     for index, entry in ipairs(group or {}) do
         local score = 0
-        local bridgeBase = money_replay_bridge_base(entry)
+        local bridgeBase = money_replay_bridge_base_for_entry(entry)
         if bridgeBase ~= "" and sourceBridgeBases[bridgeBase] == true then
             score = 1
         end

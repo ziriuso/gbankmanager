@@ -1758,6 +1758,49 @@ assert.equal(0, bankLedger.MergeMoneyTransactions(dedupeSourceStableMoneyDb, {
         },
     },
 }), "a money scan after cleanup should not reimport the same visible source row")
+
+local dedupeTimezoneStableMoneyDb = fresh_db()
+dedupeTimezoneStableMoneyDb.bankLedger.moneySourceSnapshots = {
+    money = {
+        "2026|6|2|12|51|Zirleficent|withdraw|1500000000|1",
+    },
+}
+dedupeTimezoneStableMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-old-visible-duplicate",
+        timestamp = 1780415704,
+        when = 1780415704,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|11|55|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+    {
+        entryId = "money-current-source-hour-duplicate",
+        timestamp = 1780417641,
+        when = 1780417641,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|12|27|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+}
+local originalDate = _G.date
+_G.date = function(format, timestamp)
+    if format == "*t" then
+        return os.date("!*t", timestamp)
+    end
+    return os.date(format, timestamp)
+end
+local timezoneStableDedupePlan = bankLedger.BuildDedupePlan(dedupeTimezoneStableMoneyDb)
+local timezoneStableDedupeResult = bankLedger.ApplyDedupePlan(dedupeTimezoneStableMoneyDb, timezoneStableDedupePlan)
+_G.date = originalDate
+assert.equal(1, timezoneStableDedupeResult.moneyRemoved, "money cleanup should remove one visible duplicate under a UTC-style test runner")
+assert.equal("money-current-source-hour-duplicate", dedupeTimezoneStableMoneyDb.bankLedger.moneyLogs[1].entryId, "money cleanup should use stored row fingerprints instead of runner timezone when protecting source-stable rows")
 assert.equal(1, #dedupeSourceStableMoneyDb.bankLedger.moneyLogs, "money cleanup should stay stable after the next scan")
 
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {
