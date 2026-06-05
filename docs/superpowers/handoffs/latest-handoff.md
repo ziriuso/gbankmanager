@@ -8,11 +8,11 @@
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
   - latest commit is the current `fix: recover stale ledger manifest sync` checkpoint
-  - target release line: `v1.2.1`
+  - target release line: `v1.2.2`
   - local branch is ahead of origin; only expected local noise is untracked `.vscode/`
 - Scope implemented:
-  - `GBankManager.toc`, `ADDON_VERSION`, and About metadata now target `1.2.1` / `v1.2.1`
-  - `v1.2.0` was pushed first but failed during the release workflow's Lua suite before packaging, GitHub Release creation, or CurseForge upload; `v1.2.1` is the follow-up publish tag
+  - `GBankManager.toc`, `ADDON_VERSION`, and About metadata now target `1.2.2` / `v1.2.2`
+  - `v1.2.0` and `v1.2.1` were pushed first but failed during the release workflow's Lua suite before packaging, GitHub Release creation, or CurseForge upload; `v1.2.2` is the follow-up publish tag
   - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0` intentionally forces one clean Bank Ledger reset while preserving inventory, Minimums, Requests, auth, blacklist, UI settings, and general sync peers
   - `LEDGER_PROTOCOL_VERSION = 2` gates the new manifest, bucket-request, and bucket-reply payload families; old or missing ledger protocols are rejected as `old_ledger_protocol`
   - ledger row identity now uses durable occurrence IDs and count metadata so repeated same-hour activity can be represented without relying on remote row positions
@@ -35,7 +35,7 @@
   - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
   - `.\tools\lua\lua.exe .\tests\run_unit.lua`
 - Manual validation still needed before release:
-  1. With two 1.2.1 clients online, create a new guild-bank item or money-log row on client A, wait for client A to scan, and confirm client B receives missing rows through manifest/bucket sync exactly once.
+  1. With two 1.2.2 clients online, create a new guild-bank item or money-log row on client A, wait for client A to scan, and confirm client B receives missing rows through manifest/bucket sync exactly once.
   2. On a stale or empty client that missed the original manifest, run `Sync Ledger` and confirm the fuller online peer sends back missing bucket rows.
   3. Repeat the scan or `Sync Ledger` with no further bank-log changes and confirm no row payload or chat line repeats.
   4. Run `/gbm debug sync` and `/gbm debug ledger` and confirm the last ledger manifest is matched or lists only differing buckets.
