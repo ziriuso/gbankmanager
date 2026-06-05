@@ -1687,7 +1687,7 @@ function bankLedger.MergeMoneyTransactions(db, payload)
             previousBatchCounts = batchCounts[sourceKey],
             currentBatchCounts = currentBatchCounts,
             eventBaseBuilder = type(ledgerIdentity.MoneyBase) == "function" and ledgerIdentity.MoneyBase or nil,
-            replayBridgeBaseBuilder = money_replay_bridge_base,
+            replayBridgeBaseBuilder = money_replay_bridge_base_for_entry,
         }
     )
     batchCounts[sourceKey] = currentBatchCounts

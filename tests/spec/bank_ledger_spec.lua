@@ -1798,9 +1798,25 @@ _G.date = function(format, timestamp)
 end
 local timezoneStableDedupePlan = bankLedger.BuildDedupePlan(dedupeTimezoneStableMoneyDb)
 local timezoneStableDedupeResult = bankLedger.ApplyDedupePlan(dedupeTimezoneStableMoneyDb, timezoneStableDedupePlan)
+local timezoneStableRepeatCount = bankLedger.MergeMoneyTransactions(dedupeTimezoneStableMoneyDb, {
+    scanStartedAt = 1780453860,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 51,
+        },
+    },
+})
 _G.date = originalDate
 assert.equal(1, timezoneStableDedupeResult.moneyRemoved, "money cleanup should remove one visible duplicate under a UTC-style test runner")
 assert.equal("money-current-source-hour-duplicate", dedupeTimezoneStableMoneyDb.bankLedger.moneyLogs[1].entryId, "money cleanup should use stored row fingerprints instead of runner timezone when protecting source-stable rows")
+assert.equal(0, timezoneStableRepeatCount, "money cleanup should not reimport the same visible source row under a UTC-style test runner")
 assert.equal(1, #dedupeSourceStableMoneyDb.bankLedger.moneyLogs, "money cleanup should stay stable after the next scan")
 
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {
