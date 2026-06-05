@@ -1246,6 +1246,7 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
         change.scannedAt = currentSnapshot.scannedAt
         table.insert(db.changeLog, change)
     end
+    compact_inventory_snapshots(db)
 
     if requests and type(requests.AutoFulfillApprovedFromSnapshot) == "function" then
         requests.AutoFulfillApprovedFromSnapshot(db, currentSnapshot, "Bank Scan", currentSnapshot.scannedAt)

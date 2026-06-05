@@ -51,7 +51,7 @@ local SCAN_INTERVAL_LABELS = {
 }
 
 local LEDGER_DELTA_REPEAT_WINDOW_SECONDS = 30
-local RELATIVE_MONEY_REPLAY_WINDOW_SECONDS = 30 * 60
+local RELATIVE_MONEY_REPLAY_WINDOW_SECONDS = 60 * 60
 
 local RETENTION_LABELS = {
     ["1_week"] = "1 Week",
@@ -1293,6 +1293,25 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     local legacyStoredScanTimestamps = {}
     local eventBaseBuilder = type(options.eventBaseBuilder) == "function" and options.eventBaseBuilder or nil
 
+    local function time_candidates(row)
+        row = type(row) == "table" and row or {}
+        local candidates = {}
+        local seen = {}
+        for _, value in ipairs({
+            row.timestamp,
+            row.when,
+            row.scanStartedAt,
+            row.scannedAt,
+        }) do
+            local timestamp = tonumber(value or 0) or 0
+            if timestamp > 0 and seen[timestamp] ~= true then
+                candidates[#candidates + 1] = timestamp
+                seen[timestamp] = true
+            end
+        end
+        return candidates
+    end
+
     local function is_known_row(row, includeLegacy)
         if fingerprintIndex[tostring((row or {}).fingerprint or "")] then
             return true
@@ -1319,7 +1338,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             legacyStoredCounts[legacyFingerprint] = (tonumber(legacyStoredCounts[legacyFingerprint] or 0) or 0) + 1
             legacyStoredScanTimestamps[legacyFingerprint] = legacyStoredScanTimestamps[legacyFingerprint] or {}
             legacyStoredScanTimestamps[legacyFingerprint][#legacyStoredScanTimestamps[legacyFingerprint] + 1] =
-                tonumber((entry or {}).scanStartedAt or (entry or {}).scannedAt or (entry or {}).timestamp or (entry or {}).when or 0) or 0
+                time_candidates(entry)
         end
     end
 
@@ -1328,15 +1347,28 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
             return 0
         end
 
-        local timestamp = tonumber((row or {}).scanStartedAt or (row or {}).scannedAt or (row or {}).timestamp or (row or {}).when or 0) or 0
-        if timestamp <= 0 then
+        local rowTimestamps = time_candidates(row)
+        if #rowTimestamps == 0 then
             return 0
         end
 
         local count = 0
-        for _, storedTimestamp in ipairs(legacyStoredScanTimestamps[legacyFingerprint] or {}) do
-            storedTimestamp = tonumber(storedTimestamp or 0) or 0
-            if storedTimestamp > 0 and math.abs(timestamp - storedTimestamp) <= RELATIVE_MONEY_REPLAY_WINDOW_SECONDS then
+        for _, storedTimestamps in ipairs(legacyStoredScanTimestamps[legacyFingerprint] or {}) do
+            local matched = false
+            for _, storedTimestamp in ipairs(storedTimestamps or {}) do
+                for _, rowTimestamp in ipairs(rowTimestamps) do
+                    storedTimestamp = tonumber(storedTimestamp or 0) or 0
+                    rowTimestamp = tonumber(rowTimestamp or 0) or 0
+                    if storedTimestamp > 0 and rowTimestamp > 0 and math.abs(rowTimestamp - storedTimestamp) < RELATIVE_MONEY_REPLAY_WINDOW_SECONDS then
+                        matched = true
+                        break
+                    end
+                end
+                if matched then
+                    break
+                end
+            end
+            if matched then
                 count = count + 1
             end
         end

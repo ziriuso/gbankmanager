@@ -388,8 +388,69 @@ local function compact_inventory_snapshots(db, options)
     return db
 end
 
+local function change_log_timestamp(entry, index)
+    entry = type(entry) == "table" and entry or {}
+    local timestamp = tonumber(entry.scannedAt or entry.timestamp or entry.when or 0) or 0
+    if timestamp > 0 then
+        return timestamp
+    end
+
+    return tonumber(index or 0) or 0
+end
+
+local function compact_inventory_change_log(db, options)
+    if type(db) ~= "table" or type(db.changeLog) ~= "table" then
+        return db
+    end
+
+    options = type(options) == "table" and options or {}
+    local retentionLimit = tonumber(options.changeLogRetentionLimit or constants.INVENTORY_CHANGELOG_RETENTION_LIMIT or 500) or 500
+    if retentionLimit <= 0 then
+        retentionLimit = 1
+    end
+
+    if #db.changeLog <= retentionLimit then
+        return db
+    end
+
+    local ordered = {}
+    for index, entry in ipairs(db.changeLog or {}) do
+        ordered[#ordered + 1] = {
+            index = index,
+            timestamp = change_log_timestamp(entry, index),
+        }
+    end
+
+    table.sort(ordered, function(left, right)
+        if left.timestamp ~= right.timestamp then
+            return left.timestamp > right.timestamp
+        end
+        return left.index > right.index
+    end)
+
+    local keep = {}
+    for index, entry in ipairs(ordered) do
+        if index > retentionLimit then
+            break
+        end
+        keep[entry.index] = true
+    end
+
+    local compacted = {}
+    for index, entry in ipairs(db.changeLog or {}) do
+        if keep[index] == true then
+            compacted[#compacted + 1] = entry
+        end
+    end
+    db.changeLog = compacted
+
+    return db
+end
+
 function store.CompactInventorySnapshots(db, options)
-    return compact_inventory_snapshots(resolve_active_database(db or store.GetDatabase()), options)
+    local activeDb = resolve_active_database(db or store.GetDatabase())
+    compact_inventory_snapshots(activeDb, options)
+    return compact_inventory_change_log(activeDb, options)
 end
 
 local function apply_versioned_saved_variables_compaction_to_database(db)
@@ -410,6 +471,7 @@ local function apply_versioned_saved_variables_compaction_to_database(db)
     end
 
     compact_inventory_snapshots(db)
+    compact_inventory_change_log(db)
     db.meta.savedVariablesCompactedForVersion = compactVersion
     return db
 end

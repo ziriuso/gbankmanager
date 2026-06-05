@@ -24,9 +24,10 @@ end
 
 ns.constants.ADDON_VERSION = ns.constants.ADDON_VERSION or addon_metadata("Version") or "1.2.3"
 ns.constants.LEDGER_FORCE_CLEAR_VERSION = ns.constants.LEDGER_FORCE_CLEAR_VERSION or "1.2.0"
-ns.constants.MONEY_LEDGER_DEDUPE_VERSION = ns.constants.MONEY_LEDGER_DEDUPE_VERSION or "1.2.3-money-v5"
-ns.constants.SAVED_VARIABLES_COMPACT_VERSION = ns.constants.SAVED_VARIABLES_COMPACT_VERSION or "1.2.3-snapshot-v2"
+ns.constants.MONEY_LEDGER_DEDUPE_VERSION = ns.constants.MONEY_LEDGER_DEDUPE_VERSION or "1.2.3-money-v7"
+ns.constants.SAVED_VARIABLES_COMPACT_VERSION = ns.constants.SAVED_VARIABLES_COMPACT_VERSION or "1.2.3-snapshot-v3"
 ns.constants.INVENTORY_SNAPSHOT_RETENTION_LIMIT = ns.constants.INVENTORY_SNAPSHOT_RETENTION_LIMIT or 3
+ns.constants.INVENTORY_CHANGELOG_RETENTION_LIMIT = ns.constants.INVENTORY_CHANGELOG_RETENTION_LIMIT or 500
 ns.constants.LEDGER_PROTOCOL_VERSION = ns.constants.LEDGER_PROTOCOL_VERSION or 3
 
 return ns.constants

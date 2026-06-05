@@ -1006,6 +1006,55 @@ local driftedRelativeDepositMerge = bankLedger.MergeMoneyTransactions(driftedRel
 assert.equal(0, driftedRelativeDepositMerge, "raw relative money deposits should not duplicate when Blizzard's visible hour drifts")
 assert.equal(1, #driftedRelativeDepositDb.bankLedger.moneyLogs, "drifted raw relative deposits should keep one canonical row")
 
+local legacyStampedRelativeDepositDb = fresh_db()
+legacyStampedRelativeDepositDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-live-5000-original",
+        timestamp = 1780684429,
+        when = 1780684429,
+        who = "Ziriously",
+        action = "Deposit",
+        amountCopper = 50000000,
+        amount = 50000000,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 0,
+        fingerprint = "2026|6|5|14|33|Ziriously|deposit|50000000|1",
+        legacyFingerprint = "unknown|Ziriously|deposit|50000000|1",
+        replayBridgeBase = "0|0|0|0||0|Ziriously|deposit|50000000",
+    },
+    {
+        entryId = "money-live-5001-original",
+        timestamp = 1780686959,
+        when = 1780686959,
+        who = "Ziriously",
+        action = "Deposit",
+        amountCopper = 50010000,
+        amount = 50010000,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 0,
+        fingerprint = "2026|6|5|15|15|Ziriously|deposit|50010000|1",
+        legacyFingerprint = "unknown|Ziriously|deposit|50010000|1",
+        replayBridgeBase = "0|0|0|0||0|Ziriously|deposit|50010000",
+    },
+}
+bankLedger.EnsureState(legacyStampedRelativeDepositDb)
+_G.GetServerTime = function()
+    return 1780690784
+end
+local legacyStampedRelativeDepositMerge = bankLedger.MergeMoneyTransactions(legacyStampedRelativeDepositDb, {
+    scanStartedAt = 1780690782,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 1 },
+        { type = "deposit", who = "Ziriously", amount = 50010000, year = 0, month = 0, day = 0, hour = 1 },
+    },
+})
+assert.equal(0, legacyStampedRelativeDepositMerge, "legacy-keyed raw relative deposits should not reappend when a later scan shifts their visible hour")
+assert.equal(2, #legacyStampedRelativeDepositDb.bankLedger.moneyLogs, "legacy-keyed drifted deposits should keep only the canonical original rows")
+
 local regrownBatchItemDb = fresh_db()
 local regrownBatchItemInitial = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
     scanStartedAt = 1716573600,
