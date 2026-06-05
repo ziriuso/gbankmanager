@@ -102,6 +102,75 @@ local function current_db()
     return runtime
 end
 
+local function clone_array_records(records)
+    local out = {}
+    for _, record in ipairs(records or {}) do
+        local copy = {}
+        for key, value in pairs(record or {}) do
+            copy[key] = value
+        end
+        out[#out + 1] = copy
+    end
+    return out
+end
+
+local function snapshot_scope_count(snapshot, rule)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    rule = type(rule) == "table" and rule or {}
+    local itemID = tonumber(rule.itemID)
+    local item = itemID and (snapshot.items or {})[itemID] or nil
+    if type(item) ~= "table" then
+        return 0
+    end
+
+    if tostring(rule.scope or "GLOBAL") == "TAB" then
+        local tabName = tostring(rule.tabName or "")
+        return tonumber(((item.tabs or {})[tabName]) or 0) or 0
+    end
+
+    return tonumber(item.totalCount or 0) or 0
+end
+
+local function publish_minimums_snapshot(db, updatedAt)
+    local transport = ns.modules.syncTransport or {}
+    if type(transport.Send) ~= "function" then
+        return false
+    end
+
+    transport.Send("GUILD", "GUILD", {
+        type = "MINIMUMS_SNAPSHOT",
+        updatedAt = updatedAt,
+        payload = {
+            guildKey = current_guild_key(db),
+            actorContext = current_context(db),
+            minimums = clone_array_records((db or {}).minimums or {}),
+        },
+    })
+    return true
+end
+
+local function cleanup_stocked_one_time_minimums(db, snapshot, actor, timestamp)
+    local minimumsView = ns.modules.minimumsView or {}
+    if type(minimumsView.RemoveWithAudit) ~= "function" then
+        return 0
+    end
+
+    local removedCount = 0
+    local candidates = clone_array_records((db or {}).minimums or {})
+    for _, rule in ipairs(candidates) do
+        local quantity = tonumber(rule.quantity or 0) or 0
+        if rule.enabled == false and quantity > 0 and snapshot_scope_count(snapshot, rule) >= quantity then
+            minimumsView.RemoveWithAudit(db, rule, {
+                actor = actor or "Bank Scan",
+                timestamp = timestamp,
+            })
+            removedCount = removedCount + 1
+        end
+    end
+
+    return removedCount
+end
+
 local function is_guild_bank_open_now()
     if scanner.guildBankOpen == true then
         return true
@@ -725,11 +794,7 @@ finish_ledger_scan = function(db)
     if mergedItemRows > 0 or mergedMoneyRows > 0 then
         publish_ledger_manifest(db, publishedLedgerSyncAt)
     end
-    if silentScan then
-        if mergedItemRows > 0 or mergedMoneyRows > 0 then
-            report_status(string.format("Guild bank ledger auto-refresh found %d item rows and %d money rows.", mergedItemRows, mergedMoneyRows))
-        end
-    else
+    if not silentScan then
         report_status(string.format("Guild bank ledger scan finished (%d item rows, %d money rows).", mergedItemRows, mergedMoneyRows))
     end
     if mergedItemRows > 0 or mergedMoneyRows > 0 then
@@ -1139,6 +1204,11 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
 
     if requests and type(requests.AutoFulfillApprovedFromSnapshot) == "function" then
         requests.AutoFulfillApprovedFromSnapshot(db, currentSnapshot, "Bank Scan", currentSnapshot.scannedAt)
+    end
+
+    local removedOneTimeMinimums = cleanup_stocked_one_time_minimums(db, currentSnapshot, actor or "Bank Scan", currentSnapshot.scannedAt)
+    if removedOneTimeMinimums > 0 then
+        publish_minimums_snapshot(db, currentSnapshot.scannedAt)
     end
 
     scanner.scanInProgress = false

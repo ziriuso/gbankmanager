@@ -369,7 +369,7 @@ _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "Mem
 local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
 assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark a peer synchronized without an actual sync payload")
-assert.equal("", table.concat(helloDispatches, ","), "sync hello should not fan out catch-up sync families")
+assert.equal("requests,minimums,history,ledger", table.concat(helloDispatches, ","), "full-shell sync hello should silently answer with catch-up sync families")
 
 local originalFullUi = db.auth.capabilities.full_ui
 local originalGetGuildInfo = _G.GetGuildInfo
@@ -386,7 +386,7 @@ local requestOnlyHelloPayload = codec.EncodeTable({
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", requestOnlyHelloPayload, "GUILD", "MemberTwo")
 local requestOnlyPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberTwo-Stormrage"] or {})
 assert.equal(0, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark request-only peers synchronized without an actual sync payload")
-assert.equal("", table.concat(helloDispatches, ","), "sync hello should stay presence-only for request-only users")
+assert.equal("requests", table.concat(helloDispatches, ","), "request-only sync hello should only answer with request catch-up")
 db.auth.capabilities.full_ui = originalFullUi
 _G.GetGuildInfo = originalGetGuildInfo
 ns.modules.syncManualActionHandlers = originalManualSyncHandlers
@@ -1170,6 +1170,133 @@ local minimumAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
 local duplicateMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumSnapshotPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateMinimumSnapshotAccepted, "replayed minimum snapshots should still count as handled accepted messages")
 assert.equal(minimumAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change minimum snapshots should not append duplicate history rows")
+
+local originalMinimumSnapshotSend = ns.modules.syncTransport.Send
+local reciprocalMinimumMessages = {}
+ns.modules.syncTransport.Send = function(_, _, message)
+    reciprocalMinimumMessages[#reciprocalMinimumMessages + 1] = message
+    return codec.EncodeTable(message)
+end
+db.minimums = {
+    {
+        itemID = 23529,
+        itemName = "Adamantite Sharpening Stone",
+        quantity = 20,
+        scope = "TAB",
+        tabName = "Raid Buffet",
+        enabled = true,
+        updatedAt = 1780532026,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+    {
+        itemID = 240983,
+        itemName = "Indecipherable Eversong Diamond",
+        quantity = 5,
+        scope = "TAB",
+        tabName = "Gems and Chants",
+        enabled = true,
+        updatedAt = 1780669182,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+    {
+        itemID = 240971,
+        itemName = "Stoic Eversong Diamond",
+        quantity = 5,
+        scope = "TAB",
+        tabName = "Gems and Chants",
+        enabled = false,
+        updatedAt = 1780669182,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+}
+db.auditLog = {}
+local staleMinimumSnapshotPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670000,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 23529,
+                itemName = "Adamantite Sharpening Stone",
+                quantity = 20,
+                scope = "TAB",
+                tabName = "Raid Buffet",
+                enabled = true,
+                updatedAt = 1780532026,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local staleMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleMinimumSnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(staleMinimumSnapshotAccepted, "stale minimum snapshots should still be handled from authorized officers")
+assert.equal(3, #(db.minimums or {}), "stale minimum snapshots should not erase newer local minimum rows that the sender is missing")
+assert.equal(240983, ((db.minimums or {})[2] or {}).itemID, "newer local minimum rows should be preserved after stale snapshot receive")
+assert.equal(1, #reciprocalMinimumMessages, "receiving a stale minimum snapshot should reply with the fuller local snapshot")
+assert.equal("MINIMUMS_SNAPSHOT", reciprocalMinimumMessages[1].type, "minimum catch-up replies should use the existing snapshot family")
+assert.truthy(((reciprocalMinimumMessages[1].payload or {}).syncReply == true), "minimum catch-up replies should be marked to avoid reply loops")
+assert.equal(3, #(((reciprocalMinimumMessages[1].payload or {}).minimums) or {}), "minimum catch-up replies should include the fuller local rule set")
+
+reciprocalMinimumMessages = {}
+local staleMinimumReplyPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670001,
+    payload = {
+        guildKey = "Guild Testers",
+        syncReply = true,
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 23529,
+                itemName = "Adamantite Sharpening Stone",
+                quantity = 20,
+                scope = "TAB",
+                tabName = "Raid Buffet",
+                enabled = true,
+                updatedAt = 1780532026,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local staleMinimumReplyAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleMinimumReplyPayload, "GUILD", "OfficerOne")
+assert.truthy(staleMinimumReplyAccepted, "minimum sync replies should still be accepted")
+assert.equal(0, #reciprocalMinimumMessages, "minimum sync replies should not trigger another reply loop")
+ns.modules.syncTransport.Send = originalMinimumSnapshotSend
+db.minimums = {
+    {
+        itemID = 243734,
+        itemName = "Thalassian Phoenix Oil",
+        quantity = 100,
+        scope = "TAB",
+        tabName = "Alchemy",
+        enabled = true,
+        updatedAt = 205,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+}
 
 db.auditLog = {
     { type = "LEDGER_IMPORTED", category = "LEDGER", itemName = "Hidden Ledger Row", actor = "Bank", timestamp = 150 },

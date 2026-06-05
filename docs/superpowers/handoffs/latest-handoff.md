@@ -2,14 +2,68 @@
 
 ## Resume Here
 
-### 2026-06-04 Ledger Engine 1.2.0 Implementation Checkpoint
+### 2026-06-05 Post-v1.2.2 Live Sync Follow-Up
 
 - Current local checkpoint:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - latest commit is the current `fix: recover stale ledger manifest sync` checkpoint
-  - target release line: `v1.2.2`
-  - local branch is ahead of origin; only expected local noise is untracked `.vscode/`
+  - base release at session start was `v1.2.2` on commit `821ab88` (`chore: prepare 1.2.2 release`)
+  - local work is an unreleased follow-up to later Retail two-client sync findings; do not treat it as part of the published `v1.2.2` asset
+- Live problem report:
+  - passive bank-open ledger refresh was repeatedly reporting row counts while no ledger-log rows were actually changing
+  - a stale online client did not reliably receive newer ledger rows from a fuller peer through login, manual `Sync Ledger`, reload, or relog
+  - `Sync All` from the stale side did not pull newer Minimums or missing money-log bucket rows from the fuller side
+  - a fuller peer eventually pushed item-log rows but not money-log rows, and another sync action took roughly 10 minutes before visible receive chatter began
+  - new Minimums created on one client were not automatically synchronized to another online client, and bank-backed new Minimums with positive quantities could remain `Restock: No`, keeping them out of export demand
+  - clarified product rule: `Restock: No` plus a positive Minimum is a one-time stocking target, not a disabled or ignored rule
+- Root cause narrowed:
+  - inbound `SYNC_HELLO` was presence-only, so login did not advertise local state or prompt any catch-up family
+  - `Sync All` was a one-way publish of the sender's local snapshots/manifests, so stale clients could not pull fuller peer state unless the fuller side independently sent the right family
+  - Minimum snapshots replaced the whole local saved rule array, so a stale snapshot could omit newer local rules instead of causing a fuller reciprocal reply
+  - bank-backed `Show All` Minimum rows inherited the display-only `Restock: No` placeholder when staged as a new rule
+- Local fix in progress:
+  - login hello now silently triggers the catch-up families allowed by the receiver's local access profile
+  - login also schedules a short delayed `Sync All`, and an occasional periodic silent `Sync All`, so online clients continue advertising local changes without user chat noise
+  - stale inbound Minimum snapshots now merge by rule key and `updatedAt`, preserve newer local rows, and reply once with a fuller `MINIMUMS_SNAPSHOT` marked `syncReply=true`
+  - passive ledger refresh no longer prints repeated `auto-refresh found X item rows and Y money rows` status lines
+  - bank-backed new Minimums default to Restock enabled, while an explicit Restock disable is still respected
+  - disabled positive Minimums now contribute `ONE_TIME_TARGET` export demand while understocked
+  - successful guild-bank scans remove stocked one-time Minimums, record normal `MINIMUM_REMOVED` history, and publish the remaining Minimums snapshot so peers can drop the completed one-time target
+- Verification completed:
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_manifest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\exports_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_exports_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\planning_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Local Retail deploy completed after the fix:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+  - deployed `GBankManager` and `GBankManager_ItemData` into `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
+- Next live validation:
+  1. In Retail, `/reload` both clients.
+  2. Confirm a fuller online client answers a stale client's login and manual sync with ledger item-log, ledger money-log, Minimums, visible History, and Requests catch-up without waiting minutes.
+  3. Confirm a newly logged-in client also advertises any newer data it has to already-online clients.
+  4. With the guild bank left open, confirm passive ledger refresh imports actual new rows but does not spam auto-refresh count messages when no row changes.
+  5. In Minimums `Show All`, add a positive new minimum from a bank row and confirm exports include it. Then toggle another positive target to `Restock: No` and confirm exports still include it while understocked as a one-time target.
+  6. Stock that one-time target, run `Scan Bank`, and confirm the one-time Minimum is removed locally and from peers after sync, while recurring `Restock: Yes` Minimums remain saved after being stocked.
+
+### 2026-06-05 v1.2.2 Post-Release Live Validation
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - current HEAD is `821ab88` (`chore: prepare 1.2.2 release`)
+  - current tag is `v1.2.2`
+  - local branch is in sync with `origin/codex/gbankmanager-v1`; only expected local noise is untracked `.vscode/`
+- Release state:
+  - stable GitHub Release `GBankManager v1.2.2` is published with `GBankManager-1.2.2.zip`
+  - release workflow run `26987676010` completed successfully, including the full Lua suite, package build, CurseForge upload, and GitHub Release asset attach
+  - Retail deploy completed to `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns` with both `GBankManager` and `GBankManager_ItemData`
 - Scope implemented:
   - `GBankManager.toc`, `ADDON_VERSION`, and About metadata now target `1.2.2` / `v1.2.2`
   - `v1.2.0` and `v1.2.1` were pushed first but failed during the release workflow's Lua suite before packaging, GitHub Release creation, or CurseForge upload; `v1.2.2` is the follow-up publish tag
@@ -34,12 +88,14 @@
   - `.\tools\lua\lua.exe .\tests\spec\slash_commands_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
   - `.\tools\lua\lua.exe .\tests\run_unit.lua`
-- Manual validation still needed before release:
-  1. With two 1.2.2 clients online, create a new guild-bank item or money-log row on client A, wait for client A to scan, and confirm client B receives missing rows through manifest/bucket sync exactly once.
-  2. On a stale or empty client that missed the original manifest, run `Sync Ledger` and confirm the fuller online peer sends back missing bucket rows.
-  3. Repeat the scan or `Sync Ledger` with no further bank-log changes and confirm no row payload or chat line repeats.
-  4. Run `/gbm debug sync` and `/gbm debug ledger` and confirm the last ledger manifest is matched or lists only differing buckets.
-  5. Keep an older addon client online if available, trigger its ledger sync, and confirm the 1.2.0 client rejects the payload as an old ledger protocol without importing rows.
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passed again after release verification on 2026-06-05
+- Live validation result:
+  - 2026-06-05 Retail validation passed after `/reload`
+  - About showed `v1.2.2`
+  - two online 1.2.2 clients in the same guild converged ledger rows through manifest/bucket sync
+  - stale or empty `Sync Ledger` catch-up received missing bucket rows from the fuller peer
+  - repeated no-change scan or sync did not resend row payloads or routine chat
+  - this release has no known v1.2.2 ledger-sync live blocker
 
 ### 2026-06-04 Ledger Sync Noise Stabilization Checkpoint
 
@@ -570,7 +626,7 @@ Work these in the exact order below unless a new blocking regression appears:
   - `244559` same-itemID multi-quality check case
 - Guild-bank-open ledger wakeup is now running as expected in live WoW. The latest follow-up fixes scanner-driven item-log imports so a fully rotated same-size visible item-log window appends new rows instead of being treated as an unsafe stale no-overlap batch; money-log imports are covered alongside item logs. The merge now mirrors the MIT-licensed `GuildBankLedger` reference more closely by comparing session batch counts for repeated scans of the same source, while the active/passive coordinator prevents ledger starts during inventory scan and waits for completion before scheduling the next passive tick. If old local ledger data looks poisoned, clear `Guild Bank Log Data` and validate from a fresh ledger baseline.
 - Deferred follow-up items, intentionally not done in this checkpoint:
-  - live/manual sync sanity against real guild peers after install
+  - broader backlog polish beyond the verified v1.2.2 ledger-sync release path
 
 ## Best Next Debug Step
 

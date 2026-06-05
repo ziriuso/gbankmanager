@@ -14,6 +14,10 @@ local authPolicyCodec = ns.modules.authPolicyCodec or {}
 local requestsModule = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
 local peerState = ns.modules.syncPeerState or {}
+local manualActions = ns.modules.syncManualActions or {}
+
+local AUTO_SYNC_LOGIN_DELAY_SECONDS = 2
+local AUTO_SYNC_INTERVAL_SECONDS = 10 * 60
 
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
@@ -96,6 +100,10 @@ local function current_message_updated_at(payload)
     end
 
     return 0
+end
+
+local function current_timestamp()
+    return tonumber(type(_G.time) == "function" and _G.time() or 0) or 0
 end
 
 local function remember_ledger_debug_state(db, key, state)
@@ -372,6 +380,77 @@ local function clone_array_records(records)
     return out
 end
 
+local function minimum_rule_key(row)
+    row = type(row) == "table" and row or {}
+    local itemID = tostring(tonumber(row.itemID or row.originalItemID or 0) or 0)
+    local scope = tostring(row.scope or row.originalScope or "GLOBAL")
+    local tabName = tostring(row.tabName or row.originalTabName or "")
+    return table.concat({ itemID, scope, tabName }, "|")
+end
+
+local function minimum_updated_at(row)
+    row = type(row) == "table" and row or {}
+    return tonumber(row.updatedAt or row.createdAt or 0) or 0
+end
+
+local function merge_minimum_snapshot_rows(localRows, incomingRows)
+    local localByKey = {}
+    local localOrder = {}
+    for _, row in ipairs(localRows or {}) do
+        local key = minimum_rule_key(row)
+        if key ~= "0|GLOBAL|" and localByKey[key] == nil then
+            localByKey[key] = row
+            localOrder[#localOrder + 1] = key
+        end
+    end
+
+    local incomingKeys = {}
+    local merged = {}
+    local shouldReply = false
+    for _, incoming in ipairs(incomingRows or {}) do
+        if type(incoming) == "table" then
+            local key = minimum_rule_key(incoming)
+            incomingKeys[key] = true
+            local existing = localByKey[key]
+            if existing == nil then
+                merged[#merged + 1] = incoming
+            elseif minimum_updated_at(incoming) >= minimum_updated_at(existing) then
+                merged[#merged + 1] = incoming
+            else
+                merged[#merged + 1] = existing
+                shouldReply = true
+            end
+        end
+    end
+
+    for _, key in ipairs(localOrder) do
+        if incomingKeys[key] ~= true then
+            merged[#merged + 1] = localByKey[key]
+            shouldReply = true
+        end
+    end
+
+    return clone_array_records(merged), shouldReply
+end
+
+local function send_minimums_snapshot_reply(db)
+    if type(transport.Send) ~= "function" then
+        return false
+    end
+
+    transport.Send("GUILD", "GUILD", {
+        type = "MINIMUMS_SNAPSHOT",
+        updatedAt = current_timestamp(),
+        payload = {
+            guildKey = active_guild_key(db),
+            actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+            minimums = clone_array_records((db or {}).minimums or {}),
+            syncReply = true,
+        },
+    })
+    return true
+end
+
 local function payload_version(payload)
     payload = type(payload) == "table" and payload or {}
     if type(payload.version) == "string" and payload.version ~= "" then
@@ -555,6 +634,69 @@ local function refresh_visible_sync_views()
     if activeView == "HISTORY" or activeView == "REQUESTS" or activeView == "MINIMUMS" then
         mainFrame:RefreshView()
     end
+end
+
+local function current_access_profile(db)
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    local policy = current_policy(db)
+    if type(permissions.GetEffectiveAccessProfile) == "function" then
+        return permissions.GetEffectiveAccessProfile(context, policy), context
+    end
+
+    return "full_shell", context
+end
+
+local function run_silent_auto_sync(db)
+    if type(manualActions.Run) ~= "function" then
+        return false
+    end
+
+    local accessProfile = current_access_profile(db)
+    if accessProfile == "blocked" then
+        return false
+    end
+
+    manualActions.Run(db, {
+        action = "all",
+        accessProfile = accessProfile,
+        skipCooldown = true,
+        now = current_timestamp(),
+    })
+    return true
+end
+
+local function schedule_after(delaySeconds, callback)
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(delaySeconds, callback)
+        return true
+    end
+
+    return false
+end
+
+local function schedule_login_auto_sync()
+    return schedule_after(AUTO_SYNC_LOGIN_DELAY_SECONDS, function()
+        run_silent_auto_sync(current_db())
+    end)
+end
+
+local function schedule_periodic_auto_sync()
+    if syncEvents.periodicAutoSyncActive == true then
+        return false
+    end
+
+    syncEvents.periodicAutoSyncActive = true
+    syncEvents.periodicAutoSyncToken = (tonumber(syncEvents.periodicAutoSyncToken or 0) or 0) + 1
+    local token = syncEvents.periodicAutoSyncToken
+    return schedule_after(AUTO_SYNC_INTERVAL_SECONDS, function()
+        if syncEvents.periodicAutoSyncToken ~= token then
+            return
+        end
+
+        syncEvents.periodicAutoSyncActive = false
+        run_silent_auto_sync(current_db())
+        schedule_periodic_auto_sync()
+    end)
 end
 
 local function append_audit_entry(db, entry)
@@ -992,10 +1134,14 @@ local function handle_minimums_snapshot(db, payload, sender)
     end
 
     local previousMinimums = clone_array_records(db.minimums or {})
-    db.minimums = clone_array_records(minimums)
+    local mergedMinimums, shouldReply = merge_minimum_snapshot_rows(previousMinimums, minimums)
+    db.minimums = mergedMinimums
     append_minimums_snapshot_audit(db, previousMinimums, db.minimums, actorContext, payload.updatedAt or ns.state.lastSyncMessage.updatedAt)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", "applied")
+    if shouldReply == true and payload.syncReply ~= true then
+        send_minimums_snapshot_reply(db)
+    end
     report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
     return true
 end
@@ -1118,10 +1264,6 @@ end
 
 local function current_ledger_protocol()
     return tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
-end
-
-local function current_timestamp()
-    return tonumber(type(_G.time) == "function" and _G.time() or 0) or 0
 end
 
 local function payload_targets_local_player(db, payload)
@@ -1489,6 +1631,8 @@ function syncEvents.HandleEvent(event, ...)
                 updatedAt = _G.time(),
                 payload = context.characterKey or (_G.UnitName("player") or "Unknown"),
             })
+            schedule_login_auto_sync()
+            schedule_periodic_auto_sync()
         end
 
         return true
@@ -1572,6 +1716,7 @@ function syncEvents.HandleEvent(event, ...)
         if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
             remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, true, "sync_hello", "presence")
             refresh_sync_peer_view()
+            run_silent_auto_sync(db)
             return true
         end
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then

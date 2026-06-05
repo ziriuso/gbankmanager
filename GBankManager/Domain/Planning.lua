@@ -79,12 +79,17 @@ function planning.BuildDemandPlan(input)
     snapshot.items = snapshot.items or {}
 
     for _, minimum in ipairs(input.minimums or {}) do
-        if minimum.enabled ~= false then
-            local shortage = math.max(0, (minimum.quantity or 0) - current_scope_count(snapshot, minimum.itemID, minimum))
-            local row = ensure_row(plan, minimum.itemID, minimum.itemName)
-            row.sources.RESTOCK = row.sources.RESTOCK + shortage
-            row.totalToBuy = row.totalToBuy + shortage
-            add_detail(row, "RESTOCK", shortage, minimum)
+        local quantity = tonumber(minimum.quantity or 0) or 0
+        if quantity > 0 then
+            local shortage = math.max(0, quantity - current_scope_count(snapshot, minimum.itemID, minimum))
+            local isOneTime = minimum.enabled == false
+            local source = isOneTime and "ONE_TIME_TARGET" or "RESTOCK"
+            if not isOneTime or shortage > 0 then
+                local row = ensure_row(plan, minimum.itemID, minimum.itemName)
+                row.sources[source] = row.sources[source] + shortage
+                row.totalToBuy = row.totalToBuy + shortage
+                add_detail(row, source, shortage, minimum)
+            end
         end
     end
 

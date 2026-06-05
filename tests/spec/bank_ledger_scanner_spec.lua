@@ -1480,6 +1480,7 @@ assert.truthy(passiveAdvancedToPhaseTwo == true, "passive refresh test harness s
 assert.truthy(passiveAdvancedToPhaseThree == true, "passive refresh test harness should advance into the new-row passive phase")
 assert.equal(2, #(_G.GBankManagerDB.bankLedger.itemLogs or {}), "passive refresh should import newly available ledger rows without requiring a manual rescan")
 assert.truthy(passiveQueryCount >= 4, "passive refresh should continue polling while the bank stays open across repeated end-to-end ledger scans")
+assert.truthy(string.find(scanner:GetStatusText() or "", "auto-refresh found", 1, true) == nil, "passive ledger refresh should stay silent instead of spamming auto-refresh row counts")
 local passiveQueryCountAfterClose = passiveQueryCount
 run_all_pending(10)
 assert.equal(passiveQueryCountAfterClose, passiveQueryCount, "passive refresh should stop scheduling additional ledger queries once the guild bank closes")

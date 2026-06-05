@@ -203,15 +203,16 @@ local function minimum_rule_quantity(db, itemID, bankTab)
     local total = 0
     bankTab = tostring(bankTab or "")
     for _, minimum in ipairs((db or {}).minimums or {}) do
-        if minimum.enabled ~= false and tonumber(minimum.itemID) == tonumber(itemID) then
+        local minimumQuantity = tonumber(minimum.quantity or 0) or 0
+        if minimumQuantity > 0 and tonumber(minimum.itemID) == tonumber(itemID) then
             local scope = tostring(minimum.scope or "GLOBAL")
             local minimumTab = tostring(minimum.tabName or "")
             if bankTab == "GLOBAL" or bankTab == "" then
                 if scope ~= "TAB" then
-                    total = total + (tonumber(minimum.quantity or 0) or 0)
+                    total = total + minimumQuantity
                 end
             elseif scope == "TAB" and minimumTab == bankTab then
-                total = total + (tonumber(minimum.quantity or 0) or 0)
+                total = total + minimumQuantity
             end
         end
     end

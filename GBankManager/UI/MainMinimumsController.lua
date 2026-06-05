@@ -742,7 +742,7 @@ function mainMinimumsController.Attach(mainFrame, options)
             quantity = quantity,
             scope = scope,
             tabName = (tabName and tabName ~= "" and tabName) or nil,
-            enabled = row.restock == "Yes",
+            enabled = row.configured ~= true or row.restock == "Yes",
             craftedQuality = row.craftedQuality,
             craftedQualityIcon = row.craftedQualityIcon,
             craftedQualityMax = row.craftedQualityMax,
