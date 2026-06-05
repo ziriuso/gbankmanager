@@ -167,6 +167,10 @@ local function versioned_money_ledger_dedupe_token()
     return versioned_token(constants.MONEY_LEDGER_DEDUPE_VERSION)
 end
 
+local function versioned_saved_variables_compact_token()
+    return versioned_token(constants.SAVED_VARIABLES_COMPACT_VERSION)
+end
+
 local function clear_ledger_sync_state(db)
     db.syncState = type(db.syncState) == "table" and db.syncState or {}
     db.syncState.ledgerDigest = nil
@@ -313,6 +317,37 @@ local function apply_versioned_money_ledger_dedupe_to_database(db)
     return db
 end
 
+local function apply_versioned_saved_variables_compaction_to_database(db)
+    if type(db) ~= "table" then
+        return db
+    end
+
+    local compactVersion = versioned_saved_variables_compact_token()
+    if not compactVersion then
+        return db
+    end
+
+    db.meta = db.meta or {}
+    local schemaVersion = tonumber(db.meta.schemaVersion or 0) or 0
+    local currentSchemaVersion = tonumber(constants.SCHEMA_VERSION or 0) or 0
+    if currentSchemaVersion > 0 and schemaVersion > currentSchemaVersion then
+        return db
+    end
+
+    if tostring(db.meta.savedVariablesCompactedForVersion or "") == compactVersion then
+        return db
+    end
+
+    for _, snapshot in pairs(db.snapshots or {}) do
+        if type(snapshot) == "table" then
+            snapshot.searchCatalog = nil
+        end
+    end
+
+    db.meta.savedVariablesCompactedForVersion = compactVersion
+    return db
+end
+
 local function apply_versioned_ledger_reset_to_database(db)
     if type(db) ~= "table" then
         return db
@@ -348,12 +383,15 @@ local function apply_versioned_ledger_reset(db)
                 guildDb.meta.guildName = guildDb.meta.guildName or tostring(guildKey)
                 apply_versioned_ledger_reset_to_database(guildDb)
                 apply_versioned_money_ledger_dedupe_to_database(guildDb)
+                apply_versioned_saved_variables_compaction_to_database(guildDb)
             end
         end
         return db
     end
 
-    return apply_versioned_money_ledger_dedupe_to_database(apply_versioned_ledger_reset_to_database(db))
+    apply_versioned_ledger_reset_to_database(db)
+    apply_versioned_money_ledger_dedupe_to_database(db)
+    return apply_versioned_saved_variables_compaction_to_database(db)
 end
 
 local function select_runtime_source(guildName)

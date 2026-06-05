@@ -266,8 +266,8 @@ assert.equal(16, (mainFrame.optionsRepairThresholdTitle.points[1] or {})[4], "re
 assert.truthy(type(mainFrame.optionsRepairThresholdHint) == "table", "data settings should expose helper text for repair threshold classification")
 assert.truthy(string.find(mainFrame.optionsRepairThresholdHint:GetText() or "", "equal to or under", 1, true) ~= nil, "repair threshold helper text should explain repair-vs-withdrawal classification")
 assert.equal("Clear Data", mainFrame.optionsClearDataTitle:GetText(), "data settings should expose a clear-data section")
-assert.equal("Dedupe Ledger", mainFrame.optionsDedupeLedgerButton.labelText:GetText(), "data settings should expose a ledger dedupe action")
-assert.equal("secondary", mainFrame.optionsDedupeLedgerButton.gbmButtonVariant, "ledger dedupe should use the same themed secondary button variant as the other data actions")
+assert.truthy(type(mainFrame.optionsDedupeLedgerButton) == "table", "data settings should keep the ledger dedupe control available for internal wiring")
+assert.truthy(not mainFrame.optionsDedupeLedgerButton:IsShown(), "data settings should hide the manual ledger dedupe action")
 assert.equal("Clear Guild Bank Log Data", mainFrame.optionsClearBankLedgerButton.labelText:GetText(), "data settings should expose a clear guild-bank log action")
 assert.equal(mainFrame.optionsClearInventoryDataButton:GetWidth(), mainFrame.optionsClearBankLedgerButton:GetWidth(), "data settings should size the clear guild-bank log action like the sibling destructive controls so its text stays centered")
 assert.equal(mainFrame.optionsClearCompletedRequestsButton:GetWidth(), mainFrame.optionsClearBankLedgerButton:GetWidth(), "data settings should keep all clear-data buttons the same width")
@@ -327,7 +327,7 @@ current_db().bankLedger.moneyLogs = {
         hour = 11,
     },
 }
-mainFrame.optionsDedupeLedgerButton:GetScript("OnClick")(mainFrame.optionsDedupeLedgerButton)
+mainFrame:OpenLedgerDedupePreviewModal((env.ns.modules.bankLedger or {}).BuildDedupePlan(current_db()))
 assert.truthy(mainFrame.ledgerDedupePreviewModal and mainFrame.ledgerDedupePreviewModal:IsShown(), "ledger dedupe should open a preview modal instead of deleting rows immediately")
 assert.truthy(string.find(mainFrame.ledgerDedupePreviewSummaryText:GetText() or "", "2 duplicate row", 1, true) ~= nil, "ledger dedupe preview should summarize the duplicate rows it plans to remove")
 mainFrame.ledgerDedupePreviewReviewButton:GetScript("OnClick")(mainFrame.ledgerDedupePreviewReviewButton)

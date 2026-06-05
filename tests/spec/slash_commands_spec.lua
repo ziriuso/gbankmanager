@@ -275,7 +275,7 @@ _G.DEFAULT_CHAT_FRAME.messages = {}
 local ledgerDebugLines = slash.command("debug ledger")
 local ledgerDebugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(type(ledgerDebugLines) == "table", "/gbm debug ledger should return copy-friendly diagnostic lines")
-assert.truthy(string.find(ledgerDebugText, "ledgerProtocol=2", 1, true) ~= nil, "/gbm debug ledger should report ledger protocol")
+assert.truthy(string.find(ledgerDebugText, "ledgerProtocol=" .. tostring((env.ns.constants or {}).LEDGER_PROTOCOL_VERSION), 1, true) ~= nil, "/gbm debug ledger should report ledger protocol")
 assert.truthy(string.find(ledgerDebugText, "reset=1.2.0", 1, true) ~= nil, "/gbm debug ledger should report the ledger reset version")
 assert.truthy(string.find(ledgerDebugText, "globalHash=", 1, true) ~= nil, "/gbm debug ledger should report the current manifest global hash")
 assert.truthy(string.find(ledgerDebugText, "buckets=", 1, true) ~= nil, "/gbm debug ledger should report the current manifest bucket count")

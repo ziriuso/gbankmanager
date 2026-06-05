@@ -1505,12 +1505,21 @@ function mainMinimumsController.Attach(mainFrame, options)
         local snapshot = self:GetCurrentSnapshot()
         local db = currentDb()
         local itemCatalog = ns.modules.itemCatalog
-        snapshot.searchCatalog = itemCatalog and type(itemCatalog.BuildSearchCatalog) == "function"
+        local searchCatalog = itemCatalog and type(itemCatalog.BuildSearchCatalog) == "function"
             and itemCatalog.BuildSearchCatalog(db, snapshot, {
                 includeBundled = false,
             })
             or {}
-        return snapshot
+        return {
+            scanId = snapshot.scanId,
+            guildName = snapshot.guildName,
+            actor = snapshot.actor,
+            scannedAt = snapshot.scannedAt,
+            scannedTabs = snapshot.scannedTabs,
+            items = snapshot.items or {},
+            itemRows = snapshot.itemRows or {},
+            searchCatalog = searchCatalog,
+        }
     end
 
     function mainFrame:GetMinimumCatalogItemByID(itemID, snapshot)

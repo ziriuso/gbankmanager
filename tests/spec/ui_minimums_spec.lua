@@ -275,6 +275,10 @@ function mainFrame:GetMinimumSearchSnapshot()
     return originalGetMinimumSearchSnapshot(self)
 end
 
+local minimumPersistedSnapshot = mainFrame:GetCurrentSnapshot()
+if type(minimumPersistedSnapshot) == "table" then
+    minimumPersistedSnapshot.searchCatalog = nil
+end
 mainFrame:ResetMinimumAddRow()
 mainFrame.minimumSearchSession = nil
 mainFrame.minimumAddItemNameInput:SetText("f")
@@ -284,6 +288,7 @@ mainFrame.minimumAddItemNameInput:SetText("fl")
 assert.truthy((mainFrame.minimumAddSearchSelector.resultsDataProvider:GetSize() or 0) > 0, "minimum add modal should activate name search once two characters are typed")
 mainFrame.minimumAddItemNameInput:SetText("fla")
 assert.equal(1, minimumSearchSnapshotCalls, "minimum add modal should build the shared search session once and reuse it across follow-up name queries")
+assert.equal(nil, (minimumPersistedSnapshot or {}).searchCatalog, "minimum add modal should not persist generated search catalogs onto the saved inventory snapshot")
 mainFrame.GetMinimumSearchSnapshot = originalGetMinimumSearchSnapshot
 mainFrame:ResetMinimumAddRow()
 

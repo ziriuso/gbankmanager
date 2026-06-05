@@ -111,7 +111,7 @@ local function fire_bucket_reply(mergedCount)
                     name = "MemberOne",
                 },
                 version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-                ledgerProtocol = 2,
+                ledgerProtocol = tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0) or 0,
                 target = "GuildLead",
                 buckets = { 3 },
                 rows = { item = {}, money = {} },

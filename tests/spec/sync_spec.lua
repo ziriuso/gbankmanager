@@ -1494,6 +1494,7 @@ db.bankLedger.itemLogs = {}
 db.bankLedger.moneyLogs = {}
 db.bankLedger.lastScanAt = 999
 local currentAddonVersion = tostring((ns.constants or {}).ADDON_VERSION or "1.1.1")
+local currentLedgerProtocol = tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0) or 0
 local oldLedgerManifestPayload = codec.EncodeTable({
     type = "LEDGER_MANIFEST",
     updatedAt = 207,
@@ -1559,6 +1560,7 @@ local oldLedgerDeltaPayload = codec.EncodeTable({
             name = "MemberOne",
         },
         kind = "item",
+        ledgerProtocol = currentLedgerProtocol,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
@@ -1584,6 +1586,45 @@ assert.equal(0, #(db.bankLedger.itemLogs or {}), "older-client ledger deltas sho
 assert.equal("older_version", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "older-client ledger rejection should record the version reason")
 assert.equal(ledgerRejectChatCount, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "rejected ledger deltas should not add routine ledger chat noise")
 
+local staleProtocolLedgerDeltaPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        kind = "item",
+        version = currentAddonVersion,
+        ledgerProtocol = 2,
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "MemberOne-Stormrage",
+                itemID = 243734,
+                itemName = "Stale Protocol Ledger Oil",
+                quantity = 4,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local staleProtocolLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleProtocolLedgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(not staleProtocolLedgerAccepted, "sync events should reject ledger deltas from older protocol-2 clients even when addon versions match")
+assert.equal(0, #(db.bankLedger.itemLogs or {}), "stale-protocol ledger deltas should not append remote item-log rows")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "stale-protocol ledger delta rejection should record the protocol reason")
+
 local ledgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
     updatedAt = 207,
@@ -1599,6 +1640,7 @@ local ledgerDeltaPayload = codec.EncodeTable({
         },
         kind = "item",
         version = currentAddonVersion,
+        ledgerProtocol = currentLedgerProtocol,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",

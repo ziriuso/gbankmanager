@@ -211,6 +211,43 @@ local function fire_sync_message(message, sender)
 end
 
 local localManifest = bankLedger.BuildLedgerManifest(syncDb)
+local currentLedgerProtocol = tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0) or 0
+reset_sync_output()
+local staleProtocolTwoManifestAccepted = fire_sync_message({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 299,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = tostring((ns.constants or {}).ADDON_VERSION or ""),
+        ledgerProtocol = 2,
+        manifest = {
+            ledgerProtocol = 2,
+            version = "1.2.3",
+            totalCount = 1,
+            itemCount = 0,
+            moneyCount = 1,
+            globalHash = "older-1.2.3-protocol-two",
+            buckets = {
+                [2] = {
+                    key = 2,
+                    count = 1,
+                    hash = "poisoned-money-bucket",
+                },
+            },
+        },
+    },
+}, "MemberOne")
+assert.truthy(not staleProtocolTwoManifestAccepted, "ledger manifests from older 1.2.3 protocol-2 clients should be rejected")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "stale protocol-2 manifest rejection should record the protocol reason")
+assert.equal(0, #sent_sync_messages(), "stale protocol-2 manifests should not trigger bucket requests or replies")
 reset_sync_output()
 local matchingManifestAccepted = fire_sync_message({
     type = "LEDGER_MANIFEST",
@@ -226,7 +263,7 @@ local matchingManifestAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         manifest = localManifest,
     },
 }, "MemberOne")
@@ -236,7 +273,7 @@ assert.equal("matched", tostring(((ns.state or {}).lastSyncDecision or {}).reaso
 assert.equal(0, #sent_sync_messages(), "matching manifests should not request any buckets")
 
 local remoteDifferentManifest = {
-    ledgerProtocol = 2,
+    ledgerProtocol = currentLedgerProtocol,
     version = tostring((ns.constants or {}).ADDON_VERSION or ""),
     buckets = {
         [1] = localManifest.buckets[1],
@@ -262,7 +299,7 @@ local differingManifestAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         manifest = remoteDifferentManifest,
     },
 }, "MemberOne")
@@ -271,7 +308,7 @@ assert.truthy(differingManifestAccepted, "differing ledger manifests should be a
 assert.equal("different", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "differing manifests should record a different decision")
 assert.equal(1, #bucketRequests, "differing manifests should send exactly one bucket request")
 assert.equal("LEDGER_BUCKET_REQUEST", bucketRequests[1].type, "differing manifests should request only changed ledger buckets")
-assert.equal(2, tonumber(((bucketRequests[1].payload or {}).ledgerProtocol) or 0), "bucket requests should advertise ledger protocol 2")
+assert.equal(currentLedgerProtocol, tonumber(((bucketRequests[1].payload or {}).ledgerProtocol) or 0), "bucket requests should advertise the current ledger protocol")
 assert.equal("MemberOne", tostring(((bucketRequests[1].payload or {}).target) or ""), "bucket requests should target the manifest sender")
 assert.equal(1, #(((bucketRequests[1].payload or {}).buckets) or {}), "bucket requests should include only differing buckets")
 assert.equal(2, tonumber((((bucketRequests[1].payload or {}).buckets) or {})[1] or 0), "bucket request should ask for the differing bucket")
@@ -291,9 +328,9 @@ local staleManifestAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         manifest = {
-            ledgerProtocol = 2,
+            ledgerProtocol = currentLedgerProtocol,
             version = tostring((ns.constants or {}).ADDON_VERSION or ""),
             totalCount = 0,
             itemCount = 0,
@@ -327,7 +364,7 @@ local bucketRequestAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         target = "SyncTester",
         buckets = { 2 },
     },
@@ -336,7 +373,7 @@ local bucketReplies = sent_sync_messages()
 assert.truthy(bucketRequestAccepted, "addressed bucket requests should be accepted")
 assert.equal(1, #bucketReplies, "addressed bucket requests should send exactly one bucket reply")
 assert.equal("LEDGER_BUCKET_REPLY", bucketReplies[1].type, "addressed bucket requests should reply with bucket rows")
-assert.equal(2, tonumber(((bucketReplies[1].payload or {}).ledgerProtocol) or 0), "bucket replies should advertise ledger protocol 2")
+assert.equal(currentLedgerProtocol, tonumber(((bucketReplies[1].payload or {}).ledgerProtocol) or 0), "bucket replies should advertise the current ledger protocol")
 assert.equal("MemberOne", tostring(((bucketReplies[1].payload or {}).target) or ""), "bucket replies should target the requesting sender")
 assert.equal(1, #((((bucketReplies[1].payload or {}).rows or {}).money) or {}), "bucket replies should include rows for requested buckets")
 assert.equal(0, #((((bucketReplies[1].payload or {}).rows or {}).item) or {}), "bucket replies should omit rows outside requested buckets")
@@ -356,7 +393,7 @@ local misaddressedRequestAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         target = "OtherPlayer",
         buckets = { 2 },
     },
@@ -371,6 +408,31 @@ bankLedger.MergeBucketRows = function(_, payload)
     assert.equal("table", type(payload), "bucket replies should pass the payload to the merge hook")
     return 1
 end
+reset_sync_output()
+local staleProtocolTwoReplyAccepted = fire_sync_message({
+    type = "LEDGER_BUCKET_REPLY",
+    updatedAt = 304,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = tostring((ns.constants or {}).ADDON_VERSION or ""),
+        ledgerProtocol = 2,
+        target = "SyncTester",
+        buckets = { 2 },
+        rows = { item = {}, money = syncDb.bankLedger.moneyLogs },
+    },
+}, "MemberOne")
+assert.truthy(not staleProtocolTwoReplyAccepted, "bucket replies from older 1.2.3 protocol-2 clients should be rejected")
+assert.equal(0, mergeCalls, "stale protocol-2 bucket replies should not merge poisoned rows")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "stale protocol-2 bucket reply rejection should record the protocol reason")
+
 reset_sync_output()
 local chatBeforeMisaddressedReply = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local misaddressedReplyAccepted = fire_sync_message({
@@ -387,7 +449,7 @@ local misaddressedReplyAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         target = "OtherPlayer",
         buckets = { 2 },
         rows = { item = {}, money = {} },
@@ -412,7 +474,7 @@ local addressedReplyAccepted = fire_sync_message({
             name = "MemberOne",
         },
         version = tostring((ns.constants or {}).ADDON_VERSION or ""),
-        ledgerProtocol = 2,
+        ledgerProtocol = currentLedgerProtocol,
         target = "SyncTester",
         buckets = { 2 },
         rows = { item = {}, money = syncDb.bankLedger.moneyLogs },

@@ -1516,6 +1516,11 @@ local function handle_ledger_delta(db, payload, sender)
         return false
     end
 
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "old_ledger_protocol")
+        return false
+    end
+
     if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "older_version")
         return false

@@ -200,7 +200,7 @@ assert.equal(1, #sentMessages, "manual ledger sync should send exactly one manif
 assert.equal("GUILD", sentMessages[1].distribution, "manual ledger manifests should use guild distribution")
 assert.equal("GUILD", sentMessages[1].target, "manual ledger manifests should use guild target metadata")
 assert.equal("LEDGER_MANIFEST", sentMessages[1].message.type, "manual ledger sync should send a ledger manifest")
-assert.equal(2, tonumber(((sentMessages[1].message.payload or {}).ledgerProtocol) or 0), "manual ledger manifests should advertise protocol 2")
+assert.equal(tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0), tonumber(((sentMessages[1].message.payload or {}).ledgerProtocol) or 0), "manual ledger manifests should advertise the current ledger protocol")
 assert.equal(2, tonumber((((sentMessages[1].message.payload or {}).manifest or {}).totalCount) or 0), "manual ledger manifests should include the built manifest row count")
 
 transport.Send = originalSend

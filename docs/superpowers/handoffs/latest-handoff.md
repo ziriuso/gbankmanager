@@ -40,10 +40,12 @@
   - successful guild-bank scans remove stocked one-time Minimums, record normal `MINIMUM_REMOVED` history, and publish the remaining Minimums snapshot so peers can drop the completed one-time target
   - money replay bridging now prefers raw relative Blizzard time fields before minted timestamps, so the same visible `0/0/0` money row does not append again just because a later scan or sync minted a new absolute timestamp
   - remote money delta merge now uses the same replay bridge as local money scans
-  - `Dedupe Ledger` now flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount so old polluted saved variables can be reviewed and cleaned
+  - internal ledger dedupe planning still flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount for regression coverage, but the manual `Options -> Data -> Dedupe Ledger` button is hidden
   - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
   - `GBankManager.toc` and the addon version fallback now advertise `1.2.3` / `v1.2.3`
-  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v2`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v3`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - `LEDGER_PROTOCOL_VERSION = 3` rejects older same-version protocol-2 ledger manifest, bucket, and direct delta payloads as `old_ledger_protocol`, preventing older 1.2.3 builds from re-poisoning cleaned money ledgers
+  - load-time SavedVariables compaction now records `meta.savedVariablesCompactedForVersion = 1.2.3-snapshot-v1` after removing generated snapshot `searchCatalog` tables, while Requests and Minimums build search catalogs in memory instead of persisting them back onto scan snapshots
 - Verification completed:
   - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\toc_spec.lua`
@@ -198,8 +200,8 @@
   - older locally stored money rows could also be "known" only through the coarse legacy fingerprint while still counting as zero exact hour-level matches, which let a later local money-log replay append a third copy even with no peer online
 - Local fix now in the worktree:
   - remote ledger merge now reconciles same-source batch counts for matching visible ledger identities so a later local scan does not reappend the same repeated money row just because it arrived through sync first
-  - `Options -> Data` now adds `Dedupe Ledger`
-  - `Dedupe Ledger` is review-first: preview counts first, then a `Review Rows` modal with the exact rows to remove, then `Clean Up`
+  - `Options -> Data` previously added `Dedupe Ledger`; the manual button is now hidden while versioned load-time cleanup handles duplicate money-ledger recovery
+  - the internal dedupe review modal remains covered by tests, but users should not see a Data-tab entry point for it
   - cleanup now targets item rows with the same visible ledger date, actor, action, item, quantity, tab, and moved-from values, plus money rows with the same visible ledger date, actor, action, and amount
   - the `Review Rows` modal now provisions a slim scrollbar and expands its text content height so long cleanup lists can be reviewed before applying
   - latest live-cache evidence showed cleanup could keep an older money duplicate whose hour no longer matched `moneySourceSnapshots`; after cleanup cleared transient state, the next money scan could reimport the current Blizzard row
@@ -229,7 +231,7 @@
   2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
   3. With one older client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows even when the older sender's copy has a different timestamp.
   4. Confirm a missing-version or older-version client cannot repopulate ledger rows through `LEDGER_DELTA`; same-version and newer clients should still sync ledger rows normally.
-  5. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-visible-date item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
+  5. Confirm `Options -> Data` does not show the manual `Dedupe Ledger` button; if older duplicates remain, validate that versioned load-time cleanup handles money-ledger recovery while preserving item ledger rows.
 
 ### 2026-06-02 v1.1.0 Release Success
 

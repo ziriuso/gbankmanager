@@ -225,7 +225,7 @@ assert.equal("Guild bank ledger scan finished (2 item rows, 2 money rows).", sca
 assert.equal(1, #(outboundLedgerSyncMessages or {}), "ledger scan should publish exactly one manifest sync message after native writes")
 local publishedLedgerManifest = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
 assert.equal("LEDGER_MANIFEST", tostring(publishedLedgerManifest.type or ""), "ledger scan should publish a manifest instead of row chunks")
-assert.equal(2, tonumber(((publishedLedgerManifest.payload or {}).ledgerProtocol) or 0) or 0, "ledger manifest sync should stamp the protocol version")
+assert.equal(tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0), tonumber(((publishedLedgerManifest.payload or {}).ledgerProtocol) or 0) or 0, "ledger manifest sync should stamp the protocol version")
 assert.truthy(tostring((((publishedLedgerManifest.payload or {}).manifest or {}).globalHash) or "") ~= "", "ledger manifest sync should include a global hash")
 local ledgerDiagnostics = scanner.GetLedgerDiagnostics()
 assert.equal("event", tostring((ledgerDiagnostics or {}).finalizeMode or ""), "ledger scan should record event debounce finalization")

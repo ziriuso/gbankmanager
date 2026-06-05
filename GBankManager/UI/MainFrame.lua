@@ -1848,9 +1848,10 @@ end
 
 mainFrame.optionsDedupeLedgerButton = mainFrame.optionsDedupeLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Dedupe Ledger")
 mainFrame.optionsDedupeLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
+mainFrame.optionsDedupeLedgerButton:Hide()
 
 mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Log Data")
-mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsDedupeLedgerButton, "BOTTOMLEFT", 0, -10)
+mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Inventory Data")
 mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)

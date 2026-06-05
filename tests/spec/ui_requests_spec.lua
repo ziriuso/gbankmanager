@@ -587,6 +587,10 @@ function mainFrame:GetRequestSearchSnapshot()
     return originalGetRequestSearchSnapshot(self)
 end
 
+local requestPersistedSnapshot = mainFrame:GetCurrentSnapshot()
+if type(requestPersistedSnapshot) == "table" then
+    requestPersistedSnapshot.searchCatalog = nil
+end
 mainFrame.requestCreateSearchSelector:ClearSelection()
 mainFrame.requestSearchSession = nil
 mainFrame.requestCreateItemNameInput:SetText("f")
@@ -596,6 +600,7 @@ mainFrame.requestCreateItemNameInput:SetText("fl")
 assert.truthy((mainFrame.requestCreateSearchSelector.resultsDataProvider:GetSize() or 0) > 0, "requests view should activate name search once two characters are typed")
 mainFrame.requestCreateItemNameInput:SetText("fla")
 assert.equal(1, requestSearchSnapshotCalls, "requests view should build the shared search session once and reuse it across follow-up name queries")
+assert.equal(nil, (requestPersistedSnapshot or {}).searchCatalog, "requests view should not persist generated search catalogs onto the saved inventory snapshot")
 mainFrame.GetRequestSearchSnapshot = originalGetRequestSearchSnapshot
 mainFrame.requestCreateSearchSelector:ClearSelection()
 

@@ -88,7 +88,7 @@ assert.truthy(type(ns.modules) == "table", "namespace should expose module table
 assert.truthy(type(ns.state) == "table", "namespace should expose state table")
 assert.truthy(type(ns.constants) == "table", "constants should populate the shared namespace")
 assert.equal(1, ns.constants.SCHEMA_VERSION, "constants should expose schema version")
-assert.equal(2, ns.constants.LEDGER_PROTOCOL_VERSION, "constants should expose the 1.2.0 ledger protocol version")
+assert.equal(3, ns.constants.LEDGER_PROTOCOL_VERSION, "constants should expose the 1.2.3 ledger cleanup protocol version")
 assert.truthy(type(ns.modules.events) == "table", "events module should populate the shared namespace")
 assert.truthy(type(ns.modules.slash) == "table", "slash module should populate the shared namespace")
 assert.same(ns, loadedByPath["GBankManager/Core/Namespace.lua"], "namespace chunk should return the shared namespace table")
@@ -121,7 +121,7 @@ assert.truthy(type(store.GetAppearanceSettings) == "function", "store should exp
 assert.truthy(type(itemCatalog) == "table", "item catalog module should load from the toc")
 assert.truthy(itemCatalog.IsBundledDataLoaded() ~= true, "bundled item data should remain unloaded until a search path requests it")
 local preloadedDb = (((_G.GBankManagerDB or {}).guilds or {})["Existing Guild"] or {})
-assert.equal("1.2.3-money-v2", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
+assert.equal("1.2.3-money-v3", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
 assert.equal(1, #(((preloadedDb.bankLedger or {}).itemLogs) or {}), "bootstrap money cleanup should preserve preloaded item ledger rows")
 assert.equal(1, #(((preloadedDb.bankLedger or {}).moneyLogs) or {}), "bootstrap money cleanup should dedupe preloaded raw-relative money rows")
 assert.truthy(type(db) == "table", "fresh db should be created")
@@ -212,6 +212,54 @@ assert.same(persistedDb.ui.minimumItemCatalog, store.GetMinimumItemCatalog(persi
 assert.same(persistedDb.ui.exportSettings, store.GetExportSettings(persisted), "store should return the normalized export-settings table")
 assert.same(persistedDb.ui.appearance, store.GetAppearanceSettings(persisted), "store should return the normalized appearance-settings table")
 assert.same(persistedDb.snapshots["scan-old"], store.GetCurrentSnapshot(persisted), "store current snapshot accessor should resolve the active snapshot row")
+
+local compactedRoot = store.Normalize({
+    activeGuildKey = "Compact Guild",
+    guilds = {
+        ["Compact Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Compact Guild",
+                ledgerClearedForVersion = "1.2.0",
+                moneyLedgerDedupedForVersion = "1.2.3-money-v3",
+            },
+            currentSnapshotId = "scan-current",
+            snapshots = {
+                ["scan-current"] = {
+                    scanId = "scan-current",
+                    scannedAt = 1717000000,
+                    items = {
+                        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 5 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1001, name = "Flask Alpha" },
+                    },
+                },
+                ["scan-old"] = {
+                    scanId = "scan-old",
+                    scannedAt = 1716900000,
+                    items = {
+                        [1002] = { itemID = 1002, name = "Flask Beta", totalCount = 2 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1002, name = "Flask Beta" },
+                    },
+                },
+            },
+            changeLog = {},
+            bankLedger = {
+                itemLogs = {},
+                moneyLogs = {},
+            },
+        },
+    },
+}, "Compact Guild")
+local compactedDb = (compactedRoot.guilds or {})["Compact Guild"] or {}
+assert.equal("1.2.3-snapshot-v1", tostring((compactedDb.meta or {}).savedVariablesCompactedForVersion or ""), "snapshot compaction should stamp the saved-variable compaction marker")
+assert.equal(nil, ((compactedDb.snapshots or {})["scan-current"] or {}).searchCatalog, "snapshot compaction should remove generated search catalogs from the current snapshot")
+assert.equal(nil, ((compactedDb.snapshots or {})["scan-old"] or {}).searchCatalog, "snapshot compaction should remove generated search catalogs from historical snapshots")
+assert.equal(5, (((compactedDb.snapshots or {})["scan-current"] or {}).items or {})[1001].totalCount, "snapshot compaction should preserve current inventory items")
+assert.equal(2, (((compactedDb.snapshots or {})["scan-old"] or {}).items or {})[1002].totalCount, "snapshot compaction should preserve historical inventory items")
 
 local resetRoot = store.Normalize({
     activeGuildKey = "Reset Guild",
@@ -352,7 +400,7 @@ local moneyCleanupRoot = store.Normalize({
     },
 }, "Money Cleanup Guild")
 local moneyCleanupDb = (moneyCleanupRoot.guilds or {})["Money Cleanup Guild"] or {}
-assert.equal("1.2.3-money-v2", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v2 should stamp the money-ledger cleanup marker")
+assert.equal("1.2.3-money-v3", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v3 should stamp the money-ledger cleanup marker")
 assert.equal(2, #(moneyCleanupDb.bankLedger.itemLogs or {}), "money-ledger cleanup should preserve item ledger rows")
 assert.equal(2, #(moneyCleanupDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should remove only duplicate money rows")
 assert.equal("money-relative-original", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "money-ledger cleanup should keep the first matching visible money row")
