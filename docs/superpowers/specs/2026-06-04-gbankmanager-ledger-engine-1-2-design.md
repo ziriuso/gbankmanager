@@ -142,7 +142,7 @@ The existing GBankManager UI stays in place:
 
 - `Bank Ledger` keeps item/money modes, filters, summaries, export, shared table rendering, and active-view refresh.
 - `Options -> Data -> Clear Guild Bank Log Data` clears the new ledger engine state.
-- `Options -> Appearance -> Suppress Routine Chat` continues to gate routine ledger scan and sync messages.
+- `Options -> Appearance -> Suppress Chat Except Sync Changes` continues to gate routine ledger scan and no-change sync messages.
 - `Options -> Sync` keeps the current peer table; ledger-specific protocol/hash details remain debug-only for the first 1.2.0 pass.
 
 No new visible UI is required for this refactor unless tests or live validation show the debug surface is insufficient.

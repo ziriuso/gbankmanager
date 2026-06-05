@@ -130,7 +130,7 @@ assert.truthy(type(store.GetAppearanceSettings) == "function", "store should exp
 assert.truthy(type(itemCatalog) == "table", "item catalog module should load from the toc")
 assert.truthy(itemCatalog.IsBundledDataLoaded() ~= true, "bundled item data should remain unloaded until a search path requests it")
 local preloadedDb = (((_G.GBankManagerDB or {}).guilds or {})["Existing Guild"] or {})
-assert.equal("1.2.3-money-v4", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
+assert.equal("1.2.3-money-v5", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
 assert.equal(1, #(((preloadedDb.bankLedger or {}).itemLogs) or {}), "bootstrap money cleanup should preserve preloaded item ledger rows")
 assert.equal(1, #(((preloadedDb.bankLedger or {}).moneyLogs) or {}), "bootstrap money cleanup should dedupe preloaded raw-relative money rows")
 assert.truthy(type(db) == "table", "fresh db should be created")
@@ -230,7 +230,7 @@ local compactedRoot = store.Normalize({
                 schemaVersion = 1,
                 guildName = "Compact Guild",
                 ledgerClearedForVersion = "1.2.0",
-                moneyLedgerDedupedForVersion = "1.2.3-money-v4",
+                moneyLedgerDedupedForVersion = "1.2.3-money-v5",
             },
             currentSnapshotId = "scan-current",
             snapshots = {
@@ -445,7 +445,7 @@ local moneyCleanupRoot = store.Normalize({
     },
 }, "Money Cleanup Guild")
 local moneyCleanupDb = (moneyCleanupRoot.guilds or {})["Money Cleanup Guild"] or {}
-assert.equal("1.2.3-money-v4", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v4 should stamp the money-ledger cleanup marker")
+assert.equal("1.2.3-money-v5", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v5 should stamp the money-ledger cleanup marker")
 assert.equal(2, #(moneyCleanupDb.bankLedger.itemLogs or {}), "money-ledger cleanup should preserve item ledger rows")
 assert.equal(2, #(moneyCleanupDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should remove only duplicate money rows")
 assert.equal("money-relative-original", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "money-ledger cleanup should keep the first matching visible money row")

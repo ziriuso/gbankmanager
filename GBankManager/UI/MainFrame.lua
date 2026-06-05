@@ -1640,7 +1640,7 @@ mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or t
 mainFrame.optionsMuteSilvermoonCitizenToggle = mainFrame.optionsMuteSilvermoonCitizenToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Mute Silvermoon Citizen")
 mainFrame.optionsMuteSilvermoonCitizenToggle:SetPoint("TOPLEFT", mainFrame.optionsMinimapToggle, "BOTTOMLEFT", 0, -12)
 
-mainFrame.optionsSuppressRoutineChatToggle = mainFrame.optionsSuppressRoutineChatToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Suppress Routine Chat")
+mainFrame.optionsSuppressRoutineChatToggle = mainFrame.optionsSuppressRoutineChatToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Suppress Chat Except Sync Changes")
 mainFrame.optionsSuppressRoutineChatToggle:SetPoint("TOPLEFT", mainFrame.optionsMuteSilvermoonCitizenToggle, "BOTTOMLEFT", 0, -12)
 
 mainFrame.optionsOnboardingTitle = mainFrame.optionsOnboardingTitle or make_label(mainFrame.optionsAppearancePanel, "First-Run Walkthrough", "GameFontHighlightSmall")

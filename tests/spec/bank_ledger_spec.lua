@@ -990,6 +990,22 @@ durableCountMoneyPayload.transactions[#durableCountMoneyPayload.transactions + 1
 local durableCountMoneyLaterMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
 assert.equal(1, durableCountMoneyLaterMerge, "one extra visible money occurrence should append exactly one row")
 
+local driftedRelativeDepositDb = fresh_db()
+bankLedger.MergeMoneyTransactions(driftedRelativeDepositDb, {
+    scanStartedAt = 1780684429,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 0 },
+    },
+})
+local driftedRelativeDepositMerge = bankLedger.MergeMoneyTransactions(driftedRelativeDepositDb, {
+    scanStartedAt = 1780685233,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 1 },
+    },
+})
+assert.equal(0, driftedRelativeDepositMerge, "raw relative money deposits should not duplicate when Blizzard's visible hour drifts")
+assert.equal(1, #driftedRelativeDepositDb.bankLedger.moneyLogs, "drifted raw relative deposits should keep one canonical row")
+
 local regrownBatchItemDb = fresh_db()
 local regrownBatchItemInitial = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
     scanStartedAt = 1716573600,

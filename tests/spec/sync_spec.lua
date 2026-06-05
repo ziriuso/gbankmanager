@@ -507,6 +507,63 @@ _G.C_ChatInfo.sentMessages = {}
 db.requests = {}
 db.auditLog = {}
 
+db.requests = {
+    {
+        requestId = "req-local-newer-snapshot",
+        requester = "MemberOne",
+        requesterCharacterKey = "Stormrage-MemberOne",
+        itemID = 2000,
+        itemName = "Local Newer Snapshot Oil",
+        quantity = 4,
+        approval = "PENDING",
+        fulfillment = "OPEN",
+        createdAt = 100,
+        updatedAt = 100,
+        createdBy = "MemberOne",
+        updatedBy = "MemberOne",
+    },
+}
+local noChangeRequestSnapshotPayload = codec.EncodeTable({
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 501,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        requests = {
+            {
+                requestId = "req-local-newer-snapshot",
+                requester = "MemberOne",
+                requesterCharacterKey = "Stormrage-MemberOne",
+                itemID = 2000,
+                itemName = "Older Snapshot Oil",
+                quantity = 4,
+                approval = "PENDING",
+                fulfillment = "OPEN",
+                createdAt = 99,
+                updatedAt = 99,
+                createdBy = "MemberOne",
+                updatedBy = "MemberOne",
+            },
+        },
+    },
+})
+local chatCountBeforeNoChangeRequestSnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
+local noChangeRequestSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", noChangeRequestSnapshotPayload, "GUILD", "OfficerOne")
+local noChangeRequestSnapshotPeer = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"] or {})
+assert.truthy(noChangeRequestSnapshotAccepted, "no-change request snapshots should still be handled as successful sync payloads")
+assert.equal("Local Newer Snapshot Oil", (db.requests[1] or {}).itemName, "no-change request snapshots should not overwrite newer local request state")
+assert.equal(chatCountBeforeNoChangeRequestSnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "no-change request snapshots should update peer sync time without printing chat")
+assert.equal(501, tonumber(noChangeRequestSnapshotPeer.lastSynchronizedAt or 0), "no-change request snapshots should still update the peer synchronized timestamp")
+db.requests = {}
+db.auditLog = {}
+
 local chunkedRemoteRequestMessage = {
     type = "REQUEST_CREATED",
     updatedAt = 90,
@@ -1167,9 +1224,11 @@ assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}
 assert.equal("Thalassian Phoenix Oil", ((db.auditLog or {})[#(db.auditLog or {})] or {}).itemName, "accepted remote minimum snapshots should preserve the created minimum item name in history")
 assert.equal("OfficerOne", ((db.auditLog or {})[#(db.auditLog or {})] or {}).actor, "accepted remote minimum snapshots should use the remote actor name in reconstructed history rows")
 local minimumAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local chatCountBeforeDuplicateMinimumSnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumSnapshotPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateMinimumSnapshotAccepted, "replayed minimum snapshots should still count as handled accepted messages")
 assert.equal(minimumAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change minimum snapshots should not append duplicate history rows")
+assert.equal(chatCountBeforeDuplicateMinimumSnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "replayed no-change minimum snapshots should update sync state without printing chat")
 
 local originalMinimumSnapshotSend = ns.modules.syncTransport.Send
 local reciprocalMinimumMessages = {}
@@ -1281,8 +1340,10 @@ local staleMinimumReplyPayload = codec.EncodeTable({
     },
 })
 local staleMinimumReplyAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleMinimumReplyPayload, "GUILD", "OfficerOne")
+local staleMinimumReplyPeer = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"] or {})
 assert.truthy(staleMinimumReplyAccepted, "minimum sync replies should still be accepted")
 assert.equal(0, #reciprocalMinimumMessages, "minimum sync replies should not trigger another reply loop")
+assert.equal(1780670001, tonumber(staleMinimumReplyPeer.lastSynchronizedAt or 0), "no-change minimum replies should still update the peer synchronized timestamp")
 ns.modules.syncTransport.Send = originalMinimumSnapshotSend
 db.minimums = {
     {
@@ -1351,9 +1412,11 @@ assert.equal(3, #(db.auditLog or {}), "accepted history snapshots should append 
 assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[2] or {}).type, "accepted history snapshots should append visible minimum history rows")
 assert.equal("REQUEST_CREATED", ((db.auditLog or {})[3] or {}).type, "accepted history snapshots should append visible request history rows")
 local historyAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local chatCountBeforeDuplicateHistorySnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateHistorySnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", visibleHistorySnapshotPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateHistorySnapshotAccepted, "replayed history snapshots should still count as handled accepted messages")
 assert.equal(historyAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change history snapshots should not append duplicate visible history rows")
+assert.equal(chatCountBeforeDuplicateHistorySnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "replayed no-change history snapshots should update sync state without printing chat")
 
 local memberMinimumPayload = codec.EncodeTable({
     type = "MINIMUMS_SNAPSHOT",

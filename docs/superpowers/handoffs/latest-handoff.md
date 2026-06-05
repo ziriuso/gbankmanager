@@ -35,6 +35,7 @@
   - login also schedules a short delayed `Sync All`, and an occasional periodic silent `Sync All`, so online clients continue advertising local changes without user chat noise
   - stale inbound Minimum snapshots now merge by rule key and `updatedAt`, preserve newer local rows, and reply once with a fuller `MINIMUMS_SNAPSHOT` marked `syncReply=true`
   - passive ledger refresh no longer prints repeated `auto-refresh found X item rows and Y money rows` status lines
+  - accepted request, minimum, history, and ledger snapshot sync now prints chat only when local rows actually arrive or change; no-change accepted payloads update the Sync peer timestamps and stay available through `/gbm debug sync`
   - bank-backed new Minimums default to Restock enabled, while an explicit Restock disable is still respected
   - disabled positive Minimums now contribute `ONE_TIME_TARGET` export demand while understocked
   - successful guild-bank scans remove stocked one-time Minimums, record normal `MINIMUM_REMOVED` history, and publish the remaining Minimums snapshot so peers can drop the completed one-time target
@@ -43,8 +44,8 @@
   - internal ledger dedupe planning still flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount for regression coverage, but the manual `Options -> Data -> Dedupe Ledger` button is hidden
   - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
   - `GBankManager.toc` and the addon version fallback now advertise `1.2.3` / `v1.2.3`
-  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v4`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
-  - local money scans now apply the visible duplicate filter before appending rows, so raw-relative Blizzard money rows whose visible relative hour drifts cannot regrow duplicates after cleanup
+  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v5`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows
+  - local money scans now suppress short-window raw-relative deposit replays by scan timestamp, so Blizzard money rows whose visible relative hour drifts during a bank-open rescan cannot regrow duplicates after cleanup
   - `LEDGER_PROTOCOL_VERSION = 3` rejects older same-version protocol-2 ledger manifest, bucket, and direct delta payloads as `old_ledger_protocol`, preventing older 1.2.3 builds from re-poisoning cleaned money ledgers
   - SavedVariables compaction now records `meta.savedVariablesCompactedForVersion = 1.2.3-snapshot-v2` after removing generated snapshot `searchCatalog` tables and pruning inventory snapshots to the active snapshot plus two recent backups; fresh scans also enforce that rolling snapshot window, while Requests and Minimums build search catalogs in memory instead of persisting them back onto scan snapshots
 - Verification completed:
@@ -166,8 +167,8 @@
   - guild-bank scanner start/finish/progress chat now flows through the routine output gate while still updating visible scanner status text
   - scanner warnings and failures bypass the routine mute
   - explicit slash debug and test output remains visible
-  - `Options -> Appearance` now has an immediate-save `Suppress Routine Chat` toggle beside the existing local appearance toggles
-  - follow-up default changed `Suppress Routine Chat` to on for missing or fresh settings while preserving an explicit saved off state
+  - `Options -> Appearance` now has an immediate-save `Suppress Chat Except Sync Changes` toggle beside the existing local appearance toggles
+  - follow-up default changed `Suppress Chat Except Sync Changes` to on for missing or fresh settings while preserving an explicit saved off state
   - follow-up Appearance chrome now extends behind the added toggle stack and onboarding replay control; future Options expansion should grow the owning panel background with the new controls
   - follow-up minimap launcher positioning now derives its radius from the minimap and launcher sizes so the icon sits on the minimap edge instead of inside the map
   - follow-up New Request wizard copy now says `Search for the item you would like stocked. Current expansion items only, no gear.`
@@ -186,7 +187,7 @@
   - `docs/manual-test-checklist.md`
   - this handoff
 - Recommended next manual verification before release or deploy:
-  1. In Retail, confirm `Options -> Appearance -> Suppress Routine Chat` starts checked, run a manual scan plus a two-client routine sync update, and confirm routine scan/sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible; then toggle it off and confirm routine chat feedback returns.
+  1. In Retail, confirm `Options -> Appearance -> Suppress Chat Except Sync Changes` starts checked, run a manual scan plus a two-client routine sync update, and confirm routine scan/no-change sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible; then toggle it off and confirm sync chat still appears only when rows actually arrive.
 
 ### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
 
@@ -355,7 +356,7 @@
 - The current local follow-up also brings the Minimums add-item modal back into line with the New Request wizard: both now enable the shared selector's crafted-quality icon path, so crafted search results and the selected-item summary show the same quality icons in both surfaces.
 - The current local follow-up also fixes two Minimums add-flow regressions: the typed `Minimum` value now carries from the add-search modal into `Minimum Details` instead of resetting to the default, and the lower add-search controls no longer jump right when a crafted-quality selected-item icon appears.
 - Completed feature note:
-  - global `Suppress Routine Chat` option now lives under `Options -> Appearance`
+  - global `Suppress Chat Except Sync Changes` option now lives under `Options -> Appearance`
   - default scope mutes routine scan/sync status or progress messages only
   - `/gbm debug ...`, in-game test output, warnings, and real error messages remain visible
   - add active-view auto-refresh when accepted remote sync mutates Requests, Minimums, or Bank Ledger data

@@ -51,6 +51,7 @@ local SCAN_INTERVAL_LABELS = {
 }
 
 local LEDGER_DELTA_REPEAT_WINDOW_SECONDS = 30
+local RELATIVE_MONEY_REPLAY_WINDOW_SECONDS = 30 * 60
 
 local RETENTION_LABELS = {
     ["1_week"] = "1 Week",
@@ -704,6 +705,10 @@ local function money_replay_bridge_base_for_entry(entry)
     return money_replay_bridge_base(entry)
 end
 
+local function money_legacy_fingerprint_is_relative(value)
+    return trim(value):match("^unknown|") ~= nil
+end
+
 local function money_legacy_fingerprint_is_withdrawal(value)
     return trim(value):match("^unknown|.*|withdraw|") ~= nil
 end
@@ -1285,6 +1290,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
     local replayBridgeStoredCounts = {}
     local replayBridgeLegacyKnownCounts = {}
     local legacyStoredCounts = {}
+    local legacyStoredScanTimestamps = {}
     local eventBaseBuilder = type(options.eventBaseBuilder) == "function" and options.eventBaseBuilder or nil
 
     local function is_known_row(row, includeLegacy)
@@ -1311,7 +1317,31 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
         local legacyFingerprint = trim(entry and entry.legacyFingerprint)
         if legacyFingerprint ~= "" then
             legacyStoredCounts[legacyFingerprint] = (tonumber(legacyStoredCounts[legacyFingerprint] or 0) or 0) + 1
+            legacyStoredScanTimestamps[legacyFingerprint] = legacyStoredScanTimestamps[legacyFingerprint] or {}
+            legacyStoredScanTimestamps[legacyFingerprint][#legacyStoredScanTimestamps[legacyFingerprint] + 1] =
+                tonumber((entry or {}).scanStartedAt or (entry or {}).scannedAt or (entry or {}).timestamp or (entry or {}).when or 0) or 0
         end
+    end
+
+    local function recent_legacy_stored_count(legacyFingerprint, row)
+        if not money_legacy_fingerprint_is_relative(legacyFingerprint) then
+            return 0
+        end
+
+        local timestamp = tonumber((row or {}).scanStartedAt or (row or {}).scannedAt or (row or {}).timestamp or (row or {}).when or 0) or 0
+        if timestamp <= 0 then
+            return 0
+        end
+
+        local count = 0
+        for _, storedTimestamp in ipairs(legacyStoredScanTimestamps[legacyFingerprint] or {}) do
+            storedTimestamp = tonumber(storedTimestamp or 0) or 0
+            if storedTimestamp > 0 and math.abs(timestamp - storedTimestamp) <= RELATIVE_MONEY_REPLAY_WINDOW_SECONDS then
+                count = count + 1
+            end
+        end
+
+        return count
     end
 
     for _, row in ipairs(normalizedRows or {}) do
@@ -1346,7 +1376,7 @@ local function append_delta_rows(ledger, entries, fingerprintIndex, sourceSnapsh
                 local legacyFingerprint = trim(row.legacyFingerprint)
                 local legacyKnownCount = money_legacy_fingerprint_is_withdrawal(legacyFingerprint)
                     and (tonumber(legacyStoredCounts[legacyFingerprint] or 0) or 0)
-                    or 0
+                    or recent_legacy_stored_count(legacyFingerprint, row)
                 local replayKnownCount = replayBase ~= "" and (tonumber(replayBridgeStoredCounts[replayBase] or 0) or 0) or 0
                 replayBridgeLegacyKnownCounts[base] = math.max(
                     tonumber(replayBridgeLegacyKnownCounts[base] or 0) or 0,
@@ -1537,6 +1567,7 @@ local function normalize_money_rows(payload)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
+            scanStartedAt = scanStartedAt,
             year = raw.year,
             month = raw.month,
             day = raw.day,

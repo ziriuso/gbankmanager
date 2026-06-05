@@ -575,7 +575,7 @@ assert.truthy(math.abs((current_db().ui.appearance.modalOpacity or 0) - 0.93) < 
 assert.equal("Mute Silvermoon Citizen", mainFrame.optionsMuteSilvermoonCitizenToggle.labelText:GetText(), "appearance settings should expose the Silvermoon Citizen mute toggle")
 assert.same(mainFrame.optionsMinimapToggle, (mainFrame.optionsMuteSilvermoonCitizenToggle.points[1] or {})[2], "appearance settings should stack the Silvermoon Citizen mute toggle beneath the minimap toggle")
 assert.truthy(mainFrame.optionsMuteSilvermoonCitizenToggle:GetChecked() ~= true, "appearance settings should default the Silvermoon Citizen mute toggle off")
-assert.equal("Suppress Routine Chat", mainFrame.optionsSuppressRoutineChatToggle.labelText:GetText(), "appearance settings should expose the global routine chat suppression toggle")
+assert.equal("Suppress Chat Except Sync Changes", mainFrame.optionsSuppressRoutineChatToggle.labelText:GetText(), "appearance settings should describe routine chat suppression as only showing sync changes")
 assert.same(mainFrame.optionsMuteSilvermoonCitizenToggle, (mainFrame.optionsSuppressRoutineChatToggle.points[1] or {})[2], "appearance settings should stack routine chat suppression beneath the Silvermoon Citizen mute toggle")
 assert.equal(true, mainFrame.optionsSuppressRoutineChatToggle:GetChecked(), "appearance settings should default routine chat suppression on")
 mainFrame.optionsMinimapToggle:SetChecked(false)

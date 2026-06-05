@@ -1111,38 +1111,38 @@ local function handle_minimums_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if minimums == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", minimums and "blacklisted" or "missing_minimums")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_can_manage_minimums(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     local previousMinimums = clone_array_records(db.minimums or {})
     local mergedMinimums, shouldReply = merge_minimum_snapshot_rows(previousMinimums, minimums)
+    local auditCountBefore = #(db.auditLog or {})
     db.minimums = mergedMinimums
     append_minimums_snapshot_audit(db, previousMinimums, db.minimums, actorContext, payload.updatedAt or ns.state.lastSyncMessage.updatedAt)
+    local changedCount = math.max(0, #(db.auditLog or {}) - auditCountBefore)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", "applied")
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", changedCount > 0 and "applied" or "no_change")
     if shouldReply == true and payload.syncReply ~= true then
         send_minimums_snapshot_reply(db)
     end
-    report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    if changedCount > 0 then
+        report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    end
     return true
 end
 
@@ -1154,19 +1154,16 @@ local function handle_requests_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if requests == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", requests and "blacklisted" or "missing_requests")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1175,7 +1172,6 @@ local function handle_requests_snapshot(db, payload, sender)
         and not actor_can(actorContext, "full_ui", localPolicy)
     then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1207,8 +1203,10 @@ local function handle_requests_snapshot(db, payload, sender)
     end
 
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", "applied")
-    report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", mergedCount > 0 and "applied" or "no_change")
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
     return true
 end
 
@@ -1229,32 +1227,30 @@ local function handle_history_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if entries == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", entries and "blacklisted" or "missing_history")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_can_sync_history(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     local mergedCount = type(historyView.MergeSyncSnapshot) == "function" and historyView.MergeSyncSnapshot(db.auditLog or {}, entries) or 0
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "history_snapshot", mergedCount > 0 and "applied" or "no_change")
-    report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
     return true
 end
 
