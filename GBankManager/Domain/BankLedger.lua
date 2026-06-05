@@ -189,6 +189,18 @@ local function has_time_parts(year, month, day, hour, minute)
     return year ~= nil or month ~= nil or day ~= nil or hour ~= nil or minute ~= nil
 end
 
+local function has_relative_time_parts(values)
+    values = type(values) == "table" and values or {}
+    if not has_time_parts(values.year, values.month, values.day, values.hour, values.minute) then
+        return false
+    end
+
+    local year = tonumber(values.year)
+    local month = tonumber(values.month)
+    local day = tonumber(values.day)
+    return not (year and year >= 1000 and month and day)
+end
+
 local function format_export_timestamp(timestamp)
     timestamp = tonumber(timestamp or 0) or 0
     if timestamp <= 0 then
@@ -509,6 +521,10 @@ local function money_visible_hour_key(values)
         return raw_time_key(year, month, day, hour, nil)
     end
 
+    if has_relative_time_parts(values) then
+        return raw_time_key(year, month, day, hour, nil)
+    end
+
     local persistedTimeKey = timestamp_hour_key(values.timestamp or values.when)
     if persistedTimeKey then
         return persistedTimeKey
@@ -541,6 +557,15 @@ local function money_visible_date_key(values)
     end
 
     return "unknown"
+end
+
+local function money_dedupe_time_key(values)
+    values = type(values) == "table" and values or {}
+    if has_relative_time_parts(values) then
+        return money_visible_hour_key(values)
+    end
+
+    return money_visible_date_key(values)
 end
 
 local function ensure_settings(db)
@@ -657,6 +682,15 @@ end
 
 local function money_replay_bridge_base_for_entry(entry)
     entry = type(entry) == "table" and entry or {}
+    if has_relative_time_parts(entry) then
+        return money_replay_bridge_base(entry)
+    end
+
+    local storedBridgeBase = trim(entry.replayBridgeBase)
+    if storedBridgeBase ~= "" then
+        return storedBridgeBase
+    end
+
     local bridgeBase = money_replay_bridge_base_from_fingerprint(entry.fingerprint)
     if bridgeBase ~= "" then
         return bridgeBase
@@ -1541,7 +1575,7 @@ end
 local function money_dedupe_key(entry)
     entry = type(entry) == "table" and entry or {}
     return make_fingerprint({
-        money_visible_date_key(entry),
+        money_dedupe_time_key(entry),
         trim(entry.who or "Unknown"),
         visible_money_action_label(entry),
         tonumber(entry.amountCopper or entry.amount or 0) or 0,
@@ -1835,6 +1869,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
             {
                 allowSuspiciousUnknownAppend = true,
                 skipSourceSnapshotUpdate = true,
+                replayBridgeBaseBuilder = money_replay_bridge_base_for_entry,
             }
         )
         reconcile_remote_batch_counts(ledger, "money", sourceKey, ledger.moneySourceSnapshots, normalizedRows)

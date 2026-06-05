@@ -774,6 +774,45 @@ local repeatedRealMoneyNext = bankLedger.MergeMoneyTransactions(repeatedRealMone
 assert.equal(1, repeatedRealMoneyNext, "a real later money transaction with the same actor/action/amount should append instead of being hidden by timeless legacy dedupe")
 assert.equal(2, #repeatedRealMoneyDb.bankLedger.moneyLogs, "repeated real money activity should keep both distinct timestamps")
 
+local relativeMoneyReplayDb = fresh_db()
+_G.GetServerTime = function()
+    return 1780540360
+end
+local relativeMoneyReplayInitial = bankLedger.MergeMoneyTransactions(relativeMoneyReplayDb, {
+    scanStartedAt = 1780540360,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amount = 1874304,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 21,
+        },
+    },
+})
+assert.equal(1, relativeMoneyReplayInitial, "baseline relative money replay import should persist the first visible ledger row")
+_G.GetServerTime = function()
+    return 1780594903
+end
+local relativeMoneyReplayRepeat = bankLedger.MergeMoneyTransactions(relativeMoneyReplayDb, {
+    scanStartedAt = 1780594903,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amount = 1874304,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 21,
+        },
+    },
+})
+assert.equal(0, relativeMoneyReplayRepeat, "money replay should not duplicate the same raw relative Blizzard row when a later scan mints a new absolute timestamp")
+assert.equal(1, #relativeMoneyReplayDb.bankLedger.moneyLogs, "money replay should keep one row for the same raw relative Blizzard money entry")
+
 local repeatedRealItemDb = fresh_db()
 _G.GetServerTime = function()
     return 1779998400
@@ -1758,6 +1797,45 @@ assert.equal(0, bankLedger.MergeMoneyTransactions(dedupeSourceStableMoneyDb, {
         },
     },
 }), "a money scan after cleanup should not reimport the same visible source row")
+
+local dedupeRelativeMoneyDb = fresh_db()
+dedupeRelativeMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-row",
+        timestamp = 1780540360,
+        when = 1780540360,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 1874304,
+        amount = 1874304,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 21,
+        fingerprint = "2026|6|3|22|32|Zerobrews|withdraw|1874304|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+    },
+    {
+        entryId = "money-later-relative-row",
+        timestamp = 1780594903,
+        when = 1780594903,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 1874304,
+        amount = 1874304,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 21,
+        fingerprint = "2026|6|4|13|41|Zerobrews|withdraw|1874304|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+    },
+}
+local relativeMoneyDedupePlan = bankLedger.BuildDedupePlan(dedupeRelativeMoneyDb)
+assert.equal(1, relativeMoneyDedupePlan.moneyDuplicateRowCount, "money cleanup should flag duplicate raw relative Blizzard rows even when their minted timestamps differ")
+local relativeMoneyDedupeResult = bankLedger.ApplyDedupePlan(dedupeRelativeMoneyDb, relativeMoneyDedupePlan)
+assert.equal(1, relativeMoneyDedupeResult.moneyRemoved, "money cleanup should remove duplicated raw relative Blizzard money rows")
+assert.equal(1, #dedupeRelativeMoneyDb.bankLedger.moneyLogs, "money cleanup should leave one canonical raw relative Blizzard money row")
 
 local dedupeTimezoneStableMoneyDb = fresh_db()
 dedupeTimezoneStableMoneyDb.bankLedger.moneySourceSnapshots = {

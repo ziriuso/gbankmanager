@@ -9,6 +9,10 @@
   - branch: `codex/gbankmanager-v1`
   - base release at session start was `v1.2.2` on commit `821ab88` (`chore: prepare 1.2.2 release`)
   - local work is an unreleased follow-up to later Retail two-client sync findings; do not treat it as part of the published `v1.2.2` asset
+- Additional live duplicate-money report:
+  - Client B saved variables showed three visible sets of duplicate Bank Ledger money rows, while Client A showed two sets; item logs looked accurate
+  - the duplicate money rows shared Blizzard's raw relative fields (`year/month/day = 0/0/0` plus the same visible hour), actor, action, and amount, but had different addon-minted absolute timestamps and fingerprints from later scans or sync
+  - current timestamp-date fallback therefore hid the duplicates from the existing visible-dedupe and cleanup grouping
 - Live problem report:
   - passive bank-open ledger refresh was repeatedly reporting row counts while no ledger-log rows were actually changing
   - a stale online client did not reliably receive newer ledger rows from a fuller peer through login, manual `Sync Ledger`, reload, or relog
@@ -29,7 +33,11 @@
   - bank-backed new Minimums default to Restock enabled, while an explicit Restock disable is still respected
   - disabled positive Minimums now contribute `ONE_TIME_TARGET` export demand while understocked
   - successful guild-bank scans remove stocked one-time Minimums, record normal `MINIMUM_REMOVED` history, and publish the remaining Minimums snapshot so peers can drop the completed one-time target
+  - money replay bridging now prefers raw relative Blizzard time fields before minted timestamps, so the same visible `0/0/0` money row does not append again just because a later scan or sync minted a new absolute timestamp
+  - remote money delta merge now uses the same replay bridge as local money scans
+  - `Dedupe Ledger` now flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount so old polluted saved variables can be reviewed and cleaned
 - Verification completed:
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_manifest_spec.lua`
