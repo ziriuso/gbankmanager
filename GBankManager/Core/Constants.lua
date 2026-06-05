@@ -22,7 +22,7 @@ local function addon_metadata(fieldName)
     return nil
 end
 
-ns.constants.ADDON_VERSION = ns.constants.ADDON_VERSION or addon_metadata("Version") or "1.2.0"
+ns.constants.ADDON_VERSION = ns.constants.ADDON_VERSION or addon_metadata("Version") or "1.2.1"
 ns.constants.LEDGER_FORCE_CLEAR_VERSION = ns.constants.LEDGER_FORCE_CLEAR_VERSION or "1.2.0"
 ns.constants.LEDGER_PROTOCOL_VERSION = ns.constants.LEDGER_PROTOCOL_VERSION or 2
 
