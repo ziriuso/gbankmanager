@@ -252,10 +252,36 @@ scanner.scanInProgress = true
 scanner.ledgerScanInProgress = false
 scanner.pendingLedgerScanAfterInventory = true
 scanner.pendingLedgerAutoScan = false
+local debugLedgerDb = env.ns.state.db or _G.GBankManagerDB or {}
+debugLedgerDb.syncState = debugLedgerDb.syncState or {}
+debugLedgerDb.syncState.ledgerLastManifest = {
+    sender = "MemberOne",
+    reason = "different",
+    updatedAt = 301,
+    buckets = { 2 },
+}
+debugLedgerDb.syncState.ledgerLastBucketRequest = {
+    sender = "MemberOne",
+    updatedAt = 302,
+    buckets = { 2 },
+}
+debugLedgerDb.syncState.ledgerLastBucketReply = {
+    sender = "MemberOne",
+    updatedAt = 303,
+    buckets = { 2 },
+    merged = 1,
+}
 _G.DEFAULT_CHAT_FRAME.messages = {}
 local ledgerDebugLines = slash.command("debug ledger")
 local ledgerDebugText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(type(ledgerDebugLines) == "table", "/gbm debug ledger should return copy-friendly diagnostic lines")
+assert.truthy(string.find(ledgerDebugText, "ledgerProtocol=" .. tostring((env.ns.constants or {}).LEDGER_PROTOCOL_VERSION), 1, true) ~= nil, "/gbm debug ledger should report ledger protocol")
+assert.truthy(string.find(ledgerDebugText, "reset=1.2.0", 1, true) ~= nil, "/gbm debug ledger should report the ledger reset version")
+assert.truthy(string.find(ledgerDebugText, "globalHash=", 1, true) ~= nil, "/gbm debug ledger should report the current manifest global hash")
+assert.truthy(string.find(ledgerDebugText, "buckets=", 1, true) ~= nil, "/gbm debug ledger should report the current manifest bucket count")
+assert.truthy(string.find(ledgerDebugText, "ledgerLastManifest sender=MemberOne reason=different updatedAt=301 buckets=2", 1, true) ~= nil, "/gbm debug ledger should report the recent ledger manifest debug state")
+assert.truthy(string.find(ledgerDebugText, "ledgerLastBucketRequest sender=MemberOne updatedAt=302 buckets=2", 1, true) ~= nil, "/gbm debug ledger should report the recent ledger bucket request debug state")
+assert.truthy(string.find(ledgerDebugText, "ledgerLastBucketReply sender=MemberOne updatedAt=303 merged=1 buckets=2", 1, true) ~= nil, "/gbm debug ledger should report the recent ledger bucket reply debug state")
 assert.truthy(string.find(ledgerDebugText, "ledger debug state scanInProgress=true ledgerScanInProgress=false pendingAfterInventory=true", 1, true) ~= nil, "/gbm debug ledger should report scanner state flags")
 assert.truthy(string.find(ledgerDebugText, "ledger debug tabs count=1", 1, true) ~= nil, "/gbm debug ledger should report guild-bank tab count")
 assert.truthy(string.find(ledgerDebugText, "itemLog tab=1 name=Donations viewable=true count=1", 1, true) ~= nil, "/gbm debug ledger should report raw visible item-log counts")

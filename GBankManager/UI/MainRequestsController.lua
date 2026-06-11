@@ -943,7 +943,7 @@ function mainRequestsController.Attach(mainFrame, options)
                 or (isStep2 and "Step 2 of 3: Set Quantity" or "Step 3 of 3: Confirm Request")
         )
         self.requestWizardStatusText:SetText(
-            isStep1 and "Search or select the crafted item you want stocked."
+            isStep1 and "Search for the item you would like stocked. Current expansion items only, no gear."
                 or (isStep2 and "Set the quantity and note for this request." or "Review the request before submitting it.")
         )
 
@@ -1331,12 +1331,21 @@ function mainRequestsController.Attach(mainFrame, options)
         local db = current_db()
         local snapshot = type(self.GetCurrentSnapshot) == "function" and self:GetCurrentSnapshot() or { items = {} }
         local itemCatalog = ns.modules.itemCatalog
-        snapshot.searchCatalog = itemCatalog and type(itemCatalog.BuildSearchCatalog) == "function"
+        local searchCatalog = itemCatalog and type(itemCatalog.BuildSearchCatalog) == "function"
             and itemCatalog.BuildSearchCatalog(db, snapshot, {
                 includeBundled = false,
             })
             or {}
-        return snapshot
+        return {
+            scanId = snapshot.scanId,
+            guildName = snapshot.guildName,
+            actor = snapshot.actor,
+            scannedAt = snapshot.scannedAt,
+            scannedTabs = snapshot.scannedTabs,
+            items = snapshot.items or {},
+            itemRows = snapshot.itemRows or {},
+            searchCatalog = searchCatalog,
+        }
     end
 
     function mainFrame:BackfillRequestCraftedTier(item)

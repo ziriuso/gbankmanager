@@ -271,6 +271,9 @@ local loginChatText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for SyncTester-Stormrage.", 1, true) == nil, "player login should not add self hello noise to chat")
 
 local db = ns.state.db
+db.ui = db.ui or {}
+db.ui.chatSettings = db.ui.chatSettings or {}
+db.ui.chatSettings.suppressRoutineMessages = false
 db.requests = {}
 db.auth.capabilities.request_submit = {}
 db.auth.capabilities.request_approve = { [1] = true }
@@ -365,8 +368,8 @@ _G.C_ChatInfo.sentMessages = {}
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteHelloPayload, "GUILD", "MemberOne")
 local helloPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.equal(90, tonumber(helloPeerEntry.lastSeen or 0), "sync hello traffic should update the peer last seen timestamp")
-assert.equal(90, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello traffic should mark the peer as synchronized when it triggers outbound catch-up")
-assert.equal("requests,minimums,history,ledger", table.concat(helloDispatches, ","), "sync hello should trigger the same sync families as Sync All for full-shell users")
+assert.equal(0, tonumber(helloPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark a peer synchronized without an actual sync payload")
+assert.equal("requests,minimums,history,ledger", table.concat(helloDispatches, ","), "full-shell sync hello should silently answer with catch-up sync families")
 
 local originalFullUi = db.auth.capabilities.full_ui
 local originalGetGuildInfo = _G.GetGuildInfo
@@ -382,8 +385,8 @@ local requestOnlyHelloPayload = codec.EncodeTable({
 })
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", requestOnlyHelloPayload, "GUILD", "MemberTwo")
 local requestOnlyPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberTwo-Stormrage"] or {})
-assert.equal(91, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello should still update peer sync time for request-only users")
-assert.equal("requests", table.concat(helloDispatches, ","), "sync hello should collapse to request sync only for request-only users")
+assert.equal(0, tonumber(requestOnlyPeerEntry.lastSynchronizedAt or 0), "sync hello presence should not mark request-only peers synchronized without an actual sync payload")
+assert.equal("requests", table.concat(helloDispatches, ","), "request-only sync hello should only answer with request catch-up")
 db.auth.capabilities.full_ui = originalFullUi
 _G.GetGuildInfo = originalGetGuildInfo
 ns.modules.syncManualActionHandlers = originalManualSyncHandlers
@@ -501,6 +504,63 @@ ns.state.db = stateDbBeforeGuildBootstrap
 ns.state.dbRoot = stateDbRootBeforeGuildBootstrap
 
 _G.C_ChatInfo.sentMessages = {}
+db.requests = {}
+db.auditLog = {}
+
+db.requests = {
+    {
+        requestId = "req-local-newer-snapshot",
+        requester = "MemberOne",
+        requesterCharacterKey = "Stormrage-MemberOne",
+        itemID = 2000,
+        itemName = "Local Newer Snapshot Oil",
+        quantity = 4,
+        approval = "PENDING",
+        fulfillment = "OPEN",
+        createdAt = 100,
+        updatedAt = 100,
+        createdBy = "MemberOne",
+        updatedBy = "MemberOne",
+    },
+}
+local noChangeRequestSnapshotPayload = codec.EncodeTable({
+    type = "REQUESTS_SNAPSHOT",
+    updatedAt = 501,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        requests = {
+            {
+                requestId = "req-local-newer-snapshot",
+                requester = "MemberOne",
+                requesterCharacterKey = "Stormrage-MemberOne",
+                itemID = 2000,
+                itemName = "Older Snapshot Oil",
+                quantity = 4,
+                approval = "PENDING",
+                fulfillment = "OPEN",
+                createdAt = 99,
+                updatedAt = 99,
+                createdBy = "MemberOne",
+                updatedBy = "MemberOne",
+            },
+        },
+    },
+})
+local chatCountBeforeNoChangeRequestSnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
+local noChangeRequestSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", noChangeRequestSnapshotPayload, "GUILD", "OfficerOne")
+local noChangeRequestSnapshotPeer = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"] or {})
+assert.truthy(noChangeRequestSnapshotAccepted, "no-change request snapshots should still be handled as successful sync payloads")
+assert.equal("Local Newer Snapshot Oil", (db.requests[1] or {}).itemName, "no-change request snapshots should not overwrite newer local request state")
+assert.equal(chatCountBeforeNoChangeRequestSnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "no-change request snapshots should update peer sync time without printing chat")
+assert.equal(501, tonumber(noChangeRequestSnapshotPeer.lastSynchronizedAt or 0), "no-change request snapshots should still update the peer synchronized timestamp")
 db.requests = {}
 db.auditLog = {}
 
@@ -1164,9 +1224,140 @@ assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}
 assert.equal("Thalassian Phoenix Oil", ((db.auditLog or {})[#(db.auditLog or {})] or {}).itemName, "accepted remote minimum snapshots should preserve the created minimum item name in history")
 assert.equal("OfficerOne", ((db.auditLog or {})[#(db.auditLog or {})] or {}).actor, "accepted remote minimum snapshots should use the remote actor name in reconstructed history rows")
 local minimumAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local chatCountBeforeDuplicateMinimumSnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumSnapshotPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateMinimumSnapshotAccepted, "replayed minimum snapshots should still count as handled accepted messages")
 assert.equal(minimumAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change minimum snapshots should not append duplicate history rows")
+assert.equal(chatCountBeforeDuplicateMinimumSnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "replayed no-change minimum snapshots should update sync state without printing chat")
+
+local originalMinimumSnapshotSend = ns.modules.syncTransport.Send
+local reciprocalMinimumMessages = {}
+ns.modules.syncTransport.Send = function(_, _, message)
+    reciprocalMinimumMessages[#reciprocalMinimumMessages + 1] = message
+    return codec.EncodeTable(message)
+end
+db.minimums = {
+    {
+        itemID = 23529,
+        itemName = "Adamantite Sharpening Stone",
+        quantity = 20,
+        scope = "TAB",
+        tabName = "Raid Buffet",
+        enabled = true,
+        updatedAt = 1780532026,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+    {
+        itemID = 240983,
+        itemName = "Indecipherable Eversong Diamond",
+        quantity = 5,
+        scope = "TAB",
+        tabName = "Gems and Chants",
+        enabled = true,
+        updatedAt = 1780669182,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+    {
+        itemID = 240971,
+        itemName = "Stoic Eversong Diamond",
+        quantity = 5,
+        scope = "TAB",
+        tabName = "Gems and Chants",
+        enabled = false,
+        updatedAt = 1780669182,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+}
+db.auditLog = {}
+local staleMinimumSnapshotPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670000,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 23529,
+                itemName = "Adamantite Sharpening Stone",
+                quantity = 20,
+                scope = "TAB",
+                tabName = "Raid Buffet",
+                enabled = true,
+                updatedAt = 1780532026,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local staleMinimumSnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleMinimumSnapshotPayload, "GUILD", "OfficerOne")
+assert.truthy(staleMinimumSnapshotAccepted, "stale minimum snapshots should still be handled from authorized officers")
+assert.equal(3, #(db.minimums or {}), "stale minimum snapshots should not erase newer local minimum rows that the sender is missing")
+assert.equal(240983, ((db.minimums or {})[2] or {}).itemID, "newer local minimum rows should be preserved after stale snapshot receive")
+assert.equal(1, #reciprocalMinimumMessages, "receiving a stale minimum snapshot should reply with the fuller local snapshot")
+assert.equal("MINIMUMS_SNAPSHOT", reciprocalMinimumMessages[1].type, "minimum catch-up replies should use the existing snapshot family")
+assert.truthy(((reciprocalMinimumMessages[1].payload or {}).syncReply == true), "minimum catch-up replies should be marked to avoid reply loops")
+assert.equal(3, #(((reciprocalMinimumMessages[1].payload or {}).minimums) or {}), "minimum catch-up replies should include the fuller local rule set")
+
+reciprocalMinimumMessages = {}
+local staleMinimumReplyPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670001,
+    payload = {
+        guildKey = "Guild Testers",
+        syncReply = true,
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 23529,
+                itemName = "Adamantite Sharpening Stone",
+                quantity = 20,
+                scope = "TAB",
+                tabName = "Raid Buffet",
+                enabled = true,
+                updatedAt = 1780532026,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local staleMinimumReplyAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleMinimumReplyPayload, "GUILD", "OfficerOne")
+local staleMinimumReplyPeer = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"] or {})
+assert.truthy(staleMinimumReplyAccepted, "minimum sync replies should still be accepted")
+assert.equal(0, #reciprocalMinimumMessages, "minimum sync replies should not trigger another reply loop")
+assert.equal(1780670001, tonumber(staleMinimumReplyPeer.lastSynchronizedAt or 0), "no-change minimum replies should still update the peer synchronized timestamp")
+ns.modules.syncTransport.Send = originalMinimumSnapshotSend
+db.minimums = {
+    {
+        itemID = 243734,
+        itemName = "Thalassian Phoenix Oil",
+        quantity = 100,
+        scope = "TAB",
+        tabName = "Alchemy",
+        enabled = true,
+        updatedAt = 205,
+        updatedBy = "Stormrage-OfficerOne",
+        updatedByRankIndex = 1,
+    },
+}
 
 db.auditLog = {
     { type = "LEDGER_IMPORTED", category = "LEDGER", itemName = "Hidden Ledger Row", actor = "Bank", timestamp = 150 },
@@ -1221,9 +1412,11 @@ assert.equal(3, #(db.auditLog or {}), "accepted history snapshots should append 
 assert.equal("MINIMUM_CREATED", ((db.auditLog or {})[2] or {}).type, "accepted history snapshots should append visible minimum history rows")
 assert.equal("REQUEST_CREATED", ((db.auditLog or {})[3] or {}).type, "accepted history snapshots should append visible request history rows")
 local historyAuditCountBeforeDuplicateSnapshot = #(db.auditLog or {})
+local chatCountBeforeDuplicateHistorySnapshot = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateHistorySnapshotAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", visibleHistorySnapshotPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateHistorySnapshotAccepted, "replayed history snapshots should still count as handled accepted messages")
 assert.equal(historyAuditCountBeforeDuplicateSnapshot, #(db.auditLog or {}), "replayed no-change history snapshots should not append duplicate visible history rows")
+assert.equal(chatCountBeforeDuplicateHistorySnapshot, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "replayed no-change history snapshots should update sync state without printing chat")
 
 local memberMinimumPayload = codec.EncodeTable({
     type = "MINIMUMS_SNAPSHOT",
@@ -1363,7 +1556,59 @@ db.bankLedger = db.bankLedger or {}
 db.bankLedger.itemLogs = {}
 db.bankLedger.moneyLogs = {}
 db.bankLedger.lastScanAt = 999
-local currentAddonVersion = tostring((ns.constants or {}).ADDON_VERSION or "1.1.0")
+local currentAddonVersion = tostring((ns.constants or {}).ADDON_VERSION or "1.1.1")
+local currentLedgerProtocol = tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0) or 0
+local oldLedgerManifestPayload = codec.EncodeTable({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = currentAddonVersion,
+        ledgerProtocol = 1,
+        manifest = {
+            ledgerProtocol = 1,
+            totalCount = 0,
+            buckets = {},
+        },
+    },
+})
+local oldLedgerManifestAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", oldLedgerManifestPayload, "GUILD", "MemberOne")
+assert.truthy(not oldLedgerManifestAccepted, "sync events should reject ledger manifests from older ledger protocols")
+assert.equal("ledger_manifest", tostring(((ns.state or {}).lastSyncDecision or {}).category or ""), "old-protocol manifest rejection should record the manifest decision category")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "old-protocol manifest rejection should record the protocol reason")
+
+local missingProtocolManifestPayload = codec.EncodeTable({
+    type = "LEDGER_MANIFEST",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        version = currentAddonVersion,
+        manifest = {
+            totalCount = 0,
+            buckets = {},
+        },
+    },
+})
+local missingProtocolManifestAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", missingProtocolManifestPayload, "GUILD", "MemberOne")
+assert.truthy(not missingProtocolManifestAccepted, "sync events should reject ledger manifests that do not advertise a ledger protocol")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "missing-protocol manifest rejection should record the protocol reason")
+
 local oldLedgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
     updatedAt = 207,
@@ -1378,6 +1623,7 @@ local oldLedgerDeltaPayload = codec.EncodeTable({
             name = "MemberOne",
         },
         kind = "item",
+        ledgerProtocol = currentLedgerProtocol,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
@@ -1396,10 +1642,51 @@ local oldLedgerDeltaPayload = codec.EncodeTable({
         },
     },
 })
+local ledgerRejectChatCount = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local oldLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", oldLedgerDeltaPayload, "GUILD", "MemberOne")
 assert.truthy(not oldLedgerAccepted, "sync events should reject ledger deltas from older clients that do not advertise a compatible version")
 assert.equal(0, #(db.bankLedger.itemLogs or {}), "older-client ledger deltas should not append remote item-log rows")
 assert.equal("older_version", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "older-client ledger rejection should record the version reason")
+assert.equal(ledgerRejectChatCount, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "rejected ledger deltas should not add routine ledger chat noise")
+
+local staleProtocolLedgerDeltaPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        kind = "item",
+        version = currentAddonVersion,
+        ledgerProtocol = 2,
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "MemberOne-Stormrage",
+                itemID = 243734,
+                itemName = "Stale Protocol Ledger Oil",
+                quantity = 4,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local staleProtocolLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", staleProtocolLedgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(not staleProtocolLedgerAccepted, "sync events should reject ledger deltas from older protocol-2 clients even when addon versions match")
+assert.equal(0, #(db.bankLedger.itemLogs or {}), "stale-protocol ledger deltas should not append remote item-log rows")
+assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "stale-protocol ledger delta rejection should record the protocol reason")
 
 local ledgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
@@ -1416,6 +1703,7 @@ local ledgerDeltaPayload = codec.EncodeTable({
         },
         kind = "item",
         version = currentAddonVersion,
+        ledgerProtocol = currentLedgerProtocol,
         scanStartedAt = 1716573600,
         sourceTabIndex = 1,
         sourceTabName = "Alchemy",
@@ -1438,6 +1726,7 @@ local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDelt
 assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
 assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
+assert.equal("GBankManager: Synced ledger delta from MemberOne.", last_chat_message(), "ledger deltas should report only when they write actual new rows")
 local ledgerChatCountBeforeDuplicate = #(_G.DEFAULT_CHAT_FRAME.messages or {})
 local duplicateLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
 assert.truthy(duplicateLedgerAccepted, "duplicate ledger deltas should still be accepted for peer bookkeeping")

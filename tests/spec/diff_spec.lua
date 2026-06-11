@@ -83,6 +83,59 @@ assert.equal(5, snapshot.itemRows[2].quantity, "snapshot item rows should keep p
 assert.equal("QUANTITY_INCREASED", changes[1].type, "diff should report quantity increase")
 assert.equal(12, changes[1].delta, "diff should capture quantity delta")
 
+local originalMinimumSyncSend = ns.modules.syncTransport.Send
+local oneTimeMinimumSyncMessages = {}
+ns.modules.syncTransport.Send = function(_, _, message)
+    oneTimeMinimumSyncMessages[#oneTimeMinimumSyncMessages + 1] = message
+    return true
+end
+
+local originalTimeForOneTimeMinimum = _G.time
+_G.time = function()
+    return 1715523300
+end
+
+ns.state.db.snapshots = {}
+ns.state.db.currentSnapshotId = nil
+ns.state.db.changeLog = {}
+ns.state.db.auditLog = {}
+ns.state.db.minimums = {
+    { itemID = 1001, itemName = "Flask Alpha", quantity = 10, scope = "TAB", tabName = "Flasks", enabled = false },
+    { itemID = 1001, itemName = "Flask Alpha", quantity = 20, scope = "TAB", tabName = "Raid", enabled = false },
+    { itemID = 2002, itemName = "Potion Beta", quantity = 2, scope = "TAB", tabName = "Flasks", enabled = true },
+}
+scanner.rawTabs = {
+    {
+        index = 1,
+        name = "Flasks",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 10 },
+            { itemID = 2002, name = "Potion Beta", count = 2 },
+        },
+    },
+    {
+        index = 2,
+        name = "Raid",
+        slots = {
+            { itemID = 1001, name = "Flask Alpha", count = 5 },
+        },
+    },
+}
+
+local oneTimeCleanupSnapshot = scanner.FinishScan("OfficerOne", "Guild Testers")
+
+assert.truthy(oneTimeCleanupSnapshot ~= nil, "one-time minimum cleanup should run after a successful saved snapshot")
+assert.equal(2, #(ns.state.db.minimums or {}), "stocked one-time minimums should be removed after scan while other rules remain")
+assert.equal("Raid", ((ns.state.db.minimums or {})[1] or {}).tabName, "understocked one-time minimums should remain until stocked")
+assert.equal(true, ((ns.state.db.minimums or {})[2] or {}).enabled, "recurring minimums should not be removed just because they are stocked")
+assert.equal("MINIMUM_REMOVED", ((ns.state.db.auditLog or {})[1] or {}).type, "one-time cleanup should record a normal minimum removal history row")
+assert.equal(1, #oneTimeMinimumSyncMessages, "one-time cleanup should publish the updated minimum snapshot")
+assert.equal("MINIMUMS_SNAPSHOT", (oneTimeMinimumSyncMessages[1] or {}).type, "one-time cleanup should use the minimum snapshot sync family")
+assert.equal(2, #(((oneTimeMinimumSyncMessages[1] or {}).payload or {}).minimums or {}), "one-time cleanup sync should include the remaining minimum rules")
+
+ns.modules.syncTransport.Send = originalMinimumSyncSend
+_G.time = originalTimeForOneTimeMinimum
+
 local originalDate = _G.date
 local dateCalls = {}
 _G.date = function(format, timestamp)
@@ -310,13 +363,15 @@ scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 1750
 queriedTabs = {}
 _G.DEFAULT_CHAT_FRAME.messages = {}
+ns.state.db.ui.chatSettings.suppressRoutineMessages = false
 scanner.BeginScan()
 assert.equal(1, queriedTabs[1], "manual scan should still run even inside the auto-scan throttle window")
-assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status")
+assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_FRAME.messages[1], "manual scans should announce chat-visible start status when routine chat is enabled")
 assert.truthy(_G.DEFAULT_CHAT_FRAME.messages[2] == nil, "scanner should not spam per-tab progress into chat")
 
 _G.time = originalTime
 _G.DEFAULT_CHAT_FRAME.messages = originalMessages
+ns.state.db.ui.chatSettings.suppressRoutineMessages = true
 
 local timedOutTabs = {}
 scanner.scanInProgress = true
@@ -361,7 +416,7 @@ _G.C_Timer.RunPending()
 assert.equal(1, #timedOutTabs, "scanner timeout fallback should read the waited tab when no guild bank slot event arrives")
 _G.C_Timer.RunPending()
 assert.equal(3, queriedTabs[2], "scanner timeout fallback should continue requesting queued tabs after a missed event")
-assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[2], "timeout fallback should report a chat-visible recovery message")
+assert.equal("GBankManager: Guild bank scan timed out waiting for tab 1. Capturing current tab contents.", _G.DEFAULT_CHAT_FRAME.messages[1], "timeout fallback should report a chat-visible recovery message even while routine chat is suppressed")
 
 local snapshotDb = ns.modules.store.CreateFreshDatabase("My Guild")
 scanner.rawTabs = {

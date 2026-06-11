@@ -1441,7 +1441,7 @@ mainFrame.optionsActiveTab = mainFrame.optionsActiveTab or "APPEARANCE"
 mainFrame.optionsAppearancePanel = mainFrame.optionsAppearancePanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
 mainFrame.optionsAppearancePanel:SetPoint("TOPLEFT", mainFrame.optionsScrollChild, "TOPLEFT", 0, 0)
 mainFrame.optionsAppearancePanel:SetPoint("TOPRIGHT", mainFrame.optionsScrollChild, "TOPRIGHT", 0, 0)
-mainFrame.optionsAppearancePanel:SetHeight(352)
+mainFrame.optionsAppearancePanel:SetHeight(404)
 apply_surface_variant(mainFrame.optionsAppearancePanel, "panel-alt")
 
 mainFrame.optionsStockSettingsPanel = mainFrame.optionsStockSettingsPanel or _G.CreateFrame("Frame", nil, mainFrame.optionsScrollChild, "BackdropTemplate")
@@ -1640,8 +1640,11 @@ mainFrame.optionsMinimapToggle:SetPoint("TOPLEFT", themeButtonRowAnchors[3] or t
 mainFrame.optionsMuteSilvermoonCitizenToggle = mainFrame.optionsMuteSilvermoonCitizenToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Mute Silvermoon Citizen")
 mainFrame.optionsMuteSilvermoonCitizenToggle:SetPoint("TOPLEFT", mainFrame.optionsMinimapToggle, "BOTTOMLEFT", 0, -12)
 
+mainFrame.optionsSuppressRoutineChatToggle = mainFrame.optionsSuppressRoutineChatToggle or make_checkbox(mainFrame.optionsAppearancePanel, "Suppress Chat Except Sync Changes")
+mainFrame.optionsSuppressRoutineChatToggle:SetPoint("TOPLEFT", mainFrame.optionsMuteSilvermoonCitizenToggle, "BOTTOMLEFT", 0, -12)
+
 mainFrame.optionsOnboardingTitle = mainFrame.optionsOnboardingTitle or make_label(mainFrame.optionsAppearancePanel, "First-Run Walkthrough", "GameFontHighlightSmall")
-mainFrame.optionsOnboardingTitle:SetPoint("TOPLEFT", mainFrame.optionsMuteSilvermoonCitizenToggle, "BOTTOMLEFT", 0, -18)
+mainFrame.optionsOnboardingTitle:SetPoint("TOPLEFT", mainFrame.optionsSuppressRoutineChatToggle, "BOTTOMLEFT", 0, -18)
 
 mainFrame.optionsOnboardingHint = mainFrame.optionsOnboardingHint or make_label(mainFrame.optionsAppearancePanel, "Replay the manager walkthrough for permissions, blacklist guidance, and the request workflow at any time.", "GameFontHighlightSmall")
 mainFrame.optionsOnboardingHint:SetPoint("TOPLEFT", mainFrame.optionsOnboardingTitle, "BOTTOMLEFT", 0, -8)
@@ -1845,9 +1848,10 @@ end
 
 mainFrame.optionsDedupeLedgerButton = mainFrame.optionsDedupeLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Dedupe Ledger")
 mainFrame.optionsDedupeLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
+mainFrame.optionsDedupeLedgerButton:Hide()
 
 mainFrame.optionsClearBankLedgerButton = mainFrame.optionsClearBankLedgerButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Log Data")
-mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsDedupeLedgerButton, "BOTTOMLEFT", 0, -10)
+mainFrame.optionsClearBankLedgerButton:SetPoint("TOPLEFT", mainFrame.optionsClearDataHint, "BOTTOMLEFT", 0, -14)
 
 mainFrame.optionsClearInventoryDataButton = mainFrame.optionsClearInventoryDataButton or make_button(mainFrame.optionsLogsHistoryPanel, 252, 28, "Clear Guild Bank Inventory Data")
 mainFrame.optionsClearInventoryDataButton:SetPoint("TOPLEFT", mainFrame.optionsClearBankLedgerButton, "BOTTOMLEFT", 0, -10)
@@ -2271,6 +2275,10 @@ function mainFrame:RefreshAppearanceControls()
             or (((current_db() or {}).ui or {}).logsHistorySettings or {})
         self.optionsMuteSilvermoonCitizenToggle:SetChecked(logsHistorySettings.muteSilvermoonCitizen == true)
     end
+    if self.optionsSuppressRoutineChatToggle and type(self.optionsSuppressRoutineChatToggle.SetChecked) == "function" then
+        local chatSettings = (((current_db() or {}).ui or {}).chatSettings or {})
+        self.optionsSuppressRoutineChatToggle:SetChecked(chatSettings.suppressRoutineMessages == true)
+    end
     self.isRefreshingAppearanceControls = false
 end
 
@@ -2393,6 +2401,15 @@ function mainFrame:SetMuteSilvermoonCitizen(isMuted)
     return settings.muteSilvermoonCitizen
 end
 
+function mainFrame:SetSuppressRoutineChat(isMuted)
+    local db = current_db()
+    db.ui = type(db.ui) == "table" and db.ui or {}
+    db.ui.chatSettings = type(db.ui.chatSettings) == "table" and db.ui.chatSettings or {}
+    db.ui.chatSettings.suppressRoutineMessages = isMuted == true
+    self:RefreshAppearanceControls()
+    return db.ui.chatSettings.suppressRoutineMessages
+end
+
 local function adjust_appearance_value(getter, setter, delta)
     local currentValue = getter()
     setter(currentValue + delta)
@@ -2494,6 +2511,15 @@ if mainFrame.optionsMuteSilvermoonCitizenToggle then
             return
         end
         mainFrame:SetMuteSilvermoonCitizen(toggle:GetChecked() == true)
+    end)
+end
+
+if mainFrame.optionsSuppressRoutineChatToggle then
+    mainFrame.optionsSuppressRoutineChatToggle:SetScript("OnClick", function(toggle)
+        if mainFrame.isRefreshingAppearanceControls then
+            return
+        end
+        mainFrame:SetSuppressRoutineChat(toggle:GetChecked() == true)
     end)
 end
 
@@ -3150,6 +3176,7 @@ function mainFrame:SetOptionsTab(tabKey)
 
     set_frame_shown(self.optionsAppearancePanel, nextTab == "APPEARANCE")
     set_frame_shown(self.optionsMuteSilvermoonCitizenToggle, nextTab == "APPEARANCE")
+    set_frame_shown(self.optionsSuppressRoutineChatToggle, nextTab == "APPEARANCE")
     set_frame_shown(self.optionsStockSettingsPanel, nextTab == "STOCK")
     set_frame_shown(self.optionsPermissionsPanel, nextTab == "PERMISSIONS")
     set_frame_shown(self.optionsBlacklistPanel, nextTab == "BLACKLIST")

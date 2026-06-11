@@ -2,8 +2,21 @@ local assert = require("tests.helpers.assert")
 
 dofile("tests/helpers/wow_stubs.lua")
 
+_G.UnitName = function()
+    return "SyncTester"
+end
+
+_G.GetRealmName = function()
+    return "Stormrage"
+end
+
+_G.GetGuildInfo = function()
+    return "Guild Testers", "Officer", 1
+end
+
 local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local manualActions = ns.modules.syncManualActions
+local transport = ns.modules.syncTransport
 
 local function fresh_db()
     return {
@@ -131,3 +144,64 @@ local fullShellAllCooldown = manualActions.Run(db, {
 
 assert.equal(false, fullShellAllCooldown.ok, "Sync All should have its own cooldown")
 assert.truthy(string.find(fullShellAllCooldown.message or "", "cooling down", 1, true) ~= nil, "Sync All cooldown feedback should be player-facing")
+
+local originalHandlers = ns.modules.syncManualActionHandlers
+local originalSend = transport.Send
+local sentMessages = {}
+ns.modules.syncManualActionHandlers = nil
+transport.Send = function(distribution, target, message)
+    sentMessages[#sentMessages + 1] = {
+        distribution = distribution,
+        target = target,
+        message = message,
+    }
+    return true
+end
+
+local defaultLedgerDb = fresh_db()
+defaultLedgerDb.meta = {
+    guildName = "Guild Testers",
+}
+defaultLedgerDb.bankLedger = {
+    itemLogs = {
+        {
+            entryId = "manual-item-a",
+            timestamp = 21600,
+            action = "Deposit",
+            who = "SyncTester-Stormrage",
+            itemID = 1,
+            item = "Manual Oil",
+            quantity = 2,
+            tabIndex = 1,
+            tabName = "Alchemy",
+        },
+    },
+    moneyLogs = {
+        {
+            entryId = "manual-money-b",
+            timestamp = 43200,
+            action = "Repair",
+            who = "SyncTester-Stormrage",
+            amountCopper = 100,
+        },
+    },
+}
+
+local defaultLedgerSync = manualActions.Run(defaultLedgerDb, {
+    action = "ledger",
+    accessProfile = "full_shell",
+    now = 1717000400,
+    skipCooldown = true,
+})
+
+assert.equal(true, defaultLedgerSync.ok, "default ledger sync should succeed")
+assert.equal("Announced ledger manifest for 2 row(s).", defaultLedgerSync.message, "manual ledger sync should announce the manifest row count")
+assert.equal(1, #sentMessages, "manual ledger sync should send exactly one manifest message")
+assert.equal("GUILD", sentMessages[1].distribution, "manual ledger manifests should use guild distribution")
+assert.equal("GUILD", sentMessages[1].target, "manual ledger manifests should use guild target metadata")
+assert.equal("LEDGER_MANIFEST", sentMessages[1].message.type, "manual ledger sync should send a ledger manifest")
+assert.equal(tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0), tonumber(((sentMessages[1].message.payload or {}).ledgerProtocol) or 0), "manual ledger manifests should advertise the current ledger protocol")
+assert.equal(2, tonumber((((sentMessages[1].message.payload or {}).manifest or {}).totalCount) or 0), "manual ledger manifests should include the built manifest row count")
+
+transport.Send = originalSend
+ns.modules.syncManualActionHandlers = originalHandlers

@@ -283,9 +283,80 @@ local function safe_call(fn, ...)
     return pcall(fn, ...)
 end
 
-local function collect_ledger_debug(scanner)
+local function compact_list(value)
+    if type(value) ~= "table" then
+        return ""
+    end
+
+    local parts = {}
+    for index, item in ipairs(value) do
+        parts[index] = tostring(item or "")
+    end
+    return table.concat(parts, ",")
+end
+
+local function count_table_entries(value)
+    if type(value) ~= "table" then
+        return 0
+    end
+
+    local count = 0
+    for _ in pairs(value) do
+        count = count + 1
+    end
+    return count
+end
+
+local function append_ledger_sync_state(lines, syncState)
+    syncState = type(syncState) == "table" and syncState or {}
+    local lastManifest = syncState.ledgerLastManifest
+    if type(lastManifest) == "table" then
+        append_line(lines, string.format(
+            "ledgerLastManifest sender=%s reason=%s updatedAt=%s buckets=%s",
+            value_text(lastManifest.sender),
+            value_text(lastManifest.reason),
+            value_text(lastManifest.updatedAt),
+            compact_list(lastManifest.buckets)
+        ))
+    end
+
+    local lastRequest = syncState.ledgerLastBucketRequest
+    if type(lastRequest) == "table" then
+        append_line(lines, string.format(
+            "ledgerLastBucketRequest sender=%s updatedAt=%s buckets=%s",
+            value_text(lastRequest.sender),
+            value_text(lastRequest.updatedAt),
+            compact_list(lastRequest.buckets)
+        ))
+    end
+
+    local lastReply = syncState.ledgerLastBucketReply
+    if type(lastReply) == "table" then
+        append_line(lines, string.format(
+            "ledgerLastBucketReply sender=%s updatedAt=%s merged=%s buckets=%s",
+            value_text(lastReply.sender),
+            value_text(lastReply.updatedAt),
+            value_text(lastReply.merged),
+            compact_list(lastReply.buckets)
+        ))
+    end
+end
+
+local function collect_ledger_debug(scanner, db)
     local lines = {}
     scanner = type(scanner) == "table" and scanner or {}
+    db = type(db) == "table" and db or {}
+    local bankLedger = ns.modules.bankLedger or {}
+    local constants = ns.constants or {}
+    local manifest = type(bankLedger.BuildLedgerManifest) == "function" and bankLedger.BuildLedgerManifest(db) or {}
+    append_line(lines, string.format(
+        "ledger debug manifest ledgerProtocol=%s reset=%s globalHash=%s buckets=%d",
+        value_text(manifest.ledgerProtocol or constants.LEDGER_PROTOCOL_VERSION),
+        value_text(constants.LEDGER_FORCE_CLEAR_VERSION),
+        value_text(manifest.globalHash or manifest.hash),
+        count_table_entries(manifest.buckets)
+    ))
+    append_ledger_sync_state(lines, db.syncState)
     append_line(lines, string.format(
         "ledger debug state scanInProgress=%s ledgerScanInProgress=%s pendingAfterInventory=%s pendingAuto=%s guildBankOpen=%s passiveActive=%s waitingForTab=%s ledgerTargets=%d",
         tostring(scanner.scanInProgress == true),
@@ -765,7 +836,7 @@ _G.SlashCmdList.GBANKMANAGER = function(msg)
             end
             return lines
         elseif subcommand == "ledger" then
-            local lines = collect_ledger_debug(scanner)
+            local lines = collect_ledger_debug(scanner, db)
             for _, line in ipairs(lines or {}) do
                 push_chat_line(string.format("GBankManager: %s", tostring(line or "")))
             end

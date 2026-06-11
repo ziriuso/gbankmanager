@@ -102,6 +102,10 @@ local function current_addon_version()
     return tostring(((ns.constants or {}).ADDON_VERSION) or "")
 end
 
+local function current_ledger_protocol()
+    return tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
+end
+
 local function clone_array_records(records)
     local out = {}
     for _, record in ipairs(records or {}) do
@@ -213,104 +217,25 @@ local function default_action_handlers()
             return true, string.format("Requested history sync for %d visible row(s).", #snapshot)
         end,
         ledger = function(db, options)
-            if type(transport.Send) ~= "function" or type(bankLedger.EnsureState) ~= "function" then
+            if type(transport.Send) ~= "function" or type(bankLedger.BuildLedgerManifest) ~= "function" then
                 return false, "Manual sync is unavailable right now."
             end
 
-            local ledgerState = bankLedger.EnsureState(db)
-            local itemGroups = {}
-            for _, row in ipairs((ledgerState or {}).itemLogs or {}) do
-                local tabIndex = tonumber(row.tabIndex or 0) or 0
-                local tabName = tostring(row.tabName or ("Tab " .. tostring(tabIndex)))
-                local key = string.format("%d|%s", tabIndex, tabName)
-                local group = itemGroups[key]
-                if group == nil then
-                    group = {
-                        tabIndex = tabIndex,
-                        tabName = tabName,
-                        transactions = {},
-                    }
-                    itemGroups[key] = group
-                end
-
-                local parts = split_timestamp(row.timestamp or row.when)
-                local transaction = {
-                    type = item_row_type(row.action),
-                    who = row.who,
-                    itemID = row.itemID,
-                    itemName = row.item,
-                    quantity = row.quantity,
-                    fromTabName = row.fromTabName ~= "-" and row.fromTabName or nil,
-                    craftedQuality = row.craftedQuality or row.qualityTier,
-                }
-                for keyName, value in pairs(parts) do
-                    transaction[keyName] = value
-                end
-                group.transactions[#group.transactions + 1] = transaction
-            end
-
-            local itemCount = 0
-            for _, group in pairs(itemGroups) do
-                local payload = {
+            local now = tonumber(options.now or 0) or 0
+            local ledgerManifest = bankLedger.BuildLedgerManifest(db)
+            transport.Send("GUILD", "GUILD", {
+                type = "LEDGER_MANIFEST",
+                updatedAt = now,
+                payload = {
                     guildKey = current_guild_key(db),
                     actorContext = current_context(db),
                     version = current_addon_version(),
-                    kind = "item",
-                    sourceTabIndex = group.tabIndex,
-                    sourceTabName = group.tabName,
-                    scanStartedAt = tonumber(options.now or 0) or 0,
-                    transactions = group.transactions,
-                }
-                if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
-                    payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
-                end
-                itemCount = itemCount + #(payload.transactions or {})
-                transport.Send("GUILD", "GUILD", {
-                    type = "LEDGER_DELTA",
-                    updatedAt = tonumber(options.now or 0) or 0,
-                    payload = payload,
-                })
-            end
+                    ledgerProtocol = current_ledger_protocol(),
+                    manifest = ledgerManifest,
+                },
+            })
 
-            local moneyTransactions = {}
-            for _, row in ipairs((ledgerState or {}).moneyLogs or {}) do
-                local parts = split_timestamp(row.timestamp or row.when)
-                local transaction = {
-                    type = money_row_type(row.action),
-                    who = row.who,
-                    amountCopper = row.amountCopper or row.amount,
-                }
-                for keyName, value in pairs(parts) do
-                    transaction[keyName] = value
-                end
-                moneyTransactions[#moneyTransactions + 1] = transaction
-            end
-
-            local moneyCount = #moneyTransactions
-            if #moneyTransactions > 0 then
-                local payload = {
-                    guildKey = current_guild_key(db),
-                    actorContext = current_context(db),
-                    version = current_addon_version(),
-                    kind = "money",
-                    scanStartedAt = tonumber(options.now or 0) or 0,
-                    repairThresholdGold = tonumber((((db or {}).ui or {}).logsHistorySettings or {}).repairThresholdGold or 5000) or 5000,
-                    transactions = moneyTransactions,
-                }
-                if type(bankLedger.SanitizeRemoteDeltaPayload) == "function" then
-                    payload = bankLedger.SanitizeRemoteDeltaPayload(payload)
-                end
-                moneyCount = #(payload.transactions or {})
-                if moneyCount > 0 then
-                    transport.Send("GUILD", "GUILD", {
-                        type = "LEDGER_DELTA",
-                        updatedAt = tonumber(options.now or 0) or 0,
-                        payload = payload,
-                    })
-                end
-            end
-
-            return true, string.format("Requested ledger sync for %d item row(s) and %d money row(s).", itemCount, moneyCount)
+            return true, string.format("Announced ledger manifest for %d row(s).", tonumber((ledgerManifest or {}).totalCount or 0) or 0)
         end,
     }
 end
@@ -400,6 +325,7 @@ function manualActions.Run(db, options)
 
     local handlers = ensure_table(ns.modules.syncManualActionHandlers)
     local defaults = default_action_handlers()
+    local lastHandlerMessage = nil
     for _, targetAction in ipairs(targets) do
         local handler = handlers[targetAction] or defaults[targetAction]
         if type(handler) == "function" then
@@ -415,6 +341,9 @@ function manualActions.Run(db, options)
                     message = tostring(handlerMessage or "Unable to trigger sync."),
                 }
             end
+            if tostring(handlerMessage or "") ~= "" then
+                lastHandlerMessage = tostring(handlerMessage or "")
+            end
         end
     end
 
@@ -425,7 +354,9 @@ function manualActions.Run(db, options)
         end
     end
 
-    local successMessage = action == "all"
+    local successMessage = action ~= "all" and lastHandlerMessage ~= nil
+        and lastHandlerMessage
+        or action == "all"
         and "Triggered all available sync actions."
         or string.format("Triggered %s sync.", reportedAction)
 

@@ -102,17 +102,28 @@ local disabledMinimumPlan = planning.BuildDemandPlan({
                     Food = 1,
                 },
             },
+            [3004] = {
+                itemID = 3004,
+                name = "Feast Omega",
+                totalCount = 15,
+                tabs = {
+                    Food = 15,
+                },
+            },
         },
     },
     minimums = {
         { itemID = 3003, itemName = "Feast Gamma", quantity = 15, scope = "GLOBAL", enabled = false },
+        { itemID = 3004, itemName = "Feast Omega", quantity = 15, scope = "GLOBAL", enabled = false },
         { itemID = 4004, itemName = "Rune Delta", quantity = 7, scope = "GLOBAL", enabled = true },
     },
     oneTimeTargets = {},
     requests = {},
 })
 
-assert.truthy(disabledMinimumPlan[3003] == nil, "disabled minimum rules should not contribute to planning demand")
+assert.equal(14, disabledMinimumPlan[3003].sources.ONE_TIME_TARGET, "disabled positive minimum rules should contribute one-time demand until stocked")
+assert.equal(14, disabledMinimumPlan[3003].totalToBuy, "one-time minimum demand should buy only the current shortage")
+assert.truthy(disabledMinimumPlan[3004] == nil, "stocked one-time minimum rules should not contribute demand")
 assert.equal(7, disabledMinimumPlan[4004].sources.RESTOCK, "enabled minimum rules should still contribute to planning demand")
 
 local databasePlan, databaseSnapshot = planning.BuildDemandPlanFromDatabase({

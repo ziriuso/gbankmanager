@@ -24,6 +24,8 @@ assert.equal("indefinite", db.ui.logsHistorySettings.historyRetention, "history 
 assert.equal(300, db.ui.logsHistorySettings.ledgerScanIntervalSeconds, "ledger scan interval should default to five minutes")
 assert.equal(5000, db.ui.logsHistorySettings.repairThresholdGold, "ledger repair classification threshold should default to five thousand gold")
 assert.truthy(not db.ui.logsHistorySettings.muteSilvermoonCitizen, "Silvermoon Citizen chat mute should default off")
+assert.truthy(type(db.ui.chatSettings) == "table", "database defaults should include reusable chat settings")
+assert.equal(true, db.ui.chatSettings.suppressRoutineMessages, "routine addon chat suppression should default on")
 
 local mergedItemCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716573600,
@@ -86,6 +88,70 @@ local duplicateItemCount = bankLedger.MergeItemTransactions(db, {
 
 assert.equal(0, duplicateItemCount, "ledger item merge should skip duplicate transactions during later scans")
 assert.equal(2, #db.bankLedger.itemLogs, "ledger item merge should stay append-only when no deltas appear")
+
+local bucketMergeDb = fresh_db()
+local bucketPayload = {
+    rows = {
+        item = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                itemID = 211878,
+                item = "Flask of Tempered Swiftness",
+                quantity = 5,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+            },
+        },
+        money = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                amountCopper = 2500000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+            },
+        },
+    },
+}
+local bucketMergeInitialCount = bankLedger.MergeBucketRows(bucketMergeDb, bucketPayload)
+assert.equal(2, bucketMergeInitialCount, "ledger bucket merge should append item and money bucket rows")
+assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket merge should persist item bucket rows")
+assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket merge should persist money bucket rows")
+assert.equal(3, bucketMergeDb.bankLedger.itemLogs[1].tabIndex, "ledger bucket merge should preserve source tab index metadata")
+assert.equal("Raid Supplies", bucketMergeDb.bankLedger.itemLogs[1].tabName, "ledger bucket merge should preserve source tab name metadata")
+local bucketMergeReplayCount = bankLedger.MergeBucketRows(bucketMergeDb, bucketPayload)
+assert.equal(0, bucketMergeReplayCount, "ledger bucket merge should skip duplicate bucket payload rows")
+assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket replay should not duplicate item rows")
+assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket replay should not duplicate money rows")
+
+local malformedBucketDb = fresh_db()
+local malformedBucketCount = bankLedger.MergeBucketRows(malformedBucketDb, {
+    rows = {
+        item = { "bad" },
+        money = { "bad" },
+    },
+})
+assert.equal(0, malformedBucketCount, "ledger bucket merge should ignore malformed non-table bucket rows")
+assert.equal(0, #malformedBucketDb.bankLedger.itemLogs, "malformed item bucket rows should not append synthetic item rows")
+assert.equal(0, #malformedBucketDb.bankLedger.moneyLogs, "malformed money bucket rows should not append synthetic money rows")
+
+local emptyBucketRowDb = fresh_db()
+local emptyBucketRowCount = bankLedger.MergeBucketRows(emptyBucketRowDb, {
+    rows = {
+        item = { {} },
+        money = { {} },
+    },
+})
+assert.equal(0, emptyBucketRowCount, "ledger bucket merge should ignore empty table bucket rows")
+assert.equal(0, #emptyBucketRowDb.bankLedger.itemLogs, "empty item bucket rows should not append synthetic item rows")
+assert.equal(0, #emptyBucketRowDb.bankLedger.moneyLogs, "empty money bucket rows should not append synthetic money rows")
 
 local repeatedVisibleScanCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716574200,
@@ -708,6 +774,81 @@ local repeatedRealMoneyNext = bankLedger.MergeMoneyTransactions(repeatedRealMone
 assert.equal(1, repeatedRealMoneyNext, "a real later money transaction with the same actor/action/amount should append instead of being hidden by timeless legacy dedupe")
 assert.equal(2, #repeatedRealMoneyDb.bankLedger.moneyLogs, "repeated real money activity should keep both distinct timestamps")
 
+local relativeMoneyReplayDb = fresh_db()
+_G.GetServerTime = function()
+    return 1780540360
+end
+local relativeMoneyReplayInitial = bankLedger.MergeMoneyTransactions(relativeMoneyReplayDb, {
+    scanStartedAt = 1780540360,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amount = 1874304,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 21,
+        },
+    },
+})
+assert.equal(1, relativeMoneyReplayInitial, "baseline relative money replay import should persist the first visible ledger row")
+_G.GetServerTime = function()
+    return 1780594903
+end
+local relativeMoneyReplayRepeat = bankLedger.MergeMoneyTransactions(relativeMoneyReplayDb, {
+    scanStartedAt = 1780594903,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amount = 1874304,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 21,
+        },
+    },
+})
+assert.equal(0, relativeMoneyReplayRepeat, "money replay should not duplicate the same raw relative Blizzard row when a later scan mints a new absolute timestamp")
+assert.equal(1, #relativeMoneyReplayDb.bankLedger.moneyLogs, "money replay should keep one row for the same raw relative Blizzard money entry")
+
+local driftedRelativeMoneyReplayDb = fresh_db()
+driftedRelativeMoneyReplayDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-hour",
+        timestamp = 1780626109,
+        when = 1780626109,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 12,
+        fingerprint = "2026|6|4|22|21|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+}
+bankLedger.EnsureState(driftedRelativeMoneyReplayDb)
+local driftedRelativeMoneyReplayRepeat = bankLedger.MergeMoneyTransactions(driftedRelativeMoneyReplayDb, {
+    scanStartedAt = 1780625759,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zerobrews",
+            amountCopper = 5779554,
+            year = 0,
+            month = 0,
+            day = 0,
+            hour = 17,
+        },
+    },
+})
+assert.equal(0, driftedRelativeMoneyReplayRepeat, "money replay should not duplicate the same raw relative Blizzard row when its visible relative hour drifts")
+assert.equal(1, #driftedRelativeMoneyReplayDb.bankLedger.moneyLogs, "drifted relative money replay should leave one canonical row")
+
 local repeatedRealItemDb = fresh_db()
 _G.GetServerTime = function()
     return 1779998400
@@ -822,6 +963,98 @@ local regrownBatchMoneyNext = bankLedger.MergeMoneyTransactions(regrownBatchMone
 assert.equal(1, regrownBatchMoneyNext, "GBL-style session batch counts should append a same-identity money row when the visible batch regrows")
 assert.equal(3, #regrownBatchMoneyDb.bankLedger.moneyLogs, "regrown same-identity money batches should preserve every distinct event")
 
+local durableCountMoneyDb = fresh_db()
+local durableCountMoneyPayload = {
+    scanStartedAt = 1718300000,
+    transactions = {
+        { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 },
+        { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 },
+    },
+}
+local durableCountMoneyFirstMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(2, durableCountMoneyFirstMerge, "first full money batch should append both same-hour occurrences")
+
+local durableCountMoneyLedger = bankLedger.EnsureState(durableCountMoneyDb)
+assert.truthy(type(((durableCountMoneyLedger.eventCounts or {}).money)) == "table", "money merge should persist durable event count metadata")
+local durableCountMoneyHighWater = 0
+for _, entry in pairs(durableCountMoneyLedger.eventCounts.money or {}) do
+    durableCountMoneyHighWater = math.max(durableCountMoneyHighWater, tonumber((entry or {}).count or 0) or 0)
+end
+assert.equal(2, durableCountMoneyHighWater, "money durable event counts should remember both same-hour occurrences")
+durableCountMoneyLedger.sessionBatchCounts = nil
+bankLedger = dofile("GBankManager/Domain/BankLedger.lua")
+local durableCountMoneyReplayMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(0, durableCountMoneyReplayMerge, "persisted money event counts should prevent reload-time duplicate appends")
+
+durableCountMoneyPayload.transactions[#durableCountMoneyPayload.transactions + 1] = { type = "deposit", who = "MemberOne", amount = 1234500, year = 0, month = 0, day = 0, hour = 16 }
+local durableCountMoneyLaterMerge = bankLedger.MergeMoneyTransactions(durableCountMoneyDb, durableCountMoneyPayload)
+assert.equal(1, durableCountMoneyLaterMerge, "one extra visible money occurrence should append exactly one row")
+
+local driftedRelativeDepositDb = fresh_db()
+bankLedger.MergeMoneyTransactions(driftedRelativeDepositDb, {
+    scanStartedAt = 1780684429,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 0 },
+    },
+})
+local driftedRelativeDepositMerge = bankLedger.MergeMoneyTransactions(driftedRelativeDepositDb, {
+    scanStartedAt = 1780685233,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 1 },
+    },
+})
+assert.equal(0, driftedRelativeDepositMerge, "raw relative money deposits should not duplicate when Blizzard's visible hour drifts")
+assert.equal(1, #driftedRelativeDepositDb.bankLedger.moneyLogs, "drifted raw relative deposits should keep one canonical row")
+
+local legacyStampedRelativeDepositDb = fresh_db()
+legacyStampedRelativeDepositDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-live-5000-original",
+        timestamp = 1780684429,
+        when = 1780684429,
+        who = "Ziriously",
+        action = "Deposit",
+        amountCopper = 50000000,
+        amount = 50000000,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 0,
+        fingerprint = "2026|6|5|14|33|Ziriously|deposit|50000000|1",
+        legacyFingerprint = "unknown|Ziriously|deposit|50000000|1",
+        replayBridgeBase = "0|0|0|0||0|Ziriously|deposit|50000000",
+    },
+    {
+        entryId = "money-live-5001-original",
+        timestamp = 1780686959,
+        when = 1780686959,
+        who = "Ziriously",
+        action = "Deposit",
+        amountCopper = 50010000,
+        amount = 50010000,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 0,
+        fingerprint = "2026|6|5|15|15|Ziriously|deposit|50010000|1",
+        legacyFingerprint = "unknown|Ziriously|deposit|50010000|1",
+        replayBridgeBase = "0|0|0|0||0|Ziriously|deposit|50010000",
+    },
+}
+bankLedger.EnsureState(legacyStampedRelativeDepositDb)
+_G.GetServerTime = function()
+    return 1780690784
+end
+local legacyStampedRelativeDepositMerge = bankLedger.MergeMoneyTransactions(legacyStampedRelativeDepositDb, {
+    scanStartedAt = 1780690782,
+    transactions = {
+        { type = "deposit", who = "Ziriously", amount = 50000000, year = 0, month = 0, day = 0, hour = 1 },
+        { type = "deposit", who = "Ziriously", amount = 50010000, year = 0, month = 0, day = 0, hour = 1 },
+    },
+})
+assert.equal(0, legacyStampedRelativeDepositMerge, "legacy-keyed raw relative deposits should not reappend when a later scan shifts their visible hour")
+assert.equal(2, #legacyStampedRelativeDepositDb.bankLedger.moneyLogs, "legacy-keyed drifted deposits should keep only the canonical original rows")
+
 local regrownBatchItemDb = fresh_db()
 local regrownBatchItemInitial = bankLedger.MergeItemTransactions(regrownBatchItemDb, {
     scanStartedAt = 1716573600,
@@ -903,6 +1136,37 @@ local regrownBatchItemNext = bankLedger.MergeItemTransactions(regrownBatchItemDb
 })
 assert.equal(1, regrownBatchItemNext, "GBL-style session batch counts should append a same-identity item row when the visible batch regrows")
 assert.equal(3, #regrownBatchItemDb.bankLedger.itemLogs, "regrown same-identity item batches should preserve every distinct event")
+
+local durableCountItemDb = fresh_db()
+local durableCountItemPayload = {
+    kind = "item",
+    sourceTabIndex = 2,
+    sourceTabName = "Extra Stuff",
+    scanStartedAt = 1718300000,
+    transactions = {
+        { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 },
+        { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 },
+    },
+}
+
+local durableCountItemFirstMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(2, durableCountItemFirstMerge, "first full batch should append both same-hour occurrences")
+
+local durableCountItemLedger = bankLedger.EnsureState(durableCountItemDb)
+assert.truthy(type(((durableCountItemLedger.eventCounts or {}).item)) == "table", "item merge should persist durable event count metadata")
+local durableCountItemHighWater = 0
+for _, entry in pairs(durableCountItemLedger.eventCounts.item or {}) do
+    durableCountItemHighWater = math.max(durableCountItemHighWater, tonumber((entry or {}).count or 0) or 0)
+end
+assert.equal(2, durableCountItemHighWater, "item durable event counts should remember both same-hour occurrences")
+durableCountItemLedger.sessionBatchCounts = nil
+bankLedger = dofile("GBankManager/Domain/BankLedger.lua")
+local durableCountItemReplayMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(0, durableCountItemReplayMerge, "persisted event counts should prevent reload-time duplicate appends")
+
+durableCountItemPayload.transactions[#durableCountItemPayload.transactions + 1] = { type = "withdraw", who = "MemberOne", itemID = 238415, itemName = "Vantus Rune: Radiant", quantity = 1, year = 0, month = 0, day = 0, hour = 16 }
+local durableCountItemLaterMerge = bankLedger.MergeItemTransactions(durableCountItemDb, durableCountItemPayload)
+assert.equal(1, durableCountItemLaterMerge, "one extra visible occurrence should append exactly one row")
 
 local thresholdStableFingerprintDb = fresh_db()
 local thresholdStableFingerprintInitial = bankLedger.MergeMoneyTransactions(thresholdStableFingerprintDb, {
@@ -1634,6 +1898,143 @@ assert.equal(0, bankLedger.MergeMoneyTransactions(dedupeSourceStableMoneyDb, {
         },
     },
 }), "a money scan after cleanup should not reimport the same visible source row")
+
+local dedupeRelativeMoneyDb = fresh_db()
+dedupeRelativeMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-row",
+        timestamp = 1780540360,
+        when = 1780540360,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 1874304,
+        amount = 1874304,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 21,
+        fingerprint = "2026|6|3|22|32|Zerobrews|withdraw|1874304|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+    },
+    {
+        entryId = "money-later-relative-row",
+        timestamp = 1780594903,
+        when = 1780594903,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 1874304,
+        amount = 1874304,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 21,
+        fingerprint = "2026|6|4|13|41|Zerobrews|withdraw|1874304|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+    },
+}
+local relativeMoneyDedupePlan = bankLedger.BuildDedupePlan(dedupeRelativeMoneyDb)
+assert.equal(1, relativeMoneyDedupePlan.moneyDuplicateRowCount, "money cleanup should flag duplicate raw relative Blizzard rows even when their minted timestamps differ")
+local relativeMoneyDedupeResult = bankLedger.ApplyDedupePlan(dedupeRelativeMoneyDb, relativeMoneyDedupePlan)
+assert.equal(1, relativeMoneyDedupeResult.moneyRemoved, "money cleanup should remove duplicated raw relative Blizzard money rows")
+assert.equal(1, #dedupeRelativeMoneyDb.bankLedger.moneyLogs, "money cleanup should leave one canonical raw relative Blizzard money row")
+
+local dedupeDriftedRelativeMoneyDb = fresh_db()
+dedupeDriftedRelativeMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-original-relative-hour",
+        timestamp = 1780626109,
+        when = 1780626109,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 12,
+        fingerprint = "2026|6|4|22|21|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+    {
+        entryId = "money-drifted-relative-hour",
+        timestamp = 1780624777,
+        when = 1780624777,
+        who = "Zerobrews",
+        action = "Repair",
+        amountCopper = 5779554,
+        amount = 5779554,
+        year = 0,
+        month = 0,
+        day = 0,
+        hour = 15,
+        fingerprint = "2026|6|4|21|59|Zerobrews|withdraw|5779554|1",
+        legacyFingerprint = "unknown|Zerobrews|withdraw|5779554|1",
+    },
+}
+local driftedRelativeMoneyDedupePlan = bankLedger.BuildDedupePlan(dedupeDriftedRelativeMoneyDb)
+assert.equal(1, driftedRelativeMoneyDedupePlan.moneyDuplicateRowCount, "money cleanup should flag raw relative rows whose bridged visible hour drifted")
+local driftedRelativeMoneyDedupeResult = bankLedger.ApplyDedupePlan(dedupeDriftedRelativeMoneyDb, driftedRelativeMoneyDedupePlan)
+assert.equal(1, driftedRelativeMoneyDedupeResult.moneyRemoved, "money cleanup should remove relative rows that still share the same legacy source fingerprint")
+assert.equal(1, #dedupeDriftedRelativeMoneyDb.bankLedger.moneyLogs, "money cleanup should leave one canonical drifted raw relative money row")
+
+local dedupeTimezoneStableMoneyDb = fresh_db()
+dedupeTimezoneStableMoneyDb.bankLedger.moneySourceSnapshots = {
+    money = {
+        "2026|6|2|12|51|Zirleficent|withdraw|1500000000|1",
+    },
+}
+dedupeTimezoneStableMoneyDb.bankLedger.moneyLogs = {
+    {
+        entryId = "money-old-visible-duplicate",
+        timestamp = 1780415704,
+        when = 1780415704,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|11|55|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+    {
+        entryId = "money-current-source-hour-duplicate",
+        timestamp = 1780417641,
+        when = 1780417641,
+        who = "Zirleficent",
+        action = "Withdrawal",
+        amountCopper = 1500000000,
+        amount = 1500000000,
+        fingerprint = "2026|6|2|12|27|Zirleficent|withdraw|1500000000|1",
+        legacyFingerprint = "unknown|Zirleficent|withdraw|1500000000|1",
+    },
+}
+local originalDate = _G.date
+_G.date = function(format, timestamp)
+    if format == "*t" then
+        return os.date("!*t", timestamp)
+    end
+    return os.date(format, timestamp)
+end
+local timezoneStableDedupePlan = bankLedger.BuildDedupePlan(dedupeTimezoneStableMoneyDb)
+local timezoneStableDedupeResult = bankLedger.ApplyDedupePlan(dedupeTimezoneStableMoneyDb, timezoneStableDedupePlan)
+local timezoneStableRepeatCount = bankLedger.MergeMoneyTransactions(dedupeTimezoneStableMoneyDb, {
+    scanStartedAt = 1780453860,
+    transactions = {
+        {
+            type = "withdraw",
+            who = "Zirleficent",
+            amountCopper = 1500000000,
+            year = 2026,
+            month = 6,
+            day = 2,
+            hour = 12,
+            minute = 51,
+        },
+    },
+})
+_G.date = originalDate
+assert.equal(1, timezoneStableDedupeResult.moneyRemoved, "money cleanup should remove one visible duplicate under a UTC-style test runner")
+assert.equal("money-current-source-hour-duplicate", dedupeTimezoneStableMoneyDb.bankLedger.moneyLogs[1].entryId, "money cleanup should use stored row fingerprints instead of runner timezone when protecting source-stable rows")
+assert.equal(0, timezoneStableRepeatCount, "money cleanup should not reimport the same visible source row under a UTC-style test runner")
 assert.equal(1, #dedupeSourceStableMoneyDb.bankLedger.moneyLogs, "money cleanup should stay stable after the next scan")
 
 local itemRows = bankLedger.BuildTableRows(db, "ITEM", {

@@ -2,12 +2,199 @@
 
 ## Resume Here
 
+### 2026-06-05 Post-v1.2.2 Live Sync Follow-Up
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base release at session start was `v1.2.2` on commit `821ab88` (`chore: prepare 1.2.2 release`)
+  - local work is an unreleased follow-up to later Retail two-client sync findings and now targets `v1.2.4`; do not treat it as part of the published `v1.2.2` asset
+- Additional live duplicate-money report:
+  - Client B saved variables showed three visible sets of duplicate Bank Ledger money rows, while Client A showed two sets; item logs looked accurate
+  - the duplicate money rows shared Blizzard's raw relative fields (`year/month/day = 0/0/0` plus the same visible hour), actor, action, and amount, but had different addon-minted absolute timestamps and fingerprints from later scans or sync
+  - current timestamp-date fallback therefore hid the duplicates from the existing visible-dedupe and cleanup grouping
+  - v1.2.4 should preserve item ledger rows while cleaning only duplicate money-ledger rows and preventing fixed clients from accepting the same duplicate money rows again
+- Additional live item-ledger catch-up report:
+  - after Client B had item ledger rows that Client A lacked, the rows did not arrive on A until `Sync Ledger` was pressed on B
+  - comparing the later SavedVariables showed A had the rows after the forced sync, confirming manifest/bucket transfer worked once B announced its manifest
+  - root cause: a fuller client that already had the rows locally could complete a no-change ledger scan without publishing a manifest, so stale peers had nothing to compare against until manual or later periodic ledger sync
+- Live problem report:
+  - passive bank-open ledger refresh was repeatedly reporting row counts while no ledger-log rows were actually changing
+  - a stale online client did not reliably receive newer ledger rows from a fuller peer through login, manual `Sync Ledger`, reload, or relog
+  - `Sync All` from the stale side did not pull newer Minimums or missing money-log bucket rows from the fuller side
+  - a fuller peer eventually pushed item-log rows but not money-log rows, and another sync action took roughly 10 minutes before visible receive chatter began
+  - new Minimums created on one client were not automatically synchronized to another online client, and bank-backed new Minimums with positive quantities could remain `Restock: No`, keeping them out of export demand
+  - clarified product rule: `Restock: No` plus a positive Minimum is a one-time stocking target, not a disabled or ignored rule
+- Root cause narrowed:
+  - inbound `SYNC_HELLO` was presence-only, so login did not advertise local state or prompt any catch-up family
+  - `Sync All` was a one-way publish of the sender's local snapshots/manifests, so stale clients could not pull fuller peer state unless the fuller side independently sent the right family
+  - Minimum snapshots replaced the whole local saved rule array, so a stale snapshot could omit newer local rules instead of causing a fuller reciprocal reply
+  - bank-backed `Show All` Minimum rows inherited the display-only `Restock: No` placeholder when staged as a new rule
+- Local fix in progress:
+  - login hello now silently triggers the catch-up families allowed by the receiver's local access profile
+  - login also schedules a short delayed `Sync All`, and an occasional periodic silent `Sync All`, so online clients continue advertising local changes without user chat noise
+  - stale inbound Minimum snapshots now merge by rule key and `updatedAt`, preserve newer local rows, and reply once with a fuller `MINIMUMS_SNAPSHOT` marked `syncReply=true`
+  - passive ledger refresh no longer prints repeated `auto-refresh found X item rows and Y money rows` status lines
+  - accepted request, minimum, history, and ledger snapshot sync now prints chat only when local rows actually arrive or change; no-change accepted payloads update the Sync peer timestamps and stay available through `/gbm debug sync`
+  - bank-backed new Minimums default to Restock enabled, while an explicit Restock disable is still respected
+  - disabled positive Minimums now contribute `ONE_TIME_TARGET` export demand while understocked
+  - successful guild-bank scans remove stocked one-time Minimums, record normal `MINIMUM_REMOVED` history, and publish the remaining Minimums snapshot so peers can drop the completed one-time target
+  - money replay bridging now prefers raw relative Blizzard time fields before minted timestamps, so the same visible `0/0/0` money row does not append again just because a later scan or sync minted a new absolute timestamp
+  - remote money delta merge now uses the same replay bridge as local money scans
+  - internal ledger dedupe planning still flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount for regression coverage, but the manual `Options -> Data -> Dedupe Ledger` button is hidden
+  - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
+  - `GBankManager.toc` and the addon version fallback now advertise `1.2.4` / `v1.2.4`
+  - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v7`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows; v7 intentionally reruns recovery for clients that may have stamped v6 while still carrying drifted 5000g/5001g deposit duplicates
+  - local money scans now suppress short-window raw-relative deposit replays by scan timestamp, so Blizzard money rows whose visible relative hour drifts during a bank-open rescan cannot regrow duplicates after cleanup
+  - `LEDGER_PROTOCOL_VERSION = 3` rejects older same-version protocol-2 ledger manifest, bucket, and direct delta payloads as `old_ledger_protocol`, preventing older 1.2.3 builds from re-poisoning cleaned money ledgers
+  - SavedVariables compaction now records `meta.savedVariablesCompactedForVersion = 1.2.3-snapshot-v3` after removing generated snapshot `searchCatalog` tables, pruning inventory snapshots to the active snapshot plus two recent backups, and capping raw inventory diff diagnostics to the newest 500 rows; fresh scans also enforce those rolling windows, while Requests and Minimums build search catalogs in memory instead of persisting them back onto scan snapshots
+- Verification completed:
+  - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\toc_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_about_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_manifest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_minimums_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\exports_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_exports_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\planning_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Local Retail deploy completed after the fix:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
+  - deployed `GBankManager` and `GBankManager_ItemData` into `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns`
+- Next live validation:
+  1. In Retail, `/reload` both clients.
+  2. Confirm a fuller online client answers a stale client's login and manual sync with ledger item-log, ledger money-log, Minimums, visible History, and Requests catch-up without waiting minutes.
+  3. Confirm a newly logged-in client also advertises any newer data it has to already-online clients.
+  4. With the guild bank left open, confirm passive ledger refresh imports actual new rows but does not spam auto-refresh count messages when no row changes.
+  5. In Minimums `Show All`, add a positive new minimum from a bank row and confirm exports include it. Then toggle another positive target to `Restock: No` and confirm exports still include it while understocked as a one-time target.
+  6. Stock that one-time target, run `Scan Bank`, and confirm the one-time Minimum is removed locally and from peers after sync, while recurring `Restock: Yes` Minimums remain saved after being stocked.
+
+### 2026-06-05 v1.2.2 Post-Release Live Validation
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - current HEAD is `821ab88` (`chore: prepare 1.2.2 release`)
+  - current tag is `v1.2.2`
+  - local branch is in sync with `origin/codex/gbankmanager-v1`; only expected local noise is untracked `.vscode/`
+- Release state:
+  - stable GitHub Release `GBankManager v1.2.2` is published with `GBankManager-1.2.2.zip`
+  - release workflow run `26987676010` completed successfully, including the full Lua suite, package build, CurseForge upload, and GitHub Release asset attach
+  - Retail deploy completed to `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns` with both `GBankManager` and `GBankManager_ItemData`
+- Scope implemented:
+  - `GBankManager.toc`, `ADDON_VERSION`, and About metadata now target `1.2.2` / `v1.2.2`
+  - `v1.2.0` and `v1.2.1` were pushed first but failed during the release workflow's Lua suite before packaging, GitHub Release creation, or CurseForge upload; `v1.2.2` is the follow-up publish tag
+  - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0` intentionally forces one clean Bank Ledger reset while preserving inventory, Minimums, Requests, auth, blacklist, UI settings, and general sync peers
+  - `LEDGER_PROTOCOL_VERSION = 2` gates the new manifest, bucket-request, and bucket-reply payload families; old or missing ledger protocols are rejected as `old_ledger_protocol`
+  - ledger row identity now uses durable occurrence IDs and count metadata so repeated same-hour activity can be represented without relying on remote row positions
+  - `LedgerManifest.lua` builds deterministic global and six-hour bucket hashes, compares manifests, and selects rows for requested buckets
+  - `LedgerScanner.lua` owns ledger log target planning, fixed money-log query id, raw item/money log reads, and scanner diagnostics
+  - native ledger scans now publish a single `LEDGER_MANIFEST` only after local native row writes; no-change scans do not publish row payloads
+  - manual `Sync Ledger` now announces the local manifest instead of sending digest/delta row bursts
+  - peers request only differing buckets and reply with bucket rows targeted to the requesting client
+  - when a stale or empty client announces a behind ledger manifest, fuller peers can reply directly with the local missing bucket rows instead of asking the stale client for rows it does not have
+  - `MergeBucketRows` appends only valid bucket rows, rejects malformed row payloads before they can create synthetic ledger entries, is idempotent on replay, and does not echo outbound sync
+  - `/gbm debug ledger` now includes ledger protocol, reset marker, global hash, bucket count, and recent manifest/request/reply state
+- Focused verification green during implementation:
+  - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_manifest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\slash_commands_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_unit.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passed again after release verification on 2026-06-05
+- Live validation result:
+  - 2026-06-05 Retail validation passed after `/reload`
+  - About showed `v1.2.2`
+  - two online 1.2.2 clients in the same guild converged ledger rows through manifest/bucket sync
+  - stale or empty `Sync Ledger` catch-up received missing bucket rows from the fuller peer
+  - repeated no-change scan or sync did not resend row payloads or routine chat
+  - this release has no known v1.2.2 ledger-sync live blocker
+
+### 2026-06-04 Ledger Sync Noise Stabilization Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base release in the worktree is `v1.1.2`
+  - local work is a follow-up to live guild reports of repeated ledger delta chatter during high activity
+- Scope implemented:
+  - `BankLedger.BuildSyncDigest` now produces a compact ledger digest with stable hash, item count, money count, total count, and per-bucket hashes
+  - manual `Sync Ledger` and scanner-published ledger updates now announce `LEDGER_DIGEST` before `LEDGER_DELTA`
+  - same-hash ledger delta sends are suppressed for a short burst window while digest announcements remain available for convergence/debug state
+  - scanner-ledger publishing still stays quiet when the scan produced no pending ledger payloads
+  - inbound `LEDGER_DIGEST` traffic is validated with the same guild, version, blacklist, and sender checks as ledger deltas, stores the peer digest, and records `matched` or `different` in the existing sync decision surface
+  - inbound `SYNC_HELLO` is now presence-only: it updates last-seen peer state and refreshes the Sync tab without running the same catch-up family set as `Sync All`
+  - accepted remote `LEDGER_DELTA` payloads only print `Synced ledger delta ...` when they merge actual new rows; no-change and rejected ledger deltas stay quiet in chat while `/gbm debug sync` still records the decision
+  - native local ledger writes from manual, bank-open, or passive scans remain the trigger for automatic ledger sync publication
+  - sync tests that expect routine chat now explicitly opt out of the default-on routine chat suppression setting
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\sync_ledger_digest_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_manual_actions_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_scanner_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- Recommended next manual verification:
+  1. In a live guild with two addon clients, perform a new guild-bank item or money-log action, let client A publish the ledger update, and confirm client B imports the row once.
+  2. Repeat `Sync Ledger` or a scan burst with no further ledger changes and confirm client B does not receive duplicate rows or another `Synced ledger delta ...` line; `/gbm debug sync` should show ledger digest convergence instead of repeated applied deltas.
+  3. `/reload` one client with another online and confirm login hello updates peer last-seen state without dispatching Requests, Minimums, History, or Ledger catch-up payloads until a manual sync action or native local write occurs.
+
+### 2026-06-03 Routine Addon Chat Suppression Checkpoint
+
+- Current local checkpoint:
+  - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
+  - branch: `codex/gbankmanager-v1`
+  - base release in the worktree is being prepared as `v1.1.2`
+  - issue under implementation: `https://github.com/ziriuso/gbankmanager/issues/11`
+- Scope implemented:
+  - added persisted `ui.chatSettings.suppressRoutineMessages`, defaulting off and normalized through database migrations
+  - added reusable `Core/ChatOutput.lua` and loaded it early in `GBankManager.toc`
+  - `Sync/Transport.lua` now treats accepted sync status output as routine by default
+  - guild-bank scanner start/finish/progress chat now flows through the routine output gate while still updating visible scanner status text
+  - scanner warnings and failures bypass the routine mute
+  - explicit slash debug and test output remains visible
+  - `Options -> Appearance` now has an immediate-save `Suppress Chat Except Sync Changes` toggle beside the existing local appearance toggles
+  - follow-up default changed `Suppress Chat Except Sync Changes` to on for missing or fresh settings while preserving an explicit saved off state
+  - follow-up Appearance chrome now extends behind the added toggle stack and onboarding replay control; future Options expansion should grow the owning panel background with the new controls
+  - follow-up minimap launcher positioning now derives its radius from the minimap and launcher sizes so the icon sits on the minimap edge instead of inside the map
+  - follow-up New Request wizard copy now says `Search for the item you would like stocked. Current expansion items only, no gear.`
+  - `GBankManager.toc` now advertises `1.1.2` / `v1.1.2`; `ADDON_VERSION` fallback matches `1.1.2` while the ledger clear marker remains `1.1.1`
+- Focused verification now green:
+  - `.\tools\lua\lua.exe .\tests\spec\chat_output_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\diff_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\sync_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\ui_options_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
+  - `.\tools\lua\lua.exe .\tests\run_unit.lua`
+  - `.\tools\lua\lua.exe .\tests\run_all.lua`
+- Docs updated in this slice:
+  - `README.md`
+  - `docs/testing.md`
+  - `docs/manual-test-checklist.md`
+  - this handoff
+- Recommended next manual verification before release or deploy:
+  1. In Retail, confirm `Options -> Appearance -> Suppress Chat Except Sync Changes` starts checked, run a manual scan plus a two-client routine sync update, and confirm routine scan/no-change sync chat is hidden while UI status, warnings/errors, `/gbm debug sync`, and `/gbm test unit` remain visible; then toggle it off and confirm sync chat still appears only when rows actually arrive.
+
 ### 2026-06-03 Ledger Sync Dedupe + Review Cleanup Checkpoint
 
 - Current local checkpoint in the v1.1.0 line:
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
-  - base public release remains `v1.1.0`
+  - base public release remains `v1.1.0`; current patch release prep targets `v1.1.1`
   - issue under investigation came from live duplicate `Bank Ledger -> Money Log` rows after sync replay
 - Root cause narrowed and covered locally:
   - a local money-log source window could stay at an older same-identity batch count after remote ledger sync appended an extra repeated occurrence
@@ -15,8 +202,8 @@
   - older locally stored money rows could also be "known" only through the coarse legacy fingerprint while still counting as zero exact hour-level matches, which let a later local money-log replay append a third copy even with no peer online
 - Local fix now in the worktree:
   - remote ledger merge now reconciles same-source batch counts for matching visible ledger identities so a later local scan does not reappend the same repeated money row just because it arrived through sync first
-  - `Options -> Data` now adds `Dedupe Ledger`
-  - `Dedupe Ledger` is review-first: preview counts first, then a `Review Rows` modal with the exact rows to remove, then `Clean Up`
+  - `Options -> Data` previously added `Dedupe Ledger`; the manual button is now hidden while versioned load-time cleanup handles duplicate money-ledger recovery
+  - the internal dedupe review modal remains covered by tests, but users should not see a Data-tab entry point for it
   - cleanup now targets item rows with the same visible ledger date, actor, action, item, quantity, tab, and moved-from values, plus money rows with the same visible ledger date, actor, action, and amount
   - the `Review Rows` modal now provisions a slim scrollbar and expands its text content height so long cleanup lists can be reviewed before applying
   - latest live-cache evidence showed cleanup could keep an older money duplicate whose hour no longer matched `moneySourceSnapshots`; after cleanup cleared transient state, the next money scan could reimport the current Blizzard row
@@ -25,10 +212,10 @@
   - remote ledger sync now sanitizes outbound manual/scanner `LEDGER_DELTA` payloads and inbound remote merge batches so a peer cache that still contains duplicate visible rows cannot re-contaminate a repaired client
   - follow-up live finding: older clients can still send a polluted payload whose first remaining visible duplicate has a different timestamp than the repaired receiver's kept row; inbound remote merge now seeds the visible-dedupe filter from existing receiver rows before applying the remote batch
   - latest local source-data check found the active Retail cache had `1068` item ledger rows, `0` `itemSourceSnapshots`, and `186` same-visible-date item duplicate groups covering `999` rows; item replay protection now bridges legacy item rows by visible date so shifted timestamps do not regrow the same displayed row
-  - this version now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
+  - `v1.1.1` now forces a one-time Bank Ledger clear during database normalization when `ADDON_VERSION` matches `LEDGER_FORCE_CLEAR_VERSION`, records `meta.ledgerClearedForVersion`, and marks fresh databases as already cleared so later reloads keep newly scanned rows
   - outbound manual and scanner `LEDGER_DELTA` payloads now include the addon version, and inbound ledger deltas are accepted only when the remote version is the same or newer; missing-version or older-version ledger deltas are rejected as `older_version`
   - local Blizzard ledger scans remain the source of truth for real repeated same-identity activity; remote sync is intentionally conservative because it cannot distinguish true identical rows from a dirty peer cache
-  - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; they do not currently prune inventory snapshots, Minimums, Requests, or sync-peer history
+  - retention settings are active cleanup hooks for Bank Ledger item/money rows and visible audit-history rows on database load, after ledger scans, and on logs/history settings save; inventory snapshots are separately compacted to the active snapshot plus two recent backups, while Minimums, Requests, and sync-peer history are not pruned by those retention settings
 - Focused verification now green:
   - `.\tools\lua\lua.exe .\tests\spec\store_spec.lua`
   - `.\tools\lua\lua.exe .\tests\spec\bank_ledger_spec.lua`
@@ -46,7 +233,7 @@
   2. Confirm the next local money-log scan does not reappend the already-synced repeated row, and also confirm a local money-log replay with no peer online does not grow an older duplicate set by one more row.
   3. With one older client still containing old duplicate ledger rows, run `Sync Ledger` or `Sync All` and confirm a cleaned receiver does not gain those duplicate visible rows even when the older sender's copy has a different timestamp.
   4. Confirm a missing-version or older-version client cannot repopulate ledger rows through `LEDGER_DELTA`; same-version and newer clients should still sync ledger rows normally.
-  5. If any older duplicates remain, use `Options -> Data -> Dedupe Ledger`, inspect `Review Rows`, confirm long review lists scroll, and confirm cleanup removes only duplicate same-visible-date item rows or money rows with the same visible ledger date, actor, action, and amount while keeping a source-stable money survivor when available.
+  5. Confirm `Options -> Data` does not show the manual `Dedupe Ledger` button; if older duplicates remain, validate that versioned load-time cleanup handles money-ledger recovery while preserving item ledger rows.
 
 ### 2026-06-02 v1.1.0 Release Success
 
@@ -92,7 +279,7 @@
   - accepted remote `REQUESTS_SNAPSHOT` catch-up sync now also reconstructs existing `REQUEST_*` History rows when the snapshot is what brings a receiver up to date
   - visible History rows now also have a dedicated `HISTORY_SNAPSHOT` sync family that merges only the same `History` page categories already shown today
   - `Options -> Sync` now includes `Sync History`, and `Sync All` now includes that family too
-  - incoming guild hello now triggers the same catch-up family set as `Sync All` for the receiver's local access profile, so full-shell clients can republish Requests, Minimums, visible History rows, and ledger deltas automatically while request-only clients still collapse to Requests only
+  - this older checkpoint originally made incoming guild hello trigger the same catch-up family set as `Sync All`; the 2026-06-04 ledger sync noise checkpoint supersedes that behavior and makes hello presence-only again
   - `Options -> Sync` now includes an inline red peer-remove control so one bad stored peer can be cleared without resetting the whole guild peer table
   - the Sync peer table now provisions its own slim scrollbar, keeps that scrollbar hidden until the peer list truly overflows, reserves a stable right-side gutter for it, and keeps the delete `X` inside a dedicated trailing action column instead of hugging the outer edge
   - `Minimums -> Import` now opens with a visibly framed focused payload field and keeps the lower review viewport hidden until preview actually succeeds, while parse failures stay in a clean status line
@@ -152,7 +339,6 @@
 - Older sections below this checkpoint are archival and intentionally preserve earlier beta-era resume context.
 - Current remaining follow-up is backlog polish, not a known release blocker:
   - passive ledger refresh validation after `/reload` with the bank already open
-  - routine chat suppression option
   - active-view auto-refresh for accepted sync updates
   - portable Minimums export/import
   - possible History sync design
@@ -169,11 +355,10 @@
 - The current local follow-up now also fixes the live `Options -> Sync` peer list rendering bug: the Sync subtable now assigns a concrete scroll-child and row width instead of relying on anchor-only width resolution that left the peer rows clipped away in the real WoW client.
 - The current local follow-up also brings the Minimums add-item modal back into line with the New Request wizard: both now enable the shared selector's crafted-quality icon path, so crafted search results and the selected-item summary show the same quality icons in both surfaces.
 - The current local follow-up also fixes two Minimums add-flow regressions: the typed `Minimum` value now carries from the add-search modal into `Minimum Details` instead of resetting to the default, and the lower add-search controls no longer jump right when a crafted-quality selected-item icon appears.
-- Possible future feature note:
-  - add a global `Suppress routine addon chat messages` option
-  - default scope: mute routine status or progress messages only
-  - keep `/gbm debug ...` output and real error messages visible
-  - likely low-to-moderate effort because most chat already flows through shared status helpers
+- Completed feature note:
+  - global `Suppress Chat Except Sync Changes` option now lives under `Options -> Appearance`
+  - default scope mutes routine scan/sync status or progress messages only
+  - `/gbm debug ...`, in-game test output, warnings, and real error messages remain visible
   - add active-view auto-refresh when accepted remote sync mutates Requests, Minimums, or Bank Ledger data
   - preferred scope: repaint only when the relevant view is currently open, while preserving filters, selected row, and scroll where possible
   - likely moderate effort because each view already has a refresh path, but Requests and Bank Ledger currently reset scroll or selection state during naive refreshes
@@ -464,7 +649,7 @@ Work these in the exact order below unless a new blocking regression appears:
   - `244559` same-itemID multi-quality check case
 - Guild-bank-open ledger wakeup is now running as expected in live WoW. The latest follow-up fixes scanner-driven item-log imports so a fully rotated same-size visible item-log window appends new rows instead of being treated as an unsafe stale no-overlap batch; money-log imports are covered alongside item logs. The merge now mirrors the MIT-licensed `GuildBankLedger` reference more closely by comparing session batch counts for repeated scans of the same source, while the active/passive coordinator prevents ledger starts during inventory scan and waits for completion before scheduling the next passive tick. If old local ledger data looks poisoned, clear `Guild Bank Log Data` and validate from a fresh ledger baseline.
 - Deferred follow-up items, intentionally not done in this checkpoint:
-  - live/manual sync sanity against real guild peers after install
+  - broader backlog polish beyond the verified v1.2.2 ledger-sync release path
 
 ## Best Next Debug Step
 

@@ -129,14 +129,351 @@ local function fresh_bank_ledger(guildName)
     return freshLedger
 end
 
-local function versioned_ledger_reset_token()
-    local resetVersion = trim(constants.LEDGER_FORCE_CLEAR_VERSION)
+local function parse_version(value)
+    local major, minor, patch = string.match(trim(value), "^(%d+)%.(%d+)%.(%d+)")
+    return tonumber(major), tonumber(minor), tonumber(patch)
+end
+
+local function version_at_least(addonVersion, targetVersion)
+    local targetMajor, targetMinor, targetPatch = parse_version(targetVersion)
+    local addonMajor, addonMinor, addonPatch = parse_version(addonVersion)
+    if not targetMajor or not addonMajor then
+        return addonVersion == targetVersion
+    end
+    if addonMajor ~= targetMajor then
+        return addonMajor > targetMajor
+    end
+    if addonMinor ~= targetMinor then
+        return addonMinor > targetMinor
+    end
+    return addonPatch >= targetPatch
+end
+
+local function versioned_token(configuredVersion)
+    local tokenVersion = trim(configuredVersion)
     local addonVersion = trim(constants.ADDON_VERSION)
-    if resetVersion == "" or addonVersion ~= resetVersion then
+    if tokenVersion == "" then
         return nil
     end
 
-    return resetVersion
+    return version_at_least(addonVersion, tokenVersion) and tokenVersion or nil
+end
+
+local function versioned_ledger_reset_token()
+    return versioned_token(constants.LEDGER_FORCE_CLEAR_VERSION)
+end
+
+local function versioned_money_ledger_dedupe_token()
+    return versioned_token(constants.MONEY_LEDGER_DEDUPE_VERSION)
+end
+
+local function versioned_saved_variables_compact_token()
+    return versioned_token(constants.SAVED_VARIABLES_COMPACT_VERSION)
+end
+
+local function clear_ledger_sync_state(db)
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState.ledgerDigest = nil
+    db.syncState.ledgerPeerDigests = nil
+    db.syncState.ledgerBucketManifests = nil
+    db.syncState.ledgerPendingBucketRequests = nil
+    db.syncState.ledgerLastManifest = nil
+    db.syncState.ledgerLastBucketRequest = nil
+    db.syncState.ledgerLastBucketReply = nil
+end
+
+local function raw_time_key(year, month, day, hour, minute)
+    local values = {
+        trim(year),
+        trim(month),
+        trim(day),
+        trim(hour),
+        trim(minute),
+    }
+
+    for _, value in ipairs(values) do
+        if value ~= "" then
+            return table.concat(values, "|")
+        end
+    end
+
+    return "unknown"
+end
+
+local function has_time_parts(row)
+    row = type(row) == "table" and row or {}
+    return row.year ~= nil or row.month ~= nil or row.day ~= nil or row.hour ~= nil or row.minute ~= nil
+end
+
+local function has_relative_time_parts(row)
+    row = type(row) == "table" and row or {}
+    if not has_time_parts(row) then
+        return false
+    end
+
+    local year = tonumber(row.year)
+    local month = tonumber(row.month)
+    local day = tonumber(row.day)
+    return not (year and year >= 1000 and month and day)
+end
+
+local function money_cleanup_time_key(row)
+    row = type(row) == "table" and row or {}
+    local year = tonumber(row.year)
+    local month = tonumber(row.month)
+    local day = tonumber(row.day)
+    local hour = tonumber(row.hour)
+    if has_relative_time_parts(row) then
+        return raw_time_key(year, month, day, hour, nil)
+    end
+
+    return ""
+end
+
+local function visible_money_action(row)
+    local rawAction = string.lower(trim((row or {}).action or (row or {}).type or (row or {}).rawType))
+    if rawAction == "deposit" then
+        return "Deposit"
+    end
+    if rawAction == "repair" then
+        return "Repair"
+    end
+    if rawAction == "withdraw" or rawAction == "withdrawal" then
+        return "Withdrawal"
+    end
+
+    return trim((row or {}).action) ~= "" and trim((row or {}).action) or "Withdrawal"
+end
+
+local function money_cleanup_key(row)
+    row = type(row) == "table" and row or {}
+    local timeKey = money_cleanup_time_key(row)
+    if timeKey == "" then
+        return ""
+    end
+
+    local legacyFingerprint = trim(row.legacyFingerprint)
+    if legacyFingerprint:match("^unknown|") then
+        return table.concat({ "legacy", legacyFingerprint }, "|")
+    end
+
+    return table.concat({
+        timeKey,
+        trim(row.who or "Unknown"),
+        visible_money_action(row),
+        tostring(tonumber(row.amountCopper or row.amount or 0) or 0),
+    }, "|")
+end
+
+local function apply_versioned_money_ledger_dedupe_to_database(db)
+    if type(db) ~= "table" then
+        return db
+    end
+
+    local cleanupVersion = versioned_money_ledger_dedupe_token()
+    if not cleanupVersion then
+        return db
+    end
+
+    db.meta = db.meta or {}
+    local schemaVersion = tonumber(db.meta.schemaVersion or 0) or 0
+    local currentSchemaVersion = tonumber(constants.SCHEMA_VERSION or 0) or 0
+    if currentSchemaVersion > 0 and schemaVersion > currentSchemaVersion then
+        return db
+    end
+
+    if tostring(db.meta.moneyLedgerDedupedForVersion or "") == cleanupVersion then
+        return db
+    end
+
+    local ledger = type(db.bankLedger) == "table" and db.bankLedger or nil
+    if ledger and type(ledger.moneyLogs) == "table" then
+        local seen = {}
+        local cleaned = {}
+        local removed = 0
+        for _, row in ipairs(ledger.moneyLogs or {}) do
+            local key = money_cleanup_key(row)
+            if key == "" or seen[key] ~= true then
+                if key ~= "" then
+                    seen[key] = true
+                end
+                cleaned[#cleaned + 1] = row
+            else
+                removed = removed + 1
+            end
+        end
+
+        if removed > 0 then
+            ledger.moneyLogs = cleaned
+            ledger.moneyFingerprints = {}
+            ledger.moneySourceSnapshots = {}
+            ledger.eventCounts = type(ledger.eventCounts) == "table" and ledger.eventCounts or {}
+            ledger.eventCounts.money = {}
+            clear_ledger_sync_state(db)
+        end
+    end
+
+    db.meta.moneyLedgerDedupedForVersion = cleanupVersion
+    return db
+end
+
+local function snapshot_timestamp(snapshot, scanId)
+    snapshot = type(snapshot) == "table" and snapshot or {}
+    local timestamp = tonumber(snapshot.scannedAt or snapshot.timestamp or 0) or 0
+    if timestamp > 0 then
+        return timestamp
+    end
+
+    return tonumber(tostring(scanId or ""):match("^(%d+)") or 0) or 0
+end
+
+local function compact_inventory_snapshots(db, options)
+    if type(db) ~= "table" or type(db.snapshots) ~= "table" then
+        return db
+    end
+
+    options = type(options) == "table" and options or {}
+    local retentionLimit = tonumber(options.retentionLimit or constants.INVENTORY_SNAPSHOT_RETENTION_LIMIT or 3) or 3
+    if retentionLimit <= 0 then
+        retentionLimit = 1
+    end
+
+    local keep = {}
+    local kept = 0
+    local currentSnapshotId = db.currentSnapshotId
+    if currentSnapshotId ~= nil and type(db.snapshots[currentSnapshotId]) == "table" then
+        keep[currentSnapshotId] = true
+        kept = kept + 1
+    end
+
+    local ordered = {}
+    for scanId, snapshot in pairs(db.snapshots or {}) do
+        if type(snapshot) == "table" then
+            snapshot.searchCatalog = nil
+            if keep[scanId] ~= true then
+                ordered[#ordered + 1] = {
+                    scanId = scanId,
+                    scannedAt = snapshot_timestamp(snapshot, scanId),
+                }
+            end
+        end
+    end
+
+    table.sort(ordered, function(left, right)
+        if left.scannedAt ~= right.scannedAt then
+            return left.scannedAt > right.scannedAt
+        end
+        return tostring(left.scanId or "") > tostring(right.scanId or "")
+    end)
+
+    for _, entry in ipairs(ordered) do
+        if kept >= retentionLimit then
+            break
+        end
+        keep[entry.scanId] = true
+        kept = kept + 1
+    end
+
+    for scanId in pairs(db.snapshots or {}) do
+        if keep[scanId] ~= true then
+            db.snapshots[scanId] = nil
+        end
+    end
+
+    if currentSnapshotId ~= nil and db.snapshots[currentSnapshotId] == nil then
+        local firstKept = next(db.snapshots or {})
+        db.currentSnapshotId = firstKept
+    end
+
+    return db
+end
+
+local function change_log_timestamp(entry, index)
+    entry = type(entry) == "table" and entry or {}
+    local timestamp = tonumber(entry.scannedAt or entry.timestamp or entry.when or 0) or 0
+    if timestamp > 0 then
+        return timestamp
+    end
+
+    return tonumber(index or 0) or 0
+end
+
+local function compact_inventory_change_log(db, options)
+    if type(db) ~= "table" or type(db.changeLog) ~= "table" then
+        return db
+    end
+
+    options = type(options) == "table" and options or {}
+    local retentionLimit = tonumber(options.changeLogRetentionLimit or constants.INVENTORY_CHANGELOG_RETENTION_LIMIT or 500) or 500
+    if retentionLimit <= 0 then
+        retentionLimit = 1
+    end
+
+    if #db.changeLog <= retentionLimit then
+        return db
+    end
+
+    local ordered = {}
+    for index, entry in ipairs(db.changeLog or {}) do
+        ordered[#ordered + 1] = {
+            index = index,
+            timestamp = change_log_timestamp(entry, index),
+        }
+    end
+
+    table.sort(ordered, function(left, right)
+        if left.timestamp ~= right.timestamp then
+            return left.timestamp > right.timestamp
+        end
+        return left.index > right.index
+    end)
+
+    local keep = {}
+    for index, entry in ipairs(ordered) do
+        if index > retentionLimit then
+            break
+        end
+        keep[entry.index] = true
+    end
+
+    local compacted = {}
+    for index, entry in ipairs(db.changeLog or {}) do
+        if keep[index] == true then
+            compacted[#compacted + 1] = entry
+        end
+    end
+    db.changeLog = compacted
+
+    return db
+end
+
+function store.CompactInventorySnapshots(db, options)
+    local activeDb = resolve_active_database(db or store.GetDatabase())
+    compact_inventory_snapshots(activeDb, options)
+    return compact_inventory_change_log(activeDb, options)
+end
+
+local function apply_versioned_saved_variables_compaction_to_database(db)
+    if type(db) ~= "table" then
+        return db
+    end
+
+    local compactVersion = versioned_saved_variables_compact_token()
+    if not compactVersion then
+        return db
+    end
+
+    db.meta = db.meta or {}
+    local schemaVersion = tonumber(db.meta.schemaVersion or 0) or 0
+    local currentSchemaVersion = tonumber(constants.SCHEMA_VERSION or 0) or 0
+    if currentSchemaVersion > 0 and schemaVersion > currentSchemaVersion then
+        return db
+    end
+
+    compact_inventory_snapshots(db)
+    compact_inventory_change_log(db)
+    db.meta.savedVariablesCompactedForVersion = compactVersion
+    return db
 end
 
 local function apply_versioned_ledger_reset_to_database(db)
@@ -161,6 +498,7 @@ local function apply_versioned_ledger_reset_to_database(db)
     end
 
     db.bankLedger = fresh_bank_ledger(db.meta.guildName or "Unknown")
+    clear_ledger_sync_state(db)
     db.meta.ledgerClearedForVersion = resetVersion
     return db
 end
@@ -172,12 +510,16 @@ local function apply_versioned_ledger_reset(db)
                 guildDb.meta = guildDb.meta or {}
                 guildDb.meta.guildName = guildDb.meta.guildName or tostring(guildKey)
                 apply_versioned_ledger_reset_to_database(guildDb)
+                apply_versioned_money_ledger_dedupe_to_database(guildDb)
+                apply_versioned_saved_variables_compaction_to_database(guildDb)
             end
         end
         return db
     end
 
-    return apply_versioned_ledger_reset_to_database(db)
+    apply_versioned_ledger_reset_to_database(db)
+    apply_versioned_money_ledger_dedupe_to_database(db)
+    return apply_versioned_saved_variables_compaction_to_database(db)
 end
 
 local function select_runtime_source(guildName)

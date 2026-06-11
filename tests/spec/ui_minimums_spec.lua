@@ -157,6 +157,26 @@ assert.equal("Alchemy", mainFrame.tableRowsData[1].bankTab, "minimums Show All s
 assert.equal("4", mainFrame.tableRowsData[1].current, "minimums Show All should preserve the first per-tab quantity")
 assert.equal("Gems and Enchants", mainFrame.tableRowsData[2].bankTab, "minimums Show All should preserve the second tab name")
 assert.equal("1", mainFrame.tableRowsData[2].current, "minimums Show All should preserve the second per-tab quantity")
+local bankBackedMinimumRow = mainFrame.tableRowsData[1]
+mainFrame:HandleTableRowClick(bankBackedMinimumRow)
+assert.truthy(mainFrame.minimumDetailsModal:IsShown(), "clicking a bank-backed Show All minimum row should open details")
+assert.equal("Yes", mainFrame.minimumDetailsRestockToggleButton.labelText:GetText(), "new minimums from bank rows should default Restock to Yes")
+mainFrame.minimumDetailsQuantityInput:SetText("5")
+mainFrame.minimumDetailsConfirmButton:GetScript("OnClick")(mainFrame.minimumDetailsConfirmButton)
+local stagedBankBackedMinimum = mainFrame.minimumPendingRules and mainFrame.minimumPendingRules[mainFrame.selectedMinimumKey]
+assert.truthy(stagedBankBackedMinimum ~= nil, "confirming a bank-backed Show All row should stage a new minimum")
+assert.truthy(stagedBankBackedMinimum.enabled == true, "new bank-backed minimums should be exportable unless the user explicitly disables Restock")
+mainFrame:HandleTableRowClick(mainFrame.tableRowsData[1])
+mainFrame.minimumDetailsRestockToggleButton:GetScript("OnClick")(mainFrame.minimumDetailsRestockToggleButton)
+mainFrame.minimumDetailsQuantityInput:SetText("6")
+mainFrame.minimumDetailsConfirmButton:GetScript("OnClick")(mainFrame.minimumDetailsConfirmButton)
+local disabledBankBackedMinimum = mainFrame.minimumPendingRules and mainFrame.minimumPendingRules[mainFrame.selectedMinimumKey]
+assert.truthy(disabledBankBackedMinimum.enabled == false, "explicitly disabling Restock should stage the minimum as a one-time target")
+mainFrame.minimumPendingRules = {}
+mainFrame.minimumPendingDirty = {}
+mainFrame.minimumPendingDeleted = {}
+mainFrame.selectedMinimumKey = nil
+mainFrame:RefreshView()
 mainFrame.tableFilterInputs[3]:SetText("Reagents")
 mainFrame.tableFilterInputs[3]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[3])
 assert.equal(1, #mainFrame.tableRowsData, "minimums shared table filters should search by Bank Tab")
@@ -255,6 +275,10 @@ function mainFrame:GetMinimumSearchSnapshot()
     return originalGetMinimumSearchSnapshot(self)
 end
 
+local minimumPersistedSnapshot = mainFrame:GetCurrentSnapshot()
+if type(minimumPersistedSnapshot) == "table" then
+    minimumPersistedSnapshot.searchCatalog = nil
+end
 mainFrame:ResetMinimumAddRow()
 mainFrame.minimumSearchSession = nil
 mainFrame.minimumAddItemNameInput:SetText("f")
@@ -264,6 +288,7 @@ mainFrame.minimumAddItemNameInput:SetText("fl")
 assert.truthy((mainFrame.minimumAddSearchSelector.resultsDataProvider:GetSize() or 0) > 0, "minimum add modal should activate name search once two characters are typed")
 mainFrame.minimumAddItemNameInput:SetText("fla")
 assert.equal(1, minimumSearchSnapshotCalls, "minimum add modal should build the shared search session once and reuse it across follow-up name queries")
+assert.equal(nil, (minimumPersistedSnapshot or {}).searchCatalog, "minimum add modal should not persist generated search catalogs onto the saved inventory snapshot")
 mainFrame.GetMinimumSearchSnapshot = originalGetMinimumSearchSnapshot
 mainFrame:ResetMinimumAddRow()
 

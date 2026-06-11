@@ -74,6 +74,9 @@ _G.C_Item = {
 local queriedLogs = {}
 _G.QueryGuildBankLog = function(queryId)
     table.insert(queriedLogs, queryId)
+    _G.C_Timer.After(0.1, function()
+        scanner.OnGuildBankLogUpdated()
+    end)
 end
 _G.currentGuildBankTab = 1
 _G.SetCurrentGuildBankTabCalls = {}
@@ -219,16 +222,14 @@ assert.equal("Withdrawal", current_db().bankLedger.itemLogs[2].action, "ledger s
 assert.equal("Repair", current_db().bankLedger.moneyLogs[1].action, "ledger scan should preserve repair actions from money logs")
 assert.equal(1716577200, current_db().bankLedger.lastScanAt, "ledger scan should stamp the combined scan time")
 assert.equal("Guild bank ledger scan finished (2 item rows, 2 money rows).", scanner:GetStatusText(), "ledger scan should report a visible completion summary with merged row counts")
-assert.equal(3, #(outboundLedgerSyncMessages or {}), "ledger scan should automatically publish one addon sync delta per merged ledger target")
-local publishedLedgerDeltaOne = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
-local publishedLedgerDeltaTwo = ((outboundLedgerSyncMessages or {})[2] or {}).message or {}
-local publishedLedgerDeltaThree = ((outboundLedgerSyncMessages or {})[3] or {}).message or {}
-assert.equal("LEDGER_DELTA", tostring(publishedLedgerDeltaOne.type or ""), "ledger scan should publish encoded ledger delta messages")
-assert.equal("item", tostring(((publishedLedgerDeltaOne.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for item-log targets")
-assert.equal("item", tostring(((publishedLedgerDeltaTwo.payload or {}).kind) or ""), "ledger scan should publish item ledger deltas for each visible item-log target")
-assert.equal("money", tostring(((publishedLedgerDeltaThree.payload or {}).kind) or ""), "ledger scan should publish one money ledger delta when money rows merged")
-assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.0"), tostring(((publishedLedgerDeltaOne.payload or {}).version) or ""), "ledger scan should stamp item ledger deltas with the addon version")
-assert.equal(tostring((ns.constants or {}).ADDON_VERSION or "1.1.0"), tostring(((publishedLedgerDeltaThree.payload or {}).version) or ""), "ledger scan should stamp money ledger deltas with the addon version")
+assert.equal(1, #(outboundLedgerSyncMessages or {}), "ledger scan should publish exactly one manifest sync message after native writes")
+local publishedLedgerManifest = ((outboundLedgerSyncMessages or {})[1] or {}).message or {}
+assert.equal("LEDGER_MANIFEST", tostring(publishedLedgerManifest.type or ""), "ledger scan should publish a manifest instead of row chunks")
+assert.equal(tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0), tonumber(((publishedLedgerManifest.payload or {}).ledgerProtocol) or 0) or 0, "ledger manifest sync should stamp the protocol version")
+assert.truthy(tostring((((publishedLedgerManifest.payload or {}).manifest or {}).globalHash) or "") ~= "", "ledger manifest sync should include a global hash")
+local ledgerDiagnostics = scanner.GetLedgerDiagnostics()
+assert.equal("event", tostring((ledgerDiagnostics or {}).finalizeMode or ""), "ledger scan should record event debounce finalization")
+assert.equal((tonumber(_G.MAX_GUILDBANK_TABS or 8) or 8) + 1, tonumber((ledgerDiagnostics or {}).moneyQueryId or 0) or 0, "ledger scan should expose the fixed money-log query id in diagnostics")
 
 queriedLogs = {}
 assert.truthy(not scanner.BeginLedgerScan(), "ledger scan should throttle inside the configured interval")
@@ -240,7 +241,36 @@ assert.truthy(scanner.BeginLedgerScan({
     force = true,
 }), "forced ledger scan should still run when we want to verify no-change publish suppression")
 run_all_pending()
-assert.equal(autoPublishCountBeforeNoChangeRepeat, #(outboundLedgerSyncMessages or {}), "re-reading the same visible ledger windows should not auto-publish duplicate no-op ledger deltas")
+assert.equal(autoPublishCountBeforeNoChangeRepeat, #(outboundLedgerSyncMessages or {}), "re-reading the same visible ledger windows should not auto-publish duplicate no-op ledger manifests")
+
+current_db().syncState = current_db().syncState or {}
+current_db().syncState.peers = current_db().syncState.peers or {}
+current_db().syncState.peers["Guild Testers"] = {
+    ["OfficerTwo-Stormrage"] = {
+        characterKey = "OfficerTwo-Stormrage",
+        guildKey = "Guild Testers",
+        lastSeen = 1716577210,
+    },
+}
+_G.time = function()
+    return 1716577325
+end
+local peerCatchupPublishCountBefore = #(outboundLedgerSyncMessages or {})
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "forced ledger scans should still run when existing ledger rows need to be advertised to known peers")
+run_all_pending()
+assert.equal(peerCatchupPublishCountBefore + 1, #(outboundLedgerSyncMessages or {}), "a no-change ledger scan should still announce a throttled manifest when known peers may be stale")
+assert.equal("LEDGER_MANIFEST", tostring(((outboundLedgerSyncMessages or {})[#outboundLedgerSyncMessages] or {}).message.type or ""), "peer catch-up scans should announce a manifest rather than row payloads")
+local peerCatchupRepeatCountBefore = #(outboundLedgerSyncMessages or {})
+assert.truthy(scanner.BeginLedgerScan({
+    force = true,
+}), "a repeated no-change ledger scan should still complete")
+run_all_pending()
+assert.equal(peerCatchupRepeatCountBefore, #(outboundLedgerSyncMessages or {}), "peer catch-up manifests should be throttled so repeated no-change scans stay quiet")
+_G.time = function()
+    return 1716577200
+end
 transport.Send = originalTransportSend
 
 local manualLedgerStartCalls = 0
@@ -1479,6 +1509,7 @@ assert.truthy(passiveAdvancedToPhaseTwo == true, "passive refresh test harness s
 assert.truthy(passiveAdvancedToPhaseThree == true, "passive refresh test harness should advance into the new-row passive phase")
 assert.equal(2, #(_G.GBankManagerDB.bankLedger.itemLogs or {}), "passive refresh should import newly available ledger rows without requiring a manual rescan")
 assert.truthy(passiveQueryCount >= 4, "passive refresh should continue polling while the bank stays open across repeated end-to-end ledger scans")
+assert.truthy(string.find(scanner:GetStatusText() or "", "auto-refresh found", 1, true) == nil, "passive ledger refresh should stay silent instead of spamming auto-refresh row counts")
 local passiveQueryCountAfterClose = passiveQueryCount
 run_all_pending(10)
 assert.equal(passiveQueryCountAfterClose, passiveQueryCount, "passive refresh should stop scheduling additional ledger queries once the guild bank closes")

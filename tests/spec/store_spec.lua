@@ -4,6 +4,35 @@ _G.GBankManagerItemCatalogData = nil
 _G.GBankManagerDB = {
     meta = {
         guildName = "Existing Guild",
+        schemaVersion = 1,
+        ledgerClearedForVersion = "1.2.0",
+    },
+    bankLedger = {
+        itemLogs = {
+            { entryId = "item-preserved", timestamp = 1780540000 },
+        },
+        moneyLogs = {
+            {
+                entryId = "money-preload-original",
+                timestamp = 1780540360,
+                who = "Zerobrews",
+                action = "Repair",
+                amountCopper = 1874304,
+                amount = 1874304,
+                hour = 21,
+                legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+            },
+            {
+                entryId = "money-preload-duplicate",
+                timestamp = 1780594903,
+                who = "Zerobrews",
+                action = "Repair",
+                amountCopper = 1874304,
+                amount = 1874304,
+                hour = 22,
+                legacyFingerprint = "unknown|Zerobrews|withdraw|1874304|1",
+            },
+        },
     },
 }
 
@@ -21,6 +50,31 @@ local scanner = ns.modules.scanner
 local events = ns.modules.events
 local itemCatalog = ns.modules.itemCatalog
 local defaults = ns.modules.defaults
+
+local function table_count(values)
+    local count = 0
+    for _ in pairs(values or {}) do
+        count = count + 1
+    end
+    return count
+end
+
+local function build_change_log(count, baseTime)
+    local rows = {}
+    baseTime = tonumber(baseTime or 1717000000) or 1717000000
+    for index = 1, count do
+        rows[index] = {
+            type = "QUANTITY_INCREASED",
+            itemID = 1000 + index,
+            name = "Compaction Item " .. tostring(index),
+            delta = index,
+            scanId = "scan-" .. tostring(index),
+            scannedAt = baseTime + index,
+        }
+    end
+    return rows
+end
+
 local db = store and store.CreateFreshDatabase("My Guild")
 local normalizedMalformed = migrations and migrations.Apply({
     meta = "broken",
@@ -59,6 +113,7 @@ assert.truthy(type(ns.modules) == "table", "namespace should expose module table
 assert.truthy(type(ns.state) == "table", "namespace should expose state table")
 assert.truthy(type(ns.constants) == "table", "constants should populate the shared namespace")
 assert.equal(1, ns.constants.SCHEMA_VERSION, "constants should expose schema version")
+assert.equal(3, ns.constants.LEDGER_PROTOCOL_VERSION, "constants should expose the 1.2.3 ledger cleanup protocol version")
 assert.truthy(type(ns.modules.events) == "table", "events module should populate the shared namespace")
 assert.truthy(type(ns.modules.slash) == "table", "slash module should populate the shared namespace")
 assert.same(ns, loadedByPath["GBankManager/Core/Namespace.lua"], "namespace chunk should return the shared namespace table")
@@ -90,6 +145,10 @@ assert.truthy(type(store.GetExportSettings) == "function", "store should expose 
 assert.truthy(type(store.GetAppearanceSettings) == "function", "store should expose appearance-settings access")
 assert.truthy(type(itemCatalog) == "table", "item catalog module should load from the toc")
 assert.truthy(itemCatalog.IsBundledDataLoaded() ~= true, "bundled item data should remain unloaded until a search path requests it")
+local preloadedDb = (((_G.GBankManagerDB or {}).guilds or {})["Existing Guild"] or {})
+assert.equal("1.2.3-money-v7", tostring(((preloadedDb.meta or {}).moneyLedgerDedupedForVersion or "")), "bootstrap should normalize preloaded saved variables before addon events fire")
+assert.equal(1, #(((preloadedDb.bankLedger or {}).itemLogs) or {}), "bootstrap money cleanup should preserve preloaded item ledger rows")
+assert.equal(1, #(((preloadedDb.bankLedger or {}).moneyLogs) or {}), "bootstrap money cleanup should dedupe preloaded raw-relative money rows")
 assert.truthy(type(db) == "table", "fresh db should be created")
 assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
@@ -179,6 +238,93 @@ assert.same(persistedDb.ui.exportSettings, store.GetExportSettings(persisted), "
 assert.same(persistedDb.ui.appearance, store.GetAppearanceSettings(persisted), "store should return the normalized appearance-settings table")
 assert.same(persistedDb.snapshots["scan-old"], store.GetCurrentSnapshot(persisted), "store current snapshot accessor should resolve the active snapshot row")
 
+local compactedRoot = store.Normalize({
+    activeGuildKey = "Compact Guild",
+    guilds = {
+        ["Compact Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Compact Guild",
+                ledgerClearedForVersion = "1.2.0",
+                moneyLedgerDedupedForVersion = "1.2.3-money-v5",
+            },
+            currentSnapshotId = "scan-current",
+            snapshots = {
+                ["scan-current"] = {
+                    scanId = "scan-current",
+                    scannedAt = 1717000000,
+                    items = {
+                        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 5 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1001, name = "Flask Alpha" },
+                    },
+                },
+                ["scan-old"] = {
+                    scanId = "scan-old",
+                    scannedAt = 1716900000,
+                    items = {
+                        [1002] = { itemID = 1002, name = "Flask Beta", totalCount = 2 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1002, name = "Flask Beta" },
+                    },
+                },
+                ["scan-recent"] = {
+                    scanId = "scan-recent",
+                    scannedAt = 1717100000,
+                    items = {
+                        [1003] = { itemID = 1003, name = "Flask Gamma", totalCount = 3 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1003, name = "Flask Gamma" },
+                    },
+                },
+                ["scan-newest"] = {
+                    scanId = "scan-newest",
+                    scannedAt = 1717200000,
+                    items = {
+                        [1004] = { itemID = 1004, name = "Flask Delta", totalCount = 4 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1004, name = "Flask Delta" },
+                    },
+                },
+                ["scan-ancient"] = {
+                    scanId = "scan-ancient",
+                    scannedAt = 1716800000,
+                    items = {
+                        [1005] = { itemID = 1005, name = "Flask Epsilon", totalCount = 1 },
+                    },
+                    searchCatalog = {
+                        { itemID = 1005, name = "Flask Epsilon" },
+                    },
+                },
+            },
+            changeLog = build_change_log(505),
+            bankLedger = {
+                itemLogs = {},
+                moneyLogs = {},
+            },
+        },
+    },
+}, "Compact Guild")
+local compactedDb = (compactedRoot.guilds or {})["Compact Guild"] or {}
+assert.equal("1.2.3-snapshot-v3", tostring((compactedDb.meta or {}).savedVariablesCompactedForVersion or ""), "saved-variable compaction should stamp the current compaction marker")
+assert.equal(nil, ((compactedDb.snapshots or {})["scan-current"] or {}).searchCatalog, "snapshot compaction should remove generated search catalogs from the current snapshot")
+assert.equal(nil, ((compactedDb.snapshots or {})["scan-newest"] or {}).searchCatalog, "snapshot compaction should remove generated search catalogs from retained historical snapshots")
+assert.equal(3, table_count(compactedDb.snapshots or {}), "snapshot compaction should keep only the current inventory snapshot plus two recent backups")
+assert.truthy(((compactedDb.snapshots or {})["scan-current"] ~= nil), "snapshot compaction should always keep the current inventory snapshot")
+assert.truthy(((compactedDb.snapshots or {})["scan-newest"] ~= nil), "snapshot compaction should keep the newest historical inventory snapshot")
+assert.truthy(((compactedDb.snapshots or {})["scan-recent"] ~= nil), "snapshot compaction should keep the second-newest historical inventory snapshot")
+assert.equal(nil, (compactedDb.snapshots or {})["scan-old"], "snapshot compaction should remove older historical inventory snapshots")
+assert.equal(nil, (compactedDb.snapshots or {})["scan-ancient"], "snapshot compaction should remove ancient historical inventory snapshots")
+assert.equal(5, (((compactedDb.snapshots or {})["scan-current"] or {}).items or {})[1001].totalCount, "snapshot compaction should preserve current inventory items")
+assert.equal(4, (((compactedDb.snapshots or {})["scan-newest"] or {}).items or {})[1004].totalCount, "snapshot compaction should preserve retained historical inventory items")
+assert.equal(500, #(compactedDb.changeLog or {}), "saved-variable compaction should cap raw inventory diff diagnostics")
+assert.equal("scan-6", tostring(((compactedDb.changeLog or {})[1] or {}).scanId or ""), "saved-variable compaction should drop the oldest raw inventory diff entries first")
+assert.equal("scan-505", tostring(((compactedDb.changeLog or {})[500] or {}).scanId or ""), "saved-variable compaction should preserve the newest raw inventory diff entries")
+
 local resetRoot = store.Normalize({
     activeGuildKey = "Reset Guild",
     guilds = {
@@ -211,13 +357,29 @@ local resetRoot = store.Normalize({
                 lastItemScanAt = 1716500000,
                 lastMoneyScanAt = 1716500000,
             },
+            syncState = {
+                peers = {
+                    ["Guild Testers"] = {
+                        ["MemberOne-Stormrage"] = { lastSeen = 10 },
+                    },
+                },
+                ledgerDigest = { hash = "old-hash" },
+                ledgerPeerDigests = { ["MemberOne-Stormrage"] = { hash = "old-peer-hash" } },
+                ledgerBucketManifests = { ["MemberOne-Stormrage"] = { globalHash = "old-global" } },
+                ledgerPendingBucketRequests = { ["request-1"] = true },
+            },
         },
     },
 }, "Reset Guild")
 local resetDb = (resetRoot.guilds or {})["Reset Guild"] or {}
-assert.equal(0, #(resetDb.bankLedger.itemLogs or {}), "store normalization should clear polluted item ledger rows once for the configured addon version")
-assert.equal(0, #(resetDb.bankLedger.moneyLogs or {}), "store normalization should clear polluted money ledger rows once for the configured addon version")
-assert.equal(ns.constants.LEDGER_FORCE_CLEAR_VERSION, ((resetDb.meta or {}).ledgerClearedForVersion), "store normalization should mark the ledger clear version")
+assert.equal("1.2.0", tostring((resetDb.meta or {}).ledgerClearedForVersion or ""), "1.2.0 should stamp the ledger reset marker")
+assert.equal(0, #(resetDb.bankLedger.itemLogs or {}), "1.2.0 reset should clear old item ledger rows")
+assert.equal(0, #(resetDb.bankLedger.moneyLogs or {}), "1.2.0 reset should clear old money ledger rows")
+assert.truthy(((resetDb.syncState or {}).peers or {})["Guild Testers"], "general sync peers should survive the ledger reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerDigest), "ledger digest sync state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerPeerDigests), "peer ledger digest sync state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerBucketManifests), "ledger bucket manifest state should reset")
+assert.equal(nil, ((resetDb.syncState or {}).ledgerPendingBucketRequests), "ledger bucket request state should reset")
 
 resetDb.bankLedger.itemLogs = {
     { entryId = "item-after-reset", timestamp = 1716600000 },
@@ -225,6 +387,173 @@ resetDb.bankLedger.itemLogs = {
 local resetRootRepeat = store.Normalize(resetRoot, "Reset Guild")
 local resetDbRepeat = (resetRootRepeat.guilds or {})["Reset Guild"] or {}
 assert.equal(1, #(resetDbRepeat.bankLedger.itemLogs or {}), "store normalization should not clear ledger rows again once the version marker is present")
+
+local moneyCleanupRoot = store.Normalize({
+    activeGuildKey = "Money Cleanup Guild",
+    guilds = {
+        ["Money Cleanup Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Money Cleanup Guild",
+                ledgerClearedForVersion = "1.2.0",
+            },
+            bankLedger = {
+                itemLogs = {
+                    { entryId = "item-keep-1", timestamp = 1780540000 },
+                    { entryId = "item-keep-2", timestamp = 1780543600 },
+                },
+                moneyLogs = {
+                    {
+                        entryId = "money-relative-original",
+                        timestamp = 1780540360,
+                        when = 1780540360,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 21,
+                    },
+                    {
+                        entryId = "money-relative-duplicate",
+                        timestamp = 1780594903,
+                        when = 1780594903,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 21,
+                    },
+                    {
+                        entryId = "money-real-later",
+                        timestamp = 1780598503,
+                        when = 1780598503,
+                        who = "Zerobrews",
+                        action = "Repair",
+                        amountCopper = 1874304,
+                        amount = 1874304,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 20,
+                    },
+                },
+                moneyFingerprints = {
+                    ["polluted-money"] = true,
+                },
+                moneySourceSnapshots = {
+                    money = { "polluted-money-source" },
+                },
+            },
+            syncState = {
+                peers = {
+                    ["Money Cleanup Guild"] = {
+                        ["MemberOne-Stormrage"] = { lastSeen = 10 },
+                    },
+                },
+                ledgerLastManifest = { reason = "different" },
+                ledgerLastBucketRequest = { buckets = { 1 } },
+                ledgerLastBucketReply = { merged = 1 },
+            },
+        },
+    },
+}, "Money Cleanup Guild")
+local moneyCleanupDb = (moneyCleanupRoot.guilds or {})["Money Cleanup Guild"] or {}
+assert.equal("1.2.3-money-v7", tostring((moneyCleanupDb.meta or {}).moneyLedgerDedupedForVersion or ""), "1.2.3-money-v7 should stamp the money-ledger cleanup marker")
+assert.equal(2, #(moneyCleanupDb.bankLedger.itemLogs or {}), "money-ledger cleanup should preserve item ledger rows")
+assert.equal(2, #(moneyCleanupDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should remove only duplicate money rows")
+assert.equal("money-relative-original", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "money-ledger cleanup should keep the first matching visible money row")
+assert.equal("money-real-later", tostring(((moneyCleanupDb.bankLedger.moneyLogs or {})[2] or {}).entryId or ""), "money-ledger cleanup should preserve a different visible relative-hour money row")
+assert.equal(nil, next((moneyCleanupDb.bankLedger.moneyFingerprints or {})), "money-ledger cleanup should clear polluted money fingerprints so they rebuild from kept rows")
+assert.equal(nil, next((moneyCleanupDb.bankLedger.moneySourceSnapshots or {})), "money-ledger cleanup should clear polluted money source snapshots")
+assert.truthy(((moneyCleanupDb.syncState or {}).peers or {})["Money Cleanup Guild"], "money-ledger cleanup should preserve general sync peers")
+assert.equal(nil, (moneyCleanupDb.syncState or {}).ledgerLastManifest, "money-ledger cleanup should clear stale ledger manifest debug state")
+
+local moneyCleanupRepeatRoot = store.Normalize(moneyCleanupRoot, "Money Cleanup Guild")
+local moneyCleanupRepeatDb = (moneyCleanupRepeatRoot.guilds or {})["Money Cleanup Guild"] or {}
+assert.equal(2, #(moneyCleanupRepeatDb.bankLedger.moneyLogs or {}), "money-ledger cleanup should not run again after the marker is stamped")
+
+local moneyCleanupV6StampedRoot = store.Normalize({
+    activeGuildKey = "Money Cleanup V6 Guild",
+    guilds = {
+        ["Money Cleanup V6 Guild"] = {
+            meta = {
+                schemaVersion = 1,
+                guildName = "Money Cleanup V6 Guild",
+                ledgerClearedForVersion = "1.2.0",
+                moneyLedgerDedupedForVersion = "1.2.3-money-v6",
+            },
+            bankLedger = {
+                itemLogs = {
+                    { entryId = "item-v5-preserved", timestamp = 1780684400 },
+                },
+                moneyLogs = {
+                    {
+                        entryId = "money-v6-5000-original",
+                        timestamp = 1780684429,
+                        when = 1780684429,
+                        who = "Ziriously",
+                        action = "Deposit",
+                        amountCopper = 50000000,
+                        amount = 50000000,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 0,
+                        legacyFingerprint = "unknown|Ziriously|deposit|50000000|1",
+                    },
+                    {
+                        entryId = "money-v6-5001-original",
+                        timestamp = 1780686959,
+                        when = 1780686959,
+                        who = "Ziriously",
+                        action = "Deposit",
+                        amountCopper = 50010000,
+                        amount = 50010000,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 0,
+                        legacyFingerprint = "unknown|Ziriously|deposit|50010000|1",
+                    },
+                    {
+                        entryId = "money-v6-5000-drifted",
+                        timestamp = 1780685233,
+                        when = 1780685233,
+                        who = "Ziriously",
+                        action = "Deposit",
+                        amountCopper = 50000000,
+                        amount = 50000000,
+                        year = 0,
+                        month = 0,
+                        day = 0,
+                        hour = 1,
+                        legacyFingerprint = "unknown|Ziriously|deposit|50000000|1",
+                    },
+                },
+                moneyFingerprints = {
+                    ["polluted-v5-money"] = true,
+                },
+                moneySourceSnapshots = {
+                    money = { "polluted-v5-money-source" },
+                },
+            },
+        },
+    },
+}, "Money Cleanup V6 Guild")
+local moneyCleanupV6StampedDb = (moneyCleanupV6StampedRoot.guilds or {})["Money Cleanup V6 Guild"] or {}
+assert.equal("1.2.3-money-v7", tostring((moneyCleanupV6StampedDb.meta or {}).moneyLedgerDedupedForVersion or ""), "v7 should rerun money cleanup for clients that may have stamped v6 while still polluted")
+assert.equal(1, #(moneyCleanupV6StampedDb.bankLedger.itemLogs or {}), "v7 money cleanup should still preserve item ledger rows")
+assert.equal(2, #(moneyCleanupV6StampedDb.bankLedger.moneyLogs or {}), "v7 money cleanup should remove Client-A-shaped drifted deposit duplicates")
+assert.equal("money-v6-5000-original", tostring(((moneyCleanupV6StampedDb.bankLedger.moneyLogs or {})[1] or {}).entryId or ""), "v7 money cleanup should keep the first matching 5000g deposit")
+assert.equal("money-v6-5001-original", tostring(((moneyCleanupV6StampedDb.bankLedger.moneyLogs or {})[2] or {}).entryId or ""), "v7 money cleanup should keep the distinct 5001g deposit")
+assert.equal(nil, next((moneyCleanupV6StampedDb.bankLedger.moneyFingerprints or {})), "v7 money cleanup should clear polluted money fingerprints")
+assert.equal(nil, next((moneyCleanupV6StampedDb.bankLedger.moneySourceSnapshots or {})), "v7 money cleanup should clear polluted money source snapshots")
 
 persistedDb.requests = {
     {
@@ -235,6 +564,21 @@ persistedDb.requests = {
         quantity = 10,
         approval = "APPROVED",
         fulfillment = "OPEN",
+    },
+}
+persistedDb.changeLog = build_change_log(500, 1715520000)
+persistedDb.snapshots["scan-recent-a"] = {
+    scanId = "scan-recent-a",
+    scannedAt = 1715523100,
+    items = {
+        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 6, tabs = { Flasks = 6 } },
+    },
+}
+persistedDb.snapshots["scan-recent-b"] = {
+    scanId = "scan-recent-b",
+    scannedAt = 1715523200,
+    items = {
+        [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 7, tabs = { Flasks = 7 } },
     },
 }
 _G.GBankManagerDB = persisted
@@ -275,7 +619,10 @@ assert.truthy(newSnapshot.scanId ~= "scan-old", "a fresh scan should create a ne
 assert.truthy(string.find(newSnapshot.scanId, "^1715523300%-"), "fresh scans should derive collision-safe snapshot ids from the captured UTC scan timestamp")
 assert.equal(1715523300, newSnapshot.scannedAt, "fresh scans should persist the captured UTC scan timestamp on the snapshot")
 assert.equal(newSnapshot.scanId, (((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).currentSnapshotId), "fresh scans should move the current snapshot pointer forward")
-assert.equal(5, ((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})["scan-old"] or {}).items[1001].totalCount, "fresh scans should keep older snapshots for persistence and history")
+assert.equal(nil, (((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})["scan-old"], "fresh scans should prune older inventory snapshots after the rolling retention window is full")
+assert.equal(3, table_count((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})), "fresh scans should keep only the new current snapshot plus two recent backups")
+assert.equal(6, ((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})["scan-recent-a"] or {}).items[1001].totalCount, "fresh scans should retain the second newest backup snapshot")
+assert.equal(7, ((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})["scan-recent-b"] or {}).items[1001].totalCount, "fresh scans should retain the newest backup snapshot")
 assert.equal(11, (((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})[newSnapshot.scanId] or {}).items or {})[1001].totalCount, "fresh scans should store the new inventory snapshot in saved variables")
 assert.equal(2, #(((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})[newSnapshot.scanId] or {}).itemRows or {}), "fresh scans should persist tab-scoped item rows in saved variables")
 assert.equal("Flasks", ((((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).snapshots or {})[newSnapshot.scanId] or {}).itemRows or {})[1] or {}).tabName, "fresh scans should persist the first tab-scoped item row")
@@ -286,6 +633,8 @@ assert.equal(1715523300, ((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] 
 assert.truthy(#changes >= 1, "fresh scans should still produce diff history against the prior saved snapshot")
 assert.equal("FULFILLED", (((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).requests or {})[1].fulfillment, "fresh scans should auto-fulfill approved requests once inventory meets the request amount")
 assert.equal(1715523300, (((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).requests or {})[1].fulfillmentUpdatedAt, "fresh scans should store date fulfilled from the scan timestamp")
+assert.equal(500, #((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).changeLog or {})), "fresh scans should keep raw inventory diff history capped after appending new changes")
+assert.equal(newSnapshot.scanId, tostring(((((_G.GBankManagerDB.guilds or {})["Persisted Guild"] or {}).changeLog or {})[500] or {}).scanId or ""), "fresh scans should retain the newest raw inventory diff entries after compaction")
 
 _G.GBankManagerDB = store.Normalize({
     meta = {

@@ -16,6 +16,9 @@ local bankLedger = ns.modules.bankLedger or {}
 local peerState = ns.modules.syncPeerState or {}
 local manualActions = ns.modules.syncManualActions or {}
 
+local AUTO_SYNC_LOGIN_DELAY_SECONDS = 2
+local AUTO_SYNC_INTERVAL_SECONDS = 10 * 60
+
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
     "PLAYER_LOGIN",
@@ -79,6 +82,34 @@ local function sender_display_name(sender)
     end
 
     return fullSender:match("^([^%-]+)") or fullSender
+end
+
+local function current_message_updated_at(payload)
+    local envelopeUpdatedAt = tonumber(((ns.state or {}).lastSyncMessage or {}).updatedAt or 0) or 0
+    if envelopeUpdatedAt > 0 then
+        return envelopeUpdatedAt
+    end
+
+    local payloadUpdatedAt = tonumber((payload or {}).updatedAt or 0) or 0
+    if payloadUpdatedAt > 0 then
+        return payloadUpdatedAt
+    end
+
+    if type(_G.time) == "function" then
+        return tonumber(_G.time() or 0) or 0
+    end
+
+    return 0
+end
+
+local function current_timestamp()
+    return tonumber(type(_G.time) == "function" and _G.time() or 0) or 0
+end
+
+local function remember_ledger_debug_state(db, key, state)
+    db = type(db) == "table" and db or {}
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState[key] = state
 end
 
 local function normalize_character_key(value, realmName, nameHint)
@@ -349,6 +380,77 @@ local function clone_array_records(records)
     return out
 end
 
+local function minimum_rule_key(row)
+    row = type(row) == "table" and row or {}
+    local itemID = tostring(tonumber(row.itemID or row.originalItemID or 0) or 0)
+    local scope = tostring(row.scope or row.originalScope or "GLOBAL")
+    local tabName = tostring(row.tabName or row.originalTabName or "")
+    return table.concat({ itemID, scope, tabName }, "|")
+end
+
+local function minimum_updated_at(row)
+    row = type(row) == "table" and row or {}
+    return tonumber(row.updatedAt or row.createdAt or 0) or 0
+end
+
+local function merge_minimum_snapshot_rows(localRows, incomingRows)
+    local localByKey = {}
+    local localOrder = {}
+    for _, row in ipairs(localRows or {}) do
+        local key = minimum_rule_key(row)
+        if key ~= "0|GLOBAL|" and localByKey[key] == nil then
+            localByKey[key] = row
+            localOrder[#localOrder + 1] = key
+        end
+    end
+
+    local incomingKeys = {}
+    local merged = {}
+    local shouldReply = false
+    for _, incoming in ipairs(incomingRows or {}) do
+        if type(incoming) == "table" then
+            local key = minimum_rule_key(incoming)
+            incomingKeys[key] = true
+            local existing = localByKey[key]
+            if existing == nil then
+                merged[#merged + 1] = incoming
+            elseif minimum_updated_at(incoming) >= minimum_updated_at(existing) then
+                merged[#merged + 1] = incoming
+            else
+                merged[#merged + 1] = existing
+                shouldReply = true
+            end
+        end
+    end
+
+    for _, key in ipairs(localOrder) do
+        if incomingKeys[key] ~= true then
+            merged[#merged + 1] = localByKey[key]
+            shouldReply = true
+        end
+    end
+
+    return clone_array_records(merged), shouldReply
+end
+
+local function send_minimums_snapshot_reply(db)
+    if type(transport.Send) ~= "function" then
+        return false
+    end
+
+    transport.Send("GUILD", "GUILD", {
+        type = "MINIMUMS_SNAPSHOT",
+        updatedAt = current_timestamp(),
+        payload = {
+            guildKey = active_guild_key(db),
+            actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+            minimums = clone_array_records((db or {}).minimums or {}),
+            syncReply = true,
+        },
+    })
+    return true
+end
+
 local function payload_version(payload)
     payload = type(payload) == "table" and payload or {}
     if type(payload.version) == "string" and payload.version ~= "" then
@@ -422,6 +524,12 @@ local function ledger_version_is_compatible(message)
     local localVersion = tostring(((ns.constants or {}).ADDON_VERSION) or "")
     local comparison = compare_versions(remoteVersion, localVersion)
     return comparison ~= nil and comparison >= 0
+end
+
+local function ledger_protocol_is_compatible(payload)
+    local expected = tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
+    local actual = tonumber((payload or {}).ledgerProtocol or 0) or 0
+    return expected > 0 and actual >= expected
 end
 
 local function remember_sync_decision(message, sender, payload, accepted, category, reason)
@@ -528,22 +636,67 @@ local function refresh_visible_sync_views()
     end
 end
 
-local function send_visible_history_snapshot(db, actorContext, updatedAt)
-    local historyView = ns.modules.historyView or {}
-    if type(transport.Send) ~= "function" or type(historyView.BuildSyncSnapshot) ~= "function" then
+local function current_access_profile(db)
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    local policy = current_policy(db)
+    if type(permissions.GetEffectiveAccessProfile) == "function" then
+        return permissions.GetEffectiveAccessProfile(context, policy), context
+    end
+
+    return "full_shell", context
+end
+
+local function run_silent_auto_sync(db)
+    if type(manualActions.Run) ~= "function" then
         return false
     end
 
-    transport.Send("GUILD", "GUILD", {
-        type = "HISTORY_SNAPSHOT",
-        updatedAt = tonumber(updatedAt or (_G.time and _G.time() or 0)) or 0,
-        payload = {
-            guildKey = active_guild_key(db),
-            actorContext = type(actorContext) == "table" and actorContext or {},
-            entries = historyView.BuildSyncSnapshot((db or {}).auditLog or {}),
-        },
+    local accessProfile = current_access_profile(db)
+    if accessProfile == "blocked" then
+        return false
+    end
+
+    manualActions.Run(db, {
+        action = "all",
+        accessProfile = accessProfile,
+        skipCooldown = true,
+        now = current_timestamp(),
     })
     return true
+end
+
+local function schedule_after(delaySeconds, callback)
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(delaySeconds, callback)
+        return true
+    end
+
+    return false
+end
+
+local function schedule_login_auto_sync()
+    return schedule_after(AUTO_SYNC_LOGIN_DELAY_SECONDS, function()
+        run_silent_auto_sync(current_db())
+    end)
+end
+
+local function schedule_periodic_auto_sync()
+    if syncEvents.periodicAutoSyncActive == true then
+        return false
+    end
+
+    syncEvents.periodicAutoSyncActive = true
+    syncEvents.periodicAutoSyncToken = (tonumber(syncEvents.periodicAutoSyncToken or 0) or 0) + 1
+    local token = syncEvents.periodicAutoSyncToken
+    return schedule_after(AUTO_SYNC_INTERVAL_SECONDS, function()
+        if syncEvents.periodicAutoSyncToken ~= token then
+            return
+        end
+
+        syncEvents.periodicAutoSyncActive = false
+        run_silent_auto_sync(current_db())
+        schedule_periodic_auto_sync()
+    end)
 end
 
 local function append_audit_entry(db, entry)
@@ -958,34 +1111,38 @@ local function handle_minimums_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if minimums == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", minimums and "blacklisted" or "missing_minimums")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_can_manage_minimums(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced minimums from %s.", sender_display_name(sender)))
         return false
     end
 
     local previousMinimums = clone_array_records(db.minimums or {})
-    db.minimums = clone_array_records(minimums)
+    local mergedMinimums, shouldReply = merge_minimum_snapshot_rows(previousMinimums, minimums)
+    local auditCountBefore = #(db.auditLog or {})
+    db.minimums = mergedMinimums
     append_minimums_snapshot_audit(db, previousMinimums, db.minimums, actorContext, payload.updatedAt or ns.state.lastSyncMessage.updatedAt)
+    local changedCount = math.max(0, #(db.auditLog or {}) - auditCountBefore)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", "applied")
-    report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", changedCount > 0 and "applied" or "no_change")
+    if shouldReply == true and payload.syncReply ~= true then
+        send_minimums_snapshot_reply(db)
+    end
+    if changedCount > 0 then
+        report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+    end
     return true
 end
 
@@ -997,19 +1154,16 @@ local function handle_requests_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if requests == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", requests and "blacklisted" or "missing_requests")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1018,7 +1172,6 @@ local function handle_requests_snapshot(db, payload, sender)
         and not actor_can(actorContext, "full_ui", localPolicy)
     then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced requests snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1050,8 +1203,10 @@ local function handle_requests_snapshot(db, payload, sender)
     end
 
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", "applied")
-    report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", mergedCount > 0 and "applied" or "no_change")
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
     return true
 end
 
@@ -1072,32 +1227,278 @@ local function handle_history_snapshot(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "wrong_guild")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if entries == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", entries and "blacklisted" or "missing_history")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_can_sync_history(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "capability_denied")
-        report_sync_status(string.format("Ignored synced history snapshot from %s.", sender_display_name(sender)))
         return false
     end
 
     local mergedCount = type(historyView.MergeSyncSnapshot) == "function" and historyView.MergeSyncSnapshot(db.auditLog or {}, entries) or 0
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "history_snapshot", mergedCount > 0 and "applied" or "no_change")
-    report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
+    return true
+end
+
+local function current_addon_version()
+    return tostring(((ns.constants or {}).ADDON_VERSION) or "")
+end
+
+local function current_ledger_protocol()
+    return tonumber(((ns.constants or {}).LEDGER_PROTOCOL_VERSION) or 0) or 0
+end
+
+local function payload_targets_local_player(db, payload)
+    local target = tostring((payload or {}).target or "")
+    if target == "" then
+        return false
+    end
+
+    local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    return sender_matches_context(liveContext, target)
+end
+
+local function manifest_bucket_count(manifest, bucketKey)
+    local buckets = type((manifest or {}).buckets) == "table" and manifest.buckets or {}
+    local bucket = buckets[bucketKey]
+        or buckets[tonumber(bucketKey)]
+        or buckets[tostring(bucketKey)]
+    if type(bucket) == "table" then
+        return tonumber(bucket.count or 0) or 0
+    end
+
+    return bucket ~= nil and 1 or 0
+end
+
+local function rows_have_entries(rows)
+    rows = type(rows) == "table" and rows or {}
+    return #(rows.item or {}) > 0 or #(rows.money or {}) > 0
+end
+
+local function split_ledger_buckets_for_peer(localManifest, remoteManifest, differentBuckets)
+    local requestBuckets = {}
+    local replyBuckets = {}
+
+    for _, bucketKey in ipairs(differentBuckets or {}) do
+        local localCount = manifest_bucket_count(localManifest, bucketKey)
+        local remoteCount = manifest_bucket_count(remoteManifest, bucketKey)
+        if remoteCount > 0 then
+            requestBuckets[#requestBuckets + 1] = bucketKey
+        end
+        if localCount > remoteCount then
+            replyBuckets[#replyBuckets + 1] = bucketKey
+        end
+    end
+
+    return requestBuckets, replyBuckets
+end
+
+local function handle_ledger_manifest(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "old_ledger_protocol")
+        return false
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "actor_sender_mismatch")
+        return false
+    end
+
+    local localManifest = type(bankLedger.BuildLedgerManifest) == "function"
+        and bankLedger.BuildLedgerManifest(db)
+        or {}
+    local compare = type(bankLedger.CompareLedgerManifest) == "function"
+        and bankLedger.CompareLedgerManifest(db, payload.manifest or {})
+        or { matched = false, differentBuckets = {} }
+    local matched = compare.matched == true
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_manifest", matched and "matched" or "different")
+    remember_ledger_debug_state(db, "ledgerLastManifest", {
+        sender = sender,
+        reason = matched and "matched" or "different",
+        updatedAt = current_message_updated_at(payload),
+        buckets = type(compare.differentBuckets) == "table" and compare.differentBuckets or {},
+    })
+    if matched then
+        mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+        return true
+    end
+
+    local differentBuckets = type(compare.differentBuckets) == "table" and compare.differentBuckets or {}
+    if type(transport.Send) == "function" and #differentBuckets > 0 then
+        local requestBuckets, replyBuckets = split_ledger_buckets_for_peer(localManifest, payload.manifest or {}, differentBuckets)
+        if #replyBuckets > 0 and type(bankLedger.RowsForLedgerBuckets) == "function" then
+            local rows = bankLedger.RowsForLedgerBuckets(db, replyBuckets)
+            if rows_have_entries(rows) then
+                transport.Send("GUILD", "GUILD", {
+                    type = "LEDGER_BUCKET_REPLY",
+                    updatedAt = current_timestamp(),
+                    payload = {
+                        guildKey = active_guild_key(db),
+                        actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                        version = current_addon_version(),
+                        ledgerProtocol = current_ledger_protocol(),
+                        target = sender,
+                        buckets = replyBuckets,
+                        rows = rows,
+                    },
+                })
+            end
+        end
+
+        if #requestBuckets == 0 then
+            return true
+        end
+
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_BUCKET_REQUEST",
+            updatedAt = current_timestamp(),
+            payload = {
+                guildKey = active_guild_key(db),
+                actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                version = current_addon_version(),
+                ledgerProtocol = current_ledger_protocol(),
+                target = sender,
+                buckets = requestBuckets,
+            },
+        })
+    end
+
+    return true
+end
+
+local function handle_ledger_bucket_request(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "old_ledger_protocol")
+        return false
+    end
+
+    if not payload_targets_local_player(db, payload) then
+        return true
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "actor_sender_mismatch")
+        return false
+    end
+
+    local buckets = type(payload.buckets) == "table" and payload.buckets or {}
+    remember_ledger_debug_state(db, "ledgerLastBucketRequest", {
+        sender = sender,
+        updatedAt = current_message_updated_at(payload),
+        buckets = buckets,
+    })
+    local rows = type(bankLedger.RowsForLedgerBuckets) == "function"
+        and bankLedger.RowsForLedgerBuckets(db, buckets)
+        or { item = {}, money = {} }
+
+    if type(transport.Send) == "function" then
+        transport.Send("GUILD", "GUILD", {
+            type = "LEDGER_BUCKET_REPLY",
+            updatedAt = current_timestamp(),
+            payload = {
+                guildKey = active_guild_key(db),
+                actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
+                version = current_addon_version(),
+                ledgerProtocol = current_ledger_protocol(),
+                target = sender,
+                buckets = buckets,
+                rows = rows,
+            },
+        })
+    end
+
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_request", "replied")
+    return true
+end
+
+local function handle_ledger_bucket_reply(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "wrong_guild")
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "old_ledger_protocol")
+        return false
+    end
+
+    if not payload_targets_local_player(db, payload) then
+        return true
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "actor_sender_mismatch")
+        return false
+    end
+
+    if type(bankLedger.MergeBucketRows) ~= "function" then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", "merge_unavailable")
+        return true
+    end
+
+    local mergedCount = tonumber(bankLedger.MergeBucketRows(db, payload) or 0) or 0
+    remember_ledger_debug_state(db, "ledgerLastBucketReply", {
+        sender = sender,
+        updatedAt = current_message_updated_at(payload),
+        buckets = type(payload.buckets) == "table" and payload.buckets or {},
+        merged = mergedCount,
+    })
+    mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", mergedCount > 0 and "applied" or "no_change")
+    if mergedCount > 0 then
+        report_sync_status(string.format("Synced %d ledger bucket row(s) from %s.", mergedCount, sender_display_name(sender)))
+    end
     return true
 end
 
@@ -1108,25 +1509,26 @@ local function handle_ledger_delta(db, payload, sender)
 
     if not request_targets_active_guild(db, payload.guildKey) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "wrong_guild")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
+        return false
+    end
+
+    if not ledger_protocol_is_compatible(payload) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "old_ledger_protocol")
         return false
     end
 
     if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "older_version")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if permissions.IsBlacklisted(actorContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "blacklisted")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
     if not actor_matches_sender(actorContext, sender) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "actor_sender_mismatch")
-        report_sync_status(string.format("Ignored synced ledger delta from %s.", sender_display_name(sender)))
         return false
     end
 
@@ -1141,6 +1543,56 @@ local function handle_ledger_delta(db, payload, sender)
     if mergedCount > 0 then
         report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
     end
+    return true
+end
+
+local function handle_ledger_digest(db, payload, sender)
+    payload = type(payload) == "table" and payload or {}
+    local actorContext = normalize_actor_context(payload.actorContext)
+    local localPolicy = current_policy(db)
+
+    if not request_targets_active_guild(db, payload.guildKey) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "wrong_guild")
+        return false
+    end
+
+    if not ledger_version_is_compatible(ns.state.lastSyncMessage) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "older_version")
+        return false
+    end
+
+    if permissions.IsBlacklisted(actorContext, localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "blacklisted")
+        return false
+    end
+
+    if not actor_matches_sender(actorContext, sender) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "actor_sender_mismatch")
+        return false
+    end
+
+    db.syncState = type(db.syncState) == "table" and db.syncState or {}
+    db.syncState.ledgerPeerDigests = type(db.syncState.ledgerPeerDigests) == "table" and db.syncState.ledgerPeerDigests or {}
+    local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
+    if characterKey == "" then
+        characterKey = normalize_character_key(sender)
+    end
+
+    local remoteDigest = type(payload.digest) == "table" and payload.digest or {}
+    db.syncState.ledgerPeerDigests[characterKey] = {
+        hash = tostring(remoteDigest.hash or ""),
+        itemCount = tonumber(remoteDigest.itemCount or 0) or 0,
+        moneyCount = tonumber(remoteDigest.moneyCount or 0) or 0,
+        seenAt = tonumber(ns.state.lastSyncMessage.updatedAt or (_G.time and _G.time() or 0)) or 0,
+        version = payload_version(ns.state.lastSyncMessage),
+    }
+
+    local localDigest = type(bankLedger.BuildSyncDigest) == "function" and bankLedger.BuildSyncDigest(db) or {}
+    local matched = tostring(remoteDigest.hash or "") ~= "" and tostring(remoteDigest.hash or "") == tostring(localDigest.hash or "")
+    if matched then
+        mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
+    end
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_digest", matched and "matched" or "different")
     return true
 end
 
@@ -1180,6 +1632,8 @@ function syncEvents.HandleEvent(event, ...)
                 updatedAt = _G.time(),
                 payload = context.characterKey or (_G.UnitName("player") or "Unknown"),
             })
+            schedule_login_auto_sync()
+            schedule_periodic_auto_sync()
         end
 
         return true
@@ -1261,32 +1715,9 @@ function syncEvents.HandleEvent(event, ...)
         end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
-            local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
-            local manualSyncActions = ns.modules.syncManualActions or manualActions or {}
-            local accessProfile = type(permissions.GetEffectiveAccessProfile) == "function"
-                and permissions.GetEffectiveAccessProfile(liveContext, current_policy(db))
-                or "full_shell"
-            local defaultAction = type(manualSyncActions.ResolveDefaultAction) == "function"
-                and manualSyncActions.ResolveDefaultAction(accessProfile)
-                or (accessProfile == "request_only" and "requests" or "all")
-            local syncTriggered = false
-            if accessProfile ~= "blocked" and type(manualSyncActions.Run) == "function" then
-                local result = manualSyncActions.Run(db, {
-                    action = defaultAction,
-                    accessProfile = accessProfile,
-                    now = tonumber(ns.state.lastSyncMessage.updatedAt or (_G.time and _G.time() or 0)) or 0,
-                    skipCooldown = true,
-                })
-                syncTriggered = type(result) == "table" and result.ok == true
-            end
-            if not syncTriggered and accessProfile ~= "blocked" then
-                send_visible_history_snapshot(db, liveContext, ns.state.lastSyncMessage.updatedAt)
-                syncTriggered = true
-            end
-            if syncTriggered then
-                mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-            end
+            remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, true, "sync_hello", "presence")
             refresh_sync_peer_view()
+            run_silent_auto_sync(db)
             return true
         end
         if ns.state.lastSyncMessage.type == "AUTH_POLICY_SNAPSHOT" then
@@ -1331,8 +1762,32 @@ function syncEvents.HandleEvent(event, ...)
             return accepted
         end
 
+        if ns.state.lastSyncMessage.type == "LEDGER_MANIFEST" then
+            local accepted = handle_ledger_manifest(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_BUCKET_REQUEST" then
+            local accepted = handle_ledger_bucket_request(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_BUCKET_REPLY" then
+            local accepted = handle_ledger_bucket_reply(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
         if ns.state.lastSyncMessage.type == "LEDGER_DELTA" then
             local accepted = handle_ledger_delta(db, ns.state.lastSyncMessage.payload, sender)
+            refresh_sync_peer_view()
+            return accepted
+        end
+
+        if ns.state.lastSyncMessage.type == "LEDGER_DIGEST" then
+            local accepted = handle_ledger_digest(db, ns.state.lastSyncMessage.payload, sender)
             refresh_sync_peer_view()
             return accepted
         end

@@ -185,11 +185,13 @@ local dbRows = exports.BuildRowsFromDatabase({
         ["scan-1"] = {
             items = {
                 [1001] = { itemID = 1001, name = "Flask Alpha", totalCount = 3 },
+                [3003] = { itemID = 3003, name = "Feast Gamma", totalCount = 1 },
             },
         },
     },
     minimums = {
         { itemID = 1001, itemName = "Flask Alpha", quantity = 5, scope = "GLOBAL" },
+        { itemID = 3003, itemName = "Feast Gamma", quantity = 5, scope = "GLOBAL", enabled = false },
     },
     oneTimeTargets = {},
     requests = {
@@ -197,7 +199,11 @@ local dbRows = exports.BuildRowsFromDatabase({
     },
 })
 
-assert.equal(2, #dbRows, "database export rows should be materialized from planning inputs in one domain call")
-assert.equal("Flask Alpha", dbRows[1].itemName, "database export rows should stay sorted for UI consumers")
-assert.equal(2, dbRows[1].totalToBuy, "database export rows should compute shortages from minimums")
-assert.equal(2, dbRows[2].requestQuantity, "database export rows should include approved open requests")
+assert.equal(3, #dbRows, "database export rows should be materialized from planning inputs in one domain call")
+assert.equal("Feast Gamma", dbRows[1].itemName, "one-time minimum export rows should stay sorted with other demand")
+assert.equal(4, dbRows[1].totalToBuy, "one-time minimum export rows should buy only the current shortage")
+assert.equal(0, dbRows[1].restockQuantity, "one-time minimum export rows should not be labeled as recurring restock")
+assert.equal(4, dbRows[1].targetQuantity, "one-time minimum export rows should expose their one-time target contribution")
+assert.equal("Flask Alpha", dbRows[2].itemName, "database export rows should stay sorted for UI consumers")
+assert.equal(2, dbRows[2].totalToBuy, "database export rows should compute shortages from minimums")
+assert.equal(2, dbRows[3].requestQuantity, "database export rows should include approved open requests")

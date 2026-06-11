@@ -1,7 +1,7 @@
 ## Interface: 120007, 120005
 ## Title: GBankManager
-## Version: 1.1.0
-## X-Release-Tag: v1.1.0
+## Version: 1.2.4
+## X-Release-Tag: v1.2.4
 ## Notes: Guild bank inventory and procurement manager
 ## Category: Guild
 ## Author: ziriuso
@@ -16,6 +16,7 @@ Libs/AceComm-3.0/ChatThrottleLib.lua
 Libs/AceComm-3.0/AceComm-3.0.lua
 Core/Namespace.lua
 Core/Constants.lua
+Core/ChatOutput.lua
 Data/Defaults.lua
 Data/Migrations.lua
 Data/Store.lua
@@ -32,8 +33,11 @@ Domain/ItemDisplay.lua
 Domain/MinimumsPortability.lua
 Domain/Exports.lua
 Domain/Requests.lua
+Domain/LedgerIdentity.lua
+Domain/LedgerManifest.lua
 Domain/BankLedger.lua
 Bootstrap.lua
+Features/LedgerScanner.lua
 Features/GuildBankScanner.lua
 Features/GuildBankScannerEvents.lua
 Features/ChatFilters.lua

@@ -10,6 +10,7 @@ end
 
 codec = codec or {}
 local transport = ns.modules.syncTransport or {}
+local chatOutput = ns.modules.chatOutput or {}
 local SYNC_PREFIX = "GBankManager"
 local CHUNK_START = string.char(1)
 local CHUNK_CONTINUE = string.char(2)
@@ -25,6 +26,10 @@ local function current_ace_comm()
 end
 
 local function push_chat_line(message)
+    if type(chatOutput.Send) == "function" then
+        return chatOutput.Send(message)
+    end
+
     if type(_G.DEFAULT_CHAT_FRAME) == "table" and type(_G.DEFAULT_CHAT_FRAME.AddMessage) == "function" then
         _G.DEFAULT_CHAT_FRAME:AddMessage(tostring(message or ""))
         return true
@@ -175,7 +180,24 @@ function transport.Receive(payload, distribution, sender)
     return nil, "invalid"
 end
 
-function transport.ReportStatus(message)
+function transport.ReportStatus(message, options)
+    options = type(options) == "table" and options or {}
+    if options.category == nil then
+        options.category = "routine"
+    end
+
+    if type(chatOutput.Send) == "function" then
+        return chatOutput.Send(string.format("%s: %s", SYNC_PREFIX, tostring(message or "")), options)
+    end
+
+    if tostring(options.category or "") == "routine" then
+        local db = (ns.state or {}).db or _G.GBankManagerDB or {}
+        local settings = (((db or {}).ui or {}).chatSettings or {})
+        if settings.suppressRoutineMessages == true then
+            return false, "suppressed"
+        end
+    end
+
     return push_chat_line(string.format("%s: %s", SYNC_PREFIX, tostring(message or "")))
 end
 
