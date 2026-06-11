@@ -46,19 +46,65 @@ local function frame_dimension(frame, key, getterName)
     return tonumber(value or frame[key] or 0) or 0
 end
 
-local function angle_to_offset(angleDegrees, minimap, button)
+local MINIMAP_RING_OFFSET = 5
+
+local MINIMAP_SHAPES = {
+    ROUND = { true, true, true, true },
+    SQUARE = { false, false, false, false },
+    ["CORNER-TOPLEFT"] = { false, false, false, true },
+    ["CORNER-TOPRIGHT"] = { false, false, true, false },
+    ["CORNER-BOTTOMLEFT"] = { false, true, false, false },
+    ["CORNER-BOTTOMRIGHT"] = { true, false, false, false },
+    ["SIDE-LEFT"] = { false, true, false, true },
+    ["SIDE-RIGHT"] = { true, false, true, false },
+    ["SIDE-TOP"] = { false, false, true, true },
+    ["SIDE-BOTTOM"] = { true, true, false, false },
+    ["TRICORNER-TOPLEFT"] = { false, true, true, true },
+    ["TRICORNER-TOPRIGHT"] = { true, false, true, true },
+    ["TRICORNER-BOTTOMLEFT"] = { true, true, false, true },
+    ["TRICORNER-BOTTOMRIGHT"] = { true, true, true, false },
+}
+
+local function current_minimap_shape()
+    if type(_G.GetMinimapShape) == "function" then
+        return _G.GetMinimapShape()
+    end
+
+    return "ROUND"
+end
+
+local function angle_to_offset(angleDegrees, minimap)
     local angleRadians = math.rad(tonumber(angleDegrees or 315) or 315)
+    local x = math.cos(angleRadians)
+    local y = math.sin(angleRadians)
+    local quadrant = 1
+    if x < 0 then
+        quadrant = quadrant + 1
+    end
+    if y > 0 then
+        quadrant = quadrant + 2
+    end
+
     local minimapWidth = frame_dimension(minimap, "width", "GetWidth")
     local minimapHeight = frame_dimension(minimap, "height", "GetHeight")
-    local buttonWidth = frame_dimension(button, "width", "GetWidth")
-    local buttonHeight = frame_dimension(button, "height", "GetHeight")
-    local minimapRadius = math.min(minimapWidth, minimapHeight) / 2
-    local buttonRadius = math.max(buttonWidth, buttonHeight) / 2
-    if minimapRadius <= 0 then
-        minimapRadius = 64
+    if minimapWidth <= 0 then
+        minimapWidth = 140
     end
-    local radius = minimapRadius + buttonRadius
-    return math.cos(angleRadians) * radius, math.sin(angleRadians) * radius
+    if minimapHeight <= 0 then
+        minimapHeight = 140
+    end
+
+    local ringWidth = (minimapWidth / 2) + MINIMAP_RING_OFFSET
+    local ringHeight = (minimapHeight / 2) + MINIMAP_RING_OFFSET
+    local shape = MINIMAP_SHAPES[current_minimap_shape()] or MINIMAP_SHAPES.ROUND
+    if shape[quadrant] then
+        return x * ringWidth, y * ringHeight
+    end
+
+    local diagonalWidth = math.sqrt(2 * ringWidth * ringWidth) - 10
+    local diagonalHeight = math.sqrt(2 * ringHeight * ringHeight) - 10
+    return math.max(-ringWidth, math.min(x * diagonalWidth, ringWidth)),
+        math.max(-ringHeight, math.min(y * diagonalHeight, ringHeight))
 end
 
 function minimapButton.UpdatePosition()
@@ -69,7 +115,7 @@ function minimapButton.UpdatePosition()
     end
 
     local appearance = current_appearance()
-    local x, y = angle_to_offset(appearance.minimapAngle, minimap, button)
+    local x, y = angle_to_offset(appearance.minimapAngle, minimap)
     if type(button.ClearAllPoints) == "function" then
         button:ClearAllPoints()
     end
@@ -127,7 +173,7 @@ local function begin_drag(self)
 
         local angle = math.atan2 and math.atan2(py - my, px - mx) or math.atan(py - my, px - mx)
         local appearance = current_appearance()
-        appearance.minimapAngle = math.deg(angle)
+        appearance.minimapAngle = math.deg(angle) % 360
         minimapButton.UpdatePosition()
     end)
 end
@@ -135,6 +181,30 @@ end
 local function stop_drag(self)
     if type(self) == "table" then
         self:SetScript("OnUpdate", nil)
+    end
+end
+
+local function show_tooltip(self)
+    local tooltip = _G.GameTooltip
+    if type(tooltip) ~= "table" then
+        return
+    end
+
+    if type(tooltip.SetOwner) == "function" then
+        tooltip:SetOwner(self, "ANCHOR_LEFT")
+    end
+    if type(tooltip.SetText) == "function" then
+        tooltip:SetText("GuildBankManager")
+    end
+    if type(tooltip.Show) == "function" then
+        tooltip:Show()
+    end
+end
+
+local function hide_tooltip()
+    local tooltip = _G.GameTooltip
+    if type(tooltip) == "table" and type(tooltip.Hide) == "function" then
+        tooltip:Hide()
     end
 end
 
@@ -173,6 +243,8 @@ function minimapButton.EnsureButton()
 
     button:SetScript("OnDragStart", begin_drag)
     button:SetScript("OnDragStop", stop_drag)
+    button:SetScript("OnEnter", show_tooltip)
+    button:SetScript("OnLeave", hide_tooltip)
     button:SetScript("OnClick", function()
         local mainFrame = ns.modules.mainFrame
         if type(mainFrame) == "table" and type(mainFrame.IsShown) == "function" and mainFrame:IsShown() then

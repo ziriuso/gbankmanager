@@ -2210,6 +2210,27 @@ function mainFrameShell.SetFrameShown(frame, shouldShow)
     end
 end
 
+local function set_keyboard_propagation(frame, enabled)
+    if type(frame) == "table" and type(frame.SetPropagateKeyboardInput) == "function" then
+        frame:SetPropagateKeyboardInput(enabled == true)
+    end
+end
+
+local function handle_shell_key_down(self, key)
+    if key ~= "ESCAPE" then
+        set_keyboard_propagation(self, true)
+        return
+    end
+
+    set_keyboard_propagation(self, false)
+    if type(self.EnableMouse) == "function" then
+        self:EnableMouse(false)
+    end
+    if type(self.Hide) == "function" then
+        self:Hide()
+    end
+end
+
 function mainFrameShell.EnsureShell(mainFrame)
     if type(mainFrame) ~= "table" or type(mainFrame.SetSize) ~= "function" then
         mainFrame = _G.CreateFrame("Frame", "GBankManagerFrame", _G.UIParent, "BackdropTemplate")
@@ -2222,6 +2243,10 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame:SetClampedToScreen(true)
     mainFrame:SetMovable(true)
     mainFrame:EnableMouse(false)
+    if type(mainFrame.EnableKeyboard) == "function" then
+        mainFrame:EnableKeyboard(true)
+    end
+    set_keyboard_propagation(mainFrame, true)
     mainFrame:RegisterForDrag("LeftButton")
     mainFrame:SetResizable(true)
     mainFrame:SetResizeBounds(920, 560, 1280, 760)
@@ -2235,6 +2260,7 @@ function mainFrameShell.EnsureShell(mainFrame)
     mainFrame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
     end)
+    mainFrame:SetScript("OnKeyDown", handle_shell_key_down)
 
     mainFrame.activeView = mainFrame.activeView or "DASHBOARD"
     if mainFrame.collapsedSidebar == nil then

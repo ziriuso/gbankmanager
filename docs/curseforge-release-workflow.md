@@ -87,15 +87,15 @@ git rev-parse --short HEAD
 
 ```powershell
 git add GBankManager README.md docs tests
-git commit -m "chore: prepare 1.2.3 release"
+git commit -m "chore: prepare 1.2.4 release"
 git push origin codex/gbankmanager-v1
 ```
 
 5. Create and push the release tag:
 
 ```powershell
-git tag v1.2.3
-git push origin v1.2.3
+git tag v1.2.4
+git push origin v1.2.4
 ```
 
 6. Watch the tag-triggered workflow:
@@ -108,10 +108,10 @@ gh run watch <run-id>
 7. Confirm the release and artifact:
 
 ```powershell
-gh release view v1.2.3 --json name,tagName,isPrerelease,assets,url
+gh release view v1.2.4 --json name,tagName,isPrerelease,assets,url
 ```
 
-The stable release should have `isPrerelease: false`, a `GBankManager-1.2.3.zip` asset, and a successful CurseForge upload step in the workflow log.
+The stable release should have `isPrerelease: false`, a `GBankManager-1.2.4.zip` asset, and a successful CurseForge upload step in the workflow log.
 
 8. Deploy the same committed worktree locally after the release gate is green:
 

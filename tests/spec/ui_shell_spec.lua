@@ -86,7 +86,34 @@ assert.equal("HIGH", minimapButton.button.frameStrata, "minimap launcher should 
 assert.truthy(((_G.GBankManagerDB.ui.appearance or {}).minimapAngle or 0) >= 300, "minimap launcher should default to an upper-right minimap position instead of the older lower-left placement")
 local _, minimapAnchorParent, _, minimapAnchorX, minimapAnchorY = minimapButton.button:GetPoint(1)
 assert.same(_G.Minimap, minimapAnchorParent, "minimap launcher should anchor relative to the minimap")
-assert.truthy(math.sqrt(((minimapAnchorX or 0) * (minimapAnchorX or 0)) + ((minimapAnchorY or 0) * (minimapAnchorY or 0))) >= 80, "minimap launcher should sit on the minimap edge instead of inside the map")
+local minimapLauncherDistance = math.sqrt(((minimapAnchorX or 0) * (minimapAnchorX or 0)) + ((minimapAnchorY or 0) * (minimapAnchorY or 0)))
+assert.truthy(minimapLauncherDistance >= 72 and minimapLauncherDistance <= 78, "minimap launcher should snap to the LibDBIcon-style minimap ring radius")
+local originalGameTooltip = _G.GameTooltip
+_G.GameTooltip = {
+    SetOwner = function(self, owner, anchor)
+        self.owner = owner
+        self.anchor = anchor
+    end,
+    SetText = function(self, text)
+        self.text = text
+    end,
+    Show = function(self)
+        self.shown = true
+    end,
+    Hide = function(self)
+        self.hidden = true
+    end,
+}
+assert.truthy(type(minimapButton.button:GetScript("OnEnter")) == "function", "minimap launcher should expose a hover tooltip handler")
+assert.truthy(type(minimapButton.button:GetScript("OnLeave")) == "function", "minimap launcher should hide its hover tooltip")
+minimapButton.button:GetScript("OnEnter")(minimapButton.button)
+assert.same(minimapButton.button, _G.GameTooltip.owner, "minimap launcher tooltip should anchor to the button")
+assert.equal("ANCHOR_LEFT", _G.GameTooltip.anchor, "minimap launcher tooltip should use a readable minimap-side anchor")
+assert.equal("GuildBankManager", _G.GameTooltip.text, "minimap launcher tooltip should identify the addon")
+assert.truthy(_G.GameTooltip.shown == true, "minimap launcher tooltip should be shown on hover")
+minimapButton.button:GetScript("OnLeave")(minimapButton.button)
+assert.truthy(_G.GameTooltip.hidden == true, "minimap launcher tooltip should hide when hover ends")
+_G.GameTooltip = originalGameTooltip
 assert.equal("colored-distinct", mainFrame.themeExpressionStyle, "shell should expose the stronger colored-theme expression contract")
 assert.equal("dense-clean", mainFrame.defaultDensityStyle, "shell should expose the dense-but-clean spacing contract")
 assert.equal(0, ((mainFrame.sidebarButtons[1].backdropBorderColor or {})[4] or 0), "active sidebar view should no longer rely on a border glow")
@@ -132,6 +159,23 @@ assert.truthy(mainFrame:IsShown(), "slash ui command should show the main frame"
 assert.truthy(mainFrame.mouseEnabled == true, "opening the main frame should enable mouse capture")
 assert.truthy(mainFrame.topLevel == true, "main frame should opt into top-level window ordering")
 assert.equal("MEDIUM", mainFrame.frameStrata, "main frame should sit below higher-priority Blizzard dialogs until refocused")
+assert.truthy(mainFrame.keyboardEnabled == true, "main frame should listen for Escape while shown")
+assert.truthy(type(mainFrame:GetScript("OnKeyDown")) == "function", "main frame should expose an Escape key handler")
+
+mainFrame:GetScript("OnKeyDown")(mainFrame, "ESCAPE")
+assert.truthy(not mainFrame:IsShown(), "Escape should close the main addon shell")
+slash.command("ui")
+if type(mainFrame.ShowExports) == "function" then
+    mainFrame:ShowExports()
+end
+if mainFrame.exportManualShoppingListButton and type(mainFrame.exportManualShoppingListButton.GetScript) == "function" then
+    mainFrame.exportManualShoppingListButton:GetScript("OnClick")(mainFrame.exportManualShoppingListButton)
+end
+assert.truthy(mainFrame.exportManualShoppingListModal and mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should open for the Escape exception check")
+mainFrame:GetScript("OnKeyDown")(mainFrame, "ESCAPE")
+assert.truthy(not mainFrame:IsShown(), "Escape should close the main shell even while the manual shopping list requires its close X")
+assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "Escape should not close the manual shopping list")
+mainFrame.exportManualShoppingListModal:Hide()
 
 assert.truthy(not mainFrame.sidebarIdentityNameText:IsShown(), "sidebar footer should stop showing the character name text")
 assert.truthy(not mainFrame.sidebarIdentityGuildText:IsShown(), "sidebar footer should stop showing the guild name text")

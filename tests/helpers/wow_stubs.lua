@@ -710,6 +710,12 @@ if _G.CreateFrame == nil then
         function frame:EnableMouse(enabled)
             self.mouseEnabled = enabled
         end
+        function frame:EnableKeyboard(enabled)
+            self.keyboardEnabled = enabled
+        end
+        function frame:SetPropagateKeyboardInput(enabled)
+            self.propagateKeyboardInput = enabled
+        end
         function frame:RegisterForDrag(...)
             self.dragButtons = { ... }
         end
