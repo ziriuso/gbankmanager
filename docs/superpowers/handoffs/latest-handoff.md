@@ -6,24 +6,25 @@ Updated: 2026-06-11
 
 - Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Current HEAD: `2339df9 chore: prepare 1.2.4 release`
+- Current HEAD before 1.2.5 release prep: `d414425 fix: skip guild info pull in instances`
 - Branch state before this handoff cleanup: in sync with `origin/codex/gbankmanager-v1`
 - Expected local noise: untracked `.vscode/`
 - This handoff cleanup is documentation-only unless it has been committed after the checkpoint above.
 
 ## Release State
 
-- Current public release: `v1.2.4`
-- Release commit: `2339df9 chore: prepare 1.2.4 release`
-- GitHub Actions release workflow: `27362918871`
-- Workflow result: success
-- GitHub Release: `GBankManager v1.2.4`
-- Release asset: `GBankManager-1.2.4.zip`
+- Current public release before this release prep: `v1.2.4`
+- Current release target: `v1.2.5`
+- Release commit before 1.2.5 metadata: `d414425 fix: skip guild info pull in instances`
+- Prior GitHub Actions release workflow: `27362918871`
+- Prior workflow result: success
+- Prior GitHub Release: `GBankManager v1.2.4`
+- Prior release asset: `GBankManager-1.2.4.zip`
 - Release channel: stable CurseForge release
 - Local Retail deploy completed to:
   - `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns\GBankManager`
   - `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns\GBankManager_ItemData`
-- Deployed TOC was checked after release and advertised:
+- Deployed TOC before 1.2.5 release prep advertised:
   - `## Version: 1.2.4`
   - `## X-Release-Tag: v1.2.4`
 
@@ -32,23 +33,23 @@ Do not tag, republish, or create another CurseForge release unless explicitly as
 ## Version And Migration Markers
 
 - Addon display version:
-  - `GBankManager/GBankManager.toc`: `1.2.4` / `v1.2.4`
-  - `GBankManager/Core/Constants.lua` fallback `ADDON_VERSION`: `1.2.4`
+  - `GBankManager/GBankManager.toc`: `1.2.5` / `v1.2.5`
+  - `GBankManager/Core/Constants.lua` fallback `ADDON_VERSION`: `1.2.5`
 - Ledger protocol:
   - `LEDGER_PROTOCOL_VERSION = 3`
 - Intentional data-cleanup markers that should not be bumped unless the cleanup behavior changes:
   - `MONEY_LEDGER_DEDUPE_VERSION = "1.2.3-money-v7"`
   - `SAVED_VARIABLES_COMPACT_VERSION = "1.2.3-snapshot-v3"`
-- The `1.2.3` text in those marker strings is not stale release metadata; it is the durable migration token for the cleanup pass that shipped into the 1.2.4 line.
+- The `1.2.3` text in those marker strings is not stale release metadata; it is the durable migration token for the cleanup pass that ships in the 1.2.x line.
 
-## Shipped In 1.2.4
+## Shipped Through 1.2.5
 
 - Minimap launcher now snaps to a LibDBIcon-style minimap ring radius instead of floating outside the minimap.
 - Minimap launcher hover tooltip identifies the addon as `GuildBankManager`.
 - Dragging the minimap launcher normalizes the stored angle.
 - Escape closes the main addon shell.
 - If the manual shopping list is open, Escape still closes the main addon shell while leaving the shopping list open; the shopping list still requires its close X.
-- Release metadata and About version now advertise `v1.2.4`.
+- Release metadata and About version now advertise `v1.2.5`.
 - Previous unreleased 1.2.3-line fixes are included in the shipped release:
   - quiet sync chat unless local rows actually arrive or change
   - no-change request, minimum, history, and ledger sync updates peer timestamps quietly
@@ -58,6 +59,8 @@ Do not tag, republish, or create another CurseForge release unless explicitly as
   - SavedVariables compaction with the `1.2.3-snapshot-v3` marker
 - Post-1.2.4 live follow-up in progress:
   - passive Guild Info auth-policy pulls should be skipped while inside dungeon or raid instances to avoid protected `GetInfoText()` blocked-action errors
+- 1.2.5 release target:
+  - ships the post-1.2.4 instance guard above as a stable CurseForge release
 
 ## Verification Completed
 
@@ -70,7 +73,7 @@ Do not tag, republish, or create another CurseForge release unless explicitly as
   - GitHub Release creation and zip attach
 - Local Retail deploy completed after release:
   - `powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json`
-- Deployed Retail TOC confirmed `1.2.4` / `v1.2.4`.
+- Deployed Retail TOC confirmed `1.2.4` / `v1.2.4` before the 1.2.5 release-prep bump.
 
 ## Read First
 
@@ -105,7 +108,7 @@ If release or GitHub workflow facts matter:
 ```powershell
 gh auth status -h github.com
 gh run list --workflow release-curseforge.yml --limit 5
-gh release view v1.2.4 --json name,tagName,isPrerelease,assets,url
+gh release view v1.2.5 --json name,tagName,isPrerelease,assets,url
 ```
 
 ## Completed Live Validation
