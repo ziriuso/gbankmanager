@@ -56,6 +56,8 @@ Do not tag, republish, or create another CurseForge release unless explicitly as
   - short-window raw-relative money deposit replay suppression
   - protocol-2 ledger payload rejection through `LEDGER_PROTOCOL_VERSION = 3`
   - SavedVariables compaction with the `1.2.3-snapshot-v3` marker
+- Post-1.2.4 live follow-up in progress:
+  - passive Guild Info auth-policy pulls should be skipped while inside dungeon or raid instances to avoid protected `GetInfoText()` blocked-action errors
 
 ## Verification Completed
 

@@ -270,6 +270,36 @@ assert.equal("SYNC_HELLO|0|SyncTester-Stormrage", _G.C_ChatInfo.sentMessages[1].
 local loginChatText = table.concat(_G.DEFAULT_CHAT_FRAME.messages or {}, "\n")
 assert.truthy(string.find(loginChatText, "GBankManager: Sync hello sent for SyncTester-Stormrage.", 1, true) == nil, "player login should not add self hello noise to chat")
 
+local authPolicySource = ns.modules.authPolicySource
+local originalPullPolicyFromGuildInfo = authPolicySource.PullPolicyFromGuildInfo
+local originalIsInInstance = _G.IsInInstance
+local passiveGuildInfoPulls = 0
+authPolicySource.PullPolicyFromGuildInfo = function()
+    passiveGuildInfoPulls = passiveGuildInfoPulls + 1
+    return false, "missing_snippet"
+end
+
+_G.IsInInstance = function()
+    return true, "party"
+end
+syncEvents.HandleEvent("ADDON_LOADED", "GBankManager")
+assert.equal(0, passiveGuildInfoPulls, "addon load should not pull Guild Info text through protected GetInfoText while inside a dungeon")
+
+_G.IsInInstance = function()
+    return true, "raid"
+end
+syncEvents.HandleEvent("GUILD_ROSTER_UPDATE")
+assert.equal(0, passiveGuildInfoPulls, "passive guild events should not pull Guild Info text through protected GetInfoText while inside a raid")
+
+_G.IsInInstance = function()
+    return false, "none"
+end
+syncEvents.HandleEvent("GUILD_MOTD")
+assert.equal(1, passiveGuildInfoPulls, "passive guild events should still pull Guild Info text outside dungeon or raid instances")
+
+authPolicySource.PullPolicyFromGuildInfo = originalPullPolicyFromGuildInfo
+_G.IsInInstance = originalIsInInstance
+
 local db = ns.state.db
 db.ui = db.ui or {}
 db.ui.chatSettings = db.ui.chatSettings or {}

@@ -106,6 +106,27 @@ local function current_timestamp()
     return tonumber(type(_G.time) == "function" and _G.time() or 0) or 0
 end
 
+local function is_dungeon_or_raid_instance()
+    if type(_G.IsInInstance) ~= "function" then
+        return false
+    end
+
+    local inInstance, instanceType = _G.IsInInstance()
+    return inInstance == true and (instanceType == "party" or instanceType == "raid")
+end
+
+local function pull_auth_policy_from_guild_info_if_safe(db)
+    if is_dungeon_or_raid_instance() then
+        return false, "in_instance"
+    end
+
+    if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
+        return authPolicySource.PullPolicyFromGuildInfo(db)
+    end
+
+    return false, "unavailable"
+end
+
 local function remember_ledger_debug_state(db, key, state)
     db = type(db) == "table" and db or {}
     db.syncState = type(db.syncState) == "table" and db.syncState or {}
@@ -1608,9 +1629,7 @@ function syncEvents.HandleEvent(event, ...)
         if type(permissions.RefreshPolicyFromGuild) == "function" then
             permissions.RefreshPolicyFromGuild(db)
         end
-        if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
-            authPolicySource.PullPolicyFromGuildInfo(db)
-        end
+        pull_auth_policy_from_guild_info_if_safe(db)
         local mainFrame = ns.modules.mainFrame or {}
         if type(mainFrame.RefreshSidebarIdentity) == "function" then
             mainFrame:RefreshSidebarIdentity()
@@ -1644,9 +1663,7 @@ function syncEvents.HandleEvent(event, ...)
         if type(permissions.RefreshPolicyFromGuild) == "function" then
             permissions.RefreshPolicyFromGuild(db)
         end
-        if type(authPolicySource.PullPolicyFromGuildInfo) == "function" then
-            authPolicySource.PullPolicyFromGuildInfo(db)
-        end
+        pull_auth_policy_from_guild_info_if_safe(db)
         local mainFrame = ns.modules.mainFrame or {}
         if type(mainFrame.RefreshSidebarIdentity) == "function" then
             mainFrame:RefreshSidebarIdentity()
