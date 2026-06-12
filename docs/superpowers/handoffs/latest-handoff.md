@@ -6,27 +6,26 @@ Updated: 2026-06-11
 
 - Worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
 - Branch: `codex/gbankmanager-v1`
-- Current HEAD before 1.2.5 release prep: `d414425 fix: skip guild info pull in instances`
+- Current HEAD: `447d455 chore: prepare 1.2.5 release`
 - Branch state before this handoff cleanup: in sync with `origin/codex/gbankmanager-v1`
 - Expected local noise: untracked `.vscode/`
 - This handoff cleanup is documentation-only unless it has been committed after the checkpoint above.
 
 ## Release State
 
-- Current public release before this release prep: `v1.2.4`
-- Current release target: `v1.2.5`
-- Release commit before 1.2.5 metadata: `d414425 fix: skip guild info pull in instances`
-- Prior GitHub Actions release workflow: `27362918871`
-- Prior workflow result: success
-- Prior GitHub Release: `GBankManager v1.2.4`
-- Prior release asset: `GBankManager-1.2.4.zip`
+- Current public release: `v1.2.5`
+- Release commit: `447d455 chore: prepare 1.2.5 release`
+- GitHub Actions release workflow: `27389094436`
+- Workflow result: success
+- GitHub Release: `GBankManager v1.2.5`
+- Release asset: `GBankManager-1.2.5.zip`
 - Release channel: stable CurseForge release
 - Local Retail deploy completed to:
   - `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns\GBankManager`
   - `C:\Gaming\World of Warcraft\_retail_\Interface\AddOns\GBankManager_ItemData`
-- Deployed TOC before 1.2.5 release prep advertised:
-  - `## Version: 1.2.4`
-  - `## X-Release-Tag: v1.2.4`
+- Deployed TOC was checked after release and advertised:
+  - `## Version: 1.2.5`
+  - `## X-Release-Tag: v1.2.5`
 
 Do not tag, republish, or create another CurseForge release unless explicitly asked.
 
@@ -59,7 +58,7 @@ Do not tag, republish, or create another CurseForge release unless explicitly as
   - SavedVariables compaction with the `1.2.3-snapshot-v3` marker
 - Post-1.2.4 live follow-up in progress:
   - passive Guild Info auth-policy pulls should be skipped while inside dungeon or raid instances to avoid protected `GetInfoText()` blocked-action errors
-- 1.2.5 release target:
+- 1.2.5 release:
   - ships the post-1.2.4 instance guard above as a stable CurseForge release
 
 ## Verification Completed
