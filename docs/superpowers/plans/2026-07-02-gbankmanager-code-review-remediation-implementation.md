@@ -507,7 +507,7 @@ git commit -m "fix: bound sync codec decoding"
 - Modify: `tests/spec/sync_ledger_manifest_spec.lua`
 - Modify: `docs/manual-test-checklist.md`
 
-- [ ] **Step 1: Flip the existing expectation first**
+- [x] **Step 1: Flip the existing expectation first**
 
 In `tests/spec/sync_ledger_manifest_spec.lua`, change the assertion that currently expects different hashes for shared fingerprints and different entry IDs. It should expect equal hashes when `fingerprint` matches.
 
@@ -519,7 +519,7 @@ Run:
 
 Expected before implementation: FAIL because `row_identity_token` still prefers `entryId`.
 
-- [ ] **Step 2: Prefer content fingerprint**
+- [x] **Step 2: Prefer content fingerprint**
 
 Change `row_identity_token` in `GBankManager/Domain/LedgerManifest.lua` so the first branch is:
 
@@ -535,7 +535,7 @@ if entryId ~= "" then
 end
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -547,7 +547,7 @@ Run:
 
 Expected: peers with identical row fingerprints compute identical bucket/global hashes.
 
-- [ ] **Step 4: Update manual QA and commit**
+- [x] **Step 4: Update manual QA and commit**
 
 Add a two-client ledger sync checklist line: after both clients have identical visible ledger rows from different local entry IDs, `Sync Ledger` should not keep exchanging zero-merge bucket payloads.
 
