@@ -718,6 +718,68 @@ assert.same(persistedDb, reboundDb, "store database accessor should prefer the p
 assert.same(persisted, _G.GBankManagerDB, "store database accessor should keep the saved-variables root aligned")
 assert.same(persistedDb, ns.state.db, "store database accessor should keep the active guild db aligned in runtime state")
 
+assert.truthy(type(store.InvalidateDatabaseCache) == "function", "store should expose explicit database-cache invalidation")
+
+local cacheRoot = store.Normalize({
+    activeGuildKey = "Cache Guild",
+    guilds = {
+        ["Cache Guild"] = defaults.CreateDatabase("Cache Guild"),
+        ["Cache Alts"] = defaults.CreateDatabase("Cache Alts"),
+    },
+}, "Cache Guild")
+cacheRoot.guilds["Cache Guild"].ui.logsHistorySettings.ledgerRetention = "1_week"
+cacheRoot.guilds["Cache Alts"].ui.logsHistorySettings.ledgerRetention = "1_week"
+_G.GBankManagerDB = cacheRoot
+ns.state.dbRoot = cacheRoot
+ns.state.db = cacheRoot.guilds["Cache Guild"]
+store.InvalidateDatabaseCache("cache_contract_setup")
+
+local originalApply = migrations.Apply
+local originalApplyDatabase = migrations.ApplyDatabase
+local originalPruneRetention = ns.modules.bankLedger.PruneRetention
+local migrationApplyCount = 0
+local pruneRetentionCount = 0
+local cacheNow = 1717000000
+migrations.Apply = function(...)
+    migrationApplyCount = migrationApplyCount + 1
+    return originalApply(...)
+end
+migrations.ApplyDatabase = function(...)
+    migrationApplyCount = migrationApplyCount + 1
+    return originalApplyDatabase(...)
+end
+ns.modules.bankLedger.PruneRetention = function(...)
+    pruneRetentionCount = pruneRetentionCount + 1
+    return originalPruneRetention(...)
+end
+_G.time = function()
+    return cacheNow
+end
+
+local firstCacheDb = store.GetDatabase("Cache Guild")
+local migrationCountAfterFirstGet = migrationApplyCount
+local secondCacheDb = store.GetDatabase("Cache Guild")
+assert.same(firstCacheDb, secondCacheDb, "repeated store database access should return the active cached guild table")
+assert.equal(migrationCountAfterFirstGet, migrationApplyCount, "repeated store database access should not rerun migrations while the cache is valid")
+assert.same(firstCacheDb, ns.state.db, "cached store access should keep runtime state bound to the active guild db")
+assert.equal(1, pruneRetentionCount, "cached store access should prune finite retention at most once inside the throttle window")
+
+local altCacheDb = store.GetDatabase("Cache Alts")
+assert.same(cacheRoot.guilds["Cache Alts"], altCacheDb, "requesting a different guild should rebind the cached active guild db")
+assert.truthy(altCacheDb ~= firstCacheDb, "requesting a different guild should not reuse the previous guild table")
+
+store.InvalidateDatabaseCache("sync_merge")
+local migrationCountBeforeInvalidatedGet = migrationApplyCount
+local invalidatedCacheDb = store.GetDatabase("Cache Alts")
+assert.same(altCacheDb, invalidatedCacheDb, "invalidated cache should normalize back to the requested guild table")
+assert.truthy(migrationApplyCount > migrationCountBeforeInvalidatedGet, "explicit invalidation should force the next store access through normalization")
+
+migrations.Apply = originalApply
+migrations.ApplyDatabase = originalApplyDatabase
+ns.modules.bankLedger.PruneRetention = originalPruneRetention
+_G.time = originalTime
+store.InvalidateDatabaseCache("cache_contract_teardown")
+
 local clearDb = store.Normalize({
     meta = {
         schemaVersion = 1,

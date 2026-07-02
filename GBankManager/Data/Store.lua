@@ -9,6 +9,7 @@ local store = ns.data.store or ns.modules.store or {}
 local defaults = ns.data.defaults or ns.modules.defaults
 local migrations = ns.data.migrations or ns.modules.migrations
 local constants = ns.constants or {}
+local DATABASE_CACHE_PRUNE_THROTTLE_SECONDS = 60
 
 local function trim(value)
     return tostring(value or ""):match("^%s*(.-)%s*$")
@@ -545,6 +546,50 @@ local function select_runtime_source(guildName)
     return {}
 end
 
+local function database_cache_matches(cache, source, guildKey)
+    return type(cache) == "table"
+        and (cache.source == source or cache.runtime == source)
+        and cache.guildKey == guildKey
+        and type(cache.db) == "table"
+        and type(cache.runtime) == "table"
+end
+
+local function align_runtime_state(runtime, activeDb)
+    _G.GBankManagerDB = runtime
+    ns.state.dbRoot = looks_like_root(runtime) and runtime or nil
+    ns.state.db = activeDb
+end
+
+local function maybe_prune_retention(activeDb, cache)
+    local bankLedger = ns.modules.bankLedger
+    if not (bankLedger and type(bankLedger.PruneRetention) == "function") then
+        return
+    end
+
+    local logsHistory = (((activeDb or {}).ui or {}).logsHistorySettings or {})
+    local shouldPruneLedger = tostring(logsHistory.ledgerRetention or "indefinite") ~= "indefinite"
+    local shouldPruneHistory = tostring(logsHistory.historyRetention or "indefinite") ~= "indefinite"
+    if not (shouldPruneLedger or shouldPruneHistory) then
+        return
+    end
+
+    local now = type(_G.time) == "function" and (_G.time() or 0) or 0
+    local throttleSeconds = tonumber(
+        constants.DATABASE_CACHE_PRUNE_THROTTLE_SECONDS
+            or constants.RETENTION_PRUNE_THROTTLE_SECONDS
+            or DATABASE_CACHE_PRUNE_THROTTLE_SECONDS
+    ) or DATABASE_CACHE_PRUNE_THROTTLE_SECONDS
+    local lastPruneAt = cache and cache.lastRetentionPruneAt
+    if lastPruneAt ~= nil and throttleSeconds > 0 and (now - (tonumber(lastPruneAt or 0) or 0)) < throttleSeconds then
+        return
+    end
+
+    bankLedger.PruneRetention(activeDb, now)
+    if type(cache) == "table" then
+        cache.lastRetentionPruneAt = now
+    end
+end
+
 function store.CreateFreshDatabase(guildName)
     local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName))
     if migrations and type(migrations.ApplyDatabase) == "function" then
@@ -570,22 +615,33 @@ function store.Normalize(db, guildName)
     return apply_versioned_ledger_reset(migrations.Apply(db, resolve_guild_name(guildName, db)))
 end
 
+function store.InvalidateDatabaseCache(reason)
+    ns.state.dbCache = nil
+    ns.state.dbCacheReason = tostring(reason or "")
+end
+
 function store.GetDatabase(guildName)
-    local runtime = store.Normalize(select_runtime_source(guildName), guildName)
-    local activeDb = resolve_active_database(runtime, guildName)
-    local bankLedger = ns.modules.bankLedger
-    if bankLedger and type(bankLedger.PruneRetention) == "function" then
-        local logsHistory = (((activeDb or {}).ui or {}).logsHistorySettings or {})
-        local shouldPruneLedger = tostring(logsHistory.ledgerRetention or "indefinite") ~= "indefinite"
-        local shouldPruneHistory = tostring(logsHistory.historyRetention or "indefinite") ~= "indefinite"
-        if shouldPruneLedger or shouldPruneHistory then
-            local now = type(_G.time) == "function" and (_G.time() or 0) or 0
-            bankLedger.PruneRetention(activeDb, now)
-        end
+    local source = select_runtime_source(guildName)
+    local resolvedGuild = normalize_guild_name(resolve_guild_name(guildName, source))
+    local cache = ns.state.dbCache
+    if database_cache_matches(cache, source, resolvedGuild) then
+        align_runtime_state(cache.runtime, cache.db)
+        maybe_prune_retention(cache.db, cache)
+        return cache.db
     end
-    _G.GBankManagerDB = runtime
-    ns.state.dbRoot = looks_like_root(runtime) and runtime or nil
-    ns.state.db = activeDb
+
+    local runtime = store.Normalize(source, resolvedGuild)
+    local activeDb = resolve_active_database(runtime, resolvedGuild)
+    cache = {
+        source = source,
+        runtime = runtime,
+        guildKey = resolvedGuild,
+        db = activeDb,
+        reason = ns.state.dbCacheReason,
+    }
+    ns.state.dbCache = cache
+    maybe_prune_retention(activeDb, cache)
+    align_runtime_state(runtime, activeDb)
     return activeDb
 end
 
@@ -632,6 +688,7 @@ function store.ClearGuildBankLogData(db)
     db = resolve_active_database(db or store.GetDatabase())
     local guildName = (((db or {}).meta or {}).guildName) or "Unknown"
     db.bankLedger = fresh_bank_ledger(guildName)
+    store.InvalidateDatabaseCache("clear_guild_bank_log")
     return db.bankLedger
 end
 
@@ -643,6 +700,7 @@ function store.ClearGuildBankInventoryData(db)
     db.meta = db.meta or {}
     db.meta.updatedAt = 0
     db.meta.lastScanSequence = 0
+    store.InvalidateDatabaseCache("clear_guild_bank_inventory")
     return db
 end
 
@@ -676,6 +734,7 @@ function store.ClearCompletedRequestHistory(db)
         end
     end
     db.auditLog = keptAudit
+    store.InvalidateDatabaseCache("clear_completed_request_history")
     return db
 end
 

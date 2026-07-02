@@ -732,11 +732,19 @@ local remoteRequestPayload = codec.EncodeTable({
         },
     },
 })
+local originalInvalidateDatabaseCache = ns.modules.store.InvalidateDatabaseCache
+local syncInvalidationReasons = {}
+ns.modules.store.InvalidateDatabaseCache = function(reason)
+    syncInvalidationReasons[#syncInvalidationReasons + 1] = tostring(reason or "")
+    return originalInvalidateDatabaseCache(reason)
+end
 _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteRequestPayload, "GUILD", "MemberOne")
+ns.modules.store.InvalidateDatabaseCache = originalInvalidateDatabaseCache
 assert.equal(1, #db.requests, "sync events should accept guild request-created payloads from allowed members")
 assert.equal("req-remote-1", db.requests[1].requestId, "sync events should persist synced request ids")
 assert.equal("REQUEST_CREATED", ((db.auditLog or {})[#(db.auditLog or {})] or {}).type, "accepted synced request creation should append local history")
 assert.equal("GBankManager: Synced request req-remote-1 from MemberOne.", last_chat_message(), "accepted synced request creation should report chat feedback")
+assert.equal("sync_merge", syncInvalidationReasons[#syncInvalidationReasons], "accepted sync merges should invalidate the store database cache")
 local syncedPeerEntry = ((((db.syncState or {}).peers or {})["Guild Testers"] or {})["MemberOne-Stormrage"] or {})
 assert.truthy(tonumber(syncedPeerEntry.lastSynchronizedAt or 0) >= 91, "accepted sync payloads should mark the peer as synchronized")
 

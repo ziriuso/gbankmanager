@@ -38,6 +38,13 @@ local function current_db()
     return store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
 end
 
+local function invalidate_database_cache(reason)
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.InvalidateDatabaseCache) == "function" then
+        store.InvalidateDatabaseCache(reason or "sync_merge")
+    end
+end
+
 local function guild_key_is_known(guildKey)
     local store = ns.data.store or ns.modules.store
     if store and type(store.IsPlaceholderGuildName) == "function" then
@@ -964,6 +971,7 @@ local function handle_auth_policy_snapshot(db, payload, sender)
         })
         if applied == true then
             report_sync_status(string.format("Synced auth policy from %s.", sender_display_name(sender)))
+            invalidate_database_cache("sync_merge")
         end
         return applied == true
     end
@@ -977,6 +985,7 @@ local function handle_auth_policy_snapshot(db, payload, sender)
     nextPolicy.guildPolicySource = "sync"
     db.auth = nextPolicy
     report_sync_status(string.format("Synced auth policy from %s.", sender_display_name(sender)))
+    invalidate_database_cache("sync_merge")
     return true
 end
 
@@ -1029,6 +1038,7 @@ local function handle_request_created(db, payload, sender)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_create", "applied")
     report_request_sync_applied("CREATE", request, sender)
+    invalidate_database_cache("sync_merge")
     return true
 end
 
@@ -1116,6 +1126,7 @@ local function handle_request_updated(db, payload, sender)
             mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
             remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
             report_request_sync_applied(action, request, sender)
+            invalidate_database_cache("sync_merge")
         end
         return deleted
     end
@@ -1126,6 +1137,7 @@ local function handle_request_updated(db, payload, sender)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
     report_request_sync_applied(action, request, sender)
+    invalidate_database_cache("sync_merge")
     return true
 end
 
@@ -1169,6 +1181,7 @@ local function handle_minimums_snapshot(db, payload, sender)
     end
     if changedCount > 0 then
         report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1234,6 +1247,7 @@ local function handle_requests_snapshot(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1279,6 +1293,7 @@ local function handle_history_snapshot(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "history_snapshot", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1545,6 +1560,7 @@ local function handle_ledger_bucket_reply(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d ledger bucket row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1595,6 +1611,7 @@ local function handle_ledger_delta(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_delta", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end

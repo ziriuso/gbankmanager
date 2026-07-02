@@ -690,7 +690,7 @@ git commit -m "perf: batch ledger bucket merges"
 - Modify: `tests/spec/sync_spec.lua`
 - Modify: `docs/testing.md`
 
-- [ ] **Step 1: Confirm invalidation points before coding**
+- [x] **Step 1: Confirm invalidation points before coding**
 
 Search for direct SavedVariables mutation and `store.GetDatabase` callers:
 
@@ -700,7 +700,9 @@ rg -n "GetDatabase\\(|GBankManagerDB|ns\\.state\\.db|migrations\\.Apply|PruneRet
 
 Record in this plan if a direct mutation path needs an explicit `store.InvalidateDatabaseCache(reason)` call.
 
-- [ ] **Step 2: Add failing cache tests**
+Audit result: explicit invalidation is needed after accepted sync merges in `GBankManager/Sync/SyncEvents.lua`, fresh inventory snapshot writes in `GBankManager/Features/GuildBankScanner.lua`, and store-owned clear-data helpers in `GBankManager/Data/Store.lua`. Guild changes are handled by the cache key, while direct same-table mutations remain visible through the cached table.
+
+- [x] **Step 2: Add failing cache tests**
 
 In `tests/spec/store_spec.lua`, assert:
 
@@ -709,7 +711,7 @@ In `tests/spec/store_spec.lua`, assert:
 - `store.InvalidateDatabaseCache("sync_merge")` causes the next call to normalize again
 - retention prune runs at most once per configured throttle window
 
-- [ ] **Step 3: Implement cache and invalidation**
+- [x] **Step 3: Implement cache and invalidation**
 
 Add:
 
@@ -722,7 +724,7 @@ end
 
 Cache by normalized guild key and root table identity. Any sync merge, fresh scan, clear-data action, or guild-key promotion must invalidate before the next read.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
