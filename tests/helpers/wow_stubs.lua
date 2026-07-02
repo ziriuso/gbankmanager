@@ -125,6 +125,24 @@ if _G.UnitName == nil then
     end
 end
 
+_G.__guildRoster = _G.__guildRoster or {}
+
+if _G.GetNumGuildMembers == nil then
+    _G.GetNumGuildMembers = function()
+        return #(_G.__guildRoster or {})
+    end
+end
+
+if _G.GetGuildRosterInfo == nil then
+    _G.GetGuildRosterInfo = function(index)
+        local row = (_G.__guildRoster or {})[index]
+        if type(row) ~= "table" then
+            return nil
+        end
+        return row.name, row.rankName, row.rankIndex, row.level, row.class, row.zone, row.note, row.officerNote, row.online
+    end
+end
+
 function _G.C_ChatInfo.RegisterAddonMessagePrefix(prefix)
     table.insert(_G.C_ChatInfo.registeredPrefixes, prefix)
     return true

@@ -23,6 +23,45 @@ _G.GetGuildInfo = function()
     return "Guild Testers", "Officer", 1
 end
 
+local syncSpecGuildRoster = {
+    {
+        name = "MemberOne",
+        rankName = "Raider",
+        rankIndex = 2,
+        online = true,
+    },
+    {
+        name = "MemberTwo",
+        rankName = "Raider",
+        rankIndex = 2,
+        online = true,
+    },
+    {
+        name = "OfficerOne",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+    {
+        name = "GuildLead",
+        rankName = "Guild Master",
+        rankIndex = 0,
+        online = true,
+    },
+}
+_G.__guildRoster = syncSpecGuildRoster
+_G.GetNumGuildMembers = function()
+    return #syncSpecGuildRoster
+end
+_G.GetGuildRosterInfo = function(index)
+    local row = syncSpecGuildRoster[index]
+    if type(row) ~= "table" then
+        return nil
+    end
+
+    return row.name, row.rankName, row.rankIndex, nil, nil, nil, nil, nil, row.online
+end
+
 local function load_vendored_ace3()
     local vendoredLibPaths = {
         "GBankManager/Libs/LibStub/LibStub.lua",
@@ -895,6 +934,115 @@ local selfApprovalUpdateAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager"
 assert.truthy(not selfApprovalUpdateAccepted, "sync events should reject self-approval request updates from non-guildmasters")
 assert.equal("PENDING", db.requests[2].approval, "rejected self-approval sync updates should leave approval pending")
 
+db.requests[4] = {
+    requestId = "req-forged-rank-member",
+    requester = "MemberTwo",
+    requesterCharacterKey = "Stormrage-MemberTwo",
+    itemID = 2014,
+    itemName = "Forged Rank Flask",
+    quantity = 2,
+    approval = "PENDING",
+    fulfillment = "OPEN",
+    updatedAt = 170,
+}
+
+local forgedRankApprovalPayload = codec.EncodeTable({
+    type = "REQUEST_UPDATED",
+    updatedAt = 171,
+    payload = {
+        action = "APPROVE",
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 0,
+            guildRankName = "Guild Master",
+            inGuild = true,
+            isGuildMaster = true,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-forged-rank-member",
+            requester = "MemberTwo",
+            requesterCharacterKey = "Stormrage-MemberTwo",
+            itemID = 2014,
+            itemName = "Forged Rank Flask",
+            quantity = 2,
+            approval = "APPROVED",
+            fulfillment = "OPEN",
+            updatedAt = 171,
+        },
+    },
+})
+local forgedRankApprovalAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", forgedRankApprovalPayload, "GUILD", "MemberOne")
+assert.truthy(not forgedRankApprovalAccepted, "sync events should reject request approvals when the sender self-promotes in actorContext")
+assert.equal("PENDING", db.requests[4].approval, "forged-rank request approvals should leave approval pending")
+db.requests[4] = nil
+
+local minimumsCountBeforeForgedRank = #(db.minimums or {})
+local firstMinimumItemBeforeForgedRank = ((db.minimums or {})[1] or {}).itemID
+local forgedRankMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 172,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 0,
+            guildRankName = "Guild Master",
+            inGuild = true,
+            isGuildMaster = true,
+            name = "MemberOne",
+        },
+        minimums = {
+            {
+                itemID = 2015,
+                itemName = "Forged Rank Minimum",
+                quantity = 99,
+                scope = "TAB",
+                tabName = "Alchemy",
+                enabled = true,
+                updatedAt = 172,
+                updatedBy = "Stormrage-MemberOne",
+                updatedByRankIndex = 0,
+            },
+        },
+    },
+})
+local forgedRankMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", forgedRankMinimumPayload, "GUILD", "MemberOne")
+assert.truthy(not forgedRankMinimumAccepted, "sync events should reject minimum snapshots when the sender self-promotes in actorContext")
+assert.equal(minimumsCountBeforeForgedRank, #(db.minimums or {}), "forged-rank minimum snapshots should not replace local minimums")
+assert.equal(firstMinimumItemBeforeForgedRank, ((db.minimums or {})[1] or {}).itemID, "forged-rank minimum snapshots should keep existing minimum rows")
+
+local emptyActorMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 173,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+        },
+        minimums = {
+            {
+                itemID = 2016,
+                itemName = "Anonymous Minimum",
+                quantity = 12,
+                scope = "TAB",
+                tabName = "Alchemy",
+                enabled = true,
+                updatedAt = 173,
+                updatedBy = "Stormrage-OfficerOne",
+                updatedByRankIndex = 1,
+            },
+        },
+    },
+})
+local emptyActorMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", emptyActorMinimumPayload, "GUILD", "OfficerOne")
+assert.truthy(not emptyActorMinimumAccepted, "sync events should reject mutating payloads without a positive actor identity")
+assert.equal(minimumsCountBeforeForgedRank, #(db.minimums or {}), "anonymous minimum snapshots should not replace local minimums")
+
 local forgedCancelPayload = codec.EncodeTable({
     type = "REQUEST_UPDATED",
     updatedAt = 161,
@@ -1698,17 +1846,17 @@ assert.truthy(not staleProtocolLedgerAccepted, "sync events should reject ledger
 assert.equal(0, #(db.bankLedger.itemLogs or {}), "stale-protocol ledger deltas should not append remote item-log rows")
 assert.equal("old_ledger_protocol", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "stale-protocol ledger delta rejection should record the protocol reason")
 
-local ledgerDeltaPayload = codec.EncodeTable({
+local forgedRankLedgerDeltaPayload = codec.EncodeTable({
     type = "LEDGER_DELTA",
     updatedAt = 207,
     payload = {
         guildKey = "Guild Testers",
         actorContext = {
             characterKey = "Stormrage-MemberOne",
-            guildRankIndex = 2,
-            guildRankName = "Raider",
+            guildRankIndex = 0,
+            guildRankName = "Guild Master",
             inGuild = true,
-            isGuildMaster = false,
+            isGuildMaster = true,
             name = "MemberOne",
         },
         kind = "item",
@@ -1721,6 +1869,88 @@ local ledgerDeltaPayload = codec.EncodeTable({
             {
                 type = "deposit",
                 who = "MemberOne-Stormrage",
+                itemID = 243735,
+                itemName = "Forged Ledger Oil",
+                quantity = 4,
+                year = 2026,
+                month = 5,
+                day = 24,
+                hour = 9,
+            },
+        },
+    },
+})
+local forgedRankLedgerDeltaAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", forgedRankLedgerDeltaPayload, "GUILD", "MemberOne")
+assert.truthy(not forgedRankLedgerDeltaAccepted, "sync events should reject ledger deltas when the sender self-promotes in actorContext")
+assert.equal(0, #(db.bankLedger.itemLogs or {}), "forged-rank ledger deltas should not append remote item-log rows")
+assert.equal("capability_denied", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "forged-rank ledger deltas should be denied by local capability")
+
+local forgedRankLedgerBucketReplyPayload = codec.EncodeTable({
+    type = "LEDGER_BUCKET_REPLY",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 0,
+            guildRankName = "Guild Master",
+            inGuild = true,
+            isGuildMaster = true,
+            name = "MemberOne",
+        },
+        version = currentAddonVersion,
+        ledgerProtocol = currentLedgerProtocol,
+        target = "SyncTester-Stormrage",
+        buckets = { 1716573600 },
+        rows = {
+            item = {
+                {
+                    type = "deposit",
+                    who = "MemberOne-Stormrage",
+                    itemID = 243736,
+                    itemName = "Forged Bucket Oil",
+                    quantity = 3,
+                    year = 2026,
+                    month = 5,
+                    day = 24,
+                    hour = 9,
+                    sourceTabIndex = 1,
+                    sourceTabName = "Alchemy",
+                    timestamp = 1716573600,
+                },
+            },
+            money = {},
+        },
+    },
+})
+local forgedRankLedgerBucketReplyAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", forgedRankLedgerBucketReplyPayload, "GUILD", "MemberOne")
+assert.truthy(not forgedRankLedgerBucketReplyAccepted, "sync events should reject ledger bucket replies when the sender self-promotes in actorContext")
+assert.equal(0, #(db.bankLedger.itemLogs or {}), "forged-rank ledger bucket replies should not append remote item-log rows")
+assert.equal("capability_denied", tostring(((ns.state or {}).lastSyncDecision or {}).reason or ""), "forged-rank ledger bucket replies should be denied by local capability")
+
+local ledgerDeltaPayload = codec.EncodeTable({
+    type = "LEDGER_DELTA",
+    updatedAt = 207,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        kind = "item",
+        version = currentAddonVersion,
+        ledgerProtocol = currentLedgerProtocol,
+        scanStartedAt = 1716573600,
+        sourceTabIndex = 1,
+        sourceTabName = "Alchemy",
+        transactions = {
+            {
+                type = "deposit",
+                who = "OfficerOne-Stormrage",
                 itemID = 243734,
                 itemName = "Thalassian Phoenix Oil",
                 quantity = 4,
@@ -1732,13 +1962,13 @@ local ledgerDeltaPayload = codec.EncodeTable({
         },
     },
 })
-local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
-assert.truthy(ledgerAccepted, "sync events should accept guild ledger deltas from guild peers")
+local ledgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "OfficerOne")
+assert.truthy(ledgerAccepted, "sync events should accept ledger deltas from locally authorized guild peers")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "accepted ledger deltas should append remote item-log rows")
 assert.equal(999, tonumber(db.bankLedger.lastScanAt or 0), "remote ledger deltas should not advance the local scan freshness clock")
-assert.equal("GBankManager: Synced ledger delta from MemberOne.", last_chat_message(), "ledger deltas should report only when they write actual new rows")
+assert.equal("GBankManager: Synced ledger delta from OfficerOne.", last_chat_message(), "ledger deltas should report only when they write actual new rows")
 local ledgerChatCountBeforeDuplicate = #(_G.DEFAULT_CHAT_FRAME.messages or {})
-local duplicateLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "MemberOne")
+local duplicateLedgerAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", ledgerDeltaPayload, "GUILD", "OfficerOne")
 assert.truthy(duplicateLedgerAccepted, "duplicate ledger deltas should still be accepted for peer bookkeeping")
 assert.equal(1, #(db.bankLedger.itemLogs or {}), "duplicate ledger deltas should not append duplicate ledger rows")
 assert.equal(ledgerChatCountBeforeDuplicate, #(_G.DEFAULT_CHAT_FRAME.messages or {}), "duplicate ledger deltas should not spam chat when they merge no new rows")

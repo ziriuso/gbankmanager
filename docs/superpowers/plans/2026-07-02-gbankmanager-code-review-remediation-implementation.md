@@ -281,14 +281,16 @@ git commit -m "fix: register item display modules in addon namespace"
 **Files:**
 - Modify: `GBankManager/Domain/Permissions.lua`
 - Modify: `GBankManager/Sync/SyncEvents.lua`
+- Modify: `GBankManager/Testing/LiveSmoke.lua`
 - Modify: `tests/helpers/wow_stubs.lua`
-- Modify: `tests/spec/auth_spec.lua`
+- Modify: `tests/spec/chat_output_spec.lua`
+- Modify: `tests/spec/sync_ledger_digest_spec.lua`
+- Modify: `tests/spec/sync_ledger_manifest_spec.lua`
 - Modify: `tests/spec/sync_spec.lua`
-- Modify: `tests/spec/in_game_unit_spec.lua`
 - Modify: `docs/testing.md`
 - Modify: `docs/manual-test-checklist.md`
 
-- [ ] **Step 1: Add failing forged-authority tests**
+- [x] **Step 1: Add failing forged-authority tests**
 
 In `tests/spec/sync_spec.lua`, add cases proving a same-name sender cannot self-promote by sending `actorContext.isGuildMaster = true` or `guildRankIndex = 0` when the local roster says they are a member.
 
@@ -302,7 +304,7 @@ Cover at least:
 
 Expected current failure before implementation: forged member payloads are accepted or merged.
 
-- [ ] **Step 2: Add roster stubs**
+- [x] **Step 2: Add roster stubs**
 
 Extend `tests/helpers/wow_stubs.lua` with deterministic guild roster functions:
 
@@ -324,7 +326,7 @@ end
 
 Reset `_G.__guildRoster` in tests that mutate it.
 
-- [ ] **Step 3: Resolve sender authority locally**
+- [x] **Step 3: Resolve sender authority locally**
 
 Add a function in `GBankManager/Domain/Permissions.lua` that derives a context from local roster data for an inbound sender:
 
@@ -363,7 +365,7 @@ end
 
 Adjust details to match existing `BuildCharacterKey`/realm helpers. The key rule is: inbound capability checks must use locally-derived rank, never remote `actorContext.guildRankIndex` or `actorContext.isGuildMaster`.
 
-- [ ] **Step 4: Use local authority context in sync handlers**
+- [x] **Step 4: Use local authority context in sync handlers**
 
 In `GBankManager/Sync/SyncEvents.lua`, keep the incoming `actorContext` for identity/audit fields, but use a local context for all permission checks:
 
@@ -398,15 +400,15 @@ actor_can(authorityContext, capability, localPolicy)
 
 Do this for auth policy, requests, minimum snapshots, request snapshots, history snapshots, ledger manifests, ledger bucket requests, ledger bucket replies, ledger deltas, and ledger digests.
 
-- [ ] **Step 5: Require a positive actor identity match**
+- [x] **Step 5: Require a positive actor identity match**
 
 Change `actor_matches_sender` so it returns `false` unless at least one non-empty actor name or actor character key positively matches the sender.
 
-- [ ] **Step 6: Gate ledger merges**
+- [x] **Step 6: Gate ledger merges**
 
 Add a `full_ui` capability check before accepting `LEDGER_BUCKET_REPLY`, `LEDGER_DELTA`, `LEDGER_MANIFEST`, and `LEDGER_BUCKET_REQUEST`. Use the same local authority context from Step 4.
 
-- [ ] **Step 7: Verify focused and broad sync tests**
+- [x] **Step 7: Verify focused and broad sync tests**
 
 Run:
 
@@ -420,11 +422,11 @@ Run:
 
 Expected: forged member payloads are rejected; legitimate locally-authorized officer/guildmaster payloads still pass.
 
-- [ ] **Step 8: Update docs**
+- [x] **Step 8: Update docs**
 
 Document that inbound sync permission decisions use the receiver's local roster/rank view and add a manual two-client check: member attempts to approve or sync ledger data must be ignored while an officer/guildmaster still converges normally.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 Run:
 
