@@ -88,6 +88,22 @@ local futureDb = {
     syncState = "broken",
 }
 local normalizedFuture = migrations and migrations.Apply(futureDb)
+local compactedFingerprintRoot = migrations and migrations.Apply({
+    meta = {
+        guildName = "Fingerprint Legacy",
+        schemaVersion = 1,
+    },
+    bankLedger = {
+        itemLogs = {},
+        moneyLogs = {},
+        itemFingerprints = {
+            staleItem = true,
+        },
+        moneyFingerprints = {
+            staleMoney = true,
+        },
+    },
+}, "Fingerprint Legacy")
 local isolatedRoot = store and store.Normalize({
     guilds = {
         ["Guild Testers"] = defaults.CreateDatabase("Guild Testers"),
@@ -154,6 +170,8 @@ assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
 assert.truthy(db.requests ~= nil, "requests table should exist")
 assert.truthy(type(db.bankLedger) == "table", "fresh db should include a bank ledger container")
+assert.equal(nil, db.bankLedger.itemFingerprints, "fresh db should not persist runtime item fingerprint indexes")
+assert.equal(nil, db.bankLedger.moneyFingerprints, "fresh db should not persist runtime money fingerprint indexes")
 assert.truthy(type(db.testing) == "table", "fresh db should include a testing container for smoke persistence")
 assert.truthy(type(db.testing.liveSmoke) == "table", "fresh db should include a live-smoke persistence container")
 assert.truthy(type(db.testing.inGameUnit) == "table", "fresh db should include an in-game-unit persistence container")
@@ -175,6 +193,10 @@ assert.equal(0, ((((_G.GBankManagerDB.guilds or {})["My Guild"] or {}).meta or {
 assert.truthy(type(((normalizedMalformed.guilds or {}).Unknown or {}).meta) == "table", "migrations should repair malformed meta containers")
 assert.truthy(type(((normalizedMalformed.guilds or {}).Unknown or {}).syncState) == "table", "migrations should repair malformed sync state containers")
 assert.equal(1, (((normalizedMalformed.guilds or {}).Unknown or {}).meta or {}).schemaVersion, "migrations should apply v1 schema to malformed data")
+local compactedFingerprintDb = ((compactedFingerprintRoot.guilds or {})["Fingerprint Legacy"] or compactedFingerprintRoot)
+assert.equal(nil, (compactedFingerprintDb.bankLedger or {}).itemFingerprints, "migrations should remove persisted item fingerprint indexes")
+assert.equal(nil, (compactedFingerprintDb.bankLedger or {}).moneyFingerprints, "migrations should remove persisted money fingerprint indexes")
+assert.equal("2026-07-02-runtime-indexes", (compactedFingerprintDb.meta or {}).ledgerFingerprintIndexesCompactedForVersion, "migrations should record the ledger fingerprint compaction marker")
 assert.same(futureDb, normalizedFuture, "migrations should return the same table for newer schemas")
 assert.equal(99, normalizedFuture.meta.schemaVersion, "migrations should preserve newer schema versions")
 assert.equal("Future Guild", normalizedFuture.meta.guildName, "migrations should preserve newer schema metadata")

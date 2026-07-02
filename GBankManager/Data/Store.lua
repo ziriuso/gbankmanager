@@ -305,7 +305,7 @@ local function apply_versioned_money_ledger_dedupe_to_database(db)
 
         if removed > 0 then
             ledger.moneyLogs = cleaned
-            ledger.moneyFingerprints = {}
+            ledger.moneyFingerprints = nil
             ledger.moneySourceSnapshots = {}
             ledger.eventCounts = type(ledger.eventCounts) == "table" and ledger.eventCounts or {}
             ledger.eventCounts.money = {}

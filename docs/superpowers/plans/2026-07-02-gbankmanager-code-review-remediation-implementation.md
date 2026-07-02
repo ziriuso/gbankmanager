@@ -566,12 +566,13 @@ git commit -m "fix: use content fingerprints for ledger manifests"
 - Modify: `GBankManager/Domain/BankLedger.lua`
 - Modify: `GBankManager/Data/Defaults.lua`
 - Modify: `GBankManager/Data/Migrations.lua`
+- Modify: `GBankManager/Data/Store.lua`
 - Modify: `tests/spec/bank_ledger_spec.lua`
 - Modify: `tests/spec/store_spec.lua`
 - Modify: `docs/testing.md`
 - Modify: `docs/manual-test-checklist.md`
 
-- [ ] **Step 1: Add failing persistence and rebuild tests**
+- [x] **Step 1: Add failing persistence and rebuild tests**
 
 Add tests proving:
 
@@ -589,7 +590,7 @@ Run:
 
 Expected before implementation: defaults/migration tests fail because fingerprints are persisted; rebuild test fails because `EnsureState` always rebuilds.
 
-- [ ] **Step 2: Introduce runtime index state**
+- [x] **Step 2: Introduce runtime index state**
 
 In `BankLedger.lua`, keep the public ledger shape unchanged, but store fingerprint indexes under a runtime-only table that is never attached to SavedVariables. A concrete acceptable shape:
 
@@ -613,11 +614,11 @@ local runtimeByDb = setmetatable({}, { __mode = "k" })
 
 Use the weak-key cache if tests show `db.bankLedgerRuntime` would be serialized.
 
-- [ ] **Step 3: Rebuild only when dirty or count changed**
+- [x] **Step 3: Rebuild only when dirty or count changed**
 
 Have `EnsureState` compare current log counts and dirty flags before calling `rebuild_fingerprint_index`. Existing functions that mutate logs must mark the matching dirty flag.
 
-- [ ] **Step 4: Remove persisted defaults and compact old saves**
+- [x] **Step 4: Remove persisted defaults and compact old saves**
 
 Remove `itemFingerprints` and `moneyFingerprints` from `Defaults.lua`. Add a versioned migration in `Migrations.lua` that nils both persisted tables and records a marker such as:
 
@@ -625,7 +626,7 @@ Remove `itemFingerprints` and `moneyFingerprints` from `Defaults.lua`. Add a ver
 db.meta.ledgerFingerprintIndexesCompactedForVersion = "2026-07-02-runtime-indexes"
 ```
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -637,7 +638,7 @@ Run:
 
 Expected: ledger behavior remains unchanged; SavedVariables no longer carry fingerprint-index tables.
 
-- [ ] **Step 6: Update docs and commit**
+- [x] **Step 6: Update docs and commit**
 
 Document the compaction marker and add a manual `/reload` check confirming old saves load and ledger rows still dedupe after fingerprint tables are removed.
 
