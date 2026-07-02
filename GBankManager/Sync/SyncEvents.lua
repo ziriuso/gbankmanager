@@ -1757,7 +1757,7 @@ function syncEvents.HandleEvent(event, ...)
         end
 
         if not decodedMessage then
-            return receiveState == "partial" or receiveState == "invalid"
+            return receiveState == "partial"
         end
 
         ns.state.lastSyncMessage = decodedMessage

@@ -446,7 +446,7 @@ git commit -m "fix: verify inbound sync authority locally"
 - Modify: `tests/spec/sync_spec.lua`
 - Modify: `docs/testing.md`
 
-- [ ] **Step 1: Add failing codec tests**
+- [x] **Step 1: Add failing codec tests**
 
 In `tests/spec/sync_spec.lua`, add tests for:
 
@@ -458,7 +458,7 @@ In `tests/spec/sync_spec.lua`, add tests for:
 
 Expected before implementation: at least one test errors or hangs instead of returning `nil`/invalid.
 
-- [ ] **Step 2: Bound decode**
+- [x] **Step 2: Bound decode**
 
 In `GBankManager/Sync/Codec.lua`, make `decode_value` return `value, nextIndex, err` and enforce:
 
@@ -470,15 +470,15 @@ local MAX_STRING_LENGTH = 8192
 
 Reject missing separators, negative lengths, oversized lengths, table counts above the cap, and recursion deeper than the depth cap.
 
-- [ ] **Step 3: Make `DecodeTable` fail closed**
+- [x] **Step 3: Make `DecodeTable` fail closed**
 
 Wrap table-payload decode in `pcall`; return `nil, "decode_error"` or `nil, err` on malformed input. Keep existing valid payload behavior unchanged.
 
-- [ ] **Step 4: Guard receive paths**
+- [x] **Step 4: Guard receive paths**
 
 In `SyncEvents.lua` and `Transport.lua`, treat `nil` decoded messages as invalid input and return without mutating `ns.state.lastSyncMessage`, peer history, or the database.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -489,7 +489,7 @@ Run:
 
 Expected: malformed payloads are rejected without error; existing sync encode/decode tests pass.
 
-- [ ] **Step 6: Update docs and commit**
+- [x] **Step 6: Update docs and commit**
 
 Run:
 

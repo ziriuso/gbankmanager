@@ -175,6 +175,27 @@ assert.equal("req-sync-1", decodedTablePayload.payload.request.requestId, "codec
 assert.equal("Stormrage-OfficerOne", decodedTablePayload.payload.actorContext.characterKey, "codec should decode nested actor contexts")
 assert.equal("Guild Testers", decodedTablePayload.payload.guildKey, "codec should preserve request guild identity inside the payload envelope")
 
+local oversizedTableMessage, oversizedTableError = codec.DecodeTable("REQUEST_CREATED|99|@T257:")
+assert.equal(nil, oversizedTableMessage, "codec should reject table payloads whose entry count exceeds the decode cap")
+assert.truthy(oversizedTableError ~= nil, "codec should explain oversized table-payload rejection")
+
+local function nested_table_payload(depth)
+    local parts = {}
+    for _ = 1, depth do
+        parts[#parts + 1] = "T1:S1:x"
+    end
+    parts[#parts + 1] = "S3:end"
+    return table.concat(parts)
+end
+
+local tooDeepMessage, tooDeepError = codec.DecodeTable("REQUEST_CREATED|99|@" .. nested_table_payload(17))
+assert.equal(nil, tooDeepMessage, "codec should reject table payloads nested beyond the decode depth cap")
+assert.truthy(tooDeepError ~= nil, "codec should explain over-depth table-payload rejection")
+
+local malformedStringMessage, malformedStringError = codec.DecodeTable("REQUEST_CREATED|99|@S999:x")
+assert.equal(nil, malformedStringMessage, "codec should reject string payloads whose declared length exceeds remaining input")
+assert.truthy(malformedStringError ~= nil, "codec should explain malformed string-payload rejection")
+
 _G.AceCommStub.reset()
 local whisperPayload = transport.Send("WHISPER", "OfficerOne", {
     type = "SYNC_HELLO",
@@ -336,6 +357,28 @@ db.auth.capabilities.minimum_add = { [1] = true }
 db.auth.capabilities.minimum_edit = { [1] = true }
 db.auth.capabilities.minimum_delete = { [1] = true }
 db.auth.capabilities.auth_manage = { [1] = true }
+
+db.syncState = { peers = {} }
+transport.chunkBuffers = {}
+ns.state.lastSyncMessage = {
+    type = "SENTINEL",
+    payload = "preserved",
+}
+local malformedDirectReceiveAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", "REQUEST_CREATED|123|@S999:x", "GUILD", "OfficerOne")
+assert.truthy(not malformedDirectReceiveAccepted, "sync events should reject malformed direct sync payloads")
+assert.equal("SENTINEL", (ns.state.lastSyncMessage or {}).type, "malformed direct sync payloads should not replace last sync message state")
+assert.equal(nil, (((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"], "malformed direct sync payloads should not touch peer history")
+
+local malformedChunkedReceivePayload = "REQUEST_CREATED|124|@S999:x"
+local malformedChunkStart = string.char(1) .. string.sub(malformedChunkedReceivePayload, 1, 12)
+local malformedChunkEnd = string.char(3) .. string.sub(malformedChunkedReceivePayload, 13)
+local malformedChunkStartAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", malformedChunkStart, "GUILD", "OfficerOne")
+local malformedChunkEndAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", malformedChunkEnd, "GUILD", "OfficerOne")
+assert.truthy(malformedChunkStartAccepted, "sync events should treat incomplete malformed chunk sequences as pending")
+assert.truthy(not malformedChunkEndAccepted, "sync events should reject malformed reassembled chunk payloads")
+assert.equal("SENTINEL", (ns.state.lastSyncMessage or {}).type, "malformed chunked sync payloads should not replace last sync message state")
+assert.equal(nil, (((db.syncState or {}).peers or {})["Guild Testers"] or {})["OfficerOne-Stormrage"], "malformed chunked sync payloads should not touch peer history")
+
 db.requests = {
     {
         requestId = "req-hello-catchup-1",
