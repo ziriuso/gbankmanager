@@ -26,6 +26,11 @@
 
 ## Lane Coverage
 
+All `tests/spec/*_spec.lua` files must be listed in exactly one local lane. The
+lane manifests live in `tests/helpers/spec_lanes.lua`, and
+`tests/spec/test_runner_spec.lua` fails when a spec is missing from every lane or
+appears in more than one lane.
+
 - `unit`
   - domain rules for auth, requests, exports, planning, sync, store, and scan persistence
   - sync transport chunking/reassembly coverage for oversized addon-message payloads so request, minimum, and ledger sync traffic stay within WoW's base addon-message size limit

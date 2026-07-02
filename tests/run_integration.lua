@@ -6,12 +6,8 @@ package.path = table.concat({
 
 dofile("tests/helpers/wow_stubs.lua")
 local runner = require("tests.helpers.test_runner")
-
-local specs = {
-    "tests/spec/toc_spec.lua",
-    "tests/spec/live_smoke_spec.lua",
-    "tests/spec/in_game_unit_spec.lua",
-}
+local lanes = require("tests.helpers.spec_lanes")
+local specs = lanes.integration
 
 runner.run_specs(specs)
 
