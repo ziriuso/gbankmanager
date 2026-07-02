@@ -1592,7 +1592,8 @@ local function normalize_item_rows(payload)
     for index, raw in ipairs(payload.transactions or {}) do
         local itemID = tonumber(raw.itemID or 0) or 0
         local itemName = trim(raw.itemName or raw.item or ("Item " .. tostring(itemID)))
-        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
+        local rowScanStartedAt = tonumber(raw.timestamp or raw.when or raw.scanStartedAt or scanStartedAt or 0) or 0
+        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, rowScanStartedAt)
         local action = item_action_label(raw.type)
         local fromTabName = trim(raw.fromTabName)
         local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
@@ -1653,7 +1654,8 @@ local function normalize_money_rows(payload)
 
     for index, raw in ipairs(payload.transactions or {}) do
         local amountCopper = tonumber(raw.amountCopper or raw.amount or 0) or 0
-        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
+        local rowScanStartedAt = tonumber(raw.timestamp or raw.when or raw.scanStartedAt or scanStartedAt or 0) or 0
+        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, rowScanStartedAt)
         local action = money_action_label(raw.type, amountCopper, repairThresholdGold)
         local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
         local fingerprintBase = money_fingerprint_bases({
@@ -1676,7 +1678,7 @@ local function normalize_money_rows(payload)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
-            scanStartedAt = scanStartedAt,
+            scanStartedAt = rowScanStartedAt,
             year = raw.year,
             month = raw.month,
             day = raw.day,
@@ -1831,6 +1833,9 @@ end
 function bankLedger.MergeItemTransactions(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}
+    if type(bankLedger.__debugMergeCounters) == "table" then
+        bankLedger.__debugMergeCounters.item = (tonumber(bankLedger.__debugMergeCounters.item or 0) or 0) + 1
+    end
     local ledger = bankLedger.EnsureState(db)
     local runtime = runtime_for_ledger(ledger)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
@@ -1866,6 +1871,9 @@ end
 function bankLedger.MergeMoneyTransactions(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}
+    if type(bankLedger.__debugMergeCounters) == "table" then
+        bankLedger.__debugMergeCounters.money = (tonumber(bankLedger.__debugMergeCounters.money or 0) or 0) + 1
+    end
     local ledger = bankLedger.EnsureState(db)
     local runtime = runtime_for_ledger(ledger)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
@@ -1921,6 +1929,9 @@ local function bucket_item_transaction(row)
         day = row.day,
         hour = row.hour,
         minute = row.minute,
+        timestamp = row.timestamp or row.when or row.scanStartedAt,
+        when = row.when or row.timestamp or row.scanStartedAt,
+        scanStartedAt = row.scanStartedAt or row.timestamp or row.when,
     }
 end
 
@@ -1936,6 +1947,9 @@ local function bucket_money_transaction(row)
         day = row.day,
         hour = row.hour,
         minute = row.minute,
+        timestamp = row.timestamp or row.when or row.scanStartedAt,
+        when = row.when or row.timestamp or row.scanStartedAt,
+        scanStartedAt = row.scanStartedAt or row.timestamp or row.when,
     }
 end
 
@@ -1968,28 +1982,66 @@ function bankLedger.MergeBucketRows(db, payload)
     payload = type(payload) == "table" and payload or {}
     local rows = type(payload.rows) == "table" and payload.rows or {}
     local mergedCount = 0
+    local itemGroups = {}
+    local itemGroupOrder = {}
+    local moneyTransactions = {}
+    local moneyScanStartedAt = 0
 
     for _, row in ipairs(type(rows.item) == "table" and rows.item or {}) do
         if bucket_item_row_is_valid(row) then
-            mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
-                scanStartedAt = row_timestamp(row),
-                sourceTabIndex = row.tabIndex or row.sourceTabIndex,
-                sourceTabName = row.tabName or row.sourceTabName,
-                allowSuspiciousUnknownAppend = true,
-                transactions = { bucket_item_transaction(row) },
-            }) or 0) or 0)
+            local sourceTabIndex = tonumber(row.tabIndex or row.sourceTabIndex or 0) or 0
+            local sourceTabName = tostring(row.tabName or row.sourceTabName or ("Tab " .. tostring(sourceTabIndex)))
+            local groupKey = tostring(sourceTabIndex) .. "\31" .. sourceTabName
+            local group = itemGroups[groupKey]
+            if type(group) ~= "table" then
+                group = {
+                    scanStartedAt = 0,
+                    sourceTabIndex = sourceTabIndex,
+                    sourceTabName = sourceTabName,
+                    transactions = {},
+                }
+                itemGroups[groupKey] = group
+                itemGroupOrder[#itemGroupOrder + 1] = groupKey
+            end
+
+            local timestamp = row_timestamp(row)
+            if group.scanStartedAt <= 0 or (timestamp > 0 and timestamp < group.scanStartedAt) then
+                group.scanStartedAt = timestamp
+            end
+            group.transactions[#group.transactions + 1] = bucket_item_transaction(row)
         end
     end
 
     for _, row in ipairs(type(rows.money) == "table" and rows.money or {}) do
         if bucket_money_row_is_valid(row) then
-            mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
-                scanStartedAt = row_timestamp(row),
-                repairThresholdGold = 0,
+            local timestamp = row_timestamp(row)
+            if moneyScanStartedAt <= 0 or (timestamp > 0 and timestamp < moneyScanStartedAt) then
+                moneyScanStartedAt = timestamp
+            end
+            moneyTransactions[#moneyTransactions + 1] = bucket_money_transaction(row)
+        end
+    end
+
+    for _, groupKey in ipairs(itemGroupOrder) do
+        local group = itemGroups[groupKey]
+        if type(group) == "table" and #group.transactions > 0 then
+            mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
+                scanStartedAt = group.scanStartedAt,
+                sourceTabIndex = group.sourceTabIndex,
+                sourceTabName = group.sourceTabName,
                 allowSuspiciousUnknownAppend = true,
-                transactions = { bucket_money_transaction(row) },
+                transactions = group.transactions,
             }) or 0) or 0)
         end
+    end
+
+    if #moneyTransactions > 0 then
+        mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
+            scanStartedAt = moneyScanStartedAt,
+            repairThresholdGold = 0,
+            allowSuspiciousUnknownAppend = true,
+            transactions = moneyTransactions,
+        }) or 0) or 0)
     end
 
     return mergedCount

@@ -657,17 +657,17 @@ git commit -m "perf: keep ledger fingerprint indexes runtime-only"
 - Modify: `GBankManager/Domain/BankLedger.lua`
 - Modify: `tests/spec/bank_ledger_spec.lua`
 
-- [ ] **Step 1: Add failing batch-merge contract**
+- [x] **Step 1: Add failing batch-merge contract**
 
 In `tests/spec/bank_ledger_spec.lua`, add coverage for a bucket payload with multiple item rows from the same source tab and multiple money rows. Assert that all valid rows merge, duplicate replay still merges zero, and the merge path calls the expensive source merge once per kind/source bucket instead of once per row.
 
 If direct call-count assertions require invasive hooks, assert the externally visible result first and keep call-count instrumentation local to tests through a temporary debug counter on `bankLedger`.
 
-- [ ] **Step 2: Group rows before merging**
+- [x] **Step 2: Group rows before merging**
 
 In `MergeBucketRows`, collect valid item rows by source tab/index and valid money rows by source key, then call `MergeItemTransactions` or `MergeMoneyTransactions` once per group with all grouped transactions.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 

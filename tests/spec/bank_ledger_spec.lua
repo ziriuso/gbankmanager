@@ -207,6 +207,79 @@ assert.equal(0, bucketMergeReplayCount, "ledger bucket merge should skip duplica
 assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket replay should not duplicate item rows")
 assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket replay should not duplicate money rows")
 
+local bucketBatchDb = fresh_db()
+bankLedger.__debugMergeCounters = {
+    item = 0,
+    money = 0,
+}
+local bucketBatchPayload = {
+    rows = {
+        item = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                itemID = 211878,
+                item = "Flask of Tempered Swiftness",
+                quantity = 5,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+            },
+            {
+                action = "Withdraw",
+                who = "OfficerTwo-Stormrage",
+                itemID = 211879,
+                item = "Potion of Tempered Swiftness",
+                quantity = 2,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+                minute = 5,
+            },
+        },
+        money = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                amountCopper = 2500000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+            },
+            {
+                action = "Withdraw",
+                who = "OfficerTwo-Stormrage",
+                amountCopper = -750000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+                minute = 10,
+            },
+        },
+    },
+}
+local bucketBatchInitialCount = bankLedger.MergeBucketRows(bucketBatchDb, bucketBatchPayload)
+assert.equal(4, bucketBatchInitialCount, "batched ledger bucket merge should append every valid item and money row")
+assert.equal(2, #bucketBatchDb.bankLedger.itemLogs, "batched ledger bucket merge should persist all item rows")
+assert.equal(2, #bucketBatchDb.bankLedger.moneyLogs, "batched ledger bucket merge should persist all money rows")
+assert.equal(1, bankLedger.__debugMergeCounters.item, "batched ledger bucket merge should call item source merge once per source tab")
+assert.equal(1, bankLedger.__debugMergeCounters.money, "batched ledger bucket merge should call money source merge once per source key")
+local bucketBatchReplayCount = bankLedger.MergeBucketRows(bucketBatchDb, bucketBatchPayload)
+assert.equal(0, bucketBatchReplayCount, "batched ledger bucket replay should skip duplicate rows")
+assert.equal(2, #bucketBatchDb.bankLedger.itemLogs, "batched ledger bucket replay should not duplicate item rows")
+assert.equal(2, #bucketBatchDb.bankLedger.moneyLogs, "batched ledger bucket replay should not duplicate money rows")
+assert.equal(2, bankLedger.__debugMergeCounters.item, "batched ledger bucket replay should still call item source merge once per source tab")
+assert.equal(2, bankLedger.__debugMergeCounters.money, "batched ledger bucket replay should still call money source merge once per source key")
+bankLedger.__debugMergeCounters = nil
+
 local malformedBucketDb = fresh_db()
 local malformedBucketCount = bankLedger.MergeBucketRows(malformedBucketDb, {
     rows = {
