@@ -1,5 +1,31 @@
 local assert = require("tests.helpers.assert")
 
+dofile("tests/helpers/wow_stubs.lua")
+
+local function toc_file_entries(path)
+    local files = {}
+    for line in io.lines(path) do
+        local entry = tostring(line or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if entry ~= "" and not entry:match("^##") then
+            files[#files + 1] = entry
+        end
+    end
+    return files
+end
+
+local function load_toc_without_namespace_rebind(addonName, tocPath, ns)
+    ns = ns or {}
+    local basePath = tocPath:gsub("[^/\\]+$", "")
+    for _, entry in ipairs(toc_file_entries(tocPath)) do
+        local chunk, loadError = loadfile(basePath .. entry)
+        if not chunk then
+            error(loadError)
+        end
+        chunk(addonName, ns)
+    end
+    return ns
+end
+
 local interfaceLine
 local versionLine
 local releaseTagLine
@@ -53,4 +79,35 @@ assert.truthy(positions["Domain/AuthPolicySource.lua"] ~= nil, "toc should inclu
 assert.truthy(
     positions["Domain/Permissions.lua"] < positions["Domain/AuthPolicySource.lua"],
     "toc should load permissions before auth policy source so auth helpers exist on first load"
+)
+
+local originalNamespace = _G.GBankManagerNamespace
+local originalDofile = _G.dofile
+_G.GBankManagerNamespace = nil
+_G.dofile = nil
+
+local itemDataNamespace = load_toc_without_namespace_rebind(
+    "GBankManager_ItemData",
+    "GBankManager_ItemData/GBankManager_ItemData.toc",
+    {}
+)
+local mainNamespace = load_toc_without_namespace_rebind(
+    "GBankManager",
+    "GBankManager/GBankManager.toc",
+    {}
+)
+
+_G.GBankManagerNamespace = originalNamespace
+_G.dofile = originalDofile
+
+assert.truthy(itemDataNamespace ~= mainNamespace, "toc smoke should keep companion and main addon namespace tables distinct")
+assert.truthy(type(mainNamespace.modules.craftedQuality) == "table", "main addon namespace should own craftedQuality")
+assert.truthy(
+    type(mainNamespace.modules.craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function",
+    "craftedQuality should expose non-inventory atlas resolution"
+)
+assert.truthy(type(mainNamespace.modules.itemDisplay) == "table", "main addon namespace should own itemDisplay")
+assert.truthy(
+    type(mainNamespace.modules.itemDisplay.BuildDisplayPayload) == "function",
+    "itemDisplay should expose display payload builder"
 )

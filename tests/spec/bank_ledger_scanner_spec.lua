@@ -19,6 +19,7 @@ local scanner = ns.modules.scanner
 local store = ns.modules.store
 local syncCodec = ns.modules.syncCodec or dofile("GBankManager/Sync/Codec.lua")
 local transport = ns.modules.syncTransport or {}
+local originalTime = _G.time
 
 local originalStoreGetDatabase = store.GetDatabase
 if type(originalStoreGetDatabase) == "function" then
@@ -1829,3 +1830,4 @@ assert.equal(1, interactionOpens, "scanner events should route guild-bank intera
 assert.equal(1, interactionCloses, "scanner events should route guild-bank interaction hides through the shared close handler")
 scanner.OnGuildBankOpened = originalOnGuildBankOpened
 scanner.OnGuildBankClosed = originalOnGuildBankClosed
+_G.time = originalTime

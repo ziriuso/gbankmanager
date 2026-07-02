@@ -2,6 +2,15 @@ local assert = require("tests.helpers.assert")
 
 dofile("tests/helpers/wow_stubs.lua")
 
+_G.GBankManagerNamespace = nil
+_G.GBankManagerDB = nil
+_G.__eventFrames = {}
+_G.C_Timer.pending = {}
+_G.C_ChatInfo.sentMessages = {}
+_G.C_ChatInfo.loggedMessages = {}
+_G.C_ChatInfo.registeredPrefixes = {}
+_G.DEFAULT_CHAT_FRAME.messages = {}
+
 _G.UnitName = function()
     return "SyncTester"
 end
@@ -206,6 +215,7 @@ for _, sent in ipairs(_G.C_ChatInfo.sentMessages) do
     assert.truthy(#(sent.payload or "") <= 255, "transport should keep each addon-message payload within the base API size limit")
 end
 
+_G.GBankManagerNamespace = nil
 local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local events = ns.modules.events
 local syncEvents = ns.modules.syncEvents

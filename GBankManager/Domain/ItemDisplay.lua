@@ -1,6 +1,6 @@
 local _, ns = ...
 
-ns = _G.GBankManagerNamespace or ns or {}
+ns = ns or {}
 ns.modules = ns.modules or {}
 ns.data = ns.data or {}
 
