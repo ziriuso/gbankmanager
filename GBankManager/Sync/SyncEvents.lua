@@ -662,6 +662,10 @@ local function refresh_visible_sync_views()
 
     local activeView = tostring(mainFrame.activeView or "")
     if activeView == "HISTORY" or activeView == "REQUESTS" or activeView == "MINIMUMS" then
+        if type(mainFrame.IsShown) == "function" and not mainFrame:IsShown() then
+            mainFrame.syncViewsDirty = true
+            return
+        end
         mainFrame:RefreshView()
     end
 end

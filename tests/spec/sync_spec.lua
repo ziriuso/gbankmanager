@@ -705,6 +705,55 @@ _G.C_ChatInfo.sentMessages = {}
 db.requests = {}
 db.auditLog = {}
 
+local hiddenSyncMainFrame = ns.modules.mainFrame
+local originalHiddenRefreshView = hiddenSyncMainFrame.RefreshView
+local hiddenRefreshCount = 0
+hiddenSyncMainFrame.activeView = "REQUESTS"
+hiddenSyncMainFrame.syncViewsDirty = nil
+hiddenSyncMainFrame:Hide()
+hiddenSyncMainFrame.RefreshView = function(self, ...)
+    hiddenRefreshCount = hiddenRefreshCount + 1
+    return originalHiddenRefreshView(self, ...)
+end
+local hiddenRemoteRequestPayload = codec.EncodeTable({
+    type = "REQUEST_CREATED",
+    updatedAt = 90,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-MemberOne",
+            guildRankIndex = 2,
+            guildRankName = "Raider",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "MemberOne",
+        },
+        request = {
+            requestId = "req-hidden-refresh-1",
+            requester = "MemberOne",
+            requesterCharacterKey = "Stormrage-MemberOne",
+            itemID = 2000,
+            itemName = "Hidden Refresh Potion",
+            quantity = 1,
+            approval = "PENDING",
+            fulfillment = "OPEN",
+            updatedAt = 90,
+        },
+    },
+})
+local hiddenRefreshAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", hiddenRemoteRequestPayload, "GUILD", "MemberOne")
+assert.truthy(hiddenRefreshAccepted, "hidden-frame sync request should still be accepted")
+assert.equal(0, hiddenRefreshCount, "hidden-frame sync should not rebuild the active request view immediately")
+assert.equal(true, hiddenSyncMainFrame.syncViewsDirty, "hidden-frame sync should mark the active sync view dirty")
+hiddenSyncMainFrame:Show()
+hiddenSyncMainFrame:GetScript("OnShow")(hiddenSyncMainFrame)
+assert.equal(1, hiddenRefreshCount, "showing a dirty sync view should refresh exactly once")
+assert.truthy(hiddenSyncMainFrame.syncViewsDirty ~= true, "showing a dirty sync view should consume the dirty flag")
+hiddenSyncMainFrame.RefreshView = originalHiddenRefreshView
+hiddenSyncMainFrame:Hide()
+db.requests = {}
+db.auditLog = {}
+
 local remoteRequestPayload = codec.EncodeTable({
     type = "REQUEST_CREATED",
     updatedAt = 91,

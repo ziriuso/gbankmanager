@@ -1348,7 +1348,7 @@ function mainRequestsController.Attach(mainFrame, options)
         }
     end
 
-    function mainFrame:BackfillRequestCraftedTier(item)
+    function mainFrame:BackfillRequestCraftedTier(item, requestSearchSnapshot)
         if type(item) ~= "table" then
             return item
         end
@@ -1361,7 +1361,7 @@ function mainRequestsController.Attach(mainFrame, options)
         canonical_item(item)
 
         local catalogItem = nil
-        local snapshot = self:GetRequestSearchSnapshot()
+        local snapshot = type(requestSearchSnapshot) == "table" and requestSearchSnapshot or self:GetRequestSearchSnapshot()
         for _, sourceItem in pairs(snapshot.items or {}) do
             if tonumber((sourceItem or {}).itemID) == itemID then
                 catalogItem = sourceItem

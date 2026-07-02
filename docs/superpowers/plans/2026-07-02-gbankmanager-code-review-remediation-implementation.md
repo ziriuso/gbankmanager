@@ -747,7 +747,7 @@ git commit -m "perf: cache normalized guild database"
 - Modify: `tests/spec/ui_requests_spec.lua`
 - Modify: `docs/manual-test-checklist.md`
 
-- [ ] **Step 1: Add failing UI refresh tests**
+- [x] **Step 1: Add failing UI refresh tests**
 
 Cover:
 
@@ -756,15 +756,15 @@ Cover:
 - request refresh builds the item search snapshot once and passes it through `BackfillRequestCraftedTier`
 - request filter `OnTextChanged` is debounced or limited to rows-only rebuild
 
-- [ ] **Step 2: Implement visibility guard**
+- [x] **Step 2: Implement visibility guard**
 
 In `refresh_visible_sync_views`, require both active view and `mainFrame:IsShown()` before rebuilding. If hidden, set a dirty flag on the frame or `ns.state`.
 
-- [ ] **Step 3: Reuse request search snapshot**
+- [x] **Step 3: Reuse request search snapshot**
 
 In `MainFrame.lua`, build the request search/catalog snapshot once per request refresh and pass it to every request-row backfill call, mirroring the existing minimums controller pattern.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
