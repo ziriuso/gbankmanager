@@ -70,8 +70,9 @@ local function ensure_v1_shape(db, guildName)
     db.bankLedger = ensure_table(db.bankLedger)
     db.bankLedger.itemLogs = ensure_table(db.bankLedger.itemLogs)
     db.bankLedger.moneyLogs = ensure_table(db.bankLedger.moneyLogs)
-    db.bankLedger.itemFingerprints = ensure_table(db.bankLedger.itemFingerprints)
-    db.bankLedger.moneyFingerprints = ensure_table(db.bankLedger.moneyFingerprints)
+    db.bankLedger.itemFingerprints = nil
+    db.bankLedger.moneyFingerprints = nil
+    db.meta.ledgerFingerprintIndexesCompactedForVersion = "2026-07-02-runtime-indexes"
     db.bankLedger.itemSourceSnapshots = ensure_table(db.bankLedger.itemSourceSnapshots)
     db.bankLedger.moneySourceSnapshots = ensure_table(db.bankLedger.moneySourceSnapshots)
     db.bankLedger.nextEntrySequence = tonumber(db.bankLedger.nextEntrySequence or 0) or 0

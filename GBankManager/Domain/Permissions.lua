@@ -351,6 +351,56 @@ function permissions.GetLivePlayerContext(db)
     }
 end
 
+function permissions.GetGuildRosterContextBySender(sender, actorContext)
+    actorContext = type(actorContext) == "table" and actorContext or {}
+    sender = trim(sender)
+    local realmName = trim(actorContext.realmName)
+    if realmName == "" then
+        realmName = permissions.GetRealmNameFromKey(actorContext.characterKey, nil, actorContext.name)
+    end
+    if realmName == "" then
+        realmName = current_realm_name()
+    end
+
+    local senderKey = permissions.NormalizeCharacterKey(sender, realmName, actorContext.name)
+    local senderName = permissions.GetCharacterNameFromKey(senderKey, realmName, actorContext.name)
+    if senderName == "" then
+        senderName = sender:match("^([^%-]+)") or sender
+    end
+
+    local count = type(_G.GetNumGuildMembers) == "function" and tonumber(_G.GetNumGuildMembers() or 0) or 0
+    if type(_G.GetGuildRosterInfo) ~= "function" then
+        count = 0
+    end
+    for index = 1, math.max(0, count) do
+        local name, rankName, rankIndex = _G.GetGuildRosterInfo(index)
+        local rosterKey = permissions.NormalizeCharacterKey(name, realmName, actorContext.name)
+        local rosterName = permissions.GetCharacterNameFromKey(rosterKey, realmName, actorContext.name)
+        local normalizedRankIndex = tonumber(rankIndex)
+        if rosterKey ~= "" and (rosterKey == senderKey or rosterName == senderName) then
+            return {
+                name = rosterName ~= "" and rosterName or senderName,
+                realmName = permissions.GetRealmNameFromKey(rosterKey, realmName, rosterName),
+                characterKey = rosterKey,
+                guildRankName = rankName or "",
+                guildRankIndex = normalizedRankIndex,
+                isGuildMaster = normalizedRankIndex == 0,
+                inGuild = true,
+            }
+        end
+    end
+
+    return {
+        name = senderName,
+        realmName = realmName,
+        characterKey = senderKey,
+        guildRankName = "",
+        guildRankIndex = nil,
+        isGuildMaster = false,
+        inGuild = false,
+    }
+end
+
 function permissions.RefreshPolicyFromGuild(db)
     db = db or {}
     db.auth = permissions.NormalizePolicy(db.auth, permissions.GetGuildRankMetadata())

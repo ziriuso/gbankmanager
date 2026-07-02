@@ -1,5 +1,6 @@
 local assert = require("tests.helpers.assert")
 local runner = require("tests.helpers.test_runner")
+local lanes = require("tests.helpers.spec_lanes")
 
 local captured = {}
 local originalPrint = print
@@ -39,3 +40,7 @@ end
 
 assert.equal("RUN tests/fixtures/progress_pass_spec.lua", captured[1], "runner should print before executing each spec")
 assert.equal("PASS tests/fixtures/progress_pass_spec.lua", captured[2], "runner should print after each successful spec")
+
+local missing, duplicates = runner.find_lane_coverage_gaps(lanes)
+assert.equal(nil, missing[1], "all spec files should be owned by a test lane; first missing: " .. tostring(missing[1]))
+assert.equal(nil, duplicates[1], "spec files should be owned by only one test lane; first duplicate: " .. tostring(duplicates[1]))

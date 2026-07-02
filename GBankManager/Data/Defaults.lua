@@ -77,8 +77,6 @@ function defaults.CreateDatabase(guildName)
         bankLedger = {
             itemLogs = {},
             moneyLogs = {},
-            itemFingerprints = {},
-            moneyFingerprints = {},
             itemSourceSnapshots = {},
             moneySourceSnapshots = {},
             nextEntrySequence = 0,

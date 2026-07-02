@@ -120,9 +120,14 @@ assert.equal(
     mainFrame.requestDetailsItemNameText:GetText(),
     "request details should keep the item name visible after live crafted-quality backfill"
 )
+assert.equal(
+    "Professions-Icon-Quality-12-Tier2-Inv",
+    (mainFrame.requestDetailsQualityIcon or {}).atlas,
+    "request details should render the canonical bundled gold-pentagram atlas beside the shared item display"
+)
 assert.truthy(
-    not (mainFrame.requestDetailsQualityIcon and mainFrame.requestDetailsQualityIcon:IsShown()),
-    "request details should keep the separate quality icon hidden under the shared item-display contract"
+    mainFrame.requestDetailsQualityIcon and mainFrame.requestDetailsQualityIcon:IsShown(),
+    "request details should show the crafted-quality icon inline beside the shared item display"
 )
 
 mainFrame:SelectView("EXPORTS")

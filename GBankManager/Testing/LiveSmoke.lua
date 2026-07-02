@@ -72,6 +72,34 @@ local function with_guild_rank(name, zeroBasedIndex, callback)
     return value
 end
 
+local function with_guild_roster(rows, callback)
+    local originalGetNumGuildMembers = _G.GetNumGuildMembers
+    local originalGetGuildRosterInfo = _G.GetGuildRosterInfo
+    rows = type(rows) == "table" and rows or {}
+
+    _G.GetNumGuildMembers = function()
+        return #rows
+    end
+
+    _G.GetGuildRosterInfo = function(index)
+        local row = rows[index]
+        if type(row) ~= "table" then
+            return nil
+        end
+
+        return row.name, row.rankName, row.rankIndex, row.level, row.class, row.zone, row.note, row.officerNote, row.online
+    end
+
+    local ok, value = pcall(callback)
+    _G.GetNumGuildMembers = originalGetNumGuildMembers
+    _G.GetGuildRosterInfo = originalGetGuildRosterInfo
+    if not ok then
+        error(value)
+    end
+
+    return value
+end
+
 local function deep_copy(value, seen)
     if type(value) ~= "table" then
         return value
@@ -397,81 +425,96 @@ local function run_request_sync_contract(db)
 
     seed_request_sync_smoke_db(db)
 
-    local createPayload = codec.EncodeTable({
-        type = "REQUEST_CREATED",
-        updatedAt = 301,
-        payload = {
-            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
-            actorContext = {
-                characterKey = "MemberOne-Stormrage",
-                guildRankIndex = 2,
-                guildRankName = "Raider",
-                inGuild = true,
-                isGuildMaster = false,
-                name = "MemberOne",
-            },
-            request = {
-                requestId = "req-live-sync-1",
-                requester = "MemberOne",
-                requesterCharacterKey = "MemberOne-Stormrage",
-                itemID = 4004,
-                itemName = "Sync Smoke Flask",
-                quantity = 2,
-                approval = "PENDING",
-                fulfillment = "OPEN",
-                createdAt = 301,
-                createdBy = "MemberOne-Stormrage",
-                updatedAt = 301,
-            },
+    return with_guild_roster({
+        {
+            name = "MemberOne",
+            rankName = "Raider",
+            rankIndex = 2,
+            online = true,
         },
-    })
-
-    local created = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", createPayload, "GUILD", "MemberOne")
-    if created ~= true or type(db.requests) ~= "table" or #db.requests ~= 1 then
-        return smoke_result("request_sync_contract", false, "valid request-created sync payload did not apply cleanly")
-    end
-
-    local forgedUpdatePayload = codec.EncodeTable({
-        type = "REQUEST_UPDATED",
-        updatedAt = 302,
-        payload = {
-            action = "APPROVE",
-            guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
-            actorContext = {
-                characterKey = "OfficerOne-Stormrage",
-                guildRankIndex = 1,
-                guildRankName = "Officer",
-                inGuild = true,
-                isGuildMaster = false,
-                name = "OfficerOne",
-            },
-            request = {
-                requestId = "req-live-sync-1",
-                requester = "DifferentRequester",
-                requesterCharacterKey = "DifferentRequester-Stormrage",
-                itemID = 9999,
-                itemName = "Forged Sync Smoke",
-                quantity = 2,
-                approval = "APPROVED",
-                fulfillment = "OPEN",
-                createdAt = 301,
-                createdBy = "MemberOne-Stormrage",
-                updatedAt = 302,
-            },
+        {
+            name = "OfficerOne",
+            rankName = "Officer",
+            rankIndex = 1,
+            online = true,
         },
-    })
+    }, function()
+        local createPayload = codec.EncodeTable({
+            type = "REQUEST_CREATED",
+            updatedAt = 301,
+            payload = {
+                guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
+                actorContext = {
+                    characterKey = "MemberOne-Stormrage",
+                    guildRankIndex = 2,
+                    guildRankName = "Raider",
+                    inGuild = true,
+                    isGuildMaster = false,
+                    name = "MemberOne",
+                },
+                request = {
+                    requestId = "req-live-sync-1",
+                    requester = "MemberOne",
+                    requesterCharacterKey = "MemberOne-Stormrage",
+                    itemID = 4004,
+                    itemName = "Sync Smoke Flask",
+                    quantity = 2,
+                    approval = "PENDING",
+                    fulfillment = "OPEN",
+                    createdAt = 301,
+                    createdBy = "MemberOne-Stormrage",
+                    updatedAt = 301,
+                },
+            },
+        })
 
-    local forgedAccepted = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", forgedUpdatePayload, "GUILD", "OfficerOne")
-    if forgedAccepted then
-        return smoke_result("request_sync_contract", false, "forged request update payload unexpectedly applied")
-    end
+        local created = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", createPayload, "GUILD", "MemberOne")
+        if created ~= true or type(db.requests) ~= "table" or #db.requests ~= 1 then
+            return smoke_result("request_sync_contract", false, "valid request-created sync payload did not apply cleanly")
+        end
 
-    local request = db.requests[1]
-    if request.requester ~= "MemberOne" or request.requesterCharacterKey ~= "MemberOne-Stormrage" or request.itemID ~= 4004 then
-        return smoke_result("request_sync_contract", false, "forged request update mutated immutable request identity fields")
-    end
+        local forgedUpdatePayload = codec.EncodeTable({
+            type = "REQUEST_UPDATED",
+            updatedAt = 302,
+            payload = {
+                action = "APPROVE",
+                guildKey = tostring((((db or {}).meta or {}).guildName) or "Guild Testers"),
+                actorContext = {
+                    characterKey = "OfficerOne-Stormrage",
+                    guildRankIndex = 1,
+                    guildRankName = "Officer",
+                    inGuild = true,
+                    isGuildMaster = false,
+                    name = "OfficerOne",
+                },
+                request = {
+                    requestId = "req-live-sync-1",
+                    requester = "DifferentRequester",
+                    requesterCharacterKey = "DifferentRequester-Stormrage",
+                    itemID = 9999,
+                    itemName = "Forged Sync Smoke",
+                    quantity = 2,
+                    approval = "APPROVED",
+                    fulfillment = "OPEN",
+                    createdAt = 301,
+                    createdBy = "MemberOne-Stormrage",
+                    updatedAt = 302,
+                },
+            },
+        })
 
-    return smoke_result("request_sync_contract", true, "request sync accepted valid creates and rejected forged immutable-field updates")
+        local forgedAccepted = syncEvents.HandleEvent("CHAT_MSG_ADDON", "GBankManager", forgedUpdatePayload, "GUILD", "OfficerOne")
+        if forgedAccepted then
+            return smoke_result("request_sync_contract", false, "forged request update payload unexpectedly applied")
+        end
+
+        local request = db.requests[1]
+        if request.requester ~= "MemberOne" or request.requesterCharacterKey ~= "MemberOne-Stormrage" or request.itemID ~= 4004 then
+            return smoke_result("request_sync_contract", false, "forged request update mutated immutable request identity fields")
+        end
+
+        return smoke_result("request_sync_contract", true, "request sync accepted valid creates and rejected forged immutable-field updates")
+    end)
 end
 
 local function seed_minimums_smoke_db(db)

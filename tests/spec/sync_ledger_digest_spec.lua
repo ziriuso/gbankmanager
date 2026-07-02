@@ -14,6 +14,32 @@ _G.GetGuildInfo = function()
     return "Guild Testers", "Officer", 1
 end
 
+_G.__guildRoster = {
+    {
+        name = "MemberOne",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+    {
+        name = "SyncTester",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+}
+_G.GetNumGuildMembers = function()
+    return #_G.__guildRoster
+end
+_G.GetGuildRosterInfo = function(index)
+    local row = _G.__guildRoster[index]
+    if type(row) ~= "table" then
+        return nil
+    end
+
+    return row.name, row.rankName, row.rankIndex, nil, nil, nil, nil, nil, row.online
+end
+
 local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 local codec = ns.modules.syncCodec
 local transport = ns.modules.syncTransport
@@ -71,7 +97,7 @@ local first = manualActions.Run(db, {
 })
 
 assert.truthy(first.ok, "first ledger sync should succeed")
-assert.equal("LEDGER_DIGEST", sentMessages[1].type, "ledger sync should announce the digest before sending row deltas")
+assert.equal("LEDGER_MANIFEST", sentMessages[1].type, "ledger sync should announce the current manifest before peers request rows")
 
 local firstDeltaCount = 0
 for _, message in ipairs(sentMessages) do
@@ -79,7 +105,8 @@ for _, message in ipairs(sentMessages) do
         firstDeltaCount = firstDeltaCount + 1
     end
 end
-assert.truthy(firstDeltaCount > 0, "first ledger sync should still send deltas when this digest has not been announced")
+assert.equal(1, #sentMessages, "first ledger sync should send only the compact manifest")
+assert.equal(0, firstDeltaCount, "first ledger sync should not eagerly send row deltas before peers request buckets")
 
 sentMessages = {}
 local second = manualActions.Run(db, {
@@ -96,8 +123,8 @@ for _, message in ipairs(sentMessages) do
         secondDeltaCount = secondDeltaCount + 1
     end
 end
-assert.equal(1, #sentMessages, "replayed same-state ledger sync should only send the compact digest")
-assert.equal("LEDGER_DIGEST", sentMessages[1].type, "replayed same-state ledger sync should keep the digest visible to peers")
+assert.equal(1, #sentMessages, "replayed same-state ledger sync should only send the compact manifest")
+assert.equal("LEDGER_MANIFEST", sentMessages[1].type, "replayed same-state ledger sync should keep the manifest visible to peers")
 assert.equal(0, secondDeltaCount, "replayed same-state ledger sync should not resend row deltas")
 
 local remoteDigestPayload = codec.EncodeTable({

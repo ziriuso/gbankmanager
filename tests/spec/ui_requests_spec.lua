@@ -328,6 +328,15 @@ assert.equal("Professions-Icon-Quality-12-Tier2-Inv", mainFrame.tableRowsData[1]
 assert.equal("Flask of the Shattered Sun", mainFrame.tableRowsData[1].itemName, "request admin rows should preserve a plain-text item name alongside the shared display payload")
 assert.equal("Pending", mainFrame.tableRowsData[1].status, "request admin rows should expose a readable combined status")
 assert.equal(5, #mainFrame.tableRowsData, "request admin All filter should include fulfilled and rejected requests")
+local originalGetRequestSearchSnapshot = mainFrame.GetRequestSearchSnapshot
+local requestSearchSnapshotBuildCount = 0
+mainFrame.GetRequestSearchSnapshot = function(self, ...)
+    requestSearchSnapshotBuildCount = requestSearchSnapshotBuildCount + 1
+    return originalGetRequestSearchSnapshot(self, ...)
+end
+mainFrame:RefreshView()
+mainFrame.GetRequestSearchSnapshot = originalGetRequestSearchSnapshot
+assert.equal(1, requestSearchSnapshotBuildCount, "request refresh should build the item search snapshot once and reuse it for row backfill")
 mainFrame.requestAdminFilterPendingApprovalButton:GetScript("OnClick")(mainFrame.requestAdminFilterPendingApprovalButton)
 assert.truthy(mainFrame.requestAdminFilterPendingApprovalButton.filterActive == true, "request admin should highlight Pending Approval when selected")
 assert.truthy(mainFrame.requestAdminFilterAllButton.filterActive ~= true, "request admin should clear the All highlight when another filter is selected")
@@ -345,10 +354,17 @@ assert.equal(5, #mainFrame.tableRowsData, "request admin All should restore the 
 mainFrame.requestAdminAddButton:GetScript("OnClick")(mainFrame.requestAdminAddButton)
 assert.truthy(mainFrame.requestWizardModal:IsShown(), "request admin Add should launch the shared request wizard")
 mainFrame.requestWizardCancelButton:GetScript("OnClick")(mainFrame.requestWizardCancelButton)
+local requestFilterSnapshotBuildCount = 0
+mainFrame.GetRequestSearchSnapshot = function(self, ...)
+    requestFilterSnapshotBuildCount = requestFilterSnapshotBuildCount + 1
+    return originalGetRequestSearchSnapshot(self, ...)
+end
 mainFrame.tableFilterInputs[4]:SetText("Arcane")
 mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
+mainFrame.GetRequestSearchSnapshot = originalGetRequestSearchSnapshot
 assert.equal(1, #mainFrame.tableRowsData, "request admin shared filters should search by item name")
 assert.equal("Arcane Oil", mainFrame.tableRowsData[1].itemName, "request admin item-name filter should keep the matching row")
+assert.equal(0, requestFilterSnapshotBuildCount, "request admin filter typing should update visible rows without rebuilding item search snapshots")
 mainFrame.tableFilterInputs[4]:SetText("")
 mainFrame.tableFilterInputs[4]:GetScript("OnTextChanged")(mainFrame.tableFilterInputs[4])
 mainFrame.tableFilterInputs[3]:SetText("990001")

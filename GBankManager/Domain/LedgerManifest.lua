@@ -47,14 +47,14 @@ end
 
 local function row_identity_token(kind, row)
     row = type(row) == "table" and row or {}
-    local entryId = trim(row.entryId)
-    if entryId ~= "" then
-        return make_fingerprint({ kind, "entry", entryId })
-    end
-
     local fingerprint = trim(row.fingerprint)
     if fingerprint ~= "" then
         return make_fingerprint({ kind, "fingerprint", fingerprint })
+    end
+
+    local entryId = trim(row.entryId)
+    if entryId ~= "" then
+        return make_fingerprint({ kind, "entry", entryId })
     end
 
     if kind == "money" then

@@ -38,6 +38,13 @@ local function current_db()
     return store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
 end
 
+local function invalidate_database_cache(reason)
+    local store = ns.data.store or ns.modules.store
+    if store and type(store.InvalidateDatabaseCache) == "function" then
+        store.InvalidateDatabaseCache(reason or "sync_merge")
+    end
+end
+
 local function guild_key_is_known(guildKey)
     local store = ns.data.store or ns.modules.store
     if store and type(store.IsPlaceholderGuildName) == "function" then
@@ -229,20 +236,43 @@ local function actor_matches_sender(actorContext, sender)
 
     local senderName = sender:match("^([^%-]+)") or sender
     local actorName = tostring(actorContext.name or "")
-    if actorName ~= "" and actorName ~= sender and actorName ~= senderName then
-        return false
+    local matched = false
+    if actorName ~= "" then
+        if actorName ~= sender and actorName ~= senderName then
+            return false
+        end
+        matched = true
     end
 
     local actorCharacterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     local normalizedSenderKey = normalize_character_key(sender)
-    if actorCharacterKey ~= "" and actorCharacterKey ~= normalizedSenderKey then
-        local actorKeyCharacter = character_name_from_key(actorCharacterKey, actorContext.realmName, actorContext.name)
-        if actorKeyCharacter ~= sender and actorKeyCharacter ~= senderName then
-            return false
+    if actorCharacterKey ~= "" then
+        if actorCharacterKey == normalizedSenderKey then
+            matched = true
+        else
+            local actorKeyCharacter = character_name_from_key(actorCharacterKey, actorContext.realmName, actorContext.name)
+            if actorKeyCharacter ~= sender and actorKeyCharacter ~= senderName then
+                return false
+            end
+            matched = true
         end
     end
 
-    return true
+    return matched
+end
+
+local function actor_authority_context(actorContext, sender)
+    if permissions and type(permissions.GetGuildRosterContextBySender) == "function" then
+        return permissions.GetGuildRosterContextBySender(sender, actorContext)
+    end
+
+    local senderName = tostring(sender or ""):match("^([^%-]+)") or tostring(sender or "")
+    return {
+        name = senderName,
+        characterKey = normalize_character_key(sender),
+        inGuild = false,
+        isGuildMaster = false,
+    }
 end
 
 local function normalize_actor_context(actorContext)
@@ -632,6 +662,10 @@ local function refresh_visible_sync_views()
 
     local activeView = tostring(mainFrame.activeView or "")
     if activeView == "HISTORY" or activeView == "REQUESTS" or activeView == "MINIMUMS" then
+        if type(mainFrame.IsShown) == "function" and not mainFrame:IsShown() then
+            mainFrame.syncViewsDirty = true
+            return
+        end
         mainFrame:RefreshView()
     end
 end
@@ -914,10 +948,11 @@ end
 local function handle_auth_policy_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    local authorityContext = actor_authority_context(actorContext, sender)
     local remotePolicy = type(payload.policy) == "table" and payload.policy or nil
     local localPolicy = current_policy(db)
 
-    if not remotePolicy or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if not remotePolicy or permissions.IsBlacklisted(authorityContext, localPolicy) then
         report_sync_status(string.format("Ignored synced auth policy from %s.", sender_display_name(sender)))
         return false
     end
@@ -927,7 +962,7 @@ local function handle_auth_policy_snapshot(db, payload, sender)
         return false
     end
 
-    if not actorContext.isGuildMaster and not actor_can(actorContext, "auth_manage", localPolicy) then
+    if not authorityContext.isGuildMaster and not actor_can(authorityContext, "auth_manage", localPolicy) then
         report_sync_status(string.format("Ignored synced auth policy from %s.", sender_display_name(sender)))
         return false
     end
@@ -940,6 +975,7 @@ local function handle_auth_policy_snapshot(db, payload, sender)
         })
         if applied == true then
             report_sync_status(string.format("Synced auth policy from %s.", sender_display_name(sender)))
+            invalidate_database_cache("sync_merge")
         end
         return applied == true
     end
@@ -953,12 +989,14 @@ local function handle_auth_policy_snapshot(db, payload, sender)
     nextPolicy.guildPolicySource = "sync"
     db.auth = nextPolicy
     report_sync_status(string.format("Synced auth policy from %s.", sender_display_name(sender)))
+    invalidate_database_cache("sync_merge")
     return true
 end
 
 local function handle_request_created(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local request = type(payload.request) == "table" and normalize_request_for_sync(payload.request) or nil
     local localPolicy = current_policy(db)
 
@@ -968,13 +1006,13 @@ local function handle_request_created(db, payload, sender)
         return false
     end
 
-    if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if not request or permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", request and "blacklisted" or "missing_request")
         report_request_sync_ignored("CREATE", sender)
         return false
     end
 
-    if not actor_can(actorContext, "request_submit", localPolicy) then
+    if not actor_can(authorityContext, "request_submit", localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_create", "capability_denied")
         report_request_sync_ignored("CREATE", sender)
         return false
@@ -1004,12 +1042,14 @@ local function handle_request_created(db, payload, sender)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_create", "applied")
     report_request_sync_applied("CREATE", request, sender)
+    invalidate_database_cache("sync_merge")
     return true
 end
 
 local function handle_request_updated(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local request = type(payload.request) == "table" and normalize_request_for_sync(payload.request) or nil
     local action = tostring(payload.action or "")
     local localPolicy = current_policy(db)
@@ -1028,14 +1068,14 @@ local function handle_request_updated(db, payload, sender)
         return false
     end
 
-    if not request or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if not request or permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", request and "blacklisted" or "missing_request")
         report_request_sync_ignored(action, sender)
         return false
     end
 
     local capability = capabilityByAction[action]
-    if capability and not actor_can(actorContext, capability, localPolicy) then
+    if capability and not actor_can(authorityContext, capability, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "capability_denied")
         report_request_sync_ignored(action, sender)
         return false
@@ -1060,7 +1100,7 @@ local function handle_request_updated(db, payload, sender)
         return false
     end
 
-    if type(requestsModule.CanActorApplyAction) == "function" and not requestsModule.CanActorApplyAction(existing, action, actorContext) then
+    if type(requestsModule.CanActorApplyAction) == "function" and not requestsModule.CanActorApplyAction(existing, action, authorityContext) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "request_update", "invalid_transition")
         report_request_sync_ignored(action, sender)
         return false
@@ -1090,6 +1130,7 @@ local function handle_request_updated(db, payload, sender)
             mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
             remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
             report_request_sync_applied(action, request, sender)
+            invalidate_database_cache("sync_merge")
         end
         return deleted
     end
@@ -1100,12 +1141,14 @@ local function handle_request_updated(db, payload, sender)
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "request_update", "applied")
     report_request_sync_applied(action, request, sender)
+    invalidate_database_cache("sync_merge")
     return true
 end
 
 local function handle_minimums_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local minimums = type(payload.minimums) == "table" and payload.minimums or nil
     local localPolicy = current_policy(db)
 
@@ -1114,7 +1157,7 @@ local function handle_minimums_snapshot(db, payload, sender)
         return false
     end
 
-    if minimums == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if minimums == nil or permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", minimums and "blacklisted" or "missing_minimums")
         return false
     end
@@ -1124,7 +1167,7 @@ local function handle_minimums_snapshot(db, payload, sender)
         return false
     end
 
-    if not actor_can_manage_minimums(actorContext, localPolicy) then
+    if not actor_can_manage_minimums(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "capability_denied")
         return false
     end
@@ -1142,6 +1185,7 @@ local function handle_minimums_snapshot(db, payload, sender)
     end
     if changedCount > 0 then
         report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1149,6 +1193,7 @@ end
 local function handle_requests_snapshot(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local requests = type(payload.requests) == "table" and payload.requests or nil
     local localPolicy = current_policy(db)
 
@@ -1157,7 +1202,7 @@ local function handle_requests_snapshot(db, payload, sender)
         return false
     end
 
-    if requests == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if requests == nil or permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", requests and "blacklisted" or "missing_requests")
         return false
     end
@@ -1167,9 +1212,9 @@ local function handle_requests_snapshot(db, payload, sender)
         return false
     end
 
-    if not actor_can(actorContext, "request_submit", localPolicy)
-        and not actor_can(actorContext, "request_approve", localPolicy)
-        and not actor_can(actorContext, "full_ui", localPolicy)
+    if not actor_can(authorityContext, "request_submit", localPolicy)
+        and not actor_can(authorityContext, "request_approve", localPolicy)
+        and not actor_can(authorityContext, "full_ui", localPolicy)
     then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "requests_snapshot", "capability_denied")
         return false
@@ -1206,6 +1251,7 @@ local function handle_requests_snapshot(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "requests_snapshot", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d request snapshot row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1222,6 +1268,7 @@ local function handle_history_snapshot(db, payload, sender)
     local historyView = ns.modules.historyView or {}
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local entries = type(payload.entries) == "table" and payload.entries or nil
     local localPolicy = current_policy(db)
 
@@ -1230,7 +1277,7 @@ local function handle_history_snapshot(db, payload, sender)
         return false
     end
 
-    if entries == nil or permissions.IsBlacklisted(actorContext, localPolicy) then
+    if entries == nil or permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", entries and "blacklisted" or "missing_history")
         return false
     end
@@ -1240,7 +1287,7 @@ local function handle_history_snapshot(db, payload, sender)
         return false
     end
 
-    if not actor_can_sync_history(actorContext, localPolicy) then
+    if not actor_can_sync_history(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "history_snapshot", "capability_denied")
         return false
     end
@@ -1250,6 +1297,7 @@ local function handle_history_snapshot(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "history_snapshot", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d history row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1310,6 +1358,7 @@ end
 local function handle_ledger_manifest(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1322,8 +1371,13 @@ local function handle_ledger_manifest(db, payload, sender)
         return false
     end
 
-    if permissions.IsBlacklisted(actorContext, localPolicy) then
+    if permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "blacklisted")
+        return false
+    end
+
+    if not actor_can(authorityContext, "full_ui", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_manifest", "capability_denied")
         return false
     end
 
@@ -1397,6 +1451,7 @@ end
 local function handle_ledger_bucket_request(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1413,8 +1468,13 @@ local function handle_ledger_bucket_request(db, payload, sender)
         return true
     end
 
-    if permissions.IsBlacklisted(actorContext, localPolicy) then
+    if permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "blacklisted")
+        return false
+    end
+
+    if not actor_can(authorityContext, "full_ui", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_request", "capability_denied")
         return false
     end
 
@@ -1456,6 +1516,7 @@ end
 local function handle_ledger_bucket_reply(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1472,8 +1533,13 @@ local function handle_ledger_bucket_reply(db, payload, sender)
         return true
     end
 
-    if permissions.IsBlacklisted(actorContext, localPolicy) then
+    if permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "blacklisted")
+        return false
+    end
+
+    if not actor_can(authorityContext, "full_ui", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_bucket_reply", "capability_denied")
         return false
     end
 
@@ -1498,6 +1564,7 @@ local function handle_ledger_bucket_reply(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_bucket_reply", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced %d ledger bucket row(s) from %s.", mergedCount, sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1505,6 +1572,7 @@ end
 local function handle_ledger_delta(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1522,8 +1590,13 @@ local function handle_ledger_delta(db, payload, sender)
         return false
     end
 
-    if permissions.IsBlacklisted(actorContext, localPolicy) then
+    if permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "blacklisted")
+        return false
+    end
+
+    if not actor_can(authorityContext, "full_ui", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_delta", "capability_denied")
         return false
     end
 
@@ -1542,6 +1615,7 @@ local function handle_ledger_delta(db, payload, sender)
     remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "ledger_delta", mergedCount > 0 and "applied" or "no_change")
     if mergedCount > 0 then
         report_sync_status(string.format("Synced ledger delta from %s.", sender_display_name(sender)))
+        invalidate_database_cache("sync_merge")
     end
     return true
 end
@@ -1549,6 +1623,7 @@ end
 local function handle_ledger_digest(db, payload, sender)
     payload = type(payload) == "table" and payload or {}
     local actorContext = normalize_actor_context(payload.actorContext)
+    local authorityContext = actor_authority_context(actorContext, sender)
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1561,8 +1636,13 @@ local function handle_ledger_digest(db, payload, sender)
         return false
     end
 
-    if permissions.IsBlacklisted(actorContext, localPolicy) then
+    if permissions.IsBlacklisted(authorityContext, localPolicy) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "blacklisted")
+        return false
+    end
+
+    if not actor_can(authorityContext, "full_ui", localPolicy) then
+        remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "ledger_digest", "capability_denied")
         return false
     end
 
@@ -1698,7 +1778,7 @@ function syncEvents.HandleEvent(event, ...)
         end
 
         if not decodedMessage then
-            return receiveState == "partial" or receiveState == "invalid"
+            return receiveState == "partial"
         end
 
         ns.state.lastSyncMessage = decodedMessage

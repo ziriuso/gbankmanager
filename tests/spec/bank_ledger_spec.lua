@@ -18,6 +18,8 @@ end
 local db = fresh_db()
 
 assert.truthy(type(db.bankLedger) == "table", "database defaults should include a bank-ledger container")
+assert.equal(nil, db.bankLedger.itemFingerprints, "database defaults should not persist runtime item fingerprint indexes")
+assert.equal(nil, db.bankLedger.moneyFingerprints, "database defaults should not persist runtime money fingerprint indexes")
 assert.truthy(type(db.ui.logsHistorySettings) == "table", "database defaults should include logs/history settings")
 assert.equal("indefinite", db.ui.logsHistorySettings.ledgerRetention, "ledger retention should default to indefinite to avoid surprise data loss")
 assert.equal("indefinite", db.ui.logsHistorySettings.historyRetention, "history retention should default to indefinite to avoid surprise data loss")
@@ -26,6 +28,80 @@ assert.equal(5000, db.ui.logsHistorySettings.repairThresholdGold, "ledger repair
 assert.truthy(not db.ui.logsHistorySettings.muteSilvermoonCitizen, "Silvermoon Citizen chat mute should default off")
 assert.truthy(type(db.ui.chatSettings) == "table", "database defaults should include reusable chat settings")
 assert.equal(true, db.ui.chatSettings.suppressRoutineMessages, "routine addon chat suppression should default on")
+
+local indexRuntimeDb = fresh_db()
+indexRuntimeDb.bankLedger.itemLogs = {
+    {
+        entryId = "runtime-item-1",
+        timestamp = 1716573600,
+        action = "Deposit",
+        who = "GuildLead-Stormrage",
+        itemID = 211878,
+        item = "Runtime Flask",
+        quantity = 1,
+        tabIndex = 1,
+        tabName = "Flasks",
+    },
+}
+indexRuntimeDb.bankLedger.moneyLogs = {
+    {
+        entryId = "runtime-money-1",
+        timestamp = 1716573660,
+        action = "Deposit",
+        who = "GuildLead-Stormrage",
+        amountCopper = 12345,
+    },
+}
+bankLedger.EnsureState(indexRuntimeDb)
+local firstRuntimeState = bankLedger.GetRuntimeIndexState(indexRuntimeDb)
+assert.equal(1, tonumber(firstRuntimeState.itemRebuilds or 0), "initial EnsureState should build the item runtime index once")
+assert.equal(1, tonumber(firstRuntimeState.moneyRebuilds or 0), "initial EnsureState should build the money runtime index once")
+bankLedger.EnsureState(indexRuntimeDb)
+local secondRuntimeState = bankLedger.GetRuntimeIndexState(indexRuntimeDb)
+assert.equal(firstRuntimeState.itemRebuilds, secondRuntimeState.itemRebuilds, "second EnsureState with unchanged item logs should not rebuild the item runtime index")
+assert.equal(firstRuntimeState.moneyRebuilds, secondRuntimeState.moneyRebuilds, "second EnsureState with unchanged money logs should not rebuild the money runtime index")
+
+local appendRuntimeDb = fresh_db()
+bankLedger.EnsureState(appendRuntimeDb)
+local cleanRuntimeState = bankLedger.GetRuntimeIndexState(appendRuntimeDb)
+assert.truthy(cleanRuntimeState.itemDirty ~= true, "freshly ensured item runtime index should start clean")
+assert.truthy(cleanRuntimeState.moneyDirty ~= true, "freshly ensured money runtime index should start clean")
+bankLedger.MergeItemTransactions(appendRuntimeDb, {
+    scanStartedAt = 1716573600,
+    sourceTabIndex = 1,
+    sourceTabName = "Flasks",
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            itemID = 211878,
+            itemName = "Runtime Flask",
+            quantity = 1,
+            year = 2024,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+local dirtyItemRuntimeState = bankLedger.GetRuntimeIndexState(appendRuntimeDb)
+assert.truthy(dirtyItemRuntimeState.itemDirty == true, "appending item ledger rows should mark the item runtime index dirty")
+bankLedger.MergeMoneyTransactions(appendRuntimeDb, {
+    scanStartedAt = 1716573660,
+    transactions = {
+        {
+            type = "deposit",
+            who = "GuildLead-Stormrage",
+            amountCopper = 12345,
+            year = 2024,
+            month = 5,
+            day = 24,
+            hour = 9,
+        },
+    },
+})
+local dirtyRuntimeState = bankLedger.GetRuntimeIndexState(appendRuntimeDb)
+assert.truthy(dirtyRuntimeState.moneyDirty == true, "appending money ledger rows should mark the money runtime index dirty")
 
 local mergedItemCount = bankLedger.MergeItemTransactions(db, {
     scanStartedAt = 1716573600,
@@ -130,6 +206,79 @@ local bucketMergeReplayCount = bankLedger.MergeBucketRows(bucketMergeDb, bucketP
 assert.equal(0, bucketMergeReplayCount, "ledger bucket merge should skip duplicate bucket payload rows")
 assert.equal(1, #bucketMergeDb.bankLedger.itemLogs, "ledger bucket replay should not duplicate item rows")
 assert.equal(1, #bucketMergeDb.bankLedger.moneyLogs, "ledger bucket replay should not duplicate money rows")
+
+local bucketBatchDb = fresh_db()
+bankLedger.__debugMergeCounters = {
+    item = 0,
+    money = 0,
+}
+local bucketBatchPayload = {
+    rows = {
+        item = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                itemID = 211878,
+                item = "Flask of Tempered Swiftness",
+                quantity = 5,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+            },
+            {
+                action = "Withdraw",
+                who = "OfficerTwo-Stormrage",
+                itemID = 211879,
+                item = "Potion of Tempered Swiftness",
+                quantity = 2,
+                tabIndex = 3,
+                tabName = "Raid Supplies",
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 7,
+                minute = 5,
+            },
+        },
+        money = {
+            {
+                action = "Deposit",
+                who = "OfficerOne-Stormrage",
+                amountCopper = 2500000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+            },
+            {
+                action = "Withdraw",
+                who = "OfficerTwo-Stormrage",
+                amountCopper = -750000,
+                year = 2024,
+                month = 5,
+                day = 24,
+                hour = 8,
+                minute = 10,
+            },
+        },
+    },
+}
+local bucketBatchInitialCount = bankLedger.MergeBucketRows(bucketBatchDb, bucketBatchPayload)
+assert.equal(4, bucketBatchInitialCount, "batched ledger bucket merge should append every valid item and money row")
+assert.equal(2, #bucketBatchDb.bankLedger.itemLogs, "batched ledger bucket merge should persist all item rows")
+assert.equal(2, #bucketBatchDb.bankLedger.moneyLogs, "batched ledger bucket merge should persist all money rows")
+assert.equal(1, bankLedger.__debugMergeCounters.item, "batched ledger bucket merge should call item source merge once per source tab")
+assert.equal(1, bankLedger.__debugMergeCounters.money, "batched ledger bucket merge should call money source merge once per source key")
+local bucketBatchReplayCount = bankLedger.MergeBucketRows(bucketBatchDb, bucketBatchPayload)
+assert.equal(0, bucketBatchReplayCount, "batched ledger bucket replay should skip duplicate rows")
+assert.equal(2, #bucketBatchDb.bankLedger.itemLogs, "batched ledger bucket replay should not duplicate item rows")
+assert.equal(2, #bucketBatchDb.bankLedger.moneyLogs, "batched ledger bucket replay should not duplicate money rows")
+assert.equal(2, bankLedger.__debugMergeCounters.item, "batched ledger bucket replay should still call item source merge once per source tab")
+assert.equal(2, bankLedger.__debugMergeCounters.money, "batched ledger bucket replay should still call money source merge once per source key")
+bankLedger.__debugMergeCounters = nil
 
 local malformedBucketDb = fresh_db()
 local malformedBucketCount = bankLedger.MergeBucketRows(malformedBucketDb, {

@@ -6,6 +6,7 @@ ns.modules = ns.modules or {}
 local bankLedger = ns.modules.bankLedger or {}
 local ledgerIdentity = ns.modules.ledgerIdentity
 local ledgerManifest = ns.modules.ledgerManifest
+local runtimeByLedger = setmetatable({}, { __mode = "k" })
 
 if type(ledgerIdentity) ~= "table" and type(_G.dofile) == "function" then
     local ok, loaded = pcall(_G.dofile, "GBankManager/Domain/LedgerIdentity.lua")
@@ -839,12 +840,55 @@ local function rebuild_fingerprint_index(entries, fingerprintIndex, baseBuilder)
     end
 end
 
+local function runtime_for_ledger(ledger)
+    ledger = ensure_table(ledger)
+    local runtime = runtimeByLedger[ledger]
+    if runtime == nil then
+        runtime = {
+            itemFingerprints = {},
+            moneyFingerprints = {},
+            indexState = {
+                itemCount = -1,
+                moneyCount = -1,
+                itemDirty = true,
+                moneyDirty = true,
+                itemRebuilds = 0,
+                moneyRebuilds = 0,
+            },
+        }
+        runtimeByLedger[ledger] = runtime
+    end
+
+    runtime.itemFingerprints = ensure_table(runtime.itemFingerprints)
+    runtime.moneyFingerprints = ensure_table(runtime.moneyFingerprints)
+    runtime.indexState = ensure_table(runtime.indexState)
+    runtime.indexState.itemCount = tonumber(runtime.indexState.itemCount or -1) or -1
+    runtime.indexState.moneyCount = tonumber(runtime.indexState.moneyCount or -1) or -1
+    runtime.indexState.itemDirty = runtime.indexState.itemDirty == true
+    runtime.indexState.moneyDirty = runtime.indexState.moneyDirty == true
+    runtime.indexState.itemRebuilds = tonumber(runtime.indexState.itemRebuilds or 0) or 0
+    runtime.indexState.moneyRebuilds = tonumber(runtime.indexState.moneyRebuilds or 0) or 0
+    return runtime
+end
+
+local function mark_runtime_dirty(ledger, kind)
+    local runtime = runtime_for_ledger(ledger)
+    if kind == "item" then
+        runtime.indexState.itemDirty = true
+    elseif kind == "money" then
+        runtime.indexState.moneyDirty = true
+    else
+        runtime.indexState.itemDirty = true
+        runtime.indexState.moneyDirty = true
+    end
+end
+
 function bankLedger.EnsureState(db)
     db.bankLedger = ensure_table(db.bankLedger)
     db.bankLedger.itemLogs = ensure_table(db.bankLedger.itemLogs)
     db.bankLedger.moneyLogs = ensure_table(db.bankLedger.moneyLogs)
-    db.bankLedger.itemFingerprints = ensure_table(db.bankLedger.itemFingerprints)
-    db.bankLedger.moneyFingerprints = ensure_table(db.bankLedger.moneyFingerprints)
+    db.bankLedger.itemFingerprints = nil
+    db.bankLedger.moneyFingerprints = nil
     db.bankLedger.itemSourceSnapshots = ensure_table(db.bankLedger.itemSourceSnapshots)
     db.bankLedger.moneySourceSnapshots = ensure_table(db.bankLedger.moneySourceSnapshots)
     db.bankLedger.eventCounts = ensure_table(db.bankLedger.eventCounts)
@@ -856,12 +900,45 @@ function bankLedger.EnsureState(db)
     db.bankLedger.lastMoneyScanAt = tonumber(db.bankLedger.lastMoneyScanAt or 0) or 0
     ensure_settings(db)
 
-    rebuild_fingerprint_index(db.bankLedger.itemLogs, db.bankLedger.itemFingerprints, legacy_item_row_bases)
-    rebuild_fingerprint_index(db.bankLedger.moneyLogs, db.bankLedger.moneyFingerprints, function(entry)
-        return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
-    end)
+    local runtime = runtime_for_ledger(db.bankLedger)
+    local itemCount = #db.bankLedger.itemLogs
+    if runtime.indexState.itemDirty == true
+        or runtime.indexState.itemCount ~= itemCount
+        or legacy_index_requires_rebuild(db.bankLedger.itemLogs, runtime.itemFingerprints)
+    then
+        rebuild_fingerprint_index(db.bankLedger.itemLogs, runtime.itemFingerprints, legacy_item_row_bases)
+        runtime.indexState.itemCount = itemCount
+        runtime.indexState.itemDirty = false
+        runtime.indexState.itemRebuilds = runtime.indexState.itemRebuilds + 1
+    end
+
+    local moneyCount = #db.bankLedger.moneyLogs
+    if runtime.indexState.moneyDirty == true
+        or runtime.indexState.moneyCount ~= moneyCount
+        or legacy_index_requires_rebuild(db.bankLedger.moneyLogs, runtime.moneyFingerprints)
+    then
+        rebuild_fingerprint_index(db.bankLedger.moneyLogs, runtime.moneyFingerprints, function(entry)
+            return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
+        end)
+        runtime.indexState.moneyCount = moneyCount
+        runtime.indexState.moneyDirty = false
+        runtime.indexState.moneyRebuilds = runtime.indexState.moneyRebuilds + 1
+    end
 
     return db.bankLedger
+end
+
+function bankLedger.GetRuntimeIndexState(db)
+    local ledger = type((db or {}).bankLedger) == "table" and db.bankLedger or {}
+    local runtime = runtime_for_ledger(ledger)
+    return {
+        itemCount = runtime.indexState.itemCount,
+        moneyCount = runtime.indexState.moneyCount,
+        itemDirty = runtime.indexState.itemDirty,
+        moneyDirty = runtime.indexState.moneyDirty,
+        itemRebuilds = runtime.indexState.itemRebuilds,
+        moneyRebuilds = runtime.indexState.moneyRebuilds,
+    }
 end
 
 local function row_digest_token(kind, row)
@@ -1515,7 +1592,8 @@ local function normalize_item_rows(payload)
     for index, raw in ipairs(payload.transactions or {}) do
         local itemID = tonumber(raw.itemID or 0) or 0
         local itemName = trim(raw.itemName or raw.item or ("Item " .. tostring(itemID)))
-        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
+        local rowScanStartedAt = tonumber(raw.timestamp or raw.when or raw.scanStartedAt or scanStartedAt or 0) or 0
+        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, rowScanStartedAt)
         local action = item_action_label(raw.type)
         local fromTabName = trim(raw.fromTabName)
         local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
@@ -1576,7 +1654,8 @@ local function normalize_money_rows(payload)
 
     for index, raw in ipairs(payload.transactions or {}) do
         local amountCopper = tonumber(raw.amountCopper or raw.amount or 0) or 0
-        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, scanStartedAt)
+        local rowScanStartedAt = tonumber(raw.timestamp or raw.when or raw.scanStartedAt or scanStartedAt or 0) or 0
+        local timestamp = timestamp_from_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute, rowScanStartedAt)
         local action = money_action_label(raw.type, amountCopper, repairThresholdGold)
         local rowHasTimeParts = has_time_parts(raw.year, raw.month, raw.day, raw.hour, raw.minute)
         local fingerprintBase = money_fingerprint_bases({
@@ -1599,7 +1678,7 @@ local function normalize_money_rows(payload)
         normalizedRows[#normalizedRows + 1] = {
             timestamp = timestamp,
             when = timestamp,
-            scanStartedAt = scanStartedAt,
+            scanStartedAt = rowScanStartedAt,
             year = raw.year,
             month = raw.month,
             day = raw.day,
@@ -1754,7 +1833,11 @@ end
 function bankLedger.MergeItemTransactions(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}
+    if type(bankLedger.__debugMergeCounters) == "table" then
+        bankLedger.__debugMergeCounters.item = (tonumber(bankLedger.__debugMergeCounters.item or 0) or 0) + 1
+    end
     local ledger = bankLedger.EnsureState(db)
+    local runtime = runtime_for_ledger(ledger)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     local sourceKey, normalizedRows = normalize_item_rows(payload)
     local batchCounts = session_batch_counts(ledger).item
@@ -1763,7 +1846,7 @@ function bankLedger.MergeItemTransactions(db, payload)
     local mergedCount = append_delta_rows(
         ledger,
         ledger.itemLogs,
-        ledger.itemFingerprints,
+        runtime.itemFingerprints,
         ledger.itemSourceSnapshots,
         sourceKey,
         normalizedRows,
@@ -1779,13 +1862,20 @@ function bankLedger.MergeItemTransactions(db, payload)
     )
     batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "item")
+    if mergedCount > 0 then
+        mark_runtime_dirty(ledger, "item")
+    end
     return mergedCount
 end
 
 function bankLedger.MergeMoneyTransactions(db, payload)
     db = db or {}
     payload = type(payload) == "table" and payload or {}
+    if type(bankLedger.__debugMergeCounters) == "table" then
+        bankLedger.__debugMergeCounters.money = (tonumber(bankLedger.__debugMergeCounters.money or 0) or 0) + 1
+    end
     local ledger = bankLedger.EnsureState(db)
+    local runtime = runtime_for_ledger(ledger)
     local scanStartedAt = tonumber(payload.scanStartedAt or 0) or 0
     payload.repairThresholdGold = tonumber(payload.repairThresholdGold or bankLedger.GetSettings(db).repairThresholdGold or 5000) or 5000
     local sourceKey, normalizedRows = normalize_money_rows(payload)
@@ -1795,7 +1885,7 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     local mergedCount = append_delta_rows(
         ledger,
         ledger.moneyLogs,
-        ledger.moneyFingerprints,
+        runtime.moneyFingerprints,
         ledger.moneySourceSnapshots,
         sourceKey,
         normalizedRows,
@@ -1811,6 +1901,9 @@ function bankLedger.MergeMoneyTransactions(db, payload)
     )
     batchCounts[sourceKey] = currentBatchCounts
     bankLedger.MarkScanned(db, scanStartedAt, "money")
+    if mergedCount > 0 then
+        mark_runtime_dirty(ledger, "money")
+    end
     return mergedCount
 end
 
@@ -1836,6 +1929,9 @@ local function bucket_item_transaction(row)
         day = row.day,
         hour = row.hour,
         minute = row.minute,
+        timestamp = row.timestamp or row.when or row.scanStartedAt,
+        when = row.when or row.timestamp or row.scanStartedAt,
+        scanStartedAt = row.scanStartedAt or row.timestamp or row.when,
     }
 end
 
@@ -1851,6 +1947,9 @@ local function bucket_money_transaction(row)
         day = row.day,
         hour = row.hour,
         minute = row.minute,
+        timestamp = row.timestamp or row.when or row.scanStartedAt,
+        when = row.when or row.timestamp or row.scanStartedAt,
+        scanStartedAt = row.scanStartedAt or row.timestamp or row.when,
     }
 end
 
@@ -1883,28 +1982,66 @@ function bankLedger.MergeBucketRows(db, payload)
     payload = type(payload) == "table" and payload or {}
     local rows = type(payload.rows) == "table" and payload.rows or {}
     local mergedCount = 0
+    local itemGroups = {}
+    local itemGroupOrder = {}
+    local moneyTransactions = {}
+    local moneyScanStartedAt = 0
 
     for _, row in ipairs(type(rows.item) == "table" and rows.item or {}) do
         if bucket_item_row_is_valid(row) then
-            mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
-                scanStartedAt = row_timestamp(row),
-                sourceTabIndex = row.tabIndex or row.sourceTabIndex,
-                sourceTabName = row.tabName or row.sourceTabName,
-                allowSuspiciousUnknownAppend = true,
-                transactions = { bucket_item_transaction(row) },
-            }) or 0) or 0)
+            local sourceTabIndex = tonumber(row.tabIndex or row.sourceTabIndex or 0) or 0
+            local sourceTabName = tostring(row.tabName or row.sourceTabName or ("Tab " .. tostring(sourceTabIndex)))
+            local groupKey = tostring(sourceTabIndex) .. "\31" .. sourceTabName
+            local group = itemGroups[groupKey]
+            if type(group) ~= "table" then
+                group = {
+                    scanStartedAt = 0,
+                    sourceTabIndex = sourceTabIndex,
+                    sourceTabName = sourceTabName,
+                    transactions = {},
+                }
+                itemGroups[groupKey] = group
+                itemGroupOrder[#itemGroupOrder + 1] = groupKey
+            end
+
+            local timestamp = row_timestamp(row)
+            if group.scanStartedAt <= 0 or (timestamp > 0 and timestamp < group.scanStartedAt) then
+                group.scanStartedAt = timestamp
+            end
+            group.transactions[#group.transactions + 1] = bucket_item_transaction(row)
         end
     end
 
     for _, row in ipairs(type(rows.money) == "table" and rows.money or {}) do
         if bucket_money_row_is_valid(row) then
-            mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
-                scanStartedAt = row_timestamp(row),
-                repairThresholdGold = 0,
+            local timestamp = row_timestamp(row)
+            if moneyScanStartedAt <= 0 or (timestamp > 0 and timestamp < moneyScanStartedAt) then
+                moneyScanStartedAt = timestamp
+            end
+            moneyTransactions[#moneyTransactions + 1] = bucket_money_transaction(row)
+        end
+    end
+
+    for _, groupKey in ipairs(itemGroupOrder) do
+        local group = itemGroups[groupKey]
+        if type(group) == "table" and #group.transactions > 0 then
+            mergedCount = mergedCount + (tonumber(bankLedger.MergeItemTransactions(db, {
+                scanStartedAt = group.scanStartedAt,
+                sourceTabIndex = group.sourceTabIndex,
+                sourceTabName = group.sourceTabName,
                 allowSuspiciousUnknownAppend = true,
-                transactions = { bucket_money_transaction(row) },
+                transactions = group.transactions,
             }) or 0) or 0)
         end
+    end
+
+    if #moneyTransactions > 0 then
+        mergedCount = mergedCount + (tonumber(bankLedger.MergeMoneyTransactions(db, {
+            scanStartedAt = moneyScanStartedAt,
+            repairThresholdGold = 0,
+            allowSuspiciousUnknownAppend = true,
+            transactions = moneyTransactions,
+        }) or 0) or 0)
     end
 
     return mergedCount
@@ -1915,6 +2052,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
     payload = type(payload) == "table" and payload or {}
 
     local ledger = bankLedger.EnsureState(db)
+    local runtime = runtime_for_ledger(ledger)
     local kind = tostring(payload.kind or "")
     if kind == "item" then
         local sourceKey, normalizedRows = normalize_item_rows(payload)
@@ -1922,7 +2060,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.itemLogs,
-            ledger.itemFingerprints,
+            runtime.itemFingerprints,
             ledger.itemSourceSnapshots,
             sourceKey,
             normalizedRows,
@@ -1935,6 +2073,9 @@ function bankLedger.MergeRemoteDelta(db, payload)
             }
         )
         reconcile_remote_batch_counts(ledger, "item", sourceKey, ledger.itemSourceSnapshots, normalizedRows)
+        if mergedCount > 0 then
+            mark_runtime_dirty(ledger, "item")
+        end
         return mergedCount
     end
 
@@ -1945,7 +2086,7 @@ function bankLedger.MergeRemoteDelta(db, payload)
         local mergedCount = append_delta_rows(
             ledger,
             ledger.moneyLogs,
-            ledger.moneyFingerprints,
+            runtime.moneyFingerprints,
             ledger.moneySourceSnapshots,
             sourceKey,
             normalizedRows,
@@ -1958,6 +2099,9 @@ function bankLedger.MergeRemoteDelta(db, payload)
             }
         )
         reconcile_remote_batch_counts(ledger, "money", sourceKey, ledger.moneySourceSnapshots, normalizedRows)
+        if mergedCount > 0 then
+            mark_runtime_dirty(ledger, "money")
+        end
         return mergedCount
     end
 
@@ -2134,10 +2278,17 @@ function bankLedger.ApplyDedupePlan(db, plan)
     batchCounts.item = {}
     batchCounts.money = {}
 
-    rebuild_fingerprint_index(ledger.itemLogs, ledger.itemFingerprints, legacy_item_row_bases)
-    rebuild_fingerprint_index(ledger.moneyLogs, ledger.moneyFingerprints, function(entry)
+    local runtime = runtime_for_ledger(ledger)
+    rebuild_fingerprint_index(ledger.itemLogs, runtime.itemFingerprints, legacy_item_row_bases)
+    runtime.indexState.itemCount = #ledger.itemLogs
+    runtime.indexState.itemDirty = false
+    runtime.indexState.itemRebuilds = runtime.indexState.itemRebuilds + 1
+    rebuild_fingerprint_index(ledger.moneyLogs, runtime.moneyFingerprints, function(entry)
         return legacy_money_row_bases(entry, ensure_settings(db).repairThresholdGold)
     end)
+    runtime.indexState.moneyCount = #ledger.moneyLogs
+    runtime.indexState.moneyDirty = false
+    runtime.indexState.moneyRebuilds = runtime.indexState.moneyRebuilds + 1
 
     return {
         itemRemoved = itemRemoved,
@@ -2389,11 +2540,20 @@ end
 function bankLedger.PruneRetention(db, now)
     db = db or {}
     local ledger = bankLedger.EnsureState(db)
+    local runtime = runtime_for_ledger(ledger)
     local settings = ensure_settings(db)
     now = tonumber(now or 0) or 0
 
-    ledger.itemLogs = prune_list(ledger.itemLogs, ledger.itemFingerprints, retention_cutoff(settings.ledgerRetention, now))
-    ledger.moneyLogs = prune_list(ledger.moneyLogs, ledger.moneyFingerprints, retention_cutoff(settings.ledgerRetention, now))
+    local previousItemCount = #ledger.itemLogs
+    local previousMoneyCount = #ledger.moneyLogs
+    ledger.itemLogs = prune_list(ledger.itemLogs, runtime.itemFingerprints, retention_cutoff(settings.ledgerRetention, now))
+    ledger.moneyLogs = prune_list(ledger.moneyLogs, runtime.moneyFingerprints, retention_cutoff(settings.ledgerRetention, now))
+    if #ledger.itemLogs ~= previousItemCount then
+        mark_runtime_dirty(ledger, "item")
+    end
+    if #ledger.moneyLogs ~= previousMoneyCount then
+        mark_runtime_dirty(ledger, "money")
+    end
 
     local historyCutoff = retention_cutoff(settings.historyRetention, now)
     if historyCutoff ~= nil then

@@ -14,6 +14,32 @@ _G.GetGuildInfo = function()
     return "Guild Testers", "Guild Master", 0
 end
 
+_G.__guildRoster = {
+    {
+        name = "MemberOne",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+    {
+        name = "GuildLead",
+        rankName = "Guild Master",
+        rankIndex = 0,
+        online = true,
+    },
+}
+_G.GetNumGuildMembers = function()
+    return #_G.__guildRoster
+end
+_G.GetGuildRosterInfo = function(index)
+    local row = _G.__guildRoster[index]
+    if type(row) ~= "table" then
+        return nil
+    end
+
+    return row.name, row.rankName, row.rankIndex, nil, nil, nil, nil, nil, row.online
+end
+
 local _, ns = assert.load_addon_from_toc("GBankManager/GBankManager.toc")
 
 local chatOutput = ns.modules.chatOutput

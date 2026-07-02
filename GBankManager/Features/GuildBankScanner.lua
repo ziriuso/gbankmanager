@@ -1268,6 +1268,9 @@ function scanner.FinishScan(actor, guildName, previousSnapshot)
     local pendingLedgerScanOptions = scanner.pendingLedgerScanOptions
     scanner.pendingLedgerScanAfterInventory = false
     scanner.pendingLedgerScanOptions = nil
+    if store and type(store.InvalidateDatabaseCache) == "function" then
+        store.InvalidateDatabaseCache("fresh_scan")
+    end
     if shouldBeginLedgerScan then
         scanner.BeginLedgerScan(pendingLedgerScanOptions)
     end

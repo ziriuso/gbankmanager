@@ -8,12 +8,12 @@
   - worktree: `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
   - branch: `codex/gbankmanager-v1`
   - base release at session start was `v1.2.2` on commit `821ab88` (`chore: prepare 1.2.2 release`)
-  - local work is an unreleased follow-up to later Retail two-client sync findings and now targets `v1.2.4`; do not treat it as part of the published `v1.2.2` asset
+  - local work is an unreleased follow-up to later Retail two-client sync findings and now targets `v1.3.0`; do not treat it as part of the published `v1.2.2` asset
 - Additional live duplicate-money report:
   - Client B saved variables showed three visible sets of duplicate Bank Ledger money rows, while Client A showed two sets; item logs looked accurate
   - the duplicate money rows shared Blizzard's raw relative fields (`year/month/day = 0/0/0` plus the same visible hour), actor, action, and amount, but had different addon-minted absolute timestamps and fingerprints from later scans or sync
   - current timestamp-date fallback therefore hid the duplicates from the existing visible-dedupe and cleanup grouping
-  - v1.2.4 should preserve item ledger rows while cleaning only duplicate money-ledger rows and preventing fixed clients from accepting the same duplicate money rows again
+  - v1.3.0 should preserve item ledger rows while cleaning only duplicate money-ledger rows and preventing fixed clients from accepting the same duplicate money rows again
 - Additional live item-ledger catch-up report:
   - after Client B had item ledger rows that Client A lacked, the rows did not arrive on A until `Sync Ledger` was pressed on B
   - comparing the later SavedVariables showed A had the rows after the forced sync, confirming manifest/bucket transfer worked once B announced its manifest
@@ -43,7 +43,7 @@
   - remote money delta merge now uses the same replay bridge as local money scans
   - internal ledger dedupe planning still flags existing duplicate raw relative money rows by visible relative hour, actor, action, and amount for regression coverage, but the manual `Options -> Data -> Dedupe Ledger` button is hidden
   - no-change ledger scans now send a throttled `LEDGER_MANIFEST` when known guild peers may be stale, so a fuller client can advertise existing item or money rows without waiting for manual `Sync Ledger`
-  - `GBankManager.toc` and the addon version fallback now advertise `1.2.4` / `v1.2.4`
+  - `GBankManager.toc` and the addon version fallback now advertise `1.3.0` / `v1.3.0`
   - load-time normalization now runs a one-time money-only cleanup when `meta.moneyLedgerDedupedForVersion` is not `1.2.3-money-v7`, removes duplicate money rows, clears polluted money caches plus stale ledger sync debug state, and preserves item ledger rows; v7 intentionally reruns recovery for clients that may have stamped v6 while still carrying drifted 5000g/5001g deposit duplicates
   - local money scans now suppress short-window raw-relative deposit replays by scan timestamp, so Blizzard money rows whose visible relative hour drifts during a bank-open rescan cannot regrow duplicates after cleanup
   - `LEDGER_PROTOCOL_VERSION = 3` rejects older same-version protocol-2 ledger manifest, bucket, and direct delta payloads as `old_ledger_protocol`, preventing older 1.2.3 builds from re-poisoning cleaned money ledgers

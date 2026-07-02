@@ -14,6 +14,32 @@ _G.GetGuildInfo = function()
     return "Guild Testers", "Officer", 1
 end
 
+_G.__guildRoster = {
+    {
+        name = "MemberOne",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+    {
+        name = "SyncTester",
+        rankName = "Officer",
+        rankIndex = 1,
+        online = true,
+    },
+}
+_G.GetNumGuildMembers = function()
+    return #_G.__guildRoster
+end
+_G.GetGuildRosterInfo = function(index)
+    local row = _G.__guildRoster[index]
+    if type(row) ~= "table" then
+        return nil
+    end
+
+    return row.name, row.rankName, row.rankIndex, nil, nil, nil, nil, nil, row.online
+end
+
 local manifest = _G.dofile("GBankManager/Domain/LedgerManifest.lua")
 
 local rows = {
@@ -60,7 +86,7 @@ local differentEntryId = manifest.Build({
     },
     moneyLogs = {},
 }, { ledgerProtocol = 2, version = "1.2.0" })
-assert.truthy(sameFingerprint.globalHash ~= differentEntryId.globalHash, "manifest hashes should prefer entry IDs over shared row fingerprints")
+assert.equal(sameFingerprint.globalHash, differentEntryId.globalHash, "manifest hashes should prefer shared row fingerprints over per-client entry IDs")
 
 local matching = manifest.Compare(built, manifest.Build(ledger, { ledgerProtocol = 2, version = "1.2.0" }))
 assert.truthy(matching.matched == true, "matching manifests should report matched")
@@ -136,6 +162,9 @@ end
 local syncDb = ns.state.db
 syncDb.meta = syncDb.meta or {}
 syncDb.meta.guildName = "Guild Testers"
+syncDb.auth = syncDb.auth or {}
+syncDb.auth.capabilities = syncDb.auth.capabilities or {}
+syncDb.auth.capabilities.full_ui = { [1] = true }
 syncDb.ui = syncDb.ui or {}
 syncDb.ui.chatSettings = syncDb.ui.chatSettings or {}
 syncDb.ui.chatSettings.suppressRoutineMessages = false

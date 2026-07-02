@@ -4252,6 +4252,12 @@ mainFrame.closeButton:SetScript("OnClick", function()
     mainFrame:Hide()
 end)
 
+mainFrame:SetScript("OnShow", function(self)
+    if type(self.ConsumeDeferredSyncRefresh) == "function" then
+        self:ConsumeDeferredSyncRefresh()
+    end
+end)
+
 mainFrame.sidebarButtons = mainFrame.sidebarButtons or {}
 for index, item in ipairs(mainFrame.navItems) do
     local button = mainFrame.sidebarButtons[index] or make_button(mainFrame.sidebar, theme.spacing.sidebarExpanded - 32, 32, item.label)
@@ -5182,8 +5188,9 @@ function mainFrame:RefreshView()
         self:ApplyMinimumFilters()
         showTable = true
     elseif self.activeView == "REQUESTS" then
+        local requestSearchSnapshot = self:GetRequestSearchSnapshot()
         for _, request in ipairs(db.requests or {}) do
-            self:BackfillRequestCraftedTier(request)
+            self:BackfillRequestCraftedTier(request, requestSearchSnapshot)
         end
         local rows = requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState(), self.requestAdminFilterMode or "ALL")
         if not self:GetSelectedRequest() and self.suppressNextRequestAutoSelect ~= true then
@@ -5382,6 +5389,34 @@ function mainFrame:RefreshView()
     end
 end
 
+function mainFrame:ConsumeDeferredSyncRefresh()
+    if self.syncViewsDirty == true and type(self.RefreshView) == "function" and (type(self.IsShown) ~= "function" or self:IsShown()) then
+        self.syncViewsDirty = nil
+        self:RefreshView()
+    end
+end
+
+function mainFrame:ApplyRequestFilters()
+    local requestsView = ns.modules.requestsView
+    local tableLayouts = ns.modules.tableLayouts
+    local db = current_db()
+    local accessProfile, authContext = current_access_profile(db)
+    local rows = requestsView and type(requestsView.BuildTableRows) == "function"
+        and requestsView.BuildTableRows(db.requests or {}, authContext, accessProfile, self:GetSharedFilterState(), self.requestAdminFilterMode or "ALL")
+        or {}
+    local compactRequestMode = request_only_layout(self)
+    local requestColumns = compactRequestMode
+        and tableLayouts and tableLayouts.GetRequestStatusColumns and tableLayouts.GetRequestStatusColumns()
+        or tableLayouts and tableLayouts.GetRequestAdminColumns and tableLayouts.GetRequestAdminColumns()
+        or {}
+
+    self.tableScrollOffset = 0
+    self:ConfigureTable(requestColumns, rows)
+    self:RefreshVisibleTableRows()
+    self:RefreshRequestActionButtons()
+    return rows
+end
+
 for _, input in ipairs(mainFrame.tableFilterInputs) do
     input:SetScript("OnTextChanged", function()
         if mainFrame.isConfiguringTable then
@@ -5396,7 +5431,7 @@ for _, input in ipairs(mainFrame.tableFilterInputs) do
         elseif mainFrame.activeView == "BANK_LEDGER" then
             mainFrame:RefreshBankLedgerTable()
         elseif mainFrame.activeView == "REQUESTS" and mainFrame.requestOnlyMode ~= true then
-            mainFrame:RefreshView()
+            mainFrame:ApplyRequestFilters()
         end
     end)
 end

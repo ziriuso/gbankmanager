@@ -95,7 +95,11 @@ local function receive_chunked_payload(payload, distribution, sender)
     end
 
     transport.chunkBuffers[key] = nil
-    return codec.DecodeTable(buffer), "complete"
+    local decoded = codec.DecodeTable(buffer)
+    if decoded == nil then
+        return nil, "invalid"
+    end
+    return decoded, "complete"
 end
 
 local function normalize_target(distribution, target)
@@ -168,11 +172,18 @@ function transport.Receive(payload, distribution, sender)
     if decodedPayload then
         return decodedPayload, "complete"
     end
+    if tostring(payload or "") ~= "" then
+        return nil, "invalid"
+    end
 
     if transport.Initialize() then
         local received = pop_received_message()
         if received ~= nil then
-            return codec.DecodeTable(received.message), "complete"
+            local decodedReceived = codec.DecodeTable(received.message)
+            if decodedReceived == nil then
+                return nil, "invalid"
+            end
+            return decodedReceived, "complete"
         end
         return nil, "partial"
     end

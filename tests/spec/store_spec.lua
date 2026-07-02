@@ -88,6 +88,22 @@ local futureDb = {
     syncState = "broken",
 }
 local normalizedFuture = migrations and migrations.Apply(futureDb)
+local compactedFingerprintRoot = migrations and migrations.Apply({
+    meta = {
+        guildName = "Fingerprint Legacy",
+        schemaVersion = 1,
+    },
+    bankLedger = {
+        itemLogs = {},
+        moneyLogs = {},
+        itemFingerprints = {
+            staleItem = true,
+        },
+        moneyFingerprints = {
+            staleMoney = true,
+        },
+    },
+}, "Fingerprint Legacy")
 local isolatedRoot = store and store.Normalize({
     guilds = {
         ["Guild Testers"] = defaults.CreateDatabase("Guild Testers"),
@@ -154,6 +170,8 @@ assert.equal(1, db.meta.schemaVersion, "fresh db should use schema version 1")
 assert.equal("My Guild", db.meta.guildName, "guild name should be stored")
 assert.truthy(db.requests ~= nil, "requests table should exist")
 assert.truthy(type(db.bankLedger) == "table", "fresh db should include a bank ledger container")
+assert.equal(nil, db.bankLedger.itemFingerprints, "fresh db should not persist runtime item fingerprint indexes")
+assert.equal(nil, db.bankLedger.moneyFingerprints, "fresh db should not persist runtime money fingerprint indexes")
 assert.truthy(type(db.testing) == "table", "fresh db should include a testing container for smoke persistence")
 assert.truthy(type(db.testing.liveSmoke) == "table", "fresh db should include a live-smoke persistence container")
 assert.truthy(type(db.testing.inGameUnit) == "table", "fresh db should include an in-game-unit persistence container")
@@ -175,6 +193,10 @@ assert.equal(0, ((((_G.GBankManagerDB.guilds or {})["My Guild"] or {}).meta or {
 assert.truthy(type(((normalizedMalformed.guilds or {}).Unknown or {}).meta) == "table", "migrations should repair malformed meta containers")
 assert.truthy(type(((normalizedMalformed.guilds or {}).Unknown or {}).syncState) == "table", "migrations should repair malformed sync state containers")
 assert.equal(1, (((normalizedMalformed.guilds or {}).Unknown or {}).meta or {}).schemaVersion, "migrations should apply v1 schema to malformed data")
+local compactedFingerprintDb = ((compactedFingerprintRoot.guilds or {})["Fingerprint Legacy"] or compactedFingerprintRoot)
+assert.equal(nil, (compactedFingerprintDb.bankLedger or {}).itemFingerprints, "migrations should remove persisted item fingerprint indexes")
+assert.equal(nil, (compactedFingerprintDb.bankLedger or {}).moneyFingerprints, "migrations should remove persisted money fingerprint indexes")
+assert.equal("2026-07-02-runtime-indexes", (compactedFingerprintDb.meta or {}).ledgerFingerprintIndexesCompactedForVersion, "migrations should record the ledger fingerprint compaction marker")
 assert.same(futureDb, normalizedFuture, "migrations should return the same table for newer schemas")
 assert.equal(99, normalizedFuture.meta.schemaVersion, "migrations should preserve newer schema versions")
 assert.equal("Future Guild", normalizedFuture.meta.guildName, "migrations should preserve newer schema metadata")
@@ -695,6 +717,68 @@ local reboundDb = store.GetDatabase("Persisted Guild")
 assert.same(persistedDb, reboundDb, "store database accessor should prefer the populated runtime state when the saved-variables global is empty")
 assert.same(persisted, _G.GBankManagerDB, "store database accessor should keep the saved-variables root aligned")
 assert.same(persistedDb, ns.state.db, "store database accessor should keep the active guild db aligned in runtime state")
+
+assert.truthy(type(store.InvalidateDatabaseCache) == "function", "store should expose explicit database-cache invalidation")
+
+local cacheRoot = store.Normalize({
+    activeGuildKey = "Cache Guild",
+    guilds = {
+        ["Cache Guild"] = defaults.CreateDatabase("Cache Guild"),
+        ["Cache Alts"] = defaults.CreateDatabase("Cache Alts"),
+    },
+}, "Cache Guild")
+cacheRoot.guilds["Cache Guild"].ui.logsHistorySettings.ledgerRetention = "1_week"
+cacheRoot.guilds["Cache Alts"].ui.logsHistorySettings.ledgerRetention = "1_week"
+_G.GBankManagerDB = cacheRoot
+ns.state.dbRoot = cacheRoot
+ns.state.db = cacheRoot.guilds["Cache Guild"]
+store.InvalidateDatabaseCache("cache_contract_setup")
+
+local originalApply = migrations.Apply
+local originalApplyDatabase = migrations.ApplyDatabase
+local originalPruneRetention = ns.modules.bankLedger.PruneRetention
+local migrationApplyCount = 0
+local pruneRetentionCount = 0
+local cacheNow = 1717000000
+migrations.Apply = function(...)
+    migrationApplyCount = migrationApplyCount + 1
+    return originalApply(...)
+end
+migrations.ApplyDatabase = function(...)
+    migrationApplyCount = migrationApplyCount + 1
+    return originalApplyDatabase(...)
+end
+ns.modules.bankLedger.PruneRetention = function(...)
+    pruneRetentionCount = pruneRetentionCount + 1
+    return originalPruneRetention(...)
+end
+_G.time = function()
+    return cacheNow
+end
+
+local firstCacheDb = store.GetDatabase("Cache Guild")
+local migrationCountAfterFirstGet = migrationApplyCount
+local secondCacheDb = store.GetDatabase("Cache Guild")
+assert.same(firstCacheDb, secondCacheDb, "repeated store database access should return the active cached guild table")
+assert.equal(migrationCountAfterFirstGet, migrationApplyCount, "repeated store database access should not rerun migrations while the cache is valid")
+assert.same(firstCacheDb, ns.state.db, "cached store access should keep runtime state bound to the active guild db")
+assert.equal(1, pruneRetentionCount, "cached store access should prune finite retention at most once inside the throttle window")
+
+local altCacheDb = store.GetDatabase("Cache Alts")
+assert.same(cacheRoot.guilds["Cache Alts"], altCacheDb, "requesting a different guild should rebind the cached active guild db")
+assert.truthy(altCacheDb ~= firstCacheDb, "requesting a different guild should not reuse the previous guild table")
+
+store.InvalidateDatabaseCache("sync_merge")
+local migrationCountBeforeInvalidatedGet = migrationApplyCount
+local invalidatedCacheDb = store.GetDatabase("Cache Alts")
+assert.same(altCacheDb, invalidatedCacheDb, "invalidated cache should normalize back to the requested guild table")
+assert.truthy(migrationApplyCount > migrationCountBeforeInvalidatedGet, "explicit invalidation should force the next store access through normalization")
+
+migrations.Apply = originalApply
+migrations.ApplyDatabase = originalApplyDatabase
+ns.modules.bankLedger.PruneRetention = originalPruneRetention
+_G.time = originalTime
+store.InvalidateDatabaseCache("cache_contract_teardown")
 
 local clearDb = store.Normalize({
     meta = {
