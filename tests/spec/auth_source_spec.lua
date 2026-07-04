@@ -144,6 +144,35 @@ assert.truthy(db.auth.capabilities.full_ui[1] == true, "guild-info pull should r
 assert.equal(250, db.ui.minimumSettings.defaultQuantity, "guild-info pull should restore the shared restock default into options settings")
 assert.equal(40, db.ui.minimumSettings.criticalThresholdPercent, "guild-info pull should restore the shared critical shortage threshold into options settings")
 
+local originalInCombatLockdown = _G.InCombatLockdown
+local originalGetInfoText = _G.C_GuildInfo.GetInfoText
+local combatReadCalled = false
+_G.InCombatLockdown = function()
+    return true
+end
+_G.C_GuildInfo.GetInfoText = function()
+    combatReadCalled = true
+    error("protected guild info read should not run in combat")
+end
+
+local combatPullOk, combatPullReason = source.PullPolicyFromGuildInfo(db)
+assert.truthy(combatPullOk == false, "guild-info pull should skip protected reads while the player is in combat")
+assert.equal("combat_lockdown", combatPullReason, "guild-info pull should report combat lockdown instead of surfacing a protected API error")
+assert.truthy(combatReadCalled == false, "guild-info pull should not call C_GuildInfo.GetInfoText during combat")
+
+_G.C_GuildInfo.GetInfoText = originalGetInfoText
+_G.InCombatLockdown = originalInCombatLockdown
+
+_G.C_GuildInfo.GetInfoText = function()
+    error("protected guild info read was blocked")
+end
+
+local blockedPullOk, blockedPullReason = source.PullPolicyFromGuildInfo(db)
+assert.truthy(blockedPullOk == false, "guild-info pull should convert blocked protected reads into a normal failure result")
+assert.equal("read_blocked", blockedPullReason, "guild-info pull should report blocked reads without surfacing a Lua error")
+
+_G.C_GuildInfo.GetInfoText = originalGetInfoText
+
 local exportedPolicyString = source.ExportPolicyString(db)
 assert.truthy(type(exportedPolicyString) == "string" and string.find(exportedPolicyString, "[GBMAUTH:", 1, true) ~= nil, "auth policy export should return the durable guild-info snippet")
 

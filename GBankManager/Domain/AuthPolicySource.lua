@@ -19,6 +19,10 @@ local function read_guild_info_text()
     return ""
 end
 
+local function is_combat_locked()
+    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+end
+
 local function write_guild_info_text(text)
     local wrote = false
 
@@ -211,7 +215,16 @@ function source.ApplyPolicyString(db, policyString, options)
 end
 
 function source.PullPolicyFromGuildInfo(db, options)
-    local policyString = codec.ExtractPolicyString(read_guild_info_text())
+    if is_combat_locked() then
+        return false, "combat_lockdown"
+    end
+
+    local readOk, infoText = pcall(read_guild_info_text)
+    if not readOk then
+        return false, "read_blocked"
+    end
+
+    local policyString = codec.ExtractPolicyString(infoText)
     if not policyString then
         return false, "missing_snippet"
     end
