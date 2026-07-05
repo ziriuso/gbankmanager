@@ -128,7 +128,9 @@ Supported named targets:
 
 By default the tooling resolves those targets through `Resolve-WoWTarget.ps1`. You can still override the install root explicitly with `-WoWRoot` when a maintainer machine uses a non-default path.
 
-On current Blizzard installs, `PTR` may appear as `_xptr_` with shared extracted data under `Data\wowxptr` instead of the older `_ptr_\Data\...` layout. The maintainer resolver and refresh shell now accept both layouts.
+On current Blizzard installs, `PTR` may appear as `_xptr_` with shared extracted data under `Data\wowxptr` instead of the older `_ptr_\Data\...` layout. The 12.1 PTR on this machine resolves as `_ptr_` with shared product data under `Data\wowt`. The maintainer resolver and refresh shell now accept both layouts.
+
+If a PTR refresh reaches `ItemSparse.db2` and then fails with `Unable to download DBD for ItemSparse`, refresh the ignored wow.export DBD cache before retrying. For the 12.1 PTR build `12.1.0.68412`, `ItemSparse.dbd` must include that build under layout `1C17D17F`.
 
 ## Deploy Notes
 

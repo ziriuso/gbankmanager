@@ -8,7 +8,7 @@ end
 
 bootstrap.Finalize({
     source = "local_client_item_db2",
-    generatedAt = "2026-06-02",
-    itemCount = 5969,
-    tokenCount = 3934,
+    generatedAt = "2026-07-05",
+    itemCount = 7754,
+    tokenCount = 4619,
 })
