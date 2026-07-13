@@ -456,7 +456,7 @@ function Write-IndexedToc {
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("## Interface: 120007, 120005")
+    $lines.Add("## Interface: 120100, 120007, 120005")
     $lines.Add("## Title: GBankManager Item Data")
     $lines.Add("## Notes: Bundled item search data for GBankManager")
     $lines.Add("## Author: ziriuso")

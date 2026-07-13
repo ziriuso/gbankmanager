@@ -1,4 +1,4 @@
-## Interface: 120007, 120005
+## Interface: 120100, 120007, 120005
 ## Title: GBankManager Item Data
 ## Notes: Bundled item search data for GBankManager
 ## Author: ziriuso
@@ -11,6 +11,8 @@ Generated/Items_003.lua
 Generated/Items_004.lua
 Generated/Items_005.lua
 Generated/Items_006.lua
+Generated/Items_007.lua
+Generated/Items_008.lua
 Generated/Tokens_001.lua
 Generated/Tokens_002.lua
 Generated/Tokens_003.lua
@@ -19,4 +21,6 @@ Generated/Tokens_005.lua
 Generated/Tokens_006.lua
 Generated/Tokens_007.lua
 Generated/Tokens_008.lua
+Generated/Tokens_009.lua
+Generated/Tokens_010.lua
 Generated/Finalize.lua
