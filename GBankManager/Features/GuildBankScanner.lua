@@ -961,16 +961,12 @@ function scanner.OnGuildBankTabsUpdated()
         return false
     end
 
-    local db = current_db()
-    if (not scanner.scanInProgress or scanner.waitingForTab == nil) and scanner.pendingAutoScan then
-        scanner.RetryPendingAutoScan()
+    if scanner.guildBankOpen ~= true and not scanner.scanInProgress then
+        return scanner.OnGuildBankOpened()
     end
 
-    if auto_scan_allowed(db) then
-        scanner.pendingAutoScan = true
-        scanner.autoScanRetryCount = 0
+    if (not scanner.scanInProgress or scanner.waitingForTab == nil) and scanner.pendingAutoScan then
         scanner.RetryPendingAutoScan()
-        return true
     end
 
     if scanner.pendingLedgerAutoScan and scanner.scanInProgress then
@@ -1077,16 +1073,12 @@ function scanner.OnGuildBankSlotsChanged(tabIndex, scanSource)
         return tabIndex
     end
 
+    if scanner.guildBankOpen ~= true and not scanner.scanInProgress then
+        scanner.OnGuildBankOpened()
+        return tabIndex
+    end
+
     if not scanner.scanInProgress or scanner.waitingForTab == nil then
-        if not scanner.scanInProgress and not scanner.pendingAutoScan then
-            local db = current_db()
-            if auto_scan_allowed(db) then
-                scanner.pendingAutoScan = true
-                scanner.autoScanRetryCount = 0
-                scanner.RetryPendingAutoScan()
-                return tabIndex
-            end
-        end
         if scanner.pendingAutoScan then
             scanner.RetryPendingAutoScan()
         end

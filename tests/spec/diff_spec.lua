@@ -265,6 +265,7 @@ local originalTime = _G.time
 local originalBeginScan = scanner.BeginScan
 local originalReadCurrentTab = scanner.ReadCurrentTab
 local originalRetryPendingAutoScan = scanner.RetryPendingAutoScan
+local originalGuildBankFrameForAutoScan = _G.GuildBankFrame
 local originalMessages = _G.DEFAULT_CHAT_FRAME.messages
 local autoScanCalls = 0
 _G.time = function()
@@ -278,6 +279,8 @@ scanner.scanInProgress = false
 scanner.BeginScan = function()
     autoScanCalls = autoScanCalls + 1
     scanner.scanInProgress = true
+    scanner.pendingAutoScan = false
+    scanner.autoScanRetryCount = 0
     return "Scanning 0/2 tabs"
 end
 
@@ -287,19 +290,39 @@ scanner.OnGuildBankOpened()
 assert.equal(1, autoScanCalls, "opening the guild bank should auto-scan when there is no prior scan timestamp")
 
 scanner.scanInProgress = false
-ns.state.db.meta.updatedAt = 0
-scanner.pendingAutoScan = false
+ns.state.db.meta.updatedAt = 1000
+_G.time = function()
+    return 2000
+end
 scanner.OnGuildBankTabsUpdated()
-assert.equal(2, autoScanCalls, "guild bank tab updates should also be able to start the first auto-scan if the open event was missed or premature")
+scanner.OnGuildBankSlotsChanged()
+assert.equal(1, autoScanCalls, "switching tabs while the same guild bank window remains open should not start another inventory auto-scan")
 
 scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 0
 scanner.pendingAutoScan = false
+scanner.guildBankOpen = false
+_G.GuildBankFrame = {
+    IsShown = function()
+        return true
+    end,
+}
+scanner.OnGuildBankTabsUpdated()
+assert.equal(2, autoScanCalls, "guild bank tab updates should recover the first auto-scan if the open event was missed or premature")
+
+scanner.scanInProgress = false
+ns.state.db.meta.updatedAt = 0
+scanner.pendingAutoScan = false
+scanner.guildBankOpen = false
 scanner.OnGuildBankSlotsChanged()
-assert.equal(3, autoScanCalls, "guild bank slot updates should also be able to start the first auto-scan if both the open event and tab-update wakeup were missed")
+assert.equal(3, autoScanCalls, "guild bank slot updates should recover the first auto-scan if both the open event and tab-update wakeup were missed")
+_G.GuildBankFrame = originalGuildBankFrameForAutoScan
 
 scanner.scanInProgress = false
 ns.state.db.meta.updatedAt = 500
+_G.time = function()
+    return 1000
+end
 scanner.OnGuildBankOpened()
 assert.equal(3, autoScanCalls, "opening the guild bank within the throttle window should skip auto-scan")
 
@@ -370,6 +393,7 @@ assert.equal("GBankManager: Guild bank scan started (2 tabs).", _G.DEFAULT_CHAT_
 assert.truthy(_G.DEFAULT_CHAT_FRAME.messages[2] == nil, "scanner should not spam per-tab progress into chat")
 
 _G.time = originalTime
+_G.GuildBankFrame = originalGuildBankFrameForAutoScan
 _G.DEFAULT_CHAT_FRAME.messages = originalMessages
 ns.state.db.ui.chatSettings.suppressRoutineMessages = true
 
