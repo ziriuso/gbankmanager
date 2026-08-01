@@ -7,7 +7,7 @@ description: Use when handling a GBankManager alpha, beta, or release publish fr
 
 ## Overview
 
-Run the repo's full release flow for `GBankManager`: verify the addon, finalize the current checkpoint, create and push the correct tag, watch the `release-curseforge.yml` workflow, confirm the GitHub Release artifact, and handle release-failure follow-up when the workflow breaks.
+Run the repo's full release flow for `GBankManager`: verify the addon, finalize the current checkpoint, merge it through a pull request, tag the merged default-branch commit, watch the `release-curseforge.yml` workflow, confirm the GitHub Release artifact, and handle release-failure follow-up when the workflow breaks.
 
 This skill is repo-specific. Use it only in the `GBankManager` worktree and keep the release docs truthful whenever the release path changes.
 
@@ -26,8 +26,9 @@ Use these to confirm the current publish contract before creating or fixing a re
 
 Confirm all of these before publishing:
 
-- repo is `C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1`
-- branch is the intended release branch, usually `codex/gbankmanager-v1`
+- the current repo root contains `GBankManager/`, `GBankManager_ItemData/`, and `.github/workflows/release-curseforge.yml`
+- `origin` points to the intended GBankManager repository
+- the branch is the intended non-default release branch
 - `gh` is installed and authenticated
 - GitHub Actions secret `CF_API_TOKEN` exists
 - GitHub Actions variable `CF_PROJECT_ID` exists
@@ -58,6 +59,8 @@ Run:
 ```powershell
 git status -sb
 git rev-parse --abbrev-ref HEAD
+git rev-parse --show-toplevel
+git remote get-url origin
 ```
 
 If the worktree is dirty:
@@ -92,23 +95,43 @@ If needed:
 ```powershell
 git add <files>
 git commit -m "<message>"
-git push origin <branch>
+git push -u origin HEAD
 ```
 
 Use a commit message that describes the release-prep change truthfully. Do not create empty ceremonial commits.
 
-### 5. Create and push the tag
+### 5. Open and merge the release pull request
+
+Create the PR from the pushed release branch, wait for its checks, and merge it before tagging:
+
+```powershell
+gh pr create --base master --head <release-branch> --title "<release title>" --body-file <pull-request-body-file>
+gh pr checks <pr-number> --watch
+gh pr merge <pr-number> --merge --delete-branch=false
+```
+
+If branch policy blocks the normal merge, use `--admin` only when the user explicitly authorized that bypass. Do not tag the release branch.
+
+Refresh and verify the merged default branch:
+
+```powershell
+git fetch origin master
+git rev-parse origin/master
+```
+
+### 6. Create and push the tag
 
 Examples:
 
 ```powershell
-git tag v1.0.1-beta.1
+git tag <tag> origin/master
+git tag v1.0.1-beta.1 origin/master
 git push origin v1.0.1-beta.1
 ```
 
-Push the branch before the tag if the release fix is not already on origin.
+The tag must point to the merged `origin/master` commit.
 
-### 6. Watch the workflow
+### 7. Watch the workflow
 
 Use `gh`:
 
@@ -119,7 +142,7 @@ gh run watch <run-id>
 
 Wait for a final state. Do not claim success while the workflow is still `in_progress`.
 
-### 7. Confirm outputs
+### 8. Confirm outputs
 
 After a successful run, verify:
 
@@ -183,12 +206,14 @@ Instead:
 
 - commit the fix
 - push the branch
+- merge the fix through a pull request
+- refresh `origin/master`
 - create the next tag in sequence
 
 Example:
 
 ```powershell
-git tag v1.0.1-beta.2
+git tag v1.0.1-beta.2 origin/master
 git push origin v1.0.1-beta.2
 ```
 
@@ -212,6 +237,7 @@ If the release failed, lead with the failing step and exact blocker.
 ## Common Mistakes
 
 - tagging before pushing the release fix commit
+- tagging the release branch before its pull request is merged
 - assuming `gh` is authenticated without checking
 - claiming success before `gh run watch` finishes
 - forgetting that failed release fixes should use a new beta or alpha tag
