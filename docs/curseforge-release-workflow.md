@@ -56,10 +56,9 @@ Behavior:
 
 Use this checklist when cutting a stable release yourself.
 
-1. Start from the release worktree and confirm the branch:
+1. Start from the intended checkout or release worktree and confirm its exact branch and commit. Do not rely on a hard-coded machine-local worktree path:
 
 ```powershell
-cd C:\Users\Ziri\Documents\Codex\2026-05-11\GBankManager\.worktrees\gbankmanager-v1
 git status -sb
 git rev-parse --abbrev-ref HEAD
 git rev-parse --short HEAD
@@ -86,34 +85,46 @@ git rev-parse --short HEAD
 4. Commit and push the release-prep checkpoint:
 
 ```powershell
-git add GBankManager README.md docs tests
-git commit -m "chore: prepare 1.4.0 release"
-git push origin codex/guild-bank-tab-scan-guard
+git add GBankManager GBankManager_ItemData README.md docs tests
+git commit -m "chore: prepare 1.4.1 release"
+git push -u origin HEAD
 ```
 
-5. Create and push the release tag:
+5. Open, verify, and merge the release pull request before tagging:
 
 ```powershell
-git tag v1.4.0
-git push origin v1.4.0
+gh pr create --base master --head <release-branch> --title "Prepare GBankManager 1.4.1 release" --body-file <pull-request-body-file>
+gh pr checks <pr-number> --watch
+gh pr merge <pr-number> --merge --delete-branch=false
+git fetch origin master
+git rev-parse origin/master
 ```
 
-6. Watch the tag-triggered workflow:
+If branch policy blocks a normal merge and the user explicitly authorized an administrative bypass, rerun the merge command with `--admin`. Never tag the release branch itself; the release tag must identify the merged `origin/master` commit.
+
+6. Create and push the release tag on the merged default-branch commit:
+
+```powershell
+git tag v1.4.1 origin/master
+git push origin v1.4.1
+```
+
+7. Watch the tag-triggered workflow:
 
 ```powershell
 gh run list --workflow release-curseforge.yml --limit 5
 gh run watch <run-id>
 ```
 
-7. Confirm the release and artifact:
+8. Confirm the release and artifact:
 
 ```powershell
-gh release view v1.4.0 --json name,tagName,isPrerelease,assets,url
+gh release view v1.4.1 --json name,tagName,isPrerelease,assets,url
 ```
 
-The stable release should have `isPrerelease: false`, a `GBankManager-1.4.0.zip` asset, and a successful CurseForge upload step in the workflow log.
+The stable release should have `isPrerelease: false`, a `GBankManager-1.4.1.zip` asset, and a successful CurseForge upload step in the workflow log.
 
-8. Deploy the same committed worktree locally after the release gate is green:
+9. Deploy the same committed worktree locally after the release gate is green:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\catalog\Deploy-AddonsToTarget.ps1 -Target Retail -Json

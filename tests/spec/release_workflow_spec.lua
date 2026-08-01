@@ -41,3 +41,22 @@ assert.truthy(string.find(releaseDoc, "CF_API_TOKEN", 1, true) ~= nil, "release 
 assert.truthy(string.find(releaseDoc, "CF_PROJECT_ID", 1, true) ~= nil, "release workflow doc should explain which GitHub variable stores the CurseForge project id")
 assert.truthy(string.find(releaseDoc, "rotate", 1, true) ~= nil, "release workflow doc should remind maintainers to rotate exposed CurseForge tokens")
 assert.truthy(string.find(releaseDoc, "GitHub Release", 1, true) ~= nil, "release workflow doc should explain the GitHub release attachment behavior")
+
+local branchPushPosition = string.find(releaseDoc, "git push -u origin HEAD", 1, true)
+local prCreatePosition = string.find(releaseDoc, "gh pr create", 1, true)
+local prMergePosition = string.find(releaseDoc, "gh pr merge", 1, true)
+local defaultBranchRefreshPosition = string.find(releaseDoc, "git fetch origin master", 1, true)
+local stableTagPosition = string.find(releaseDoc, "git tag v1.4.1 origin/master", 1, true)
+
+assert.truthy(branchPushPosition ~= nil, "release workflow doc should push the release branch before integration")
+assert.truthy(prCreatePosition ~= nil, "release workflow doc should create a pull request before tagging")
+assert.truthy(prMergePosition ~= nil, "release workflow doc should merge the pull request before tagging")
+assert.truthy(defaultBranchRefreshPosition ~= nil, "release workflow doc should refresh the remote default branch after merge")
+assert.truthy(stableTagPosition ~= nil, "release workflow doc should tag the merged default-branch commit")
+assert.truthy(
+    branchPushPosition < prCreatePosition
+        and prCreatePosition < prMergePosition
+        and prMergePosition < defaultBranchRefreshPosition
+        and defaultBranchRefreshPosition < stableTagPosition,
+    "release workflow doc should order branch push, PR merge, default-branch refresh, and tagging safely"
+)

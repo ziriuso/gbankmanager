@@ -2,6 +2,37 @@
 
 ## Resume Here
 
+### 2026-08-01 v1.4.1 PTR Catalog Release Checkpoint
+
+- Repo truth at release preparation:
+  - source checkout: `C:\GitHub\gbankmanager`
+  - clean baseline: `master` / `origin/master` at `4ae62d4c6449e9fa245d07ad3e7b991e31949340` (`v1.4.0`)
+  - isolated release branch: `codex/gbankmanager-1-4-1-ptr-catalog`
+  - release metadata: `1.4.1` / `v1.4.1`
+- PTR catalog refresh:
+  - canonical mode: `Refresh-ItemCatalog.ps1 -Target PTR -Fresh`
+  - resolved client: `C:\Gaming\World of Warcraft\_ptr_`
+  - extracted build: `12.1.0.68914`
+  - scanned `175112` raw rows and normalized `7808` current PTR rows
+  - merged manifest results: `69` added, `7739` refreshed, `1` retained, and `166325` deprecated historical rows
+  - rebuilt companion payload: `7809` unique items, `4638` unique tokens, `8` item chunks, and `10` token chunks
+  - semantic generated-data review found `82` additions, `27` coherent PTR removals, and `107` updates with no duplicate IDs, duplicate tokens, orphan references, malformed rows, or index drift
+  - the ignored maintainer manifest, extraction output, progress state, wow.export runtime, and DBD cache remain outside the shipped diff
+- Version and release-contract coverage:
+  - `GBankManager.toc`, `Core/Constants.lua`, TOC tests, and About tests agree on `1.4.1` / `v1.4.1`
+  - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0` and `LEDGER_PROTOCOL_VERSION = 3` are intentionally unchanged for this catalog-only patch
+  - the release checklist and repo-local release operator now require branch push, PR checks, merge, `origin/master` refresh, and tagging the merged default-branch commit in that order
+- Verification completed:
+  - catalog target, extraction, merge, generated-index, TOC, About, release-workflow, and release-operator focused specs passed
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passed
+  - generated Lua loaded under Lua 5.1 and the generated TOC exactly matched the `19` generated files
+- Release order from this checkpoint:
+  1. commit and push the release branch
+  2. open, check, and merge the pull request into `master`
+  3. fetch `origin/master`, tag that merged commit as `v1.4.1`, and push the tag
+  4. require a successful `release-curseforge.yml` run plus a GitHub Release containing `GBankManager-1.4.1.zip` before claiming CurseForge publication
+  5. deploy the committed release to PTR with `Deploy-AddonsToTarget.ps1 -Target PTR -Json` and verify installed metadata plus generated payload hashes
+
 ### 2026-06-05 Post-v1.2.2 Live Sync Follow-Up
 
 - Current local checkpoint:
