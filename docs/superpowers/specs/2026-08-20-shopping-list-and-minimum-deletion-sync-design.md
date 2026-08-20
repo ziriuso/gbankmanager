@@ -11,6 +11,10 @@ Minimums rule from returning after guild sync.
 
 - The list is clipped to its modal and uses the existing reusable slim
   scrollbar, including mouse-wheel scrolling.
+- The modal uses Blizzard's standard bottom-right hash resize grip, stays
+  within readable minimum and practical maximum bounds, and expands the row
+  width plus scroll viewport as the user enlarges it. Rows remain single-line
+  so long labels cannot overlap the next item while the modal is compact.
 - A row whose `Qty To Buy` is zero because another bank tab has enough stock
   displays `Restock from <Bank Tab>` instead of `x0`.
 - Shift-clicking an item name while the Blizzard Auction House is visible puts
@@ -44,6 +48,9 @@ Merge rules:
 ## Acceptance Criteria
 
 - Long manual shopping lists show a working scrollbar and remain clipped.
+- The standard bottom-right resize grip enlarges the usable row width and
+  viewport height, hiding the scrollbar when the expanded viewport fits every
+  row.
 - Zero-buy rows identify the bank tab to restock from.
 - Shift-click fills, but does not submit, the visible Auction House Buy search.
 - Checking a row moves it below every unchecked row without losing its checked

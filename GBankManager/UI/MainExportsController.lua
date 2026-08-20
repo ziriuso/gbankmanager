@@ -24,6 +24,7 @@ function mainExportsController.Attach(mainFrame, options)
     local countLines = options.countLines
     local currentDb = options.currentDb
     local createPageOverflowViewport = options.createPageOverflowViewport
+    local makeResizeGrip = options.makeResizeGrip
 
     mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -287,6 +288,9 @@ function mainExportsController.Attach(mainFrame, options)
         mainFrame.exportManualShoppingListModal:SetFrameLevel(mainFrame.exportManualShoppingListModal.frameLevel)
     end
     mainFrame.exportManualShoppingListModal:SetMovable(true)
+    mainFrame.exportManualShoppingListModal:SetResizable(true)
+    mainFrame.exportManualShoppingListModal:SetResizeBounds(440, 320, 900, 700)
+    mainFrame.exportManualShoppingListModal:SetClampedToScreen(true)
     mainFrame.exportManualShoppingListModal:EnableMouse(true)
     mainFrame.exportManualShoppingListModal:RegisterForDrag("LeftButton")
     mainFrame.exportManualShoppingListModal:SetScript("OnDragStart", function(self)
@@ -530,6 +534,12 @@ function mainExportsController.Attach(mainFrame, options)
         if type(rowFrame.itemText.SetWidth) == "function" then
             rowFrame.itemText:SetWidth(318)
         end
+        if type(rowFrame.itemText.SetWordWrap) == "function" then
+            rowFrame.itemText:SetWordWrap(false)
+        end
+        if type(rowFrame.itemText.SetMaxLines) == "function" then
+            rowFrame.itemText:SetMaxLines(1)
+        end
         rowFrame.strikeLine = rowFrame.strikeLine or rowFrame.itemButton:CreateTexture()
         rowFrame.strikeLine:SetPoint("LEFT", rowFrame.itemText, "LEFT", 0, 0)
         rowFrame.strikeLine:SetPoint("RIGHT", rowFrame.itemText, "RIGHT", 0, 0)
@@ -558,6 +568,21 @@ function mainExportsController.Attach(mainFrame, options)
 
     layout_manual_shopping_rows = function(resetScroll)
         local entries = mainFrame.exportManualShoppingListEntries or {}
+        local modalWidth = math.max(440, tonumber(mainFrame.exportManualShoppingListModal:GetWidth() or 440) or 440)
+        local modalHeight = math.max(320, tonumber(mainFrame.exportManualShoppingListModal:GetHeight() or 320) or 320)
+        local regionWidth = math.max(408, modalWidth - 32)
+        local regionHeight = math.max(166, modalHeight - 154)
+        local viewportWidth = math.max(390, regionWidth - 18)
+        local scrollWidth = math.max(354, viewportWidth - 36)
+        local rowWidth = math.max(350, scrollWidth - 4)
+        local itemWidth = math.max(318, rowWidth - 32)
+
+        mainFrame.exportManualShoppingListHint:SetWidth(math.max(408, modalWidth - 32))
+        mainFrame.exportManualShoppingListRegion:SetSize(regionWidth, regionHeight)
+        mainFrame.exportManualShoppingListViewport:SetSize(viewportWidth, regionHeight)
+        mainFrame.exportManualShoppingListScrollFrame:SetSize(scrollWidth, regionHeight)
+        mainFrame.exportManualShoppingListContent:SetWidth(scrollWidth)
+
         local ordered = {}
         for _, entry in ipairs(entries) do
             if entry.checked ~= true then
@@ -572,6 +597,9 @@ function mainExportsController.Attach(mainFrame, options)
 
         for displayIndex, entry in ipairs(ordered) do
             local rowFrame = entry.rowFrame
+            rowFrame:SetWidth(rowWidth)
+            rowFrame.itemButton:SetWidth(itemWidth)
+            rowFrame.itemText:SetWidth(itemWidth)
             rowFrame:ClearAllPoints()
             rowFrame:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, -((displayIndex - 1) * 26))
             rowFrame.rowData = entry.rowData
@@ -629,6 +657,23 @@ function mainExportsController.Attach(mainFrame, options)
             mainFrame.exportManualShoppingListEmptyText:Show()
         end
     end
+
+    function mainFrame:RefreshManualShoppingListLayout()
+        layout_manual_shopping_rows(false)
+    end
+
+    mainFrame.exportManualShoppingListModal:SetScript("OnSizeChanged", function()
+        mainFrame:RefreshManualShoppingListLayout()
+    end)
+    if not mainFrame.exportManualShoppingListResizeGrip and type(makeResizeGrip) == "function" then
+        mainFrame.exportManualShoppingListResizeGrip = makeResizeGrip(mainFrame.exportManualShoppingListModal, {
+            minWidth = 440,
+            minHeight = 320,
+            maxWidth = 900,
+            maxHeight = 700,
+        })
+    end
+    mainFrame:RefreshManualShoppingListLayout()
 
     local function first_point(frame)
         if frame and type(frame.GetPoint) == "function" then
