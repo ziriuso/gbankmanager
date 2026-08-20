@@ -9,6 +9,7 @@ local itemDisplay = ns.modules.itemDisplay or {}
 local transport = ns.modules.syncTransport or {}
 local permissions = ns.modules.permissions or ns.modules.auth or {}
 local minimumsPortability = ns.modules.minimumsPortability or {}
+local minimumsSync = ns.modules.minimumsSync or {}
 if craftedQualityUtil.NormalizeDisplayAtlas == nil and type(_G.dofile) == "function" then
     craftedQualityUtil = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
@@ -2366,6 +2367,9 @@ function mainMinimumsController.Attach(mainFrame, options)
         local db = currentDb()
         local changed = false
         local invalidRow = self:FindMinimumBankTabValidationRow()
+        local liveActorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+        local actorName = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown"
+        local actorCharacterKey = tostring(liveActorContext.characterKey or actorName)
 
         if invalidRow then
             self.selectedMinimumKey = invalidRow.rowKey
@@ -2383,7 +2387,9 @@ function mainMinimumsController.Attach(mainFrame, options)
             local pending = (self.minimumPendingRules or {})[key] or self:GetMinimumBaselineRule(key)
             if pending then
                 minimumsView.RemoveWithAudit(db, self:CloneMinimumRule(pending), {
-                    actor = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown",
+                    actor = actorName,
+                    actorCharacterKey = actorCharacterKey,
+                    actorRankIndex = liveActorContext.guildRankIndex,
                     timestamp = _G.time(),
                 })
                 changed = true
@@ -2434,6 +2440,7 @@ function mainMinimumsController.Attach(mainFrame, options)
                         guildKey = active_guild_key(db),
                         actorContext = actorContext,
                         minimums = minimumSnapshot,
+                        minimumTombstones = type(minimumsSync.BuildTombstoneSnapshot) == "function" and minimumsSync.BuildTombstoneSnapshot(db) or {},
                     },
                 })
                 if type(historyView.BuildSyncSnapshot) == "function" then

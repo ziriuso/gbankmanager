@@ -29,6 +29,7 @@ local set_button_icon = mainFrameShell.SetButtonIcon
 local make_input = mainFrameShell.MakeInput
 local make_slider = mainFrameShell.MakeSlider
 local make_slim_scroll_bar = mainFrameShell.MakeSlimScrollBar
+local make_resize_grip = mainFrameShell.MakeResizeGrip
 local attach_scroll_behavior = mainFrameShell.AttachScrollBehavior
 local create_page_overflow_viewport = mainFrameShell.CreatePageOverflowViewport
 local set_frame_shown = mainFrameShell.SetFrameShown
@@ -1346,6 +1347,8 @@ mainExportsController.Attach(mainFrame, {
     cloneExportTemplate = clone_export_template,
     countLines = count_lines,
     currentDb = current_db,
+    createPageOverflowViewport = create_page_overflow_viewport,
+    makeResizeGrip = make_resize_grip,
 })
 
 mainMinimumsController.Attach(mainFrame, {

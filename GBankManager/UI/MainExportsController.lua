@@ -23,6 +23,8 @@ function mainExportsController.Attach(mainFrame, options)
     local cloneExportTemplate = options.cloneExportTemplate
     local countLines = options.countLines
     local currentDb = options.currentDb
+    local createPageOverflowViewport = options.createPageOverflowViewport
+    local makeResizeGrip = options.makeResizeGrip
 
     mainFrame.exportsPanel = mainFrame.exportsPanel or _G.CreateFrame("Frame", nil, mainFrame.content, "BackdropTemplate")
     mainFrame.exportsPanel:SetPoint("TOPLEFT", mainFrame.viewSubtitle, "BOTTOMLEFT", 0, -24)
@@ -286,6 +288,9 @@ function mainExportsController.Attach(mainFrame, options)
         mainFrame.exportManualShoppingListModal:SetFrameLevel(mainFrame.exportManualShoppingListModal.frameLevel)
     end
     mainFrame.exportManualShoppingListModal:SetMovable(true)
+    mainFrame.exportManualShoppingListModal:SetResizable(true)
+    mainFrame.exportManualShoppingListModal:SetResizeBounds(440, 320, 900, 700)
+    mainFrame.exportManualShoppingListModal:SetClampedToScreen(true)
     mainFrame.exportManualShoppingListModal:EnableMouse(true)
     mainFrame.exportManualShoppingListModal:RegisterForDrag("LeftButton")
     mainFrame.exportManualShoppingListModal:SetScript("OnDragStart", function(self)
@@ -306,15 +311,49 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportManualShoppingListTitle = mainFrame.exportManualShoppingListTitle or makeLabel(mainFrame.exportManualShoppingListModal, "Manual Shopping List", "GameFontHighlight")
     mainFrame.exportManualShoppingListTitle:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListModal, "TOPLEFT", 16, -16)
 
-    mainFrame.exportManualShoppingListHint = mainFrame.exportManualShoppingListHint or makeLabel(mainFrame.exportManualShoppingListModal, "Check off purchases as you work through the list.\nDoes not sync back to addon.", "GameFontHighlightSmall")
+    mainFrame.exportManualShoppingListHint = mainFrame.exportManualShoppingListHint or makeLabel(mainFrame.exportManualShoppingListModal, "Check off purchases as you work through the list.\nShift-click an item name to fill an open Auction House search.\nDoes not sync back to addon.", "GameFontHighlightSmall")
     mainFrame.exportManualShoppingListHint:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListTitle, "BOTTOMLEFT", 0, -8)
     if type(mainFrame.exportManualShoppingListHint.SetWidth) == "function" then
         mainFrame.exportManualShoppingListHint:SetWidth(420)
     end
 
-    mainFrame.exportManualShoppingListContent = mainFrame.exportManualShoppingListContent or _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListModal, "BackdropTemplate")
-    mainFrame.exportManualShoppingListContent:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListHint, "BOTTOMLEFT", 0, -12)
-    mainFrame.exportManualShoppingListContent:SetPoint("BOTTOMRIGHT", mainFrame.exportManualShoppingListModal, "BOTTOMRIGHT", -16, 52)
+    mainFrame.exportManualShoppingListRegion = mainFrame.exportManualShoppingListRegion or _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListModal, "BackdropTemplate")
+    mainFrame.exportManualShoppingListRegion:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListHint, "BOTTOMLEFT", 0, -12)
+    mainFrame.exportManualShoppingListRegion:SetPoint("BOTTOMRIGHT", mainFrame.exportManualShoppingListModal, "BOTTOMRIGHT", -16, 52)
+    mainFrame.exportManualShoppingListRegion:SetSize(408, 166)
+    if type(mainFrame.exportManualShoppingListRegion.SetBackdrop) == "function" then
+        mainFrame.exportManualShoppingListRegion:SetBackdrop(nil)
+    end
+
+    local manualShoppingOverflow = mainFrame.exportManualShoppingListOverflow
+    if not manualShoppingOverflow and type(createPageOverflowViewport) == "function" then
+        manualShoppingOverflow = createPageOverflowViewport(mainFrame.exportManualShoppingListRegion, {
+            viewportInsetLeft = 0,
+            viewportInsetTop = 0,
+            viewportInsetRight = 18,
+            viewportInsetBottom = 0,
+            scrollInsetLeft = 0,
+            scrollInsetTop = 0,
+            scrollInsetRight = 20,
+            scrollInsetBottom = 0,
+            scrollBarRightInset = 2,
+            scrollBarTopInset = 2,
+            scrollBarBottomInset = 2,
+            controllerOptions = {
+                wheelStep = 26,
+            },
+        })
+        mainFrame.exportManualShoppingListOverflow = manualShoppingOverflow
+    end
+
+    mainFrame.exportManualShoppingListViewport = manualShoppingOverflow and manualShoppingOverflow.viewportFrame or mainFrame.exportManualShoppingListRegion
+    mainFrame.exportManualShoppingListScrollFrame = manualShoppingOverflow and manualShoppingOverflow.scrollFrame or _G.CreateFrame("ScrollFrame", nil, mainFrame.exportManualShoppingListRegion)
+    mainFrame.exportManualShoppingListContent = manualShoppingOverflow and manualShoppingOverflow.scrollChild or _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListScrollFrame, "BackdropTemplate")
+    mainFrame.exportManualShoppingListScrollBar = manualShoppingOverflow and manualShoppingOverflow.scrollBar or nil
+    mainFrame.exportManualShoppingListScrollController = manualShoppingOverflow and manualShoppingOverflow.controller or nil
+    mainFrame.exportManualShoppingListViewport:SetSize(390, 166)
+    mainFrame.exportManualShoppingListScrollFrame:SetSize(354, 166)
+    mainFrame.exportManualShoppingListContent:SetSize(354, 166)
     if type(mainFrame.exportManualShoppingListContent.SetBackdrop) == "function" then
         mainFrame.exportManualShoppingListContent:SetBackdrop(nil)
     end
@@ -325,6 +364,7 @@ function mainExportsController.Attach(mainFrame, options)
     mainFrame.exportManualShoppingListCloseButton = mainFrame.exportManualShoppingListCloseButton or makeButton(mainFrame.exportManualShoppingListModal, 64, 28, "Close")
     mainFrame.exportManualShoppingListCloseButton:SetPoint("BOTTOMRIGHT", mainFrame.exportManualShoppingListModal, "BOTTOMRIGHT", -16, 16)
     mainFrame.exportManualShoppingListRows = mainFrame.exportManualShoppingListRows or {}
+    mainFrame.exportManualShoppingListEntries = mainFrame.exportManualShoppingListEntries or {}
 
     local function set_export_modal_status(text)
         mainFrame.exportModalStatusText:SetText(tostring(text or ""))
@@ -390,78 +430,250 @@ function mainExportsController.Attach(mainFrame, options)
         return ""
     end
 
-    local function build_manual_shopping_rows(rows)
-        rows = rows or {}
+    local function auction_house_is_visible()
+        local auctionHouseFrame = _G.AuctionHouseFrame
+        return type(auctionHouseFrame) == "table"
+            and type(auctionHouseFrame.IsShown) == "function"
+            and auctionHouseFrame:IsShown()
+    end
 
-        for index, row in ipairs(rows) do
-            local rowFrame = mainFrame.exportManualShoppingListRows[index]
-            if not rowFrame then
-                rowFrame = _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListContent, "BackdropTemplate")
-                rowFrame:SetSize(392, 24)
-                rowFrame.checkButton = _G.CreateFrame("CheckButton", nil, rowFrame, "UICheckButtonTemplate")
-                rowFrame.checkButton:SetSize(24, 24)
-                if type(rowFrame.checkButton.SetChecked) ~= "function" then
-                    function rowFrame.checkButton:SetChecked(value)
-                        self.checked = value and true or false
-                    end
-                end
-                if type(rowFrame.checkButton.GetChecked) ~= "function" then
-                    function rowFrame.checkButton:GetChecked()
-                        return self.checked == true
-                    end
-                end
-                rowFrame.checkButton:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
-                rowFrame.itemText = makeLabel(rowFrame, "", "GameFontNormal")
-                rowFrame.itemText:SetPoint("LEFT", rowFrame.checkButton, "RIGHT", 10, 0)
-                if type(rowFrame.itemText.SetWidth) == "function" then
-                    rowFrame.itemText:SetWidth(356)
-                end
-                rowFrame.strikeLine = rowFrame.strikeLine or rowFrame:CreateTexture()
-                rowFrame.strikeLine:SetPoint("LEFT", rowFrame.itemText, "LEFT", 0, 0)
-                rowFrame.strikeLine:SetPoint("RIGHT", rowFrame.itemText, "RIGHT", 0, 0)
-                rowFrame.strikeLine:SetHeight(1)
-                if type(rowFrame.strikeLine.SetColorTexture) == "function" then
-                    rowFrame.strikeLine:SetColorTexture(1, 0.82, 0, 0.95)
-                end
-                rowFrame.strikeLine:Hide()
-                mainFrame.exportManualShoppingListRows[index] = rowFrame
+    local function fill_auction_house_search(row)
+        if type(_G.IsShiftKeyDown) ~= "function" or not _G.IsShiftKeyDown() or not auction_house_is_visible() then
+            return false
+        end
+
+        local itemName = tostring((row or {}).itemName or "")
+        local auctionHouseFrame = _G.AuctionHouseFrame
+        if itemName == "" then
+            return false
+        end
+
+        local function try_set_search_text()
+            if type(auctionHouseFrame.SetSearchText) ~= "function" then
+                return false
             end
+            local ok, accepted = pcall(auctionHouseFrame.SetSearchText, auctionHouseFrame, itemName)
+            return ok and accepted == true
+        end
 
+        if try_set_search_text() then
+            return true
+        end
+
+        local displayModes = _G.AuctionHouseFrameDisplayMode
+        if type(auctionHouseFrame.SetDisplayMode) == "function" and type(displayModes) == "table" and displayModes.Buy ~= nil then
+            pcall(auctionHouseFrame.SetDisplayMode, auctionHouseFrame, displayModes.Buy)
+            if try_set_search_text() then
+                return true
+            end
+        end
+
+        local searchBar = auctionHouseFrame.SearchBar
+        if type(searchBar) == "table" and type(searchBar.SetSearchText) == "function" then
+            local ok = pcall(searchBar.SetSearchText, searchBar, itemName)
+            return ok
+        end
+
+        return false
+    end
+
+    local function manual_shopping_instruction(row)
+        row = type(row) == "table" and row or {}
+        local quantity = tonumber(row.qtyToBuy or row.totalToBuy or 0) or 0
+        if quantity <= 0 then
+            local restockTab = tostring(row.stockedElsewhere or (((row.stockedElsewhereTabs or {})[1] or {}).tabName) or "")
+            if restockTab == "" or restockTab == "None" then
+                restockTab = "another bank tab"
+            end
+            return "Restock from " .. restockTab
+        end
+
+        return "x" .. tostring(quantity)
+    end
+
+    local function manual_shopping_row_text(row)
+        local qualityMarkup = manual_shopping_quality_label(row)
+        local itemName = tostring((row or {}).itemName or "Unknown")
+        local instruction = manual_shopping_instruction(row)
+        if qualityMarkup ~= "" then
+            return string.format("%s  %s  %s", qualityMarkup, itemName, instruction)
+        end
+        return string.format("%s  %s", itemName, instruction)
+    end
+
+    local layout_manual_shopping_rows
+
+    local function ensure_manual_shopping_row(index)
+        local rowFrame = mainFrame.exportManualShoppingListRows[index]
+        if rowFrame then
+            return rowFrame
+        end
+
+        rowFrame = _G.CreateFrame("Frame", nil, mainFrame.exportManualShoppingListContent, "BackdropTemplate")
+        rowFrame:SetSize(350, 24)
+        rowFrame.checkButton = _G.CreateFrame("CheckButton", nil, rowFrame, "UICheckButtonTemplate")
+        rowFrame.checkButton:SetSize(24, 24)
+        if type(rowFrame.checkButton.SetChecked) ~= "function" then
+            function rowFrame.checkButton:SetChecked(value)
+                self.checked = value and true or false
+            end
+        end
+        if type(rowFrame.checkButton.GetChecked) ~= "function" then
+            function rowFrame.checkButton:GetChecked()
+                return self.checked == true
+            end
+        end
+        rowFrame.checkButton:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
+        rowFrame.checkButton.ownerRow = rowFrame
+        rowFrame.itemButton = _G.CreateFrame("Button", nil, rowFrame)
+        rowFrame.itemButton:SetPoint("LEFT", rowFrame.checkButton, "RIGHT", 8, 0)
+        rowFrame.itemButton:SetSize(318, 24)
+        rowFrame.itemButton.ownerRow = rowFrame
+        rowFrame.itemText = makeLabel(rowFrame.itemButton, "", "GameFontNormal")
+        rowFrame.itemText:SetPoint("LEFT", rowFrame.itemButton, "LEFT", 0, 0)
+        if type(rowFrame.itemText.SetWidth) == "function" then
+            rowFrame.itemText:SetWidth(318)
+        end
+        if type(rowFrame.itemText.SetWordWrap) == "function" then
+            rowFrame.itemText:SetWordWrap(false)
+        end
+        if type(rowFrame.itemText.SetMaxLines) == "function" then
+            rowFrame.itemText:SetMaxLines(1)
+        end
+        rowFrame.strikeLine = rowFrame.strikeLine or rowFrame.itemButton:CreateTexture()
+        rowFrame.strikeLine:SetPoint("LEFT", rowFrame.itemText, "LEFT", 0, 0)
+        rowFrame.strikeLine:SetPoint("RIGHT", rowFrame.itemText, "RIGHT", 0, 0)
+        rowFrame.strikeLine:SetHeight(1)
+        if type(rowFrame.strikeLine.SetColorTexture) == "function" then
+            rowFrame.strikeLine:SetColorTexture(1, 0.82, 0, 0.95)
+        end
+        rowFrame.strikeLine:Hide()
+        rowFrame.itemButton:SetScript("OnClick", function(self)
+            local ownerRow = self.ownerRow
+            return fill_auction_house_search(ownerRow and ownerRow.rowData)
+        end)
+        rowFrame.checkButton:SetScript("OnClick", function(self)
+            local ownerRow = self.ownerRow
+            local entry = ownerRow and ownerRow.shoppingEntry
+            if not entry then
+                return false
+            end
+            entry.checked = not entry.checked
+            layout_manual_shopping_rows(false)
+            return entry.checked
+        end)
+        mainFrame.exportManualShoppingListRows[index] = rowFrame
+        return rowFrame
+    end
+
+    layout_manual_shopping_rows = function(resetScroll)
+        local entries = mainFrame.exportManualShoppingListEntries or {}
+        local modalWidth = math.max(440, tonumber(mainFrame.exportManualShoppingListModal:GetWidth() or 440) or 440)
+        local modalHeight = math.max(320, tonumber(mainFrame.exportManualShoppingListModal:GetHeight() or 320) or 320)
+        local regionWidth = math.max(408, modalWidth - 32)
+        local regionHeight = math.max(166, modalHeight - 154)
+        local viewportWidth = math.max(390, regionWidth - 18)
+        local scrollWidth = math.max(354, viewportWidth - 36)
+        local rowWidth = math.max(350, scrollWidth - 4)
+        local itemWidth = math.max(318, rowWidth - 32)
+
+        mainFrame.exportManualShoppingListHint:SetWidth(math.max(408, modalWidth - 32))
+        mainFrame.exportManualShoppingListRegion:SetSize(regionWidth, regionHeight)
+        mainFrame.exportManualShoppingListViewport:SetSize(viewportWidth, regionHeight)
+        mainFrame.exportManualShoppingListScrollFrame:SetSize(scrollWidth, regionHeight)
+        mainFrame.exportManualShoppingListContent:SetWidth(scrollWidth)
+
+        local ordered = {}
+        for _, entry in ipairs(entries) do
+            if entry.checked ~= true then
+                ordered[#ordered + 1] = entry
+            end
+        end
+        for _, entry in ipairs(entries) do
+            if entry.checked == true then
+                ordered[#ordered + 1] = entry
+            end
+        end
+
+        for displayIndex, entry in ipairs(ordered) do
+            local rowFrame = entry.rowFrame
+            rowFrame:SetWidth(rowWidth)
+            rowFrame.itemButton:SetWidth(itemWidth)
+            rowFrame.itemText:SetWidth(itemWidth)
             rowFrame:ClearAllPoints()
-            rowFrame:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, -((index - 1) * 26))
-            rowFrame.rowData = row
-            rowFrame.checked = false
-            rowFrame.checkButton:SetChecked(false)
-            local qualityMarkup = manual_shopping_quality_label(row)
-            local quantityText = tostring(row.qtyToBuy or row.totalToBuy or 0)
-            if qualityMarkup ~= "" then
-                rowFrame.itemText:SetText(string.format("%s  %s  x%s", qualityMarkup, tostring(row.itemName or "Unknown"), quantityText))
+            rowFrame:SetPoint("TOPLEFT", mainFrame.exportManualShoppingListContent, "TOPLEFT", 0, -((displayIndex - 1) * 26))
+            rowFrame.rowData = entry.rowData
+            rowFrame.shoppingEntry = entry
+            rowFrame.checked = entry.checked == true
+            rowFrame.checkButton:SetChecked(rowFrame.checked)
+            rowFrame.itemText:SetText(manual_shopping_row_text(entry.rowData))
+            if rowFrame.checked then
+                rowFrame.strikeLine:Show()
             else
-                rowFrame.itemText:SetText(string.format("%s  x%s", tostring(row.itemName or "Unknown"), quantityText))
+                rowFrame.strikeLine:Hide()
             end
-            rowFrame.strikeLine:Hide()
-            rowFrame.checkButton:SetScript("OnClick", function()
-                rowFrame.checked = not rowFrame.checked
-                rowFrame.checkButton:SetChecked(rowFrame.checked)
-                if rowFrame.checked then
-                    rowFrame.strikeLine:Show()
-                else
-                    rowFrame.strikeLine:Hide()
-                end
-            end)
             rowFrame:Show()
         end
 
+        local viewportHeight = math.max(1, tonumber(mainFrame.exportManualShoppingListScrollFrame:GetHeight() or 166) or 166)
+        local contentHeight = math.max(viewportHeight, #entries * 26)
+        mainFrame.exportManualShoppingListContent:SetHeight(contentHeight)
+        local controller = mainFrame.exportManualShoppingListScrollController
+        if controller then
+            if resetScroll and type(controller.SetOffset) == "function" then
+                controller:SetOffset(0, contentHeight, viewportHeight)
+            elseif type(controller.Refresh) == "function" then
+                controller:Refresh(contentHeight, viewportHeight)
+            end
+        else
+            mainFrame.exportManualShoppingListScrollFrame.verticalScrollRange = math.max(0, contentHeight - viewportHeight)
+        end
+    end
+
+    local function build_manual_shopping_rows(rows)
+        rows = rows or {}
+        local entries = {}
+        for index, row in ipairs(rows) do
+            local rowFrame = ensure_manual_shopping_row(index)
+            entries[index] = {
+                rowData = row,
+                rowFrame = rowFrame,
+                checked = false,
+            }
+        end
+        mainFrame.exportManualShoppingListEntries = entries
+
         for index = #rows + 1, #(mainFrame.exportManualShoppingListRows or {}) do
-            mainFrame.exportManualShoppingListRows[index]:Hide()
+            local rowFrame = mainFrame.exportManualShoppingListRows[index]
+            rowFrame.shoppingEntry = nil
+            rowFrame.rowData = nil
+            rowFrame:Hide()
         end
 
+        layout_manual_shopping_rows(true)
         if #rows > 0 then
             mainFrame.exportManualShoppingListEmptyText:Hide()
         else
             mainFrame.exportManualShoppingListEmptyText:Show()
         end
     end
+
+    function mainFrame:RefreshManualShoppingListLayout()
+        layout_manual_shopping_rows(false)
+    end
+
+    mainFrame.exportManualShoppingListModal:SetScript("OnSizeChanged", function()
+        mainFrame:RefreshManualShoppingListLayout()
+    end)
+    if not mainFrame.exportManualShoppingListResizeGrip and type(makeResizeGrip) == "function" then
+        mainFrame.exportManualShoppingListResizeGrip = makeResizeGrip(mainFrame.exportManualShoppingListModal, {
+            minWidth = 440,
+            minHeight = 320,
+            maxWidth = 900,
+            maxHeight = 700,
+        })
+    end
+    mainFrame:RefreshManualShoppingListLayout()
 
     local function first_point(frame)
         if frame and type(frame.GetPoint) == "function" then

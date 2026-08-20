@@ -1019,6 +1019,54 @@ function mainFrameShell.MakeButton(parent, width, height, text)
     return button
 end
 
+function mainFrameShell.MakeResizeGrip(parent, options)
+    options = options or {}
+    local grip = _G.CreateFrame("Button", nil, parent, "PanelResizeButtonTemplate")
+    local size = tonumber(options.size or 16) or 16
+    local minWidth = tonumber(options.minWidth or 1) or 1
+    local minHeight = tonumber(options.minHeight or 1) or 1
+    local maxWidth = tonumber(options.maxWidth)
+    local maxHeight = tonumber(options.maxHeight)
+
+    grip:SetSize(size, size)
+    grip:SetPoint(
+        options.point or "BOTTOMRIGHT",
+        parent,
+        options.relativePoint or options.point or "BOTTOMRIGHT",
+        tonumber(options.offsetX or -4) or -4,
+        tonumber(options.offsetY or 4) or 4
+    )
+    if type(grip.SetNormalTexture) == "function" then
+        grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    end
+    if type(grip.SetHighlightTexture) == "function" then
+        grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    end
+    if type(grip.SetPushedTexture) == "function" then
+        grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    end
+
+    if type(grip.Init) == "function" then
+        grip:Init(parent, minWidth, minHeight, maxWidth, maxHeight)
+    else
+        grip.target = parent
+        grip:SetScript("OnMouseDown", function(self, button)
+            if button ~= "LeftButton" then
+                return
+            end
+            self.target:StartSizing("BOTTOMRIGHT")
+        end)
+        grip:SetScript("OnMouseUp", function(self, button)
+            if button ~= "LeftButton" then
+                return
+            end
+            self.target:StopMovingOrSizing()
+        end)
+    end
+
+    return grip
+end
+
 function mainFrameShell.ApplyButtonVariant(button, variant, colorOverride)
     if not button then
         return

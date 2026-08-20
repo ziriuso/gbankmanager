@@ -71,6 +71,7 @@ function defaults.CreateDatabase(guildName)
         changeLog = {},
         auditLog = {},
         minimums = {},
+        minimumTombstones = {},
         oneTimeTargets = {},
         requests = {},
         exportTemplates = {},

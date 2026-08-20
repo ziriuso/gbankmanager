@@ -203,5 +203,28 @@ assert.equal("LEDGER_MANIFEST", sentMessages[1].message.type, "manual ledger syn
 assert.equal(tonumber((ns.constants or {}).LEDGER_PROTOCOL_VERSION or 0), tonumber(((sentMessages[1].message.payload or {}).ledgerProtocol) or 0), "manual ledger manifests should advertise the current ledger protocol")
 assert.equal(2, tonumber((((sentMessages[1].message.payload or {}).manifest or {}).totalCount) or 0), "manual ledger manifests should include the built manifest row count")
 
+defaultLedgerDb.minimums = {}
+defaultLedgerDb.minimumTombstones = {
+    ["7007|TAB|Alchemy"] = {
+        ruleKey = "7007|TAB|Alchemy",
+        itemID = 7007,
+        itemName = "Algari Mana Oil",
+        scope = "TAB",
+        tabName = "Alchemy",
+        deletedAt = 1717000390,
+        deletedBy = "SyncTester-Stormrage",
+    },
+}
+local defaultMinimumSync = manualActions.Run(defaultLedgerDb, {
+    action = "minimums",
+    accessProfile = "full_shell",
+    now = 1717000401,
+    skipCooldown = true,
+})
+
+assert.equal(true, defaultMinimumSync.ok, "default minimum sync should succeed when only a deletion tombstone remains")
+assert.equal("MINIMUMS_SNAPSHOT", sentMessages[2].message.type, "manual minimum sync should use the minimum snapshot family")
+assert.equal("7007|TAB|Alchemy", (((sentMessages[2].message.payload or {}).minimumTombstones or {})[1] or {}).ruleKey, "manual minimum sync should publish durable deletion tombstones")
+
 transport.Send = originalSend
 ns.modules.syncManualActionHandlers = originalHandlers

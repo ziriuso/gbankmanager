@@ -687,6 +687,18 @@ if _G.CreateFrame == nil then
             self.thumbTexture = texture
         end
 
+        function frame:SetNormalTexture(texture)
+            self.normalTexture = texture
+        end
+
+        function frame:SetHighlightTexture(texture)
+            self.highlightTexture = texture
+        end
+
+        function frame:SetPushedTexture(texture)
+            self.pushedTexture = texture
+        end
+
         function frame:CreateFontString(name, layer, inherits)
             local region = make_region()
             region.name = name
@@ -740,10 +752,17 @@ if _G.CreateFrame == nil then
         function frame:StartMoving()
             self.moving = true
         end
+        function frame:StartSizing(anchor)
+            self.sizing = true
+            self.sizingAnchor = anchor
+        end
         function frame:StopMovingOrSizing()
             self.moving = false
+            self.sizing = false
         end
-        function frame:SetResizable() end
+        function frame:SetResizable(value)
+            self.resizable = value and true or false
+        end
         function frame:SetResizeBounds(minWidth, minHeight, maxWidth, maxHeight)
             self.resizeBounds = {
                 minWidth = minWidth,
@@ -752,7 +771,9 @@ if _G.CreateFrame == nil then
                 maxHeight = maxHeight,
             }
         end
-        function frame:SetClampedToScreen() end
+        function frame:SetClampedToScreen(value)
+            self.clampedToScreen = value and true or false
+        end
         function frame:SetFrameStrata(value)
             self.frameStrata = value
         end

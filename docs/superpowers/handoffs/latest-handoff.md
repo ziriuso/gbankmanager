@@ -2,6 +2,28 @@
 
 ## Resume Here
 
+### 2026-08-20 v1.5.0 Shopping Session And Minimum Sync Release Candidate
+
+- Repo truth at release preparation:
+  - clean base release: `master` / `origin/master` at `ea3707f30561c0e2122ea9e6f5aa466036449d20` (`v1.4.1`)
+  - release branch: `codex/shopping-list-and-minimum-deletion-sync`
+  - feature commits before release metadata: `a641405` and `f7b90f5`
+  - release metadata: `1.5.0` / `v1.5.0`
+- Release scope:
+  - the manual shopping list has a clipped mouse-wheel scrollbar, zero-buy `Restock from <Bank Tab>` guidance, shift-click Auction House search fill, stable checked-row bottom grouping, and a standard bottom-right Blizzard resize grip with responsive single-line rows
+  - Minimum deletion tombstones now participate in sync so an older peer cannot resurrect a deleted rule, while a newer intentional rule can replace the tombstone
+  - the shopping list remains local-only and independent from the main shell
+- Version and data-safety contract:
+  - `GBankManager.toc`, `Core/Constants.lua`, TOC tests, About tests, and the release checklist agree on `1.5.0` / `v1.5.0`
+  - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0`, `LEDGER_PROTOCOL_VERSION = 3`, and the saved-variable schema version remain intentionally unchanged
+- Required release order:
+  1. run `.\tools\lua\lua.exe .\tests\run_all.lua`
+  2. commit and push the release metadata on the feature branch
+  3. open, check, and merge the pull request into `master`
+  4. fetch `origin/master`, tag the merged commit as `v1.5.0`, and push the tag
+  5. require a successful `release-curseforge.yml` run plus a GitHub Release containing `GBankManager-1.5.0.zip` before claiming CurseForge publication
+  6. deploy the tagged release to Retail with `Deploy-AddonsToTarget.ps1 -Target Retail -Json` and verify exact hash parity
+
 ### 2026-08-01 v1.4.1 PTR Catalog Release Checkpoint
 
 - Repo truth at release preparation:
