@@ -1346,6 +1346,7 @@ mainExportsController.Attach(mainFrame, {
     cloneExportTemplate = clone_export_template,
     countLines = count_lines,
     currentDb = current_db,
+    createPageOverflowViewport = create_page_overflow_viewport,
 })
 
 mainMinimumsController.Attach(mainFrame, {

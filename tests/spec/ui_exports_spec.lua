@@ -154,20 +154,41 @@ assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shoppin
 assert.truthy(mainFrame.exportManualShoppingListModal.mouseEnabled == true, "manual shopping list modal should be draggable")
 assert.equal("LeftButton", (mainFrame.exportManualShoppingListModal.dragButtons or {})[1], "manual shopping list modal should register left-button dragging")
 assert.equal(_G.UIParent, mainFrame.exportManualShoppingListModal.parent, "manual shopping list should live on UIParent so it can stay open independently of the shell")
-assert.equal("Check off purchases as you work through the list.\nDoes not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should line-break the local-only note for readability")
+assert.equal("Check off purchases as you work through the list.\nShift-click an item name to fill an open Auction House search.\nDoes not sync back to addon.", mainFrame.exportManualShoppingListHint:GetText(), "manual shopping list should explain its checklist, auction-search, and local-only behavior")
 assert.truthy(#(mainFrame.exportManualShoppingListRows or {}) >= 3, "manual shopping list should build one checklist row per purchase row")
 local manualShoppingRow = (mainFrame.exportManualShoppingListRows or {})[1]
 assert.equal("UICheckButtonTemplate", (manualShoppingRow.checkButton or {}).template, "manual shopping list should use a clearer built-in checkbox control")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "|A:", 1, true) ~= nil, "manual shopping list rows should render the crafted-quality icon inline")
 assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "T3", 1, true) == nil, "manual shopping list rows should stop falling back to raw T-tier text")
+assert.truthy(string.find(manualShoppingRow.itemText:GetText() or "", "Restock from Freebiez", 1, true) ~= nil, "zero-buy shopping rows should identify the bank tab that can restock the target tab")
 local missingSnapshotRow = (mainFrame.exportManualShoppingListRows or {})[2]
 assert.truthy(string.find(missingSnapshotRow.itemText:GetText() or "", "Professions-Icon-Quality-12-Tier1-Inv", 1, true) ~= nil, "manual shopping list rows should trust bundled lower-rank crafted-tier metadata over stale saved row quality when no live stock snapshot exists")
 local higherTwoRankRow = (mainFrame.exportManualShoppingListRows or {})[3]
 assert.truthy(string.find(higherTwoRankRow.itemText:GetText() or "", "Professions-Icon-Quality-12-Tier2-Inv", 1, true) ~= nil, "manual shopping list rows should prefer the canonical higher two-rank crafted-quality atlas")
 assert.truthy(manualShoppingRow.checkButton:GetChecked() ~= true, "manual shopping rows should start unchecked")
+local originalIsShiftKeyDown = _G.IsShiftKeyDown
+local originalAuctionHouseFrame = _G.AuctionHouseFrame
+_G.IsShiftKeyDown = function()
+    return true
+end
+_G.AuctionHouseFrame = _G.CreateFrame("Frame", nil, _G.UIParent)
+function _G.AuctionHouseFrame:SetSearchText(text)
+    self.searchText = text
+    return true
+end
+_G.AuctionHouseFrame:Show()
+manualShoppingRow.itemButton:GetScript("OnClick")(manualShoppingRow.itemButton, "LeftButton")
+assert.equal("Flask Alpha", _G.AuctionHouseFrame.searchText, "shift-clicking a shopping-list item should fill the visible Auction House search without submitting it")
+_G.AuctionHouseFrame:Hide()
+_G.AuctionHouseFrame.searchText = nil
+manualShoppingRow.itemButton:GetScript("OnClick")(manualShoppingRow.itemButton, "LeftButton")
+assert.equal(nil, _G.AuctionHouseFrame.searchText, "shift-click should leave the Auction House untouched when it is closed")
+_G.IsShiftKeyDown = originalIsShiftKeyDown
+_G.AuctionHouseFrame = originalAuctionHouseFrame
 manualShoppingRow.checkButton:GetScript("OnClick")(manualShoppingRow.checkButton)
 assert.truthy(manualShoppingRow.checkButton:GetChecked() == true, "checking a manual shopping row should toggle the built-in checkbox state")
 assert.truthy(manualShoppingRow.strikeLine:IsShown(), "checking a manual shopping list row should strike it through for the current session")
+assert.truthy(select(5, manualShoppingRow:GetPoint(1)) < select(5, missingSnapshotRow:GetPoint(1)), "checked shopping rows should move below all remaining unchecked rows")
 mainFrame:SelectView("DASHBOARD")
 assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should stay open when switching tabs")
 local sawQtyToBuyText = false
@@ -187,4 +208,20 @@ assert.equal(40, select(4, mainFrame.exportManualShoppingListModal:GetPoint(1)),
 assert.equal(-60, select(5, mainFrame.exportManualShoppingListModal:GetPoint(1)), "manual shopping list should restore its saved vertical position")
 mainFrame.closeButton:GetScript("OnClick")(mainFrame.closeButton)
 assert.truthy(mainFrame.exportManualShoppingListModal:IsShown(), "manual shopping list should stay visible when the main addon shell closes")
+local longShoppingRows = {}
+for index = 1, 14 do
+    longShoppingRows[index] = {
+        itemID = 9000 + index,
+        itemName = "Scrollable Item " .. tostring(index),
+        qtyToBuy = index,
+        totalToBuy = index,
+    }
+end
+mainFrame:OpenManualShoppingList(longShoppingRows)
+assert.truthy(type(mainFrame.exportManualShoppingListScrollFrame) == "table", "manual shopping list should expose a dedicated scroll frame")
+assert.truthy(type(mainFrame.exportManualShoppingListScrollBar) == "table", "manual shopping list should expose the reusable slim scrollbar")
+assert.truthy(mainFrame.exportManualShoppingListScrollBar:IsShown(), "manual shopping list should show its scrollbar when rows overflow the viewport")
+assert.truthy((mainFrame.exportManualShoppingListScrollFrame.verticalScrollRange or 0) > 0, "manual shopping list should calculate a positive overflow range for long lists")
+mainFrame.exportManualShoppingListScrollFrame:GetScript("OnMouseWheel")(mainFrame.exportManualShoppingListScrollFrame, -1)
+assert.truthy((mainFrame.exportManualShoppingListScrollFrame.verticalScroll or 0) > 0, "manual shopping list should support mouse-wheel scrolling")
 assert.truthy(not mainFrame.tableScrollBar:IsShown(), "exports should keep the shared table scrollbar hidden when the export rows fit without scrolling")

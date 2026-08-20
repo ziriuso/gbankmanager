@@ -76,6 +76,7 @@ local function build_change_log(count, baseTime)
 end
 
 local db = store and store.CreateFreshDatabase("My Guild")
+assert.truthy(type((db or {}).minimumTombstones) == "table", "fresh databases should initialize minimum deletion tombstones")
 local normalizedMalformed = migrations and migrations.Apply({
     meta = "broken",
     syncState = "broken",
@@ -233,6 +234,7 @@ assert.equal("scan-old", persistedDb.currentSnapshotId, "normalize should preser
 assert.equal(5, persistedDb.snapshots["scan-old"].items[1001].totalCount, "normalize should preserve scanned inventory rows across reloads")
 assert.equal(77, persistedDb.meta.updatedAt, "normalize should preserve last scan metadata across reloads")
 assert.truthy(type(persistedDb.auditLog) == "table", "normalize should preserve an audit log container for workflow history")
+assert.truthy(type(persistedDb.minimumTombstones) == "table", "normalize should add the minimum deletion tombstone container to legacy databases")
 assert.truthy(type(persistedDb.ui) == "table", "normalize should preserve a ui settings container")
 assert.truthy(type(persistedDb.ui.exportSettings) == "table", "normalize should preserve export ui settings")
 assert.truthy(type(persistedDb.ui.appearance) == "table", "normalize should preserve appearance ui settings")

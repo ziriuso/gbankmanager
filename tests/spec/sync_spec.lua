@@ -1602,6 +1602,118 @@ local staleMinimumReplyPeer = ((((db.syncState or {}).peers or {})["Guild Tester
 assert.truthy(staleMinimumReplyAccepted, "minimum sync replies should still be accepted")
 assert.equal(0, #reciprocalMinimumMessages, "minimum sync replies should not trigger another reply loop")
 assert.equal(1780670001, tonumber(staleMinimumReplyPeer.lastSynchronizedAt or 0), "no-change minimum replies should still update the peer synchronized timestamp")
+
+db.minimums = {
+    {
+        itemID = 240971,
+        itemName = "Stoic Eversong Diamond",
+        quantity = 5,
+        scope = "TAB",
+        tabName = "Gems and Chants",
+        enabled = false,
+        updatedAt = 1780669182,
+    },
+}
+db.minimumTombstones = {}
+reciprocalMinimumMessages = {}
+local remoteMinimumDeletionPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670100,
+    payload = {
+        guildKey = "Guild Testers",
+        syncReply = true,
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {},
+        minimumTombstones = {
+            {
+                ruleKey = "240971|TAB|Gems and Chants",
+                itemID = 240971,
+                itemName = "Stoic Eversong Diamond",
+                scope = "TAB",
+                tabName = "Gems and Chants",
+                deletedAt = 1780670100,
+                deletedBy = "OfficerOne-Stormrage",
+            },
+        },
+    },
+})
+local remoteMinimumDeletionAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", remoteMinimumDeletionPayload, "GUILD", "OfficerOne")
+assert.truthy(remoteMinimumDeletionAccepted, "authorized minimum tombstones should be accepted")
+assert.equal(0, #(db.minimums or {}), "a newer minimum tombstone should remove the older live rule")
+assert.truthy(type((db.minimumTombstones or {})["240971|TAB|Gems and Chants"]) == "table", "accepted minimum deletions should remain durable after merge")
+
+reciprocalMinimumMessages = {}
+local resurrectedMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670200,
+    payload = {
+        guildKey = "Guild Testers",
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 240971,
+                itemName = "Stoic Eversong Diamond",
+                quantity = 5,
+                scope = "TAB",
+                tabName = "Gems and Chants",
+                enabled = false,
+                updatedAt = 1780669182,
+            },
+        },
+    },
+})
+local resurrectedMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", resurrectedMinimumPayload, "GUILD", "OfficerOne")
+assert.truthy(resurrectedMinimumAccepted, "legacy minimum snapshots should still be handled when a tombstone wins")
+assert.equal(0, #(db.minimums or {}), "a stale peer should not resurrect a minimum older than the known deletion")
+assert.equal(1, #reciprocalMinimumMessages, "a stale peer missing a deletion should receive one catch-up reply")
+assert.equal("240971|TAB|Gems and Chants", (((reciprocalMinimumMessages[1].payload or {}).minimumTombstones or {})[1] or {}).ruleKey, "minimum catch-up replies should include durable deletion tombstones")
+
+local newerMinimumPayload = codec.EncodeTable({
+    type = "MINIMUMS_SNAPSHOT",
+    updatedAt = 1780670300,
+    payload = {
+        guildKey = "Guild Testers",
+        syncReply = true,
+        actorContext = {
+            characterKey = "Stormrage-OfficerOne",
+            guildRankIndex = 1,
+            guildRankName = "Officer",
+            inGuild = true,
+            isGuildMaster = false,
+            name = "OfficerOne",
+        },
+        minimums = {
+            {
+                itemID = 240971,
+                itemName = "Stoic Eversong Diamond",
+                quantity = 8,
+                scope = "TAB",
+                tabName = "Gems and Chants",
+                enabled = true,
+                updatedAt = 1780670300,
+            },
+        },
+    },
+})
+local newerMinimumAccepted = _G.FireEvent("CHAT_MSG_ADDON", "GBankManager", newerMinimumPayload, "GUILD", "OfficerOne")
+assert.truthy(newerMinimumAccepted, "a deliberate minimum newer than the deletion should be accepted")
+assert.equal(1, #(db.minimums or {}), "a newer live minimum should replace the older tombstone")
+assert.equal(8, ((db.minimums or {})[1] or {}).quantity, "the newer live minimum should preserve its new quantity")
+assert.equal(nil, (db.minimumTombstones or {})["240971|TAB|Gems and Chants"], "a newer live minimum should clear the obsolete tombstone")
 ns.modules.syncTransport.Send = originalMinimumSnapshotSend
 db.minimums = {
     {

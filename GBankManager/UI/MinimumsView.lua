@@ -7,6 +7,7 @@ local minimumsView = ns.modules.minimumsView or {}
 local craftedQuality = ns.modules.craftedQuality or {}
 local itemCatalog = ns.modules.itemCatalog or {}
 local itemDisplay = ns.modules.itemDisplay or {}
+local minimumsSync = ns.modules.minimumsSync or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
 end
@@ -416,6 +417,9 @@ function minimumsView.UpsertWithAudit(db, rule, metadata)
     else
         db.minimums = minimumsView.Upsert(db.minimums, normalizedRule)
     end
+    if type(minimumsSync.ClearDeletion) == "function" then
+        minimumsSync.ClearDeletion(db, normalizedRule)
+    end
 
     table.insert(db.auditLog, {
         category = "MINIMUM",
@@ -521,6 +525,9 @@ function minimumsView.RemoveWithAudit(db, rule, metadata)
     db.minimums = remaining
 
     if removed then
+        if type(minimumsSync.RecordDeletion) == "function" then
+            minimumsSync.RecordDeletion(db, removed, metadata)
+        end
         table.insert(db.auditLog, {
             category = "MINIMUM",
             type = "MINIMUM_REMOVED",

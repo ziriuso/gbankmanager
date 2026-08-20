@@ -9,6 +9,7 @@ local diff = ns.modules.diff or {}
 local requests = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
 local ledgerScanner = ns.modules.ledgerScanner or {}
+local minimumsSync = ns.modules.minimumsSync or {}
 
 local scanner = ns.modules.scanner or {
     scanInProgress = false,
@@ -153,6 +154,7 @@ local function publish_minimums_snapshot(db, updatedAt)
             guildKey = current_guild_key(db),
             actorContext = current_context(db),
             minimums = clone_array_records((db or {}).minimums or {}),
+            minimumTombstones = type(minimumsSync.BuildTombstoneSnapshot) == "function" and minimumsSync.BuildTombstoneSnapshot(db) or {},
         },
     })
     return true

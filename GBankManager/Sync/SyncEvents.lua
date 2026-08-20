@@ -15,6 +15,7 @@ local requestsModule = ns.modules.requests or {}
 local bankLedger = ns.modules.bankLedger or {}
 local peerState = ns.modules.syncPeerState or {}
 local manualActions = ns.modules.syncManualActions or {}
+local minimumsSync = ns.modules.minimumsSync or {}
 
 local AUTO_SYNC_LOGIN_DELAY_SECONDS = 2
 local AUTO_SYNC_INTERVAL_SECONDS = 10 * 60
@@ -411,6 +412,10 @@ local function clone_array_records(records)
 end
 
 local function minimum_rule_key(row)
+    if type(minimumsSync.RuleKey) == "function" then
+        return minimumsSync.RuleKey(row)
+    end
+
     row = type(row) == "table" and row or {}
     local itemID = tostring(tonumber(row.itemID or row.originalItemID or 0) or 0)
     local scope = tostring(row.scope or row.originalScope or "GLOBAL")
@@ -418,49 +423,12 @@ local function minimum_rule_key(row)
     return table.concat({ itemID, scope, tabName }, "|")
 end
 
-local function minimum_updated_at(row)
-    row = type(row) == "table" and row or {}
-    return tonumber(row.updatedAt or row.createdAt or 0) or 0
-end
-
-local function merge_minimum_snapshot_rows(localRows, incomingRows)
-    local localByKey = {}
-    local localOrder = {}
-    for _, row in ipairs(localRows or {}) do
-        local key = minimum_rule_key(row)
-        if key ~= "0|GLOBAL|" and localByKey[key] == nil then
-            localByKey[key] = row
-            localOrder[#localOrder + 1] = key
-        end
+local function merge_minimum_snapshot_rows(localRows, localTombstones, incomingRows, incomingTombstones)
+    if type(minimumsSync.MergeSnapshot) == "function" then
+        return minimumsSync.MergeSnapshot(localRows, localTombstones, incomingRows, incomingTombstones)
     end
 
-    local incomingKeys = {}
-    local merged = {}
-    local shouldReply = false
-    for _, incoming in ipairs(incomingRows or {}) do
-        if type(incoming) == "table" then
-            local key = minimum_rule_key(incoming)
-            incomingKeys[key] = true
-            local existing = localByKey[key]
-            if existing == nil then
-                merged[#merged + 1] = incoming
-            elseif minimum_updated_at(incoming) >= minimum_updated_at(existing) then
-                merged[#merged + 1] = incoming
-            else
-                merged[#merged + 1] = existing
-                shouldReply = true
-            end
-        end
-    end
-
-    for _, key in ipairs(localOrder) do
-        if incomingKeys[key] ~= true then
-            merged[#merged + 1] = localByKey[key]
-            shouldReply = true
-        end
-    end
-
-    return clone_array_records(merged), shouldReply
+    return clone_array_records(incomingRows), {}, false
 end
 
 local function send_minimums_snapshot_reply(db)
@@ -475,6 +443,7 @@ local function send_minimums_snapshot_reply(db)
             guildKey = active_guild_key(db),
             actorContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {},
             minimums = clone_array_records((db or {}).minimums or {}),
+            minimumTombstones = type(minimumsSync.BuildTombstoneSnapshot) == "function" and minimumsSync.BuildTombstoneSnapshot(db) or {},
             syncReply = true,
         },
     })
@@ -1150,6 +1119,7 @@ local function handle_minimums_snapshot(db, payload, sender)
     local actorContext = normalize_actor_context(payload.actorContext)
     local authorityContext = actor_authority_context(actorContext, sender)
     local minimums = type(payload.minimums) == "table" and payload.minimums or nil
+    local incomingTombstones = type(payload.minimumTombstones) == "table" and payload.minimumTombstones or {}
     local localPolicy = current_policy(db)
 
     if not request_targets_active_guild(db, payload.guildKey) then
@@ -1167,23 +1137,36 @@ local function handle_minimums_snapshot(db, payload, sender)
         return false
     end
 
-    if not actor_can_manage_minimums(authorityContext, localPolicy) then
+    local hasIncomingTombstones = next(incomingTombstones) ~= nil
+    if not actor_can_manage_minimums(authorityContext, localPolicy)
+        or (hasIncomingTombstones and not actor_can(authorityContext, "minimum_delete", localPolicy)) then
         remember_sync_decision(ns.state.lastSyncMessage, sender, payload, false, "minimums_snapshot", "capability_denied")
         return false
     end
 
     local previousMinimums = clone_array_records(db.minimums or {})
-    local mergedMinimums, shouldReply = merge_minimum_snapshot_rows(previousMinimums, minimums)
+    local previousTombstones = type(minimumsSync.BuildTombstoneSnapshot) == "function" and minimumsSync.BuildTombstoneSnapshot(db) or {}
+    local mergedMinimums, mergedTombstones, shouldReply = merge_minimum_snapshot_rows(
+        previousMinimums,
+        db.minimumTombstones,
+        minimums,
+        incomingTombstones
+    )
     local auditCountBefore = #(db.auditLog or {})
     db.minimums = mergedMinimums
+    db.minimumTombstones = mergedTombstones
     append_minimums_snapshot_audit(db, previousMinimums, db.minimums, actorContext, payload.updatedAt or ns.state.lastSyncMessage.updatedAt)
     local changedCount = math.max(0, #(db.auditLog or {}) - auditCountBefore)
+    local tombstonesChanged = type(minimumsSync.TombstonesEqual) == "function"
+        and not minimumsSync.TombstonesEqual(previousTombstones, db.minimumTombstones)
+        or false
+    local stateChanged = changedCount > 0 or tombstonesChanged
     mark_sync_peer_synchronized(db, ns.state.lastSyncMessage, sender)
-    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", changedCount > 0 and "applied" or "no_change")
+    remember_sync_decision(ns.state.lastSyncMessage, sender, payload, true, "minimums_snapshot", stateChanged and "applied" or "no_change")
     if shouldReply == true and payload.syncReply ~= true then
         send_minimums_snapshot_reply(db)
     end
-    if changedCount > 0 then
+    if stateChanged then
         report_sync_status(string.format("Synced minimums from %s.", sender_display_name(sender)))
         invalidate_database_cache("sync_merge")
     end

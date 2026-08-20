@@ -110,3 +110,16 @@ assert.truthy(#minimumSyncCalls >= 1, "saving minimum changes should publish the
 assert.equal("MINIMUMS_SNAPSHOT", (((minimumSyncCalls[1] or {}).message) or {}).type, "minimum sync should use the dedicated minimum snapshot message family")
 assert.equal("GUILD", (minimumSyncCalls[1] or {}).distribution, "minimum sync should publish to the guild addon audience")
 assert.equal("Guild Testers", (((((minimumSyncCalls[1] or {}).message) or {}).payload or {}).guildKey), "minimum sync should stamp the active guild identity into the snapshot payload")
+
+mainFrame:RefreshView()
+local savedMinimumRow = (mainFrame.tableRowsData or {})[1]
+mainFrame:OpenMinimumDetailsModal(savedMinimumRow)
+mainFrame.minimumDetailsRemoveButton:GetScript("OnClick")(mainFrame.minimumDetailsRemoveButton)
+local deletionSyncCalls = capture_sync_calls(function()
+    mainFrame.minimumSaveButton:GetScript("OnClick")(mainFrame.minimumSaveButton)
+end)
+
+local deletedRuleKey = "7007|TAB|Alchemy"
+assert.equal(0, #(current_runtime_db().minimums or {}), "saving a staged minimum removal should remove the live rule")
+assert.truthy(type((current_runtime_db().minimumTombstones or {})[deletedRuleKey]) == "table", "saving a staged minimum removal should retain a deletion tombstone")
+assert.equal(deletedRuleKey, (((((deletionSyncCalls[1] or {}).message or {}).payload or {}).minimumTombstones or {})[1] or {}).ruleKey, "minimum sync should publish deletion tombstones with the remaining rules")

@@ -31,6 +31,7 @@ Domain/Planning.lua
 Domain/CraftedQuality.lua
 Domain/ItemDisplay.lua
 Domain/MinimumsPortability.lua
+Domain/MinimumsSync.lua
 Domain/Exports.lua
 Domain/Requests.lua
 Domain/LedgerIdentity.lua

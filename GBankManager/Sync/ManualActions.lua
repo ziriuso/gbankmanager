@@ -8,6 +8,7 @@ local permissions = ns.modules.auth or ns.modules.permissions or {}
 local transport = ns.modules.syncTransport or {}
 local bankLedger = ns.modules.bankLedger or {}
 local store = ns.modules.store or ns.data.store
+local minimumsSync = ns.modules.minimumsSync or {}
 
 local COOLDOWN_SECONDS = 60
 local ACTION_ORDER = {
@@ -194,6 +195,7 @@ local function default_action_handlers()
                     guildKey = current_guild_key(db),
                     actorContext = current_context(db),
                     minimums = snapshot,
+                    minimumTombstones = type(minimumsSync.BuildTombstoneSnapshot) == "function" and minimumsSync.BuildTombstoneSnapshot(db) or {},
                 },
             })
             return true, string.format("Requested minimums sync for %d rule(s).", #snapshot)

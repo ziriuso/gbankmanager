@@ -132,6 +132,7 @@ assert.equal("MINIMUM_REMOVED", ((ns.state.db.auditLog or {})[1] or {}).type, "o
 assert.equal(1, #oneTimeMinimumSyncMessages, "one-time cleanup should publish the updated minimum snapshot")
 assert.equal("MINIMUMS_SNAPSHOT", (oneTimeMinimumSyncMessages[1] or {}).type, "one-time cleanup should use the minimum snapshot sync family")
 assert.equal(2, #(((oneTimeMinimumSyncMessages[1] or {}).payload or {}).minimums or {}), "one-time cleanup sync should include the remaining minimum rules")
+assert.equal("1001|TAB|Flasks", (((oneTimeMinimumSyncMessages[1] or {}).payload or {}).minimumTombstones or {})[1].ruleKey, "one-time cleanup sync should publish a tombstone for the automatically removed rule")
 
 ns.modules.syncTransport.Send = originalMinimumSyncSend
 _G.time = originalTimeForOneTimeMinimum
