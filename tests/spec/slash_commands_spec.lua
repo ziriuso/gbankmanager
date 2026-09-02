@@ -11,6 +11,20 @@ _G.DEFAULT_CHAT_FRAME.messages = {}
 local assert = require("tests.helpers.assert")
 local fixture = require("tests.helpers.ui_fixture")
 
+local slashSourceHandle, slashSourceError = io.open("GBankManager/Core/SlashCommands.lua", "rb")
+assert.truthy(slashSourceHandle ~= nil, "slash command source should be readable: " .. tostring(slashSourceError))
+local slashSource = slashSourceHandle:read("*a")
+slashSourceHandle:close()
+
+assert.truthy(
+    string.find(slashSource, "_G%.SlashCmdList%s*=", 1) == nil,
+    "slash registration must not reassign Blizzard's global SlashCmdList binding"
+)
+assert.truthy(
+    string.find(slashSource, "_G.SlashCmdList.GBANKMANAGER = function", 1, true) ~= nil,
+    "slash registration should add only GBankManager's own registry entry"
+)
+
 local env = fixture.load()
 local mainFrame = env.mainFrame
 local slash = env.slash

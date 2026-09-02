@@ -46,7 +46,7 @@ local branchPushPosition = string.find(releaseDoc, "git push -u origin HEAD", 1,
 local prCreatePosition = string.find(releaseDoc, "gh pr create", 1, true)
 local prMergePosition = string.find(releaseDoc, "gh pr merge", 1, true)
 local defaultBranchRefreshPosition = string.find(releaseDoc, "git fetch origin master", 1, true)
-local stableTagPosition = string.find(releaseDoc, "git tag v1.5.0 origin/master", 1, true)
+local stableTagPosition = string.find(releaseDoc, "git tag v1.5.1 origin/master", 1, true)
 
 assert.truthy(branchPushPosition ~= nil, "release workflow doc should push the release branch before integration")
 assert.truthy(prCreatePosition ~= nil, "release workflow doc should create a pull request before tagging")

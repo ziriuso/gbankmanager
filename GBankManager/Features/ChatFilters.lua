@@ -21,12 +21,17 @@ local MUTED_AMBIENT_NPCS = {
     ["Silvermoon Citizen"] = true,
 }
 
+local canaccessvalue = _G.canaccessvalue
 local PENDING_BUBBLE_TTL = 4.0
 local BUBBLE_POLL_INTERVAL = 0.05
 local BUBBLE_WALK_DEPTH = 4
 local pendingBubbleTexts = {}
 local bubbleFrame = nil
 local hiddenBubbleParent = nil
+
+local function can_use_chat_value(value)
+    return type(canaccessvalue) ~= "function" or canaccessvalue(value)
+end
 
 local function current_db()
     local store = ns.modules.store or ns.data and ns.data.store or nil
@@ -43,7 +48,7 @@ local function mute_enabled()
 end
 
 function chatFilters.IsMutedAmbientNPC(sender)
-    if not mute_enabled() or type(sender) ~= "string" then
+    if not mute_enabled() or not can_use_chat_value(sender) or type(sender) ~= "string" then
         return false
     end
 
@@ -51,7 +56,7 @@ function chatFilters.IsMutedAmbientNPC(sender)
 end
 
 local function strip_chat_formatting(text)
-    if not text or text == "" then
+    if not can_use_chat_value(text) or not text or text == "" then
         return ""
     end
 
@@ -65,11 +70,16 @@ local function strip_chat_formatting(text)
 end
 
 local function queue_bubble_suppression(text)
-    if text == nil or text == "" or type(_G.GetTime) ~= "function" then
+    if type(_G.GetTime) ~= "function" then
         return
     end
 
-    pendingBubbleTexts[strip_chat_formatting(text)] = (_G.GetTime() or 0) + PENDING_BUBBLE_TTL
+    text = strip_chat_formatting(text)
+    if text == "" then
+        return
+    end
+
+    pendingBubbleTexts[text] = (_G.GetTime() or 0) + PENDING_BUBBLE_TTL
 end
 
 local function expire_pending_bubbles()
@@ -113,7 +123,7 @@ local function collect_font_strings(frame, out, depth)
         for _, region in ipairs({ frame:GetRegions() }) do
             if type(region.GetObjectType) == "function" and region:GetObjectType() == "FontString" then
                 local text = type(region.GetText) == "function" and region:GetText() or nil
-                if text and text ~= "" then
+                if can_use_chat_value(text) and text and text ~= "" then
                     out[#out + 1] = text
                 end
             end

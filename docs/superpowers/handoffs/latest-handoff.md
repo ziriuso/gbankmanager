@@ -2,6 +2,34 @@
 
 ## Resume Here
 
+### 2026-09-02 v1.5.1 Protected-Action And Secret-Chat Patch
+
+- Repo truth at implementation start:
+  - released base: `origin/master` at `47a4b0d7fc1d32f11b67dcc82cb578edeafd0498` (`v1.5.0`)
+  - patch branch: `codex/1.5.1-slash-registry-taint-fix`
+  - release metadata: `1.5.1` / `v1.5.1`
+- Patch scope:
+  - GBankManager no longer assigns Blizzard's global `SlashCmdList` binding back to itself during addon load
+  - `/gbm` remains registered under GBankManager's own registry entry
+  - the source-level regression test rejects future whole-registry assignments that would taint protected Blizzard slash commands such as `/tm` and `/targetmarker`
+  - the live manual check requires both target-marker aliases to run after `/reload` without an `ADDON_ACTION_FORBIDDEN` attribution to GBankManager
+  - ambient NPC chat filtering now checks `canaccessvalue` before operating on WoW-provided sender, message, or rendered bubble text
+  - inaccessible chat fails open and remains visible instead of being compared, formatted, table-indexed, queued, matched, or hidden
+- Data-safety contract:
+  - `LEDGER_FORCE_CLEAR_VERSION = 1.2.0`, `LEDGER_PROTOCOL_VERSION = 3`, SavedVariables migrations, and sync payloads remain intentionally unchanged
+- Verification completed on 2026-09-02:
+  - the focused taint regression failed before the source fix and passed afterward
+  - the focused secret-chat regression failed against the old sender lookup and passed after the shared access guard was added
+  - focused slash, chat-filter, TOC, About, and release-workflow specs passed
+  - `.\tools\lua\lua.exe .\tests\run_all.lua` passed the complete unit, UI, and integration suite after both fixes
+  - Retail deployment completed for both addon folders with exact parity: GBankManager 73/73 files and GBankManager_ItemData 23/23 files, with no missing, extra, or mismatched hashes
+  - the installed Retail TOC reports `1.5.1` / `v1.5.1`; the deployed slash source contains no global `SlashCmdList` assignment and the deployed chat-filter source contains the shared access guard
+  - the user live-verified that `/tm` and `/targetmarker` no longer trigger the GBankManager protected-action failure
+  - manual live-client verification remains for the secret-chat follow-up: `/reload`, enable `Mute Silvermoon Citizen`, enter a previously affected instance, and confirm restricted monster chat stays visible without Lua errors
+- Release status:
+  - the user approved local deployment plus a stable `v1.5.1` GitHub and CurseForge release through the existing protected-branch and tag-driven workflow
+  - remote merge, tag, workflow, package, and publication evidence are pending
+
 ### 2026-08-20 v1.5.0 Shopping Session And Minimum Sync Release Candidate
 
 - Repo truth at release preparation:

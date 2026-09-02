@@ -770,7 +770,6 @@ local function resolve_crafted_quality_module(existing)
 end
 
 _G.SLASH_GBANKMANAGER1 = "/gbm"
-_G.SlashCmdList = _G.SlashCmdList or {}
 _G.SlashCmdList.GBANKMANAGER = function(msg)
     local scanner = ns.modules.scanner
     local mainFrame = ns.modules.mainFrame
