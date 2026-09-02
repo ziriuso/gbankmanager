@@ -86,14 +86,14 @@ git rev-parse --short HEAD
 
 ```powershell
 git add GBankManager GBankManager_ItemData README.md docs tests
-git commit -m "chore: prepare 1.5.0 release"
+git commit -m "chore: prepare 1.5.1 release"
 git push -u origin HEAD
 ```
 
 5. Open, verify, and merge the release pull request before tagging:
 
 ```powershell
-gh pr create --base master --head <release-branch> --title "Prepare GBankManager 1.5.0 release" --body-file <pull-request-body-file>
+gh pr create --base master --head <release-branch> --title "Prepare GBankManager 1.5.1 release" --body-file <pull-request-body-file>
 gh pr checks <pr-number> --watch
 gh pr merge <pr-number> --merge --delete-branch=false
 git fetch origin master
@@ -105,8 +105,8 @@ If branch policy blocks a normal merge and the user explicitly authorized an adm
 6. Create and push the release tag on the merged default-branch commit:
 
 ```powershell
-git tag v1.5.0 origin/master
-git push origin v1.5.0
+git tag v1.5.1 origin/master
+git push origin v1.5.1
 ```
 
 7. Watch the tag-triggered workflow:
@@ -119,10 +119,10 @@ gh run watch <run-id>
 8. Confirm the release and artifact:
 
 ```powershell
-gh release view v1.5.0 --json name,tagName,isPrerelease,assets,url
+gh release view v1.5.1 --json name,tagName,isPrerelease,assets,url
 ```
 
-The stable release should have `isPrerelease: false`, a `GBankManager-1.5.0.zip` asset, and a successful CurseForge upload step in the workflow log.
+The stable release should have `isPrerelease: false`, a `GBankManager-1.5.1.zip` asset, and a successful CurseForge upload step in the workflow log.
 
 9. Deploy the same committed worktree locally after the release gate is green:
 
