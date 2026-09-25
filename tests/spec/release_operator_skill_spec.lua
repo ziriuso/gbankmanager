@@ -20,6 +20,8 @@ assert.truthy(string.find(skill, "Use when handling a GBankManager alpha, beta, 
 assert.truthy(string.find(skill, ".\\tools\\lua\\lua.exe .\\tests\\run_all.lua", 1, true) ~= nil, "release operator skill should require the full Lua suite")
 assert.truthy(string.find(skill, "gh run view <run-id> --log-failed", 1, true) ~= nil, "release operator skill should document failed run log inspection")
 assert.truthy(string.find(skill, "Do not reuse a failed tag for a new payload.", 1, true) ~= nil, "release operator skill should require a fresh tag after failed publishes")
+assert.truthy(string.find(skill, "forever-v", 1, true) ~= nil, "release operator skill should give Forever its own tag line")
+assert.truthy(string.find(skill, "Do not merge Forever into master", 1, true) ~= nil, "release operator skill should keep the Forever branch out of the Retail release line")
 assert.truthy(string.find(skill, "GBankManager/GBankManager.toc", 1, true) ~= nil, "release operator skill should mention TOC version confirmation")
 assert.truthy(string.find(skill, ".worktrees\\gbankmanager-v1", 1, true) == nil, "release operator skill should not require an obsolete machine-local worktree")
 

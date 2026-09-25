@@ -1,5 +1,6 @@
 .worktrees/
 .superpowers/
+artifacts/
 tests/tmp/
 tools/catalog/runtime/item-catalog-extracted.json
 tools/catalog/runtime/item-catalog-input.json

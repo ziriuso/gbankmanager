@@ -2,6 +2,10 @@
 
 World of Warcraft guild bank inventory, planning, request, and export addon.
 
+The GitHub `master` branch is the Retail release line. Forever is developed and
+released from a dedicated branch using its own item database; both variants
+are intended to appear as version-specific files under one CurseForge listing.
+
 Marketplace copy for publishing is kept in [docs/curseforge-description.md](docs/curseforge-description.md).
 Release automation setup for CurseForge and GitHub Releases is documented in [docs/curseforge-release-workflow.md](docs/curseforge-release-workflow.md).
 

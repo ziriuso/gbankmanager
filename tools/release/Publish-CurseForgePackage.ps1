@@ -13,7 +13,9 @@ param(
     [string]$TagName,
     [string]$DisplayName,
     [string]$TocPath = ".\GBankManager\GBankManager.toc",
-    [string]$GameVersionIds = ""
+    [string]$GameVersionIds = "",
+    [ValidateSet("Retail", "Forever")]
+    [string]$Target = "Retail"
 )
 
 Set-StrictMode -Version Latest
@@ -22,12 +24,19 @@ $ErrorActionPreference = "Stop"
 function Get-TocInterfaceVersion {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Path
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseTarget
     )
 
     foreach ($line in Get-Content -Path $Path) {
-        if ($line -match '^## Interface:\s*(\d{6})(?:\s*,\s*\d{5,6})*\s*$') {
+        if ($ReleaseTarget -eq "Forever" -and $line -match '^## Interface:\s*(?:\d{5,6}\s*,\s*)*(16001)(?:\s*,\s*\d{5,6})*\s*$') {
             return $Matches[1]
+        }
+        if ($line -match '^## Interface:\s*(\d{6})(?:\s*,\s*\d{5,6})*\s*$') {
+            if ($ReleaseTarget -eq "Retail") {
+                return $Matches[1]
+            }
         }
     }
 
@@ -40,8 +49,11 @@ function Convert-InterfaceToVersionName {
         [string]$Interface
     )
 
+    if ($Interface -match '^\d{5}$') {
+        return "$([int]$Interface.Substring(0, 1)).$([int]$Interface.Substring(1, 2)).$([int]$Interface.Substring(3, 2))"
+    }
     if ($Interface -notmatch '^\d{6}$') {
-        throw "Interface '$Interface' must be a six-digit retail interface value."
+        throw "Interface '$Interface' must be a supported Retail or Forever interface value."
     }
 
     $major = [int]$Interface.Substring(0, 2)
@@ -59,8 +71,13 @@ function Resolve-GameVersionIds {
         [string]$ConfiguredIds = ""
     )
 
+    $overrideName = if ($InterfaceValue -eq "16001") { "CF_FOREVER_GAME_VERSION_IDS" } else { "CF_GAME_VERSION_IDS" }
     if (-not [string]::IsNullOrWhiteSpace($ConfiguredIds)) {
-        return ($ConfiguredIds -split '[,\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { [int]$_ })
+        $ids = @($ConfiguredIds -split '[,\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { [int]$_ })
+        if ($InterfaceValue -eq "16001" -and $ids.Count -ne 1) {
+            throw "Forever must be tagged with exactly one CurseForge game version id in $overrideName."
+        }
+        return $ids
     }
 
     $versionName = Convert-InterfaceToVersionName -Interface $InterfaceValue
@@ -81,19 +98,25 @@ function Resolve-GameVersionIds {
     )
 
     if ($matches.Count -eq 0) {
-        throw "Could not resolve a CurseForge game version id for interface $InterfaceValue (version $versionName). Set CF_GAME_VERSION_IDS as a repository variable to override automatic resolution."
+        throw "Could not resolve a CurseForge game version id for interface $InterfaceValue (version $versionName). Set $overrideName as a repository variable to override automatic resolution."
+    }
+    if ($InterfaceValue -eq "16001" -and $matches.Count -ne 1) {
+        throw "Forever version $versionName matched $($matches.Count) CurseForge game versions; set one $overrideName id."
     }
 
     return @($matches | ForEach-Object { [int]$_.id })
 }
 
 $resolvedFilePath = [System.IO.Path]::GetFullPath($FilePath)
+if ($Target -eq "Forever" -and $TagName -notmatch '^forever-v\d+\.\d+\.\d+(?:-[0-9A-Za-z\.\-]+)?$') {
+    throw "Forever uploads require a Forever version tag."
+}
 if (-not (Test-Path $resolvedFilePath)) {
     throw "Package file '$resolvedFilePath' does not exist."
 }
 
 $resolvedTocPath = [System.IO.Path]::GetFullPath($TocPath)
-$interfaceValue = Get-TocInterfaceVersion -Path $resolvedTocPath
+$interfaceValue = Get-TocInterfaceVersion -Path $resolvedTocPath -ReleaseTarget $Target
 $versionIds = Resolve-GameVersionIds -Token $ApiToken -InterfaceValue $interfaceValue -ConfiguredIds $GameVersionIds
 
 $display = if ([string]::IsNullOrWhiteSpace($DisplayName)) { "GBankManager $TagName" } else { $DisplayName }

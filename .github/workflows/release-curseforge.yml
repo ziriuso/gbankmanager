@@ -1,9 +1,9 @@
-name: Release to CurseForge
+name: Release Forever to CurseForge
 
 on:
   push:
     tags:
-      - "v*"
+      - "forever-v*"
 
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-latest
     env:
       CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
-      CF_GAME_VERSION_IDS: ${{ vars.CF_GAME_VERSION_IDS }}
+      CF_FOREVER_GAME_VERSION_IDS: ${{ vars.CF_FOREVER_GAME_VERSION_IDS }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -24,10 +24,14 @@ jobs:
         shell: pwsh
         run: .\tools\lua\lua.exe .\tests\run_all.lua
 
-      - name: Build combined CurseForge package
+      - name: Build Forever CurseForge package
         id: build
         shell: pwsh
-        run: .\tools\release\Build-CurseForgePackage.ps1 -TagName "${{ github.ref_name }}" -OutputDirectory ".\artifacts\release"
+        run: .\tools\release\Build-CurseForgePackage.ps1 -TagName "${{ github.ref_name }}" -Target Forever -OutputDirectory ".\artifacts\release"
+
+      - name: Verify Forever package contents
+        shell: pwsh
+        run: .\tools\release\Assert-ForeverPackage.ps1 -PackagePath "${{ steps.build.outputs.package_path }}" -TagName "${{ github.ref_name }}"
 
       - name: Upload package to CurseForge
         shell: pwsh
@@ -42,7 +46,8 @@ jobs:
           -TagName "${{ github.ref_name }}"
           -DisplayName "${{ steps.build.outputs.release_name }}"
           -TocPath ".\GBankManager\GBankManager.toc"
-          -GameVersionIds "$env:CF_GAME_VERSION_IDS"
+          -GameVersionIds "$env:CF_FOREVER_GAME_VERSION_IDS"
+          -Target Forever
 
       - name: Create GitHub Release and attach zip
         uses: softprops/action-gh-release@v3

@@ -2,6 +2,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$TagName,
+    [ValidateSet("Retail", "Forever")]
+    [string]$Target = "Retail",
     [string]$OutputDirectory = ".\artifacts\release"
 )
 
@@ -11,11 +13,14 @@ $ErrorActionPreference = "Stop"
 function Get-ReleaseMetadata {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Tag
+        [string]$Tag,
+        [Parameter(Mandatory = $true)]
+        [string]$ReleaseTarget
     )
 
-    if ($Tag -notmatch '^v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z\.\-]+)?)$') {
-        throw "Tag '$Tag' must look like v1.2.3, v1.2.3-beta.1, or v1.2.3-alpha.1."
+    $prefix = if ($ReleaseTarget -eq "Forever") { "forever-v" } else { "v" }
+    if (-not ($Tag -match "^$prefix(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z\.\-]+)?)$")) {
+        throw "Tag '$Tag' must start with '$prefix' and contain a semantic version for $ReleaseTarget."
     }
 
     $version = $Matches.version
@@ -31,8 +36,8 @@ function Get-ReleaseMetadata {
         Version = $version
         ReleaseType = $releaseType
         IsPrerelease = ($releaseType -ne "release")
-        FileName = "GBankManager-$version.zip"
-        ReleaseName = "GBankManager $Tag"
+        FileName = if ($ReleaseTarget -eq "Forever") { "GBankManager-Forever-$version.zip" } else { "GBankManager-$version.zip" }
+        ReleaseName = if ($ReleaseTarget -eq "Forever") { "GBankManager Forever v$version" } else { "GBankManager $Tag" }
     }
 }
 
@@ -52,7 +57,7 @@ function Set-GitHubOutputs {
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$metadata = Get-ReleaseMetadata -Tag $TagName
+$metadata = Get-ReleaseMetadata -Tag $TagName -ReleaseTarget $Target
 
 $resolvedOutputDirectory = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputDirectory))
 $stagingRoot = Join-Path $resolvedOutputDirectory "staging"
@@ -65,18 +70,30 @@ if (Test-Path $stagingRoot) {
 }
 New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
 
-$addonRoots = @(
-    "GBankManager",
-    "GBankManager_ItemData"
+$addonSources = @(
+    @{ Source = "GBankManager"; Destination = "GBankManager" },
+    @{ Source = $(if ($Target -eq "Forever") { "Forever/GBankManager_ItemData" } else { "GBankManager_ItemData" }); Destination = "GBankManager_ItemData" }
 )
 
-foreach ($addonRoot in $addonRoots) {
-    $sourcePath = Join-Path $repoRoot $addonRoot
+foreach ($addon in $addonSources) {
+    $sourcePath = Join-Path $repoRoot $addon.Source
     if (-not (Test-Path $sourcePath)) {
-        throw "Required addon folder '$addonRoot' was not found under $repoRoot."
+        throw "Required addon folder '$($addon.Source)' was not found under $repoRoot."
     }
 
-    Copy-Item -Recurse -Force -Path $sourcePath -Destination (Join-Path $packageRoot $addonRoot)
+    Copy-Item -Recurse -Force -Path $sourcePath -Destination (Join-Path $packageRoot $addon.Destination)
+}
+
+if ($Target -eq "Forever") {
+    $tocPath = Join-Path $packageRoot "GBankManager/GBankManager.toc"
+    $toc = [System.IO.File]::ReadAllText($tocPath)
+    if ($toc -notmatch '(?m)^## Interface:[^\r\n]*') {
+        throw "Missing main addon interface in $tocPath."
+    }
+    $toc = $toc -replace '(?m)^## Interface:[^\r\n]*', '## Interface: 16001'
+    $toc = $toc -replace '(?m)^## Version:[^\r\n]*', "## Version: $($metadata.Version)"
+    $toc = $toc -replace '(?m)^## X-Release-Tag:[^\r\n]*', "## X-Release-Tag: $TagName"
+    [System.IO.File]::WriteAllText($tocPath, $toc, [System.Text.UTF8Encoding]::new($false))
 }
 
 if (Test-Path $packagePath) {
@@ -87,6 +104,7 @@ Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $packagePat
 
 $result = [pscustomobject]@{
     tag = $TagName
+    target = $Target
     version = $metadata.Version
     releaseType = $metadata.ReleaseType
     isPrerelease = $metadata.IsPrerelease

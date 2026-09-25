@@ -25,8 +25,8 @@ to CurseForge is a later release task.
   separate from Retail. Generate the Forever payload at
   `Forever/GBankManager_ItemData/` with the same runtime addon identity
   (`GBankManager_ItemData`).
-- Add interface `16001` to the main addon TOC and the generated Forever data TOC.
-  Do not add it to the Retail data TOC.
+- Use interface `16001` in the Forever branch's main addon TOC and the
+  generated Forever data TOC. Do not add it to the Retail data TOC.
 - Deploy `GBankManager` and the Forever data folder into the Forever AddOns
   directory. Check every installed file against its source by hash.
 
@@ -89,3 +89,25 @@ the ignored wow.export cache.
 The generated Forever payload uses the folder name `GBankManager_ItemData`
 inside `Forever/` and at the installation target. The Retail data folder at
 the repository root remains the release source for Retail.
+
+## Proposed public release boundary
+
+Keep `master` as the Retail release line and maintain Forever on a dedicated
+branch of the same GitHub repository. Bring applicable shared fixes from
+`master` into Forever deliberately; do not merge the Forever-only catalog or
+client behavior back into `master` by default. Both variants can use the
+existing CurseForge project, provided each uploaded file is tagged only for
+its own WoW game version.
+
+The Forever release must package `GBankManager/` with
+`Forever/GBankManager_ItemData/` installed under the normal
+`GBankManager_ItemData/` folder name. Its packaged TOCs must identify Forever
+interface `16001`. The GitHub tag and zip name must clearly say Forever, and
+the CurseForge upload must select only the Forever `1.60.1` game version. The
+Retail release workflow and its existing package remain on `master`.
+
+Before a public upload, run the full Lua suite, inspect the exact Forever zip,
+confirm it contains no Retail item database, and verify the matching GitHub
+release and CurseForge file after publication. The current tag-driven workflow
+still builds a Retail zip and resolves a Retail game version, so it must be
+adapted for this branch before any Forever tag is pushed.

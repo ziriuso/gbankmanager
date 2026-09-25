@@ -11,6 +11,21 @@ Run the repo's full release flow for `GBankManager`: verify the addon, finalize 
 
 This skill is repo-specific. Use it only in the `GBankManager` worktree and keep the release docs truthful whenever the release path changes.
 
+## Forever release flow on the dedicated branch
+
+Do not merge Forever into master to publish a Forever file. `master` is the
+Retail release line. On the Forever branch, use a tag such as
+`forever-v1.6.0-beta.1` on the verified Forever commit. That branch's tag
+workflow builds the Forever item database and selects only the Forever
+CurseForge game version under the existing project. Run the full suite and
+inspect the Forever zip before pushing the tag. Push the Forever branch first,
+then tag its commit. Confirm the GitHub prerelease, zip contents, completed
+upload step, and Forever file on CurseForge. For a failed publish, fix this
+branch and use the next Forever tag; never reuse the failed tag.
+
+The normal PR-to-`master` release flow below applies to Retail only. See
+`docs/curseforge-release-workflow.md` for the Forever branch checklist.
+
 ## Read First
 
 Before taking release action, read:
@@ -38,7 +53,7 @@ Confirm all of these before publishing:
 
 Never print secrets, paste secret values into files, or echo tokens into chat.
 
-## Release Channels
+## Retail release channels
 
 Use these tag shapes:
 
@@ -48,7 +63,7 @@ Use these tag shapes:
 
 Use plain semantic version tags for stable public releases, and keep using alpha or beta suffixes whenever the user explicitly wants a prerelease channel.
 
-## Normal Release Flow
+## Normal Retail Release Flow
 
 Follow this order.
 

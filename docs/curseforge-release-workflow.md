@@ -1,5 +1,45 @@
 # CurseForge Release Workflow
 
+## Forever branch
+
+Keep Forever on its own long-lived branch in the same GitHub repository. This
+branch's `.github/workflows/release-curseforge.yml` reacts only to tags named
+`forever-vX.Y.Z-beta.N` (or a later Forever alpha or stable tag). A pushed tag
+from this branch runs the full Lua suite, builds
+`GBankManager-Forever-X.Y.Z-beta.N.zip`, uploads it to the **existing**
+GuildBankManager CurseForge project as a file tagged only for WoW Forever, and
+attaches the same zip to a GitHub prerelease. The CurseForge file type is beta
+for a `-beta` tag. Retail tags and packages continue to come from `master`.
+
+The Forever zip has two top-level addon folders: `GBankManager/` and
+`GBankManager_ItemData/`. The latter is copied from
+`Forever/GBankManager_ItemData/`, not the Retail folder at the repository root.
+The main addon TOC is marked only for interface `16001` and carries the
+Forever tag and version. The package builder checks those values in the staged
+zip as well.
+
+Before tagging a Forever release:
+
+1. Confirm this branch is based on the intended Retail release and the working
+   tree is clean. Keep Forever-specific changes off `master`.
+2. Run `.\tools\lua\lua.exe .\tests\run_all.lua`.
+3. Build the proposed package locally with
+   `.\tools\release\Build-CurseForgePackage.ps1 -TagName forever-vX.Y.Z-beta.N -Target Forever`
+   and inspect the zip: exactly the two addon folders, both TOCs at interface
+   `16001`, the expected Forever item count, and no Retail data.
+4. Push the Forever branch. Create and push the Forever tag on its verified
+   commit. Do not merge it into `master` merely to publish Forever.
+5. Watch the tag workflow and verify the GitHub zip plus the new Forever file
+   under the existing CurseForge listing before calling the release complete.
+
+The existing GitHub secret `CF_API_TOKEN` and variable `CF_PROJECT_ID` are
+shared. `CF_FOREVER_GAME_VERSION_IDS` is an optional, separate variable for the
+Forever CurseForge version ID. When it is absent, the publisher resolves
+interface `16001` to game version `1.60.1` from CurseForge's version list.
+Never use the Retail `CF_GAME_VERSION_IDS` override for a Forever upload.
+
+## Retail branch (`master`)
+
 This repo now supports tag-driven CurseForge publishing for the combined `GBankManager` release artifact.
 
 The published zip contains:
