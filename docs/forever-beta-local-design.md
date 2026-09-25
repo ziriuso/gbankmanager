@@ -60,6 +60,30 @@ tab data may be delayed. The scan button must show a visible result, including
 when the bank is closed or a scan is denied. An automatic scan may continue
 retrying for delayed tab data after collecting money once.
 
+## Forever sync identity
+
+Forever names are unique by the complete first and last name within a region.
+The beta guild roster exposes complete names and character GUIDs, while the
+current local addon audit has recorded only the first name plus a beta realm
+label. Two members in the test guild share a first name. For Forever, resolve
+the local complete name by matching `UnitGUID("player")` to the guild roster,
+and use that complete name as the character key in requests, peer state, and
+blacklist entries. Do not use the beta realm label to distinguish characters.
+
+An incoming sync sender must match one complete roster name exactly (allowing
+only a client supplied realm suffix); first-name matches must not grant rank,
+identify the local player, or create a trusted peer. Do not send sync traffic
+until the local complete name has been resolved. A failed lookup should show
+clear feedback for manual sync. Existing beta keys may be migrated only when a
+roster GUID or a unique complete name proves the mapping; ambiguous first-name
+keys must not be assigned to either character.
+
+Acceptance requires unit coverage for two guild members with the same first
+name, a mismatched/ambiguous sender, and local identity resolution. A live
+two-character test must use `/gbm debug sync` to capture the raw addon-message
+sender and confirm request, minimum, history, ledger, and blacklist behavior
+before peer sync is declared verified.
+
 ## Local build and deployment
 
 The Forever beta target resolves to `_classic_beta_` and product

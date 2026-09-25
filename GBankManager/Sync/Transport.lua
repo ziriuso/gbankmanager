@@ -144,6 +144,13 @@ function transport.SetReceiver(receiver)
 end
 
 function transport.Send(distribution, target, message)
+    if type(ns.IsForever) == "function" and ns.IsForever() then
+        local permissions = ns.modules.permissions or ns.modules.auth or {}
+        local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext() or {}
+        if context.identityVerified ~= true then
+            return false, "identity_unverified"
+        end
+    end
     local payload = codec.EncodeTable(message or {})
     if transport.Initialize() and transport.comm and type(transport.comm.SendCommMessage) == "function" then
         transport.comm:SendCommMessage(

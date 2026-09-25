@@ -51,6 +51,20 @@ local function current_realm_name()
     return trim(type(_G.GetRealmName) == "function" and _G.GetRealmName() or "")
 end
 
+local function is_forever()
+    return type(ns.IsForever) == "function" and ns.IsForever()
+end
+
+local function is_secret(value)
+    return type(_G.issecretvalue) == "function" and _G.issecretvalue(value)
+end
+
+local function forever_name(value)
+    local normalized = trim(value)
+    local name = normalized:match("^([^%-]+)%-(.+)$")
+    return trim(name or normalized)
+end
+
 local function canonical_character_parts(value, realmName, nameHint)
     local normalized = trim(value)
     if normalized == "" then
@@ -152,6 +166,10 @@ function permissions.BuildCharacterKey(name, realmName)
         normalizedName = "Unknown"
     end
 
+    if is_forever() then
+        return forever_name(normalizedName)
+    end
+
     if normalizedRealm == "" then
         return normalizedName
     end
@@ -167,6 +185,10 @@ function permissions.NormalizeCharacterKey(value, realmName, nameHint)
     local normalized = trim(value)
     if normalized == "" then
         return ""
+    end
+
+    if is_forever() then
+        return forever_name(normalized)
     end
 
     if string.find(normalized, "-", 1, true) then
@@ -187,6 +209,10 @@ function permissions.NormalizeEnteredCharacterKey(value, realmName)
     local normalized = trim(value)
     if normalized == "" then
         return ""
+    end
+
+    if is_forever() then
+        return forever_name(normalized)
     end
 
     if string.find(normalized, "-", 1, true) then
@@ -211,11 +237,17 @@ function permissions.DisplayCharacterKey(characterKey)
 end
 
 function permissions.GetCharacterNameFromKey(characterKey, realmName, nameHint)
+    if is_forever() then
+        return forever_name(characterKey)
+    end
     local name = canonical_character_parts(characterKey, realmName, nameHint)
     return name
 end
 
 function permissions.GetRealmNameFromKey(characterKey, realmName, nameHint)
+    if is_forever() then
+        return ""
+    end
     local _, resolvedRealm = canonical_character_parts(characterKey, realmName, nameHint)
     return resolvedRealm
 end
@@ -335,6 +367,31 @@ function permissions.GetLivePlayerContext(db)
 
     local name = type(_G.UnitName) == "function" and _G.UnitName("player") or "Unknown"
     local realmName = type(_G.GetRealmName) == "function" and _G.GetRealmName() or ""
+    local identityVerified = not is_forever()
+    if is_forever() then
+        if is_secret(name) then
+            name = "Unknown"
+        end
+        local playerGUID = type(_G.UnitGUID) == "function" and _G.UnitGUID("player") or nil
+        if is_secret(playerGUID) then
+            playerGUID = nil
+        end
+        local count = type(_G.GetNumGuildMembers) == "function" and tonumber(_G.GetNumGuildMembers() or 0) or 0
+        if type(playerGUID) == "string" and playerGUID ~= "" and type(_G.GetGuildRosterInfo) == "function" then
+            for index = 1, count do
+                local values = { _G.GetGuildRosterInfo(index) }
+                if not is_secret(values[1]) and not is_secret(values[17]) then
+                    local rosterName = forever_name(values[1])
+                    if values[17] == playerGUID and rosterName:find(" ", 1, true) then
+                        name = rosterName
+                        identityVerified = true
+                        break
+                    end
+                end
+            end
+        end
+        realmName = ""
+    end
     local characterKey = permissions.BuildCharacterKey(name, realmName)
     local normalizedRankIndex = tonumber(guildRankIndex)
     local inGuild = trim(guildName) ~= ""
@@ -343,6 +400,7 @@ function permissions.GetLivePlayerContext(db)
         name = name or "Unknown",
         realmName = realmName,
         characterKey = characterKey,
+        identityVerified = identityVerified,
         guildName = guildName,
         guildRankName = guildRankName or "",
         guildRankIndex = normalizedRankIndex,
@@ -353,7 +411,38 @@ end
 
 function permissions.GetGuildRosterContextBySender(sender, actorContext)
     actorContext = type(actorContext) == "table" and actorContext or {}
-    sender = trim(sender)
+    sender = is_forever() and is_secret(sender) and "" or trim(sender)
+    if is_forever() then
+        local senderName = forever_name(sender)
+        local count = type(_G.GetNumGuildMembers) == "function" and tonumber(_G.GetNumGuildMembers() or 0) or 0
+        if senderName:find(" ", 1, true) and type(_G.GetGuildRosterInfo) == "function" then
+            for index = 1, count do
+                local name, rankName, rankIndex = _G.GetGuildRosterInfo(index)
+                local rosterName = not is_secret(name) and forever_name(name) or ""
+                if rosterName == senderName then
+                    local normalizedRankIndex = tonumber(rankIndex)
+                    return {
+                        name = rosterName,
+                        realmName = "",
+                        characterKey = rosterName,
+                        guildRankName = rankName or "",
+                        guildRankIndex = normalizedRankIndex,
+                        isGuildMaster = normalizedRankIndex == 0,
+                        inGuild = true,
+                    }
+                end
+            end
+        end
+        return {
+            name = senderName,
+            realmName = "",
+            characterKey = senderName,
+            guildRankName = "",
+            guildRankIndex = nil,
+            isGuildMaster = false,
+            inGuild = false,
+        }
+    end
     local realmName = trim(actorContext.realmName)
     if realmName == "" then
         realmName = permissions.GetRealmNameFromKey(actorContext.characterKey, nil, actorContext.name)

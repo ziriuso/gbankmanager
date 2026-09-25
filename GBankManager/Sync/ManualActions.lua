@@ -293,6 +293,14 @@ function manualActions.Run(db, options)
         }
     end
 
+    if type(ns.IsForever) == "function" and ns.IsForever() and current_context(db).identityVerified ~= true then
+        return {
+            ok = false,
+            action = action,
+            message = "Sync is waiting for your full Forever name in the guild roster. Try again after the roster loads.",
+        }
+    end
+
     if allowed[action] ~= true then
         return {
             ok = false,

@@ -20,6 +20,10 @@ local minimumsSync = ns.modules.minimumsSync or {}
 local AUTO_SYNC_LOGIN_DELAY_SECONDS = 2
 local AUTO_SYNC_INTERVAL_SECONDS = 10 * 60
 
+local function is_forever()
+    return type(ns.IsForever) == "function" and ns.IsForever()
+end
+
 local REGISTERED_EVENTS = {
     "ADDON_LOADED",
     "PLAYER_LOGIN",
@@ -235,6 +239,17 @@ local function actor_matches_sender(actorContext, sender)
         return false
     end
 
+    if is_forever() then
+        local rosterContext = type(permissions.GetGuildRosterContextBySender) == "function"
+            and permissions.GetGuildRosterContextBySender(sender, actorContext) or {}
+        local rosterKey = normalize_character_key(rosterContext.characterKey)
+        local actorKey = normalize_character_key(actorContext.characterKey)
+        return rosterContext.inGuild == true
+            and rosterKey:find(" ", 1, true) ~= nil
+            and actorKey == rosterKey
+            and tostring(actorContext.name or "") == tostring(rosterContext.name or "")
+    end
+
     local senderName = sender:match("^([^%-]+)") or sender
     local actorName = tostring(actorContext.name or "")
     local matched = false
@@ -292,6 +307,12 @@ local function sender_matches_context(context, sender)
         return false
     end
 
+    if is_forever() then
+        local contextKey = normalize_character_key(context.characterKey)
+        return contextKey:find(" ", 1, true) ~= nil
+            and normalize_character_key(sender) == contextKey
+    end
+
     local contextName = tostring(context.name or "")
     local contextCharacterKey = normalize_character_key(context.characterKey, context.realmName, contextName)
     local normalizedSenderKey = normalize_character_key(sender)
@@ -309,6 +330,9 @@ end
 
 local function message_is_from_local_player(db, message, sender)
     local liveContext = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    if is_forever() then
+        return liveContext.identityVerified == true and sender_matches_context(liveContext, sender)
+    end
     if sender_matches_context(liveContext, sender) then
         return true
     end
@@ -561,6 +585,20 @@ local function touch_sync_peer(db, message, sender)
     message = type(message) == "table" and message or {}
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    if is_forever() then
+        local rosterContext = type(permissions.GetGuildRosterContextBySender) == "function"
+            and permissions.GetGuildRosterContextBySender(sender, actorContext) or {}
+        if rosterContext.inGuild ~= true then
+            return nil
+        end
+        return peerState.TouchPeer(db, {
+            guildKey = tostring(payload.guildKey or active_guild_key(db)),
+            characterKey = normalize_character_key(rosterContext.characterKey),
+            messageType = tostring(message.type or ""),
+            seenAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+            version = payload_version(message),
+        })
+    end
     local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     if characterKey == "" and message.type == "SYNC_HELLO" and type(message.payload) == "string" then
         characterKey = normalize_character_key(message.payload)
@@ -587,6 +625,21 @@ local function mark_sync_peer_synchronized(db, message, sender)
     message = type(message) == "table" and message or {}
     local payload = type(message.payload) == "table" and message.payload or {}
     local actorContext = type(payload.actorContext) == "table" and payload.actorContext or {}
+    if is_forever() then
+        local rosterContext = type(permissions.GetGuildRosterContextBySender) == "function"
+            and permissions.GetGuildRosterContextBySender(sender, actorContext) or {}
+        if rosterContext.inGuild ~= true then
+            return nil
+        end
+        return peerState.MarkSynchronized(db, {
+            guildKey = tostring(payload.guildKey or active_guild_key(db)),
+            characterKey = normalize_character_key(rosterContext.characterKey),
+            messageType = tostring(message.type or ""),
+            seenAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+            synchronizedAt = tonumber(message.updatedAt or (_G.time and _G.time() or 0)) or 0,
+            version = payload_version(message),
+        })
+    end
     local characterKey = normalize_character_key(actorContext.characterKey, actorContext.realmName, actorContext.name)
     if characterKey == "" and message.type == "SYNC_HELLO" and type(message.payload) == "string" then
         characterKey = normalize_character_key(message.payload)
@@ -700,6 +753,33 @@ local function schedule_periodic_auto_sync()
         run_silent_auto_sync(current_db())
         schedule_periodic_auto_sync()
     end)
+end
+
+local function send_hello_if_ready(db)
+    if type(transport.Send) ~= "function" then
+        return false
+    end
+    if is_forever() and syncEvents.helloSent == true then
+        return true
+    end
+
+    local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
+    if is_forever() and context.identityVerified ~= true then
+        return false
+    end
+
+    local sent = transport.Send("GUILD", "GUILD", {
+        type = "SYNC_HELLO",
+        updatedAt = _G.time(),
+        payload = context.characterKey or (_G.UnitName("player") or "Unknown"),
+    })
+    if sent == false then
+        return false
+    end
+    if is_forever() then
+        syncEvents.helloSent = true
+    end
+    return true
 end
 
 local function append_audit_entry(db, entry)
@@ -1689,12 +1769,7 @@ function syncEvents.HandleEvent(event, ...)
         if type(transport.Send) == "function" then
             local store = ns.data.store or ns.modules.store
             local db = store and type(store.GetDatabase) == "function" and store.GetDatabase() or (ns.state.db or {})
-            local context = type(permissions.GetLivePlayerContext) == "function" and permissions.GetLivePlayerContext(db) or {}
-            transport.Send("GUILD", "GUILD", {
-                type = "SYNC_HELLO",
-                updatedAt = _G.time(),
-                payload = context.characterKey or (_G.UnitName("player") or "Unknown"),
-            })
+            send_hello_if_ready(db)
             schedule_login_auto_sync()
             schedule_periodic_auto_sync()
         end
@@ -1704,6 +1779,9 @@ function syncEvents.HandleEvent(event, ...)
 
     if event == "GUILD_MOTD" or event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" or event == "GUILD_RANKS_UPDATE" then
         local db = current_db()
+        if is_forever() and event == "GUILD_ROSTER_UPDATE" then
+            send_hello_if_ready(db)
+        end
         if type(permissions.RefreshPolicyFromGuild) == "function" then
             permissions.RefreshPolicyFromGuild(db)
         end
@@ -1778,6 +1856,14 @@ function syncEvents.HandleEvent(event, ...)
         end
         touch_sync_peer(db, ns.state.lastSyncMessage, sender)
         if ns.state.lastSyncMessage.type == "SYNC_HELLO" then
+            if is_forever() then
+                local rosterContext = type(permissions.GetGuildRosterContextBySender) == "function"
+                    and permissions.GetGuildRosterContextBySender(sender) or {}
+                if rosterContext.inGuild ~= true then
+                    remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, false, "sync_hello", "unverified_sender")
+                    return false
+                end
+            end
             remember_sync_decision(ns.state.lastSyncMessage, sender, ns.state.lastSyncMessage.payload, true, "sync_hello", "presence")
             refresh_sync_peer_view()
             run_silent_auto_sync(db)

@@ -2,6 +2,26 @@
 
 ## Resume Here
 
+### 2026-09-25 Forever full-name sync beta fix
+
+- Forever guild roster rows expose complete two-part names and character GUIDs;
+  the prior local policy audit stored only a first name plus the beta realm.
+  Two members of the test guild share that first name.
+- The Forever branch now resolves the local complete name by player GUID,
+  requires complete sender/roster matches for sync authority and peers, and
+  withholds outgoing sync until the full name is available. Retail behavior
+  remains unchanged.
+- A focused regression test covers the shared-first-name collision, legitimate
+  full-name traffic, legacy complete-key normalization, and delayed roster
+  loading. The full Lua suite passed. The local Forever beta installation
+  matches source at 73/73 core and 41/41 item-data files.
+- This fix is installed locally but has not been tagged or uploaded as a new
+  release. The live two-character test remains: after both clients load this
+  build, use `/gbm debug sync` to capture the raw addon-message sender and
+  confirm request, minimum, history, ledger, and blacklist behavior. If the
+  sender lacks the surname, the strict match will reject it and that client
+  API behavior needs a separate identity solution.
+
 ### 2026-09-25 WoW Forever 1.6.0 release upload
 
 - Retail stays on `master` at `361d7d0` (`v1.5.1`). Forever lives on
