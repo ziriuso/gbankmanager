@@ -1,6 +1,6 @@
 param(
     [Parameter()]
-    [ValidateSet("Retail", "PTR", "Beta")]
+    [ValidateSet("Retail", "PTR", "Beta", "Forever")]
     [string]$Target = "Retail",
 
     [Parameter()]
@@ -79,7 +79,8 @@ $resolvedAddOnsDirectory = if (-not [string]::IsNullOrWhiteSpace($AddOnsDirector
 }
 
 $mainAddonSource = Resolve-SourcePath -ExplicitPath $MainAddonPath -DefaultName "GBankManager"
-$itemDataAddonSource = Resolve-SourcePath -ExplicitPath $ItemDataAddonPath -DefaultName "GBankManager_ItemData"
+$defaultItemDataPath = if ($Target -eq "Forever") { "Forever\GBankManager_ItemData" } else { "GBankManager_ItemData" }
+$itemDataAddonSource = Resolve-SourcePath -ExplicitPath $ItemDataAddonPath -DefaultName $defaultItemDataPath
 
 if (-not (Test-Path -LiteralPath $mainAddonSource)) {
     throw ("Main addon source path does not exist: {0}" -f $mainAddonSource)

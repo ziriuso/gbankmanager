@@ -1,0 +1,44 @@
+## Interface: 16001
+## Title: GBankManager Item Data
+## Notes: Bundled item search data for GBankManager
+## Author: ziriuso
+
+Namespace.lua
+SearchBootstrap.lua
+Generated/Items_001.lua
+Generated/Items_002.lua
+Generated/Items_003.lua
+Generated/Items_004.lua
+Generated/Items_005.lua
+Generated/Items_006.lua
+Generated/Items_007.lua
+Generated/Items_008.lua
+Generated/Items_009.lua
+Generated/Items_010.lua
+Generated/Items_011.lua
+Generated/Items_012.lua
+Generated/Items_013.lua
+Generated/Items_014.lua
+Generated/Items_015.lua
+Generated/Items_016.lua
+Generated/Items_017.lua
+Generated/Items_018.lua
+Generated/Items_019.lua
+Generated/Items_020.lua
+Generated/Tokens_001.lua
+Generated/Tokens_002.lua
+Generated/Tokens_003.lua
+Generated/Tokens_004.lua
+Generated/Tokens_005.lua
+Generated/Tokens_006.lua
+Generated/Tokens_007.lua
+Generated/Tokens_008.lua
+Generated/Tokens_009.lua
+Generated/Tokens_010.lua
+Generated/Tokens_011.lua
+Generated/Tokens_012.lua
+Generated/Tokens_013.lua
+Generated/Tokens_014.lua
+Generated/Tokens_015.lua
+Generated/Tokens_016.lua
+Generated/Finalize.lua

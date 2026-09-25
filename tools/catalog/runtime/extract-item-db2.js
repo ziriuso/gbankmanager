@@ -21,6 +21,7 @@ const QUALITY_NAMES = {
 const CATALOG_PROFILES = {
     FULL: "Full",
     PROCUREMENT_CURRENT_EXPANSION: "ProcurementCurrentExpansion",
+    PROCUREMENT_FOREVER: "ProcurementForever",
 };
 
 const PROGRESS_BATCH_SIZE = 1000;
@@ -95,7 +96,11 @@ function getCatalogProfile(profile) {
         return CATALOG_PROFILES.PROCUREMENT_CURRENT_EXPANSION;
     }
 
-    throw new Error(`Unsupported catalog profile '${profile}'. Expected Full or ProcurementCurrentExpansion.`);
+    if (rawProfile === "procurementforever") {
+        return CATALOG_PROFILES.PROCUREMENT_FOREVER;
+    }
+
+    throw new Error(`Unsupported catalog profile '${profile}'. Expected Full, ProcurementCurrentExpansion, or ProcurementForever.`);
 }
 
 function getExecutionMode(mode) {
@@ -391,6 +396,10 @@ function getCurrentExpansionID(items) {
 }
 
 function isProcurementCategoryItem(item) {
+    if (!item || item.classID === null || item.classID === undefined || item.classID === "") {
+        return false;
+    }
+
     const classID = Number(item && item.classID);
     const subclassID = Number(item && item.subclassID);
 
@@ -417,9 +426,27 @@ function isProcurementCategoryItem(item) {
     return classID === 15 && subclassID === 1;
 }
 
+function isForeverAuctionCategoryItem(item) {
+    if (!item || item.classID === null || item.classID === undefined || item.classID === "") {
+        return false;
+    }
+
+    return [0, 1, 2, 4, 6, 7, 9, 12, 15].includes(Number(item.classID));
+}
+
 function filterItemsByCatalogProfile(items, profile) {
     if (profile === CATALOG_PROFILES.FULL) {
         return [...(items || [])];
+    }
+
+    if (profile === CATALOG_PROFILES.PROCUREMENT_FOREVER) {
+        return (items || []).filter(isForeverAuctionCategoryItem).map((item) => ({
+            ...item,
+            quality: null,
+            qualityName: null,
+            craftedQuality: null,
+            craftedQualityIcon: null,
+        }));
     }
 
     if (profile !== CATALOG_PROFILES.PROCUREMENT_CURRENT_EXPANSION) {

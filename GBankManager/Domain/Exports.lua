@@ -4,6 +4,10 @@ ns = ns or {}
 ns.modules = ns.modules or {}
 
 local exports = ns.modules.exports or {}
+local function is_forever()
+    return type(ns.IsForever) == "function" and ns.IsForever()
+end
+
 local craftedQuality = ns.modules.craftedQuality or {}
 if craftedQuality.ToMarkup == nil and type(_G.dofile) == "function" then
     craftedQuality = _G.dofile("GBankManager/Domain/CraftedQuality.lua")
@@ -136,6 +140,29 @@ local function excess_qty_cell_details(excessQty)
         size = 14,
         tint = { 1.0, 0.82, 0.0, 1.0 },
         textRightPadding = 22,
+    }
+end
+
+function exports.GetDefaultCsvTemplate()
+    local fields = { "Item ID", "Item Name", "Bank Tab", "Min Qty", "Qty In Stock", "Qty To Buy", "Excess Qty" }
+    if not (type(ns.IsForever) == "function" and ns.IsForever()) then
+        table.insert(fields, 2, "Tier")
+    end
+
+    return {
+        delimiter = ",",
+        includeHeader = true,
+        fields = fields,
+        labels = {
+            ["Item ID"] = "itemID",
+            ["Tier"] = "itemTierValue",
+            ["Item Name"] = "itemName",
+            ["Bank Tab"] = "bankTab",
+            ["Min Qty"] = "minQty",
+            ["Qty In Stock"] = "qtyInStock",
+            ["Qty To Buy"] = "qtyToBuy",
+            ["Excess Qty"] = "excessQtyValue",
+        },
     }
 end
 
@@ -281,6 +308,9 @@ local function stocked_elsewhere(snapshotItem, bankTab)
 end
 
 local function quality_for_item(db, snapshot, itemID)
+    if is_forever() then
+        return 0
+    end
     db = db or {}
     snapshot = snapshot or { items = {} }
 
@@ -318,6 +348,9 @@ local function quality_for_item(db, snapshot, itemID)
 end
 
 local function quality_icon_for_item(db, snapshot, itemID)
+    if is_forever() then
+        return ""
+    end
     db = db or {}
     snapshot = snapshot or { items = {} }
 
@@ -353,6 +386,9 @@ local function quality_icon_for_item(db, snapshot, itemID)
 end
 
 local function quality_max_for_item(db, snapshot, itemID)
+    if is_forever() then
+        return 0
+    end
     db = db or {}
     snapshot = snapshot or { items = {} }
 

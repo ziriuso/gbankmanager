@@ -12,6 +12,7 @@ M.unit = {
     "tests/spec/dashboard_spec.lua",
     "tests/spec/diff_spec.lua",
     "tests/spec/exports_spec.lua",
+    "tests/spec/forever_item_data_spec.lua",
     "tests/spec/history_spec.lua",
     "tests/spec/inventory_quality_spec.lua",
     "tests/spec/item_catalog_spec.lua",

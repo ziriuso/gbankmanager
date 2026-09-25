@@ -943,7 +943,9 @@ function mainRequestsController.Attach(mainFrame, options)
                 or (isStep2 and "Step 2 of 3: Set Quantity" or "Step 3 of 3: Confirm Request")
         )
         self.requestWizardStatusText:SetText(
-            isStep1 and "Search for the item you would like stocked. Current expansion items only, no gear."
+            isStep1 and ((type(ns.IsForever) == "function" and ns.IsForever())
+                and "Search for the item you would like stocked. Browse the Classic Auction House item groups."
+                or "Search for the item you would like stocked. Current expansion items only, no gear.")
                 or (isStep2 and "Set the quantity and note for this request." or "Review the request before submitting it.")
         )
 

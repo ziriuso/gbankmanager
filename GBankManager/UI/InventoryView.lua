@@ -70,6 +70,9 @@ local function parsed_quality_tier(icon)
 end
 
 local function crafted_quality_rank(item)
+    if type(ns.IsForever) == "function" and ns.IsForever() then
+        return 0
+    end
     item = item or {}
 
     local parsedTier = parsed_quality_tier(item.craftedQualityIcon)
@@ -520,20 +523,23 @@ function inventoryView.BuildDisplayRows(rows, columns)
 end
 
 function inventoryView.BuildCsvText(rows)
+    local forever = type(ns.IsForever) == "function" and ns.IsForever()
     local lines = {
-        "Item ID,Tier,Item,Bank Tab,Current,Restock,Minimum",
+        forever and "Item ID,Item,Bank Tab,Current,Restock,Minimum"
+            or "Item ID,Tier,Item,Bank Tab,Current,Restock,Minimum",
     }
 
     for _, row in ipairs(rows or {}) do
-        lines[#lines + 1] = table.concat({
-            csv_escape(row.itemID or ""),
-            csv_escape(row.tierValue or 0),
-            csv_escape(row.itemName or row.name or ""),
-            csv_escape(row.bankTab or row.tab or "-"),
-            csv_escape(row.current or 0),
-            csv_escape(row.restock or "No"),
-            csv_escape(row.minimum or row.quantity or "-"),
-        }, ",")
+        local values = { csv_escape(row.itemID or "") }
+        if not forever then
+            values[#values + 1] = csv_escape(row.tierValue or 0)
+        end
+        values[#values + 1] = csv_escape(row.itemName or row.name or "")
+        values[#values + 1] = csv_escape(row.bankTab or row.tab or "-")
+        values[#values + 1] = csv_escape(row.current or 0)
+        values[#values + 1] = csv_escape(row.restock or "No")
+        values[#values + 1] = csv_escape(row.minimum or row.quantity or "-")
+        lines[#lines + 1] = table.concat(values, ",")
     end
 
     return table.concat(lines, "\n")

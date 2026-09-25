@@ -218,6 +218,11 @@ write_text_file(extractFixturePath, [[
     { "itemID": 250002, "Display_lang": "Stormcut Diamond", "OverallQualityID": 3, "ExpansionID": 11, "ClassID": 3, "SubclassID": 9 },
     { "itemID": 250003, "Display_lang": "Blessed Alloy", "OverallQualityID": 1, "ExpansionID": 11, "ClassID": 7, "SubclassID": 6 },
     { "itemID": 250004, "Display_lang": "Stormguard Greatsword", "OverallQualityID": 4, "ExpansionID": 11, "ClassID": 2, "SubclassID": 8, "InventoryType": 17 },
+    { "itemID": 250005, "Display_lang": "Forever Armor", "OverallQualityID": 3, "ClassID": 4, "SubclassID": 1 },
+    { "itemID": 250006, "Display_lang": "Forever Ammo", "OverallQualityID": 1, "ClassID": 6, "SubclassID": 2 },
+    { "itemID": 250007, "Display_lang": "Forever Recipe", "OverallQualityID": 2, "ClassID": 9, "SubclassID": 0 },
+    { "itemID": 250008, "Display_lang": "Forever Quest Item", "OverallQualityID": 1, "ClassID": 12, "SubclassID": 0 },
+    { "itemID": 250009, "Display_lang": "Forever Miscellaneous", "OverallQualityID": 1, "ClassID": 15, "SubclassID": 0 },
     { "itemID": 999999, "Display_lang": "", "OverallQualityID": 4, "ClassID": 0, "SubclassID": 0 },
     { "itemID": 0, "Display_lang": "Ignored Placeholder", "OverallQualityID": 2, "ClassID": 0, "SubclassID": 0 }
   ],
@@ -252,17 +257,17 @@ assert.equal("Retail", json_string_field(extract.output, "target"), "extract com
 assert.equal("Full", json_string_field(extract.output, "catalogProfile"), "extract command should report the selected catalog profile")
 assert.equal("en_US", json_string_field(extract.output, "locale"), "extract command should preserve the requested locale")
 assert.equal("11.2.7.63796", json_string_field(extract.output, "build"), "extract command should report the source build")
-assert.equal(17, json_number_field(extract.output, "rawRowCount"), "extract command should report the pre-normalization row count after hotfix merge")
-assert.equal(16, json_number_field(extract.output, "normalizedCount"), "extract command should keep only the valid addon-facing normalized rows")
+assert.equal(22, json_number_field(extract.output, "rawRowCount"), "extract command should report the pre-normalization row count after hotfix merge")
+assert.equal(21, json_number_field(extract.output, "normalizedCount"), "extract command should keep only the valid addon-facing normalized rows")
 assert.equal(normalizedOutputAbsolute, json_string_field(extract.output, "normalizedRowsPath"), "extract command should report the written normalized rows path")
 assert.equal("Fresh", json_string_field(extract.output, "mode"), "extract command should report the selected execution mode")
 assert.equal(absolute_path(extractProgressPath), json_string_field(extract.output, "progressPath"), "extract command should report the selected progress path")
 assert.equal(absolute_path(extractPartialRowsPath), json_string_field(extract.output, "partialRowsPath"), "extract command should report the partial rows path")
 assert.equal(true, json_boolean_field(extract.output, "resumeSupported"), "extract command should report that extraction supports resume state")
 assert.equal(999999, json_number_field(extract.output, "lastProcessedItemID"), "extract command should report the last processed source item id after a complete fresh run")
-assert.equal(16, json_number_field(extract.output, "normalizedCountWritten"), "extract command should report the number of rows written to resumable output")
+assert.equal(21, json_number_field(extract.output, "normalizedCountWritten"), "extract command should report the number of rows written to resumable output")
 
-assert.equal("16", read_json_query(normalizedOutputPath, "$data.items.Count"), "normalized output should contain only the valid addon-facing rows")
+assert.equal("21", read_json_query(normalizedOutputPath, "$data.items.Count"), "normalized output should contain only the valid addon-facing rows")
 assert.equal("Auto-Hammer", read_item_field(normalizedOutputPath, 132514, "name"), "extract normalization should preserve the base item name")
 assert.equal("2", read_item_field(normalizedOutputPath, 132514, "quality"), "extract normalization should preserve the base item quality")
 assert.equal("Uncommon", read_item_field(normalizedOutputPath, 132514, "qualityName"), "extract normalization should map quality ids into quality names")
@@ -297,7 +302,7 @@ assert.equal("completed", read_json_query(extractProgressPath, "$data.status"), 
 assert.equal("extraction", read_json_query(extractProgressPath, "$data.phase"), "extract command should track extraction as the active phase in progress state")
 assert.equal("Full", read_json_query(extractProgressPath, "$data.catalogProfile"), "extract command should persist the selected catalog profile in progress state")
 assert.equal("999999", read_json_query(extractProgressPath, "$data.lastProcessedItemID"), "extract command should persist the last processed source item id in progress state")
-assert.equal("16", read_json_query(extractProgressPath, "$data.normalizedCountWritten"), "extract command should persist the normalized rows written in progress state")
+assert.equal("21", read_json_query(extractProgressPath, "$data.normalizedCountWritten"), "extract command should persist the normalized rows written in progress state")
 
 local procurementOutputPath = join_path(outputDir, "procurement-normalized-items.json")
 local procurementProgressPath = join_path(progressDir, "procurement-progress.json")
@@ -322,6 +327,54 @@ assert.equal("1", read_item_field(procurementOutputPath, 243733, "craftedQuality
 assert.equal("2", read_item_field(procurementOutputPath, 243734, "craftedQuality"), "procurement extraction should retain higher-tier current-expansion item enhancements")
 assert.equal("", read_item_field(procurementOutputPath, 212281, "name"), "procurement extraction should exclude old-expansion consumables from the shipped catalog")
 assert.equal("", read_item_field(procurementOutputPath, 250004, "name"), "procurement extraction should exclude non-procurement current-expansion weapon rows from the shipped catalog")
+
+local foreverOutputPath = join_path(outputDir, "forever-normalized-items.json")
+local foreverExtract = run_extract({
+    "-Target", "Forever",
+    "-Mode", "Fresh",
+    "-CatalogProfile", "ProcurementForever",
+    "-FixturePath", powershell_argument(extractFixturePath),
+    "-OutputPath", powershell_argument(foreverOutputPath),
+    "-ProgressPath", powershell_argument(join_path(progressDir, "forever-progress.json")),
+    "-PartialRowsPath", powershell_argument(join_path(progressDir, "forever-progress.partial.jsonl")),
+})
+assert.truthy(foreverExtract.success, "Forever procurement extraction should succeed")
+assert.equal("ProcurementForever", json_string_field(foreverExtract.output, "catalogProfile"), "Forever extraction should report its own profile")
+assert.equal(19, json_number_field(foreverExtract.output, "normalizedCount"), "Forever catalog should include the nine Classic Auction House groups across source eras")
+assert.equal("Flask of Alchemical Chaos", read_item_field(foreverOutputPath, 212281, "name"), "Forever procurement should keep older-era consumables")
+for _, itemID in ipairs({ 250004, 250005, 250006, 250007, 250008, 250009 }) do
+    assert.truthy(read_item_field(foreverOutputPath, itemID, "name") ~= "", "Forever catalog should include its Classic Auction House item classes")
+end
+assert.equal("", read_item_field(foreverOutputPath, 250002, "name"), "Forever catalog should exclude modern gem category rows")
+assert.equal("", read_item_field(foreverOutputPath, 240154, "name"), "Forever catalog should exclude modern item enhancements")
+assert.equal("True", read_item_field_is_null(foreverOutputPath, 250004, "quality"), "Forever catalog should omit item quality")
+assert.equal("True", read_item_field_is_null(foreverOutputPath, 250004, "qualityName"), "Forever catalog should omit item quality labels")
+assert.equal("True", read_item_field_is_null(foreverOutputPath, 241326, "craftedQuality"), "Forever catalog should omit Retail crafted quality tiers")
+assert.equal("Forever", read_item_field(foreverOutputPath, 212281, "target"), "Forever items should retain source flavor provenance")
+
+local unclassifiedFixturePath = join_path(fixtureDir, "forever-unclassified.json")
+write_text_file(unclassifiedFixturePath, [[
+{
+  "build": "1.60.1.70009",
+  "baseRows": [
+    { "itemID": 900001, "Display_lang": "Known Reagent", "OverallQualityID": 1, "ClassID": 7, "SubclassID": 0 },
+    { "itemID": 900002, "Display_lang": "Unclassified Weapon", "OverallQualityID": 2 }
+  ]
+}
+]])
+local classifiedOutputPath = join_path(outputDir, "forever-classified-items.json")
+local classifiedExtract = run_extract({
+    "-Target", "Forever",
+    "-Mode", "Fresh",
+    "-CatalogProfile", "ProcurementForever",
+    "-FixturePath", powershell_argument(unclassifiedFixturePath),
+    "-OutputPath", powershell_argument(classifiedOutputPath),
+    "-ProgressPath", powershell_argument(join_path(progressDir, "forever-classified-progress.json")),
+    "-PartialRowsPath", powershell_argument(join_path(progressDir, "forever-classified-progress.partial.jsonl")),
+})
+assert.truthy(classifiedExtract.success, "Forever extraction should accept classified fixture rows")
+assert.equal(1, json_number_field(classifiedExtract.output, "normalizedCount"), "Forever procurement should exclude rows without a known item class")
+assert.equal("", read_item_field(classifiedOutputPath, 900002, "name"), "unclassified rows should not enter the Forever database")
 
 local resumeOutputPath = join_path(outputDir, "resume-normalized-items.json")
 local resumeOutputAbsolute = absolute_path(resumeOutputPath)
@@ -370,8 +423,8 @@ assert.equal("Resume", json_string_field(resumedExtract.output, "mode"), "resume
 assert.equal("Full", json_string_field(resumedExtract.output, "catalogProfile"), "resume runs should preserve the selected catalog profile")
 assert.equal(resumeOutputAbsolute, json_string_field(resumedExtract.output, "normalizedRowsPath"), "resume runs should rebuild the final normalized output at the requested path")
 assert.equal(999999, json_number_field(resumedExtract.output, "lastProcessedItemID"), "resume runs should advance to the final processed source item id")
-assert.equal(16, json_number_field(resumedExtract.output, "normalizedCountWritten"), "resume runs should report the combined written-row count")
-assert.equal("16", read_json_query(resumeOutputPath, "$data.items.Count"), "resume runs should finalize the combined normalized output")
+assert.equal(21, json_number_field(resumedExtract.output, "normalizedCountWritten"), "resume runs should report the combined written-row count")
+assert.equal("21", read_json_query(resumeOutputPath, "$data.items.Count"), "resume runs should finalize the combined normalized output")
 assert.equal("Auto-Hammer", read_item_field(resumeOutputPath, 132514, "name"), "resume runs should preserve rows written before the interruption")
 assert.equal("Arcanoweave Spellthread", read_item_field(resumeOutputPath, 240154, "name"), "resume runs should append rows after the saved item boundary")
 assert.equal("completed", read_json_query(resumeProgressPath, "$data.status"), "resume runs should promote the progress state to completed")
@@ -434,9 +487,9 @@ assert.equal("Full", json_string_field(refresh.output, "catalogProfile"), "refre
 assert.equal("11.2.7.63796", json_string_field(refresh.output, "build"), "refresh command should surface the extracted build")
 assert.equal("en_US", json_string_field(refresh.output, "locale"), "refresh command should surface the extracted locale")
 assert.equal(refreshOutputAbsolute, json_string_field(refresh.output, "normalizedRowsPath"), "refresh command should report the normalized extraction output path")
-assert.equal(16, json_number_field(refresh.output, "normalizedCount"), "refresh command should surface the normalized row count")
+assert.equal(21, json_number_field(refresh.output, "normalizedCount"), "refresh command should surface the normalized row count")
 assert.equal("addon-rebuilt", json_string_field(refresh.output, "nextStep"), "refresh command should report that extraction continued through merge and generated addon rebuild")
 assert.equal(join_path(wowFixtureRootAbsolute, "_retail_"), json_string_field(refresh.output, "clientDirectory"), "refresh command should continue to report the validated client directory")
 assert.equal(join_path(wowFixtureRootAbsolute, "_retail_", "Data"), json_string_field(refresh.output, "dataDirectory"), "refresh command should continue to report the validated data directory")
 assert.equal(join_path(wowFixtureRootAbsolute, "_retail_", "Data", "en_US"), json_string_field(refresh.output, "localeDirectory"), "refresh command should continue to report the validated locale directory")
-assert.equal("16", read_json_query(refreshOutputPath, "$data.items.Count"), "refresh command should persist the normalized rows for the next pipeline phase")
+assert.equal("21", read_json_query(refreshOutputPath, "$data.items.Count"), "refresh command should persist the normalized rows for the next pipeline phase")

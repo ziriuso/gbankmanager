@@ -11,6 +11,8 @@ param(
     [Parameter()]
     [string]$Product,
 
+    [string]$WowExportRoot,
+
     [Parameter()]
     [string]$Locale = "en_US",
 
@@ -19,7 +21,7 @@ param(
     [string]$Mode = "Fresh",
 
     [Parameter()]
-    [ValidateSet("Full", "ProcurementCurrentExpansion")]
+    [ValidateSet("Full", "ProcurementCurrentExpansion", "ProcurementForever")]
     [string]$CatalogProfile = "ProcurementCurrentExpansion",
 
     [Parameter()]
@@ -75,6 +77,7 @@ function Get-ProductFromTarget {
             return "wowt"
         }
         "Beta" { return "wow_beta" }
+        "Forever" { return "wow_classic_beta" }
         default { throw "Unsupported target '$SelectedTarget' for extraction." }
     }
 }
@@ -145,7 +148,11 @@ function Get-NodeExecutablePath {
 
 try {
     $helperPath = Join-Path $PSScriptRoot "runtime\extract-item-db2.js"
-    $wowExportRoot = Join-Path $PSScriptRoot "runtime\wow.export\portable-wow-export-win-x64-0.2.17"
+    $resolvedWowExportRoot = if ([string]::IsNullOrWhiteSpace($WowExportRoot)) {
+        Join-Path $PSScriptRoot "runtime\wow.export\portable-wow-export-win-x64-0.2.17"
+    } else {
+        Get-AbsolutePath -Path $WowExportRoot
+    }
     $runtimeDataPath = Join-Path $PSScriptRoot "runtime\wow-export-data"
     $nodeExecutablePath = Get-NodeExecutablePath
     $resolvedOutputPath = if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -197,7 +204,7 @@ try {
         $arguments += @(
             "--wow-root", $resolvedWoWRoot,
             "--product", $resolvedProduct,
-            "--wow-export-root", (Get-AbsolutePath -Path $wowExportRoot),
+            "--wow-export-root", (Get-AbsolutePath -Path $resolvedWowExportRoot),
             "--runtime-data-path", (Get-AbsolutePath -Path $runtimeDataPath)
         )
     }

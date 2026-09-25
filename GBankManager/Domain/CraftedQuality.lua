@@ -6,6 +6,10 @@ ns.data = ns.data or {}
 
 local craftedQuality = ns.modules.craftedQuality or {}
 
+local function is_forever()
+    return type(ns.IsForever) == "function" and ns.IsForever()
+end
+
 local function current_item_catalog()
     local itemCatalog = ns.modules.itemCatalog or {}
     if itemCatalog.GetBundledItemByID == nil and type(_G.dofile) == "function" then
@@ -283,6 +287,9 @@ local function markup_string_for_atlas(atlasName, size)
 end
 
 function craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return ""
+    end
     local atlasName = unwrap_markup_atlas(icon_text(icon))
     if atlasName == "" then
         return ""
@@ -298,6 +305,9 @@ function craftedQuality.NormalizeDisplayAtlas(icon, fallbackQuality, style, maxQ
 end
 
 function craftedQuality.GetDisplayAtlas(icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return ""
+    end
     local parsedTier = craftedQuality.ParseTier(icon, fallbackQuality or 0)
     if parsedTier >= 1 and parsedTier <= 5 then
         local displayAtlas = display_atlas_for_tier(parsedTier, style, maxQuality)
@@ -312,6 +322,9 @@ function craftedQuality.GetDisplayAtlas(icon, fallbackQuality, style, maxQuality
 end
 
 function craftedQuality.GetDisplayAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return ""
+    end
     local resolvedIcon, resolvedQuality, resolvedMaxQuality, resolvedDisplayAtlas, hasBundledAuthority = resolve_item_quality_fields(itemID, icon, fallbackQuality, maxQuality)
     local liveQualityInfo = current_live_quality_info(itemID)
     local parsedTier = craftedQuality.ParseTier(resolvedIcon, resolvedQuality or 0)
@@ -342,6 +355,9 @@ function craftedQuality.GetDisplayAtlasForItem(itemID, icon, fallbackQuality, st
 end
 
 function craftedQuality.GetNonInventoryPresentationForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return { atlas = "", markupAtlas = "", markup = "", icon = "", quality = 0, maxQuality = 0, preferredAtlas = "", style = tostring(style or "reagent") }
+    end
     local resolvedIcon, resolvedQuality, resolvedMaxQuality, resolvedDisplayAtlas = resolve_item_quality_fields(itemID, icon, fallbackQuality, maxQuality)
     local resolvedStyle = tostring(style or "")
     if resolvedStyle == "" then
@@ -393,6 +409,9 @@ function craftedQuality.GetNonInventoryMarkupAtlasForItem(itemID, icon, fallback
 end
 
 function craftedQuality.GetMarkupAtlas(icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return ""
+    end
     local parsedTier = craftedQuality.ParseTier(icon, fallbackQuality or 0)
     local markupAtlas = display_atlas_for_tier(parsedTier, style, maxQuality)
     if markupAtlas == nil or markupAtlas == "" then
@@ -406,6 +425,9 @@ function craftedQuality.GetMarkupAtlas(icon, fallbackQuality, style, maxQuality)
 end
 
 function craftedQuality.GetMarkupAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
+    if is_forever() then
+        return ""
+    end
     local displayAtlas = craftedQuality.GetDisplayAtlasForItem(itemID, icon, fallbackQuality, style, maxQuality)
     if tostring(displayAtlas or "") ~= "" then
         return tostring(displayAtlas)
@@ -522,6 +544,9 @@ function craftedQuality.DisplayNonInventoryMarkupForItem(itemID, icon, size, sty
 end
 
 function craftedQuality.ParseTier(icon, fallbackQuality)
+    if is_forever() then
+        return 0
+    end
     local atlasName = icon_text(icon)
     local tierText = string.match(atlasName, "[Tt]ier%s*[_%-]?(%d+)")
     if tierText == nil then

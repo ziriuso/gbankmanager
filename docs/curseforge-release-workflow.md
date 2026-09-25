@@ -166,7 +166,7 @@ This can be a single CurseForge game version id or a comma-separated list if aut
 
 If `CF_GAME_VERSION_IDS` is not set, the publish script will:
 
-1. read `## Interface:` from `GBankManager/GBankManager.toc`
+1. read the first, six-digit Retail value from `## Interface:` in `GBankManager/GBankManager.toc` (later values may include Forever's five-digit interface)
 2. convert it to a retail version string like `12.0.5`
 3. query CurseForge for the matching WoW game version id
 

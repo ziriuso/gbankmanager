@@ -256,6 +256,7 @@ write_text_file(targetManifestPath, [[
 ensure_directory(join_path(fixtureRoot, "_retail_"))
 ensure_directory(join_path(fixtureRoot, "_ptr_"))
 ensure_directory(join_path(fixtureRoot, "_beta_"))
+ensure_directory(join_path(fixtureRoot, "_classic_beta_"))
 ensure_directory(join_path(fixtureRoot, "_retail_", "Data"))
 ensure_directory(join_path(fixtureRoot, "_retail_", "Data", "en_US"))
 
@@ -297,6 +298,14 @@ assert.equal("Beta", beta.target, "beta target should resolve with its explicit 
 assert.equal(join_path(fixtureRootAbsolute, "_beta_"), beta.clientDirectory, "beta target should use the beta client directory")
 assert.equal("wow_beta", beta.product, "beta target should use the beta product code")
 assert.equal("fr_FR", beta.locale, "caller locale overrides should flow through unchanged")
+
+local forever = run_target_resolution({
+    "-Target", "Forever",
+    "-WoWRoot", powershell_argument(fixtureRoot),
+})
+assert.equal("Forever", forever.target, "forever target should resolve independently from retail beta")
+assert.equal(join_path(fixtureRootAbsolute, "_classic_beta_"), forever.clientDirectory, "forever target should use the classic beta client directory")
+assert.equal("wow_classic_beta", forever.product, "forever target should use the installed Forever product")
 
 local customRoot = join_path(baseDir, "custom-root")
 local customRootAbsolute = absolute_path(customRoot)

@@ -13,6 +13,16 @@ local env = fixture.load()
 local mainFrame = env.mainFrame
 local activeTheme = env.mainFrameShell.GetTheme()
 
+local itemPayload = env.ns.data.staticItemSearch
+local originalTarget = itemPayload.metadata.target
+itemPayload.metadata.target = "Forever"
+mainFrame:ConfigureTable({
+    { key = "itemTier", label = "Tier", width = 56 },
+    { key = "itemName", label = "Item Name", width = 236 },
+}, {})
+assert.equal("itemName", mainFrame.tableColumnKeys[1], "Forever tables should omit Retail crafted quality columns")
+itemPayload.metadata.target = originalTarget
+
 local function color_distance(left, right)
     left = left or {}
     right = right or {}

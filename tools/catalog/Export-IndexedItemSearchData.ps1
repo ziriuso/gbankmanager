@@ -421,6 +421,12 @@ function Write-FinalizeChunkFile {
         [Parameter(Mandatory = $true)]
         [string]$GeneratedAt,
 
+        [string]$Target,
+
+        [string]$Build,
+
+        [string]$Locale,
+
         [Parameter(Mandatory = $true)]
         [int]$ItemCount,
 
@@ -440,6 +446,9 @@ function Write-FinalizeChunkFile {
     $lines.Add("bootstrap.Finalize({")
     $lines.Add("    source = $(ConvertTo-LuaString $Source),")
     $lines.Add("    generatedAt = $(ConvertTo-LuaString $GeneratedAt),")
+    $lines.Add("    target = $(ConvertTo-LuaString $Target),")
+    $lines.Add("    build = $(ConvertTo-LuaString $Build),")
+    $lines.Add("    locale = $(ConvertTo-LuaString $Locale),")
     $lines.Add("    itemCount = $ItemCount,")
     $lines.Add("    tokenCount = $TokenCount,")
     $lines.Add("})")
@@ -452,11 +461,14 @@ function Write-IndexedToc {
         [string]$Path,
 
         [Parameter(Mandatory = $true)]
-        [string[]]$GeneratedFiles
+        [string[]]$GeneratedFiles,
+
+        [string]$Target
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("## Interface: 120100, 120007, 120005")
+    $interface = if ($Target -eq "Forever") { "16001" } else { "120100, 120007, 120005" }
+    $lines.Add("## Interface: $interface")
     $lines.Add("## Title: GBankManager Item Data")
     $lines.Add("## Notes: Bundled item search data for GBankManager")
     $lines.Add("## Author: ziriuso")
@@ -481,9 +493,13 @@ $items = @($manifestItems | Where-Object {
 Apply-CraftedQualityDisplayFields -Items $items
 $generatedAt = if ($input.generatedAt) { [string]$input.generatedAt } else { (Get-Date).ToString("yyyy-MM-dd") }
 $source = if ($input.source) { [string]$input.source } else { "manual_manifest" }
+$target = [string](Get-FastPropertyValue -Object $input -Name "target")
+$build = [string](Get-FastPropertyValue -Object $input -Name "build")
+$locale = [string](Get-FastPropertyValue -Object $input -Name "locale")
 
 $outputShimPath = [System.IO.Path]::GetFullPath($OutputLuaPath)
 $addonDirectory = Split-Path -Parent $outputShimPath
+$null = New-Item -ItemType Directory -Force -Path $addonDirectory
 $tocPath = Join-Path $addonDirectory "GBankManager_ItemData.toc"
 $namespacePath = Join-Path $addonDirectory "Namespace.lua"
 $searchBootstrapPath = Join-Path $addonDirectory "SearchBootstrap.lua"
@@ -545,12 +561,15 @@ Write-FinalizeChunkFile `
     -Path (Join-Path $generatedDirectory "Finalize.lua") `
     -Source $source `
     -GeneratedAt $generatedAt `
+    -Target $target `
+    -Build $build `
+    -Locale $locale `
     -ItemCount $items.Count `
     -TokenCount $sortedTokens.Count
 
 Copy-AddonSupportFile -RelativeSourcePath "Namespace.lua" -DestinationPath $namespacePath
 Copy-AddonSupportFile -RelativeSourcePath "SearchBootstrap.lua" -DestinationPath $searchBootstrapPath
-Write-IndexedToc -Path $tocPath -GeneratedFiles @($generatedRelativeFiles)
+Write-IndexedToc -Path $tocPath -GeneratedFiles @($generatedRelativeFiles) -Target $target
 Write-DataLuaShim -Path $outputShimPath
 
 [pscustomobject]@{

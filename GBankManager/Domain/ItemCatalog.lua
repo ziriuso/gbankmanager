@@ -9,6 +9,10 @@ local ITEM_DATA_ADDON_NAME = "GBankManager_ItemData"
 local ensure_payload_quality_families
 local hydrate_namespace_from_globals
 
+local function is_forever()
+    return type(ns.IsForever) == "function" and ns.IsForever()
+end
+
 local function strip_legacy_tier_prefix(value)
     local text = tostring(value or "")
     text = text:gsub("^|c%x%x%x%x%x%x%x%x", "")
@@ -118,20 +122,21 @@ function itemCatalog.HydrateItem(item)
         return nil
     end
 
+    local useQuality = not is_forever()
     return {
         itemID = itemID,
         name = itemName,
         itemName = itemName,
         itemLink = itemLink ~= "" and itemLink or nil,
         itemString = itemString ~= "" and itemString or nil,
-        quality = tonumber(item.quality) or item.quality,
-        qualityName = item.qualityName,
-        craftedQuality = tonumber(item.craftedQuality) or item.craftedQuality,
-        craftedQualityIcon = item.craftedQualityIcon,
-        craftedQualityMax = tonumber(item.craftedQualityMax) or item.craftedQualityMax,
-        craftedQualityDisplayAtlas = item.craftedQualityDisplayAtlas,
-        craftedQualityPreferredAtlas = item.craftedQualityPreferredAtlas,
-        craftedQualityFamilySize = tonumber(item.craftedQualityFamilySize) or item.craftedQualityFamilySize,
+        quality = useQuality and (tonumber(item.quality) or item.quality) or nil,
+        qualityName = useQuality and item.qualityName or nil,
+        craftedQuality = useQuality and (tonumber(item.craftedQuality) or item.craftedQuality) or nil,
+        craftedQualityIcon = useQuality and item.craftedQualityIcon or nil,
+        craftedQualityMax = useQuality and (tonumber(item.craftedQualityMax) or item.craftedQualityMax) or nil,
+        craftedQualityDisplayAtlas = useQuality and item.craftedQualityDisplayAtlas or nil,
+        craftedQualityPreferredAtlas = useQuality and item.craftedQualityPreferredAtlas or nil,
+        craftedQualityFamilySize = useQuality and (tonumber(item.craftedQualityFamilySize) or item.craftedQualityFamilySize) or nil,
         totalCount = tonumber(item.totalCount) or item.totalCount,
         tabs = item.tabs,
     }
@@ -291,6 +296,23 @@ end
 function itemCatalog.ApplyCanonicalCraftedQuality(item)
     item = type(item) == "table" and item or nil
     if not item then
+        return item
+    end
+
+    if is_forever() then
+        item.quality = nil
+        item.qualityName = nil
+        item.qualityTier = nil
+        item.qualityTierMax = nil
+        item.qualityTierIcon = nil
+        item.craftedQuality = nil
+        item.craftedQualityIcon = nil
+        item.craftedQualityMax = nil
+        item.craftedQualityDisplayAtlas = nil
+        item.craftedQualityPreferredAtlas = nil
+        item.craftedQualityFamilySize = nil
+        item.name = strip_legacy_tier_prefix(item.name or item.itemName or "")
+        item.itemName = item.name
         return item
     end
 
@@ -756,7 +778,7 @@ local function sort_scored_matches(scoredMatches)
         if left.score ~= right.score then
             return left.score > right.score
         end
-        if tostring(left.item.name or "") == tostring(right.item.name or "") then
+        if not is_forever() and tostring(left.item.name or "") == tostring(right.item.name or "") then
             local leftTier = tonumber(left.item.craftedQuality or 0) or 0
             local rightTier = tonumber(right.item.craftedQuality or 0) or 0
             if leftTier ~= rightTier then

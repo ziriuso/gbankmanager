@@ -11,21 +11,7 @@ end
 local exportsView = ns.modules.exportsView or {}
 
 function exportsView.BuildCsvText(rows)
-    return exports.BuildDelimited(rows or {}, {
-        delimiter = ",",
-        includeHeader = true,
-        fields = { "Item ID", "Tier", "Item Name", "Bank Tab", "Min Qty", "Qty In Stock", "Qty To Buy", "Excess Qty" },
-        labels = {
-            ["Item ID"] = "itemID",
-            ["Tier"] = "itemTierValue",
-            ["Item Name"] = "itemName",
-            ["Bank Tab"] = "bankTab",
-            ["Min Qty"] = "minQty",
-            ["Qty In Stock"] = "qtyInStock",
-            ["Qty To Buy"] = "qtyToBuy",
-            ["Excess Qty"] = "excessQtyValue",
-        },
-    })
+    return exports.BuildDelimited(rows or {}, exports.GetDefaultCsvTemplate())
 end
 
 function exportsView.BuildSpreadsheetText(rows)

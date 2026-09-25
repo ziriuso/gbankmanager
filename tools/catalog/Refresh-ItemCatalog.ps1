@@ -8,21 +8,23 @@ param(
     [Parameter()]
     [string]$ClientDirectory,
 
+    [string]$WowExportRoot,
+
     [Parameter()]
     [string]$Locale = "en_US",
 
     [Parameter()]
-    [ValidateSet("Full", "ProcurementCurrentExpansion")]
-    [string]$CatalogProfile = "ProcurementCurrentExpansion",
+    [ValidateSet("Auto", "Full", "ProcurementCurrentExpansion", "ProcurementForever")]
+    [string]$CatalogProfile = "Auto",
 
     [Parameter()]
-    [string]$ExtractionOutputPath = ".\\tools\\catalog\\runtime\\item-catalog-extracted.json",
+    [string]$ExtractionOutputPath = "",
 
     [Parameter()]
-    [string]$ManifestPath = ".\\tools\\catalog\\runtime\\item-catalog-input.json",
+    [string]$ManifestPath = "",
 
     [Parameter()]
-    [string]$OutputLuaPath = ".\\GBankManager_ItemData\\Data.lua",
+    [string]$OutputLuaPath = "",
 
     [Parameter()]
     [string]$ExtractionFixturePath,
@@ -45,6 +47,19 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ($CatalogProfile -eq "Auto") {
+    $CatalogProfile = if ($Target -eq "Forever") { "ProcurementForever" } else { "ProcurementCurrentExpansion" }
+}
+if ([string]::IsNullOrWhiteSpace($ExtractionOutputPath)) {
+    $ExtractionOutputPath = if ($Target -eq "Forever") { ".\tools\catalog\runtime\forever\item-catalog-extracted.json" } else { ".\tools\catalog\runtime\item-catalog-extracted.json" }
+}
+if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
+    $ManifestPath = if ($Target -eq "Forever") { ".\tools\catalog\runtime\forever\item-catalog-input.json" } else { ".\tools\catalog\runtime\item-catalog-input.json" }
+}
+if ([string]::IsNullOrWhiteSpace($OutputLuaPath)) {
+    $OutputLuaPath = if ($Target -eq "Forever") { ".\Forever\GBankManager_ItemData\Data.lua" } else { ".\GBankManager_ItemData\Data.lua" }
+}
 
 function New-RequiredPathCheck {
     param(
@@ -706,7 +721,11 @@ try {
     }
 
     $buildManifestPath = Join-Path $effectiveTarget.wowRoot ".build.info"
-    $wowExportExecutablePath = Join-Path $PSScriptRoot "runtime\wow.export\portable-wow-export-win-x64-0.2.17\wow.export.exe"
+    $wowExportExecutablePath = if ([string]::IsNullOrWhiteSpace($WowExportRoot)) {
+        Join-Path $PSScriptRoot "runtime\wow.export\portable-wow-export-win-x64-0.2.17\wow.export.exe"
+    } else {
+        Join-Path $WowExportRoot "wow.export.exe"
+    }
     $shouldRunExtraction = (-not [string]::IsNullOrWhiteSpace($ExtractionFixturePath)) -or ((Test-Path -LiteralPath $buildManifestPath) -and (Test-Path -LiteralPath $wowExportExecutablePath))
     $skipMerge = $false
     $skipBuild = $false
@@ -815,6 +834,9 @@ try {
             if (-not [string]::IsNullOrWhiteSpace($ExtractionFixturePath)) {
                 $extractArguments.FixturePath = $ExtractionFixturePath
             }
+            if (-not [string]::IsNullOrWhiteSpace($WowExportRoot)) {
+                $extractArguments.WowExportRoot = $WowExportRoot
+            }
 
             try {
                 $extractionSummary = Invoke-JsonScript -ScriptPath $extractScript -Arguments $extractArguments
@@ -879,6 +901,13 @@ try {
             }
 
             try {
+                if ($Target -eq "Forever" -and -not (Test-Path -LiteralPath $ManifestPath)) {
+                    $manifestDirectory = Split-Path -Parent $ManifestPath
+                    if (-not [string]::IsNullOrWhiteSpace($manifestDirectory)) {
+                        $null = New-Item -ItemType Directory -Force -Path $manifestDirectory
+                    }
+                    '{"items":[]}' | Set-Content -LiteralPath $ManifestPath -Encoding utf8
+                }
                 $mergeSummary = Invoke-JsonScript -ScriptPath $mergeScript -Arguments $mergeArguments
                 $progressState = Update-RefreshProgressState `
                     -ProgressPath $progressArtifacts.progressPath `

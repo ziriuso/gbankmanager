@@ -125,6 +125,7 @@ Supported named targets:
 - `Retail`
 - `PTR`
 - `Beta`
+- `Forever` (local beta CLI; see `docs/forever-beta-local-design.md`)
 
 By default the tooling resolves those targets through `Resolve-WoWTarget.ps1`. You can still override the install root explicitly with `-WoWRoot` when a maintainer machine uses a non-default path.
 

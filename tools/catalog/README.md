@@ -16,6 +16,11 @@ Supported targets:
 - `Retail`
 - `PTR`
 - `Beta`
+- `Forever` (local beta; uses a separate generated item payload and the
+  `ProcurementForever` profile)
+
+The Forever beta refresh and deployment commands, including the local
+wow.export runtime requirement, are in `docs/forever-beta-local-design.md`.
 
 Canonical examples:
 

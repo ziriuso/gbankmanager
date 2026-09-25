@@ -43,21 +43,7 @@ function exportDialog.BuildPresetState(rows, presetName, template)
             fields = { "itemID", "itemName", "totalToBuy" },
         })
     else
-        text = exports.BuildDelimited(rows or {}, {
-            delimiter = ",",
-            includeHeader = true,
-            fields = { "Item ID", "Tier", "Item Name", "Bank Tab", "Min Qty", "Qty In Stock", "Qty To Buy", "Excess Qty" },
-            labels = {
-                ["Item ID"] = "itemID",
-                ["Tier"] = "itemTierValue",
-                ["Item Name"] = "itemName",
-                ["Bank Tab"] = "bankTab",
-                ["Min Qty"] = "minQty",
-                ["Qty In Stock"] = "qtyInStock",
-                ["Qty To Buy"] = "qtyToBuy",
-                ["Excess Qty"] = "excessQtyValue",
-            },
-        })
+        text = exports.BuildDelimited(rows or {}, exports.GetDefaultCsvTemplate())
     end
 
     return exportDialog.BuildState(text, selectedPreset, shoppingListName)

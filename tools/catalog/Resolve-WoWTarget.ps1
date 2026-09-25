@@ -1,6 +1,6 @@
 param(
     [Parameter()]
-    [ValidateSet("Retail", "PTR", "Beta")]
+    [ValidateSet("Retail", "PTR", "Beta", "Forever")]
     [string]$Target = "Retail",
 
     [Parameter()]
@@ -40,6 +40,12 @@ function Get-TargetDefinition {
             Product = "wow_beta"
             ClientFolder = "_beta_"
             ClientFolders = @("_beta_")
+        }
+        Forever = [pscustomobject]@{
+            Target = "Forever"
+            Product = "wow_classic_beta"
+            ClientFolder = "_classic_beta_"
+            ClientFolders = @("_classic_beta_")
         }
     }
 

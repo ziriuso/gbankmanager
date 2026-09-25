@@ -326,7 +326,16 @@ function mainTableController.Attach(mainFrame, options)
     function mainFrame:ConfigureTable(columns, rows)
         ensure_table_rows()
         self.isConfiguringTable = true
-        self.tableColumnLayout = fit_columns_to_width(columns or {}, self:GetTableContentWidth())
+        local displayedColumns = columns or {}
+        if type(ns.IsForever) == "function" and ns.IsForever() then
+            displayedColumns = {}
+            for _, column in ipairs(columns or {}) do
+                if column.key ~= "tier" and column.key ~= "itemTier" then
+                    displayedColumns[#displayedColumns + 1] = column
+                end
+            end
+        end
+        self.tableColumnLayout = fit_columns_to_width(displayedColumns, self:GetTableContentWidth())
         self.tableColumnKeys = {}
         local offset = 4
         local contentWidth = self:GetTableContentWidth()

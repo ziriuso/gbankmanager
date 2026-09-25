@@ -166,7 +166,15 @@ function bankLedgerView.GetColumns(mode)
     if tostring(mode or "ITEM") == "MONEY" then
         return copy_columns(MONEY_COLUMNS)
     end
-    return copy_columns(ITEM_COLUMNS)
+    local columns = copy_columns(ITEM_COLUMNS)
+    if type(ns.IsForever) == "function" and ns.IsForever() then
+        for index = #columns, 1, -1 do
+            if columns[index].key == "tier" then
+                table.remove(columns, index)
+            end
+        end
+    end
+    return columns
 end
 
 function bankLedgerView.GetActionChoices(mode)

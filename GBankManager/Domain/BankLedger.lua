@@ -2584,19 +2584,24 @@ function bankLedger.ExportRowsToCsv(db, mode, filters)
             )
         end
     else
-        lines[#lines + 1] = "Date/Time,Who,Action,Item ID,Quality Tier,Item,Quantity,Tab,Moved From"
+        local forever = type(ns.IsForever) == "function" and ns.IsForever()
+        lines[#lines + 1] = forever and "Date/Time,Who,Action,Item ID,Item,Quantity,Tab,Moved From"
+            or "Date/Time,Who,Action,Item ID,Quality Tier,Item,Quantity,Tab,Moved From"
         for _, row in ipairs(rows) do
-            lines[#lines + 1] = string.format("%s,%s,%s,%s,%s,%s,%s,%s,%s",
+            local values = {
                 format_export_timestamp(row.timestamp),
                 tostring(row.who or ""),
                 tostring(row.action or ""),
                 tostring(row.itemID or ""),
-                tostring(row.qualityTier or ""),
-                tostring(row.item or ""),
-                tostring(row.quantity or 0),
-                tostring(row.tabName or "-"),
-                tostring(row.fromTabName or "-")
-            )
+            }
+            if not forever then
+                values[#values + 1] = tostring(row.qualityTier or "")
+            end
+            values[#values + 1] = tostring(row.item or "")
+            values[#values + 1] = tostring(row.quantity or 0)
+            values[#values + 1] = tostring(row.tabName or "-")
+            values[#values + 1] = tostring(row.fromTabName or "-")
+            lines[#lines + 1] = table.concat(values, ",")
         end
     end
 

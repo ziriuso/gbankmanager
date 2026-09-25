@@ -27,7 +27,8 @@ function itemDisplay.BuildDisplayPayload(item)
     local itemLink = tostring(item.itemLink or "")
     local itemString = tostring(item.itemString or "")
     local visibleText = itemLink
-    local tierValue = tonumber(item.craftedQuality or item.qualityTier or 0) or 0
+    local tierValue = type(ns.IsForever) == "function" and ns.IsForever()
+        and 0 or (tonumber(item.craftedQuality or item.qualityTier or 0) or 0)
 
     if visibleText == "" then
         visibleText = plainTextName
