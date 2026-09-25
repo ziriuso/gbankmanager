@@ -4,8 +4,7 @@
 
 Build and deploy GBankManager to the installed WoW: Forever beta at
 `C:\Gaming\World of Warcraft\_classic_beta_`. Keep the Retail item payload and
-the existing CurseForge release artifact unchanged. Publishing a Forever file
-to CurseForge is a later release task.
+Retail CurseForge release artifact separate from the Forever version.
 
 ## Source and data contract
 
@@ -89,6 +88,25 @@ the ignored wow.export cache.
 The generated Forever payload uses the folder name `GBankManager_ItemData`
 inside `Forever/` and at the installation target. The Retail data folder at
 the repository root remains the release source for Retail.
+
+## First Forever release checkpoint
+
+On 2026-09-25, the dedicated `codex/forever` branch was pushed without merging
+its Forever changes into `master`. Commit
+`c9d613c256c31841105dc4d1775e1d228cbd855e` was tagged
+`forever-v1.6.0`. The tag workflow passed its full Lua suite and exact zip
+contents check. GitHub published the non-prerelease
+`GBankManager-Forever-1.6.0.zip` asset at
+`https://github.com/ziriuso/gbankmanager/releases/tag/forever-v1.6.0`.
+
+The same workflow uploaded a `Release` file to CurseForge project `1552923`
+and received file ID `8974199`. The file was tagged only for Forever game
+version `1.60.1`. At the immediate post-upload check, the public CurseForge
+listing still showed only the earlier Retail file and the new file page
+returned 404; public visibility remains to be confirmed after moderation.
+The local `_classic_beta_` installation was updated from this source and
+verified at 73/73 main addon files plus 41/41 Forever item-data files, with
+no hash mismatches.
 
 ## Proposed public release boundary
 

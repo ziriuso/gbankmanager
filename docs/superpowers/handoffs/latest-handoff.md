@@ -2,6 +2,26 @@
 
 ## Resume Here
 
+### 2026-09-25 WoW Forever 1.6.0 release upload
+
+- Retail stays on `master` at `361d7d0` (`v1.5.1`). Forever lives on
+  `codex/forever`, with the release tag `forever-v1.6.0` at `c9d613c`.
+- The Forever release zip includes `GBankManager/` and the 19,041-item Forever
+  database as `GBankManager_ItemData/`. Both packaged TOCs target interface
+  `16001`; the Retail database remains separate.
+- The local full Lua suite and the final branch GitHub checks passed. Tagged
+  release workflow `36174368135` passed its tests, 114-file package audit,
+  CurseForge upload, and GitHub release attachment.
+- GitHub Release: `https://github.com/ziriuso/gbankmanager/releases/tag/forever-v1.6.0`.
+  The downloaded zip matched GitHub's SHA-256 digest.
+- CurseForge project `1552923` accepted Forever file `8974199` as a `Release`
+  for game version `1.60.1`. The public listing had not yet updated at the
+  immediate check, so public visibility remains unverified.
+- Local Forever beta deployment was updated and hash-checked: 73/73 core and
+  41/41 Forever item-data files matched source. Use the repo-local
+  `gbankmanager-release-operator` guidance for later releases, observing its
+  Forever branch override.
+
 ### 2026-09-02 v1.5.1 Protected-Action And Secret-Chat Patch
 
 - Repo truth at implementation start:
