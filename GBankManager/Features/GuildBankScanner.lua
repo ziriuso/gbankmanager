@@ -208,6 +208,24 @@ local function is_guild_bank_open_now()
     return false
 end
 
+local function capture_guild_bank_balance(db)
+    if not is_guild_bank_open_now() or type(_G.GetGuildBankMoney) ~= "function" then
+        return nil
+    end
+
+    local ok, amount = pcall(function()
+        return tonumber(_G.GetGuildBankMoney())
+    end)
+    if not ok or amount == nil or amount < 0 then
+        return nil
+    end
+
+    db.meta = db.meta or {}
+    db.meta.guildBankBalanceCopper = math.floor(amount)
+    db.meta.guildBankBalanceScannedAt = type(_G.time) == "function" and (_G.time() or 0) or 0
+    return db.meta.guildBankBalanceCopper
+end
+
 local function auto_scan_allowed(db)
     local auth = ns.modules.auth or ns.modules.permissions
     if scanner.scanInProgress then
@@ -256,11 +274,12 @@ local function report_status(message, options)
         options.category = "routine"
     end
     scanner.statusText = tostring(message or "")
+    local headerText = tostring(options.headerText or scanner.statusText)
     local mainFrame = ns.modules.mainFrame
     if mainFrame and type(mainFrame.SetScanStatus) == "function" then
-        mainFrame:SetScanStatus(scanner.statusText)
+        mainFrame:SetScanStatus(headerText)
     elseif mainFrame and mainFrame.statusText and type(mainFrame.statusText.SetText) == "function" then
-        mainFrame.statusText:SetText(scanner.statusText)
+        mainFrame.statusText:SetText(headerText)
     end
 
     local syncTransport = ns.modules.syncTransport or {}
@@ -521,9 +540,27 @@ function scanner.BeginScan(options)
     scanner.QueueAccessibleTabs()
     scanner.totalTabs = #scanner.tabsToScan
 
+    local bankOpen = is_guild_bank_open_now()
+    local bankBalance = capture_guild_bank_balance(db)
+
     if scanner.totalTabs == 0 then
         scanner.scanInProgress = false
-        push_status("Open guild bank to scan")
+        if bankOpen then
+            local moneyScanStarted = false
+            if manualStart or scanner.autoScanRetryCount == 0 then
+                moneyScanStarted = scanner.BeginLedgerScan({ force = true, silent = not manualStart })
+            end
+            local balanceText = bankBalance ~= nil and string.format(" Bank balance %s.", bankLedger.FormatCopper(bankBalance)) or ""
+            local moneyText = moneyScanStarted and " Scanning Money Log." or ""
+            report_status("No accessible guild bank tabs." .. balanceText .. moneyText, {
+                category = manualStart and "warning" or "routine",
+                headerText = bankBalance ~= nil
+                    and string.format("No tabs | Bank %s", bankLedger.FormatCopper(bankBalance))
+                    or "No tabs | Money Log",
+            })
+        else
+            report_status("Open guild bank to scan", { category = "warning" })
+        end
         if not manualStart then
             scanner.pendingAutoScan = true
             schedule_auto_scan_retry()
@@ -825,6 +862,7 @@ finish_ledger_scan = function(db)
 
     local mergedItemRows = tonumber(scanner.ledgerMergedItemRows or 0) or 0
     local mergedMoneyRows = tonumber(scanner.ledgerMergedMoneyRows or 0) or 0
+    local moneyOnly = #scanner.ledgerTargets == 1 and scanner.ledgerTargets[1].kind == "money"
     local publishedLedgerSyncAt = tonumber(scanner.ledgerScanStartedAt or 0) or 0
     scanner.ledgerScanInProgress = false
     scanner.ledgerTargets = {}
@@ -844,7 +882,9 @@ finish_ledger_scan = function(db)
         publish_ledger_manifest(db, publishedLedgerSyncAt)
     end
     if not silentScan then
-        report_status(string.format("Guild bank ledger scan finished (%d item rows, %d money rows).", mergedItemRows, mergedMoneyRows))
+        report_status(string.format("Guild bank ledger scan finished (%d item rows, %d money rows).", mergedItemRows, mergedMoneyRows), {
+            headerText = moneyOnly and string.format("Money Log: %d new", mergedMoneyRows) or nil,
+        })
     end
     if mergedItemRows > 0 or mergedMoneyRows > 0 then
         refresh_ledger_view_if_visible()

@@ -545,3 +545,71 @@ scanner.RetryPendingAutoScan = originalRetryPendingAutoScan
 _G.DEFAULT_CHAT_FRAME.messages = originalMessages
 _G.C_Timer.ClearPending()
 _G.time = originalTime
+
+local originalMoneyGetter = _G.GetGuildBankMoney
+local originalMoneyLogQuery = _G.QueryGuildBankLog
+local originalMoneyLogCount = _G.GetNumGuildBankMoneyTransactions
+local originalMoneyLogRow = _G.GetGuildBankMoneyTransaction
+local originalTabCountGetter = _G.GetNumGuildBankTabs
+_G.time = function() return 2100 end
+local moneyOnlyDb = ns.modules.store.CreateFreshDatabase("My Guild")
+ns.state.db = moneyOnlyDb
+_G.GBankManagerDB = moneyOnlyDb
+scanner.guildBankOpen = true
+scanner.scanInProgress = false
+scanner.ledgerScanInProgress = false
+scanner.pendingAutoScan = false
+_G.GetNumGuildBankTabs = function() return 0 end
+_G.GetGuildBankMoney = function() return 1 end
+_G.GetNumGuildBankMoneyTransactions = function() return 1 end
+_G.GetGuildBankMoneyTransaction = function()
+    return "deposit", "OfficerOne", 1, 2026, 9, 25, 12
+end
+local moneyLogQueries = {}
+_G.QueryGuildBankLog = function(queryId)
+    moneyLogQueries[#moneyLogQueries + 1] = queryId
+end
+
+scanner.BeginScan({ forceLedgerScan = true })
+assert.equal(1, moneyOnlyDb.meta.guildBankBalanceCopper, "a zero-tab bank scan should capture the visible money balance")
+assert.truthy((moneyOnlyDb.meta.guildBankBalanceScannedAt or 0) > 0, "a balance-only scan should record when money was read")
+assert.equal(nil, moneyOnlyDb.currentSnapshotId, "a zero-tab bank scan should not replace inventory with an empty snapshot")
+assert.equal(1, #scanner.ledgerTargets, "a zero-tab bank scan should still queue the Money Log")
+assert.equal("money", scanner.ledgerTargets[1].kind, "the only zero-tab ledger target should be the Money Log")
+assert.equal(scanner.ledgerTargets[1].queryId, moneyLogQueries[1], "the zero-tab scan should query the Money Log")
+assert.truthy(dashboard.BuildCards(moneyOnlyDb, {})[1].note:find("1c", 1, true), "the dashboard should display the bank balance")
+assert.truthy(dashboard.BuildSummary(moneyOnlyDb, {}).lastScanAt > 0, "a balance-only scan should update the dashboard scan time")
+assert.truthy(ns.modules.mainFrame.statusText:GetText():find("1c", 1, true), "the scan button should show visible money-only feedback")
+assert.equal("No tabs | Bank 1c", ns.modules.mainFrame.statusText:GetText(), "zero-tab scan feedback should fit the narrow header")
+_G.C_Timer.RunPending()
+assert.equal(1, #(moneyOnlyDb.bankLedger.moneyLogs or {}), "a zero-tab bank scan should import Money Log transactions")
+assert.equal("Money Log: 1 new", ns.modules.mainFrame.statusText:GetText(), "Money Log completion should stay readable in the header")
+
+moneyOnlyDb.snapshots.stable = {
+    scanId = "stable",
+    scannedAt = 2000,
+    items = { [1001] = { itemID = 1001, totalCount = 2 } },
+}
+moneyOnlyDb.currentSnapshotId = "stable"
+scanner.BeginScan({ forceLedgerScan = true })
+assert.equal("stable", moneyOnlyDb.currentSnapshotId, "a temporarily unavailable tab list should preserve the prior inventory snapshot")
+assert.equal(2, moneyOnlyDb.snapshots.stable.items[1001].totalCount, "a zero-tab money scan should not erase prior bank items")
+
+scanner.OnGuildBankClosed()
+local previousBankFrame = _G.GuildBankFrame
+local previousInteractionManager = _G.C_PlayerInteractionManager
+_G.GuildBankFrame = nil
+_G.C_PlayerInteractionManager = nil
+local balanceScannedAt = moneyOnlyDb.meta.guildBankBalanceScannedAt
+scanner.BeginScan({ forceLedgerScan = true })
+assert.equal(balanceScannedAt, moneyOnlyDb.meta.guildBankBalanceScannedAt, "scanning a closed bank should not update the saved balance")
+assert.equal("Open guild bank to scan", ns.modules.mainFrame.statusText:GetText(), "a closed-bank scan should explain why nothing was read")
+_G.GuildBankFrame = previousBankFrame
+_G.C_PlayerInteractionManager = previousInteractionManager
+_G.GetGuildBankMoney = originalMoneyGetter
+_G.QueryGuildBankLog = originalMoneyLogQuery
+_G.GetNumGuildBankMoneyTransactions = originalMoneyLogCount
+_G.GetGuildBankMoneyTransaction = originalMoneyLogRow
+_G.GetNumGuildBankTabs = originalTabCountGetter
+_G.C_Timer.ClearPending()
+_G.time = originalTime

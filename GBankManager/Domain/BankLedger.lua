@@ -239,6 +239,8 @@ local function format_copper(amount)
     return string.format("%dc", copper)
 end
 
+bankLedger.FormatCopper = format_copper
+
 local function contains_text(haystack, needle)
     haystack = string.lower(tostring(haystack or ""))
     needle = string.lower(trim(needle))

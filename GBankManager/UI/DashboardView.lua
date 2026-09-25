@@ -224,7 +224,8 @@ function dashboard.BuildSummary(db, planRows)
     end
 
     return {
-        lastScanAt = db.meta.updatedAt or 0,
+        lastScanAt = math.max(tonumber(db.meta.updatedAt or 0) or 0, tonumber(db.meta.guildBankBalanceScannedAt or 0) or 0),
+        bankBalanceCopper = db.meta.guildBankBalanceCopper,
         pendingRequestCount = pending,
         exportReadyCount = exportReadyCount,
         totalPurchaseQuantity = totalPurchaseQuantity,
@@ -257,7 +258,9 @@ function dashboard.BuildCards(db, planRows)
         {
             title = "Last Scan",
             value = format_timestamp(summary.lastScanAt),
-            note = string.format("%d unique snapshot items", trackedItems),
+            note = summary.bankBalanceCopper ~= nil
+                and string.format("Bank balance: %s", bankLedger.FormatCopper(summary.bankBalanceCopper))
+                or string.format("%d unique snapshot items", trackedItems),
         },
         {
             title = "Pending Requests",

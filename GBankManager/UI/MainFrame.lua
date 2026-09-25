@@ -5490,8 +5490,8 @@ function mainFrame:SetStatusSummary(summary)
 end
 
 function mainFrame:SetScanStatus(text)
-    self.statusText:SetText(text or "No scan yet")
     self:RefreshView()
+    self.statusText:SetText(text or "No scan yet")
 end
 
 mainFrame:LoadAppearanceSettingsFromDb(current_db())

@@ -122,6 +122,9 @@ assert.equal("nav-soft", ((mainFrame.sidebarButtons or {})[1] or {}).gbmButtonFa
 assert.equal("selected-strong", ((mainFrame.sidebarButtons or {})[1] or {}).gbmSelectionStyle, "selected nav rows should expose the stronger active-state contract")
 local headerStatusText = (mainFrame.statusText and mainFrame.statusText:GetText()) or ""
 assert.truthy(string.find(headerStatusText, "EDT", 1, true) ~= nil or string.find(headerStatusText, "EST", 1, true) ~= nil or headerStatusText == "No scan yet", "header last-scan text should include a timezone abbreviation")
+mainFrame:SetScanStatus("No guild bank tabs purchased")
+assert.equal("No guild bank tabs purchased", mainFrame.statusText:GetText(), "scan feedback should stay visible after refreshing the dashboard")
+mainFrame:RefreshView()
 assert.truthy(string.find(headerStatusText, "Daylight", 1, true) == nil, "header last-scan text should avoid the long daylight-time label")
 assert.truthy(string.find(headerStatusText, "Standard", 1, true) == nil, "header last-scan text should avoid the long standard-time label")
 assert.truthy(string.find(headerStatusText, "Eastern", 1, true) == nil, "header last-scan text should use a short timezone abbreviation instead of the full timezone name")

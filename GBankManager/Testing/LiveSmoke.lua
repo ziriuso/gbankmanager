@@ -687,7 +687,8 @@ local function run_scan_access_gating(db)
     local officer = with_guild_rank("Guild Master", 0, function()
         return scanner.BeginScan()
     end)
-    if officer ~= "Open guild bank to scan" then
+    local openBankWithoutTabs = string.find(tostring(officer or ""), "No accessible guild bank tabs.", 1, true) ~= nil
+    if officer ~= "Open guild bank to scan" and not openBankWithoutTabs then
         _G.GetNumGuildBankTabs = originalGetNumGuildBankTabs
         _G.GetGuildBankTabInfo = originalGetGuildBankTabInfo
         _G.QueryGuildBankTab = originalQueryGuildBankTab

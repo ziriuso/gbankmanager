@@ -51,6 +51,16 @@ The Forever product's `ItemSparse` and `Item` rows are the appropriate source
 for its procurement catalog. Confirm representative items in game before
 publishing a public Forever release.
 
+## Guild bank with no purchased tabs
+
+When the guild bank is open but has no accessible item tabs, Scan Bank should
+still read the displayed bank balance and force a Money Log scan. The balance
+and its scan time should be saved for the active guild and shown on the
+Dashboard. No empty inventory snapshot should replace a prior item scan while
+tab data may be delayed. The scan button must show a visible result, including
+when the bank is closed or a scan is denied. An automatic scan may continue
+retrying for delayed tab data after collecting money once.
+
 ## Local build and deployment
 
 The Forever beta target resolves to `_classic_beta_` and product
