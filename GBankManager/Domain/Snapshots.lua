@@ -24,6 +24,7 @@ function snapshots.FromTabScan(raw)
     local items = {}
     local itemRows = {}
     local itemRowsByKey = {}
+    local useQuality = not (type(ns.IsForever) == "function" and ns.IsForever())
 
     for _, tab in ipairs(raw.scannedTabs or {}) do
         local tabName = tab.name or tostring(tab.index or "Unknown")
@@ -31,22 +32,25 @@ function snapshots.FromTabScan(raw)
         for _, slot in ipairs(tab.slots or {}) do
             local itemID = slot.itemID or slot.itemId
             local count = slot.count or slot.quantity or 0
+            local quality = useQuality and slot.quality or nil
+            local craftedQuality = useQuality and slot.craftedQuality or nil
+            local craftedQualityIcon = useQuality and slot.craftedQualityIcon or nil
 
             if itemID ~= nil and count > 0 then
                 local entry = items[itemID] or {
                     itemID = itemID,
                     name = item_name(slot),
-                    quality = slot.quality,
-                    craftedQuality = slot.craftedQuality,
-                    craftedQualityIcon = slot.craftedQualityIcon,
+                    quality = quality,
+                    craftedQuality = craftedQuality,
+                    craftedQualityIcon = craftedQualityIcon,
                     totalCount = 0,
                     tabs = {},
                 }
 
                 entry.totalCount = entry.totalCount + count
-                entry.quality = entry.quality or slot.quality
-                entry.craftedQuality = entry.craftedQuality or slot.craftedQuality
-                entry.craftedQualityIcon = entry.craftedQualityIcon or slot.craftedQualityIcon
+                entry.quality = entry.quality or quality
+                entry.craftedQuality = entry.craftedQuality or craftedQuality
+                entry.craftedQualityIcon = entry.craftedQualityIcon or craftedQualityIcon
                 entry.tabs[tabName] = (entry.tabs[tabName] or 0) + count
                 items[itemID] = entry
 
@@ -57,9 +61,9 @@ function snapshots.FromTabScan(raw)
                         rowKey = rowKey,
                         itemID = itemID,
                         name = item_name(slot),
-                        quality = slot.quality,
-                        craftedQuality = slot.craftedQuality,
-                        craftedQualityIcon = slot.craftedQualityIcon,
+                        quality = quality,
+                        craftedQuality = craftedQuality,
+                        craftedQualityIcon = craftedQualityIcon,
                         tabName = tabName,
                         quantity = 0,
                     }
@@ -68,9 +72,9 @@ function snapshots.FromTabScan(raw)
                 end
 
                 itemRow.quantity = itemRow.quantity + count
-                itemRow.quality = itemRow.quality or slot.quality
-                itemRow.craftedQuality = itemRow.craftedQuality or slot.craftedQuality
-                itemRow.craftedQualityIcon = itemRow.craftedQualityIcon or slot.craftedQualityIcon
+                itemRow.quality = itemRow.quality or quality
+                itemRow.craftedQuality = itemRow.craftedQuality or craftedQuality
+                itemRow.craftedQualityIcon = itemRow.craftedQualityIcon or craftedQualityIcon
             end
         end
     end

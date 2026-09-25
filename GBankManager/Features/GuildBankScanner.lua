@@ -396,6 +396,9 @@ local function schedule_auto_scan_retry()
 end
 
 local function get_crafted_quality_info(itemInfo)
+    if type(ns.IsForever) == "function" and ns.IsForever() then
+        return nil, nil
+    end
     local tradeSkillUI = _G.C_TradeSkillUI
     if type(itemInfo) ~= "string" or tradeSkillUI == nil then
         return nil, nil
@@ -1051,7 +1054,9 @@ function scanner.ReadCurrentTab(tabIndex, scanSource)
                 table.insert(tabData.slots, {
                     itemID = itemID,
                     name = itemName,
-                    quality = _G.C_Item and type(_G.C_Item.GetItemQualityByID) == "function" and _G.C_Item.GetItemQualityByID(itemID) or nil,
+                    quality = not (type(ns.IsForever) == "function" and ns.IsForever())
+                        and _G.C_Item and type(_G.C_Item.GetItemQualityByID) == "function"
+                        and _G.C_Item.GetItemQualityByID(itemID) or nil,
                     craftedQuality = craftedQuality,
                     craftedQualityIcon = craftedQualityIcon,
                     count = count,

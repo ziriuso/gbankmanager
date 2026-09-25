@@ -44,6 +44,24 @@ assert.equal(true, namespace.IsForever(), "main addon should recognize the Forev
 local itemDisplay = loadfile("GBankManager/Domain/ItemDisplay.lua")("GBankManager", namespace)
 local craftedQuality = loadfile("GBankManager/Domain/CraftedQuality.lua")("GBankManager", namespace)
 local itemCatalog = loadfile("GBankManager/Domain/ItemCatalog.lua")("GBankManager", namespace)
+local snapshots = loadfile("GBankManager/Domain/Snapshots.lua")("GBankManager", namespace)
+local snapshot = snapshots.FromTabScan({ scannedAt = 1, scannedTabs = { { name = "Herbs", slots = { { itemID = 2589, name = "Linen Cloth", count = 2, quality = 4, craftedQuality = 3, craftedQualityIcon = "old" } } } } })
+assert.equal(nil, snapshot.items[2589].quality, "Forever snapshots should ignore client item quality")
+assert.equal(nil, snapshot.items[2589].craftedQuality, "Forever snapshots should ignore crafted quality")
+assert.equal(nil, snapshot.itemRows[1].craftedQualityIcon, "Forever inventory rows should omit old quality icons")
+local scanner = loadfile("GBankManager/Features/GuildBankScanner.lua")("GBankManager", namespace)
+local previousItemInfo, previousItemLink, previousTabInfo = _G.GetGuildBankItemInfo, _G.GetGuildBankItemLink, _G.GetGuildBankTabInfo
+local previousItemAPI, previousTradeAPI = _G.C_Item, _G.C_TradeSkillUI
+_G.GetGuildBankItemInfo = function(_, slot) return nil, slot == 1 and 2 or 0 end
+_G.GetGuildBankItemLink = function() return "item:2589" end
+_G.GetGuildBankTabInfo = function() return "Herbs" end
+_G.C_Item = { GetItemNameByID = function() return "Linen Cloth" end, GetItemQualityByID = function() error("Forever should not query quality") end }
+_G.C_TradeSkillUI = { GetItemReagentQualityInfo = function() error("Forever should not query crafted quality") end }
+local scannedTab = scanner.ReadCurrentTab(1)
+assert.equal(nil, scannedTab.slots[1].quality, "Forever scans should omit client quality")
+assert.equal(nil, scannedTab.slots[1].craftedQuality, "Forever scans should omit crafted quality")
+_G.GetGuildBankItemInfo, _G.GetGuildBankItemLink, _G.GetGuildBankTabInfo = previousItemInfo, previousItemLink, previousTabInfo
+_G.C_Item, _G.C_TradeSkillUI = previousItemAPI, previousTradeAPI
 assert.equal(0, itemDisplay.BuildDisplayPayload({ itemID = 2589, name = "Linen Cloth", craftedQuality = 3 }).tierValue, "Forever item display should ignore saved Retail quality tiers")
 assert.equal("", craftedQuality.GetDisplayAtlasForItem(2589, "Professions-ChatIcon-Quality-Tier3", 3, "reagent", 5), "Forever should suppress crafted quality icons")
 assert.equal("", craftedQuality.DisplayMarkupForItem(2589, "Professions-ChatIcon-Quality-Tier3", 22, "reagent", 3, 5), "Forever should suppress crafted quality markup")

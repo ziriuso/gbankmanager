@@ -18,7 +18,9 @@ to CurseForge is a later release task.
   `ProcurementCurrentExpansion` profile stays as it is.
 - Omit quality labels and Retail crafted-quality tiers from the Forever catalog
   and avoid using quality to rank or decorate Forever search results. Hide tier
-  columns in tables and omit them from the built-in CSV exports.
+  columns in tables and omit them from the built-in CSV exports. The guild
+  bank scan skips client quality APIs, and snapshot rows discard legacy quality
+  values for Forever.
 - Keep Forever extraction, manifest, progress, and generated Lua payloads
   separate from Retail. Generate the Forever payload at
   `Forever/GBankManager_ItemData/` with the same runtime addon identity
