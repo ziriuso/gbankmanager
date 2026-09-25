@@ -15,11 +15,11 @@ This skill is repo-specific. Use it only in the `GBankManager` worktree and keep
 
 Do not merge Forever into master to publish a Forever file. `master` is the
 Retail release line. On the Forever branch, use a tag such as
-`forever-v1.6.0-beta.1` on the verified Forever commit. That branch's tag
+`forever-v1.6.0` on the verified Forever commit. That branch's tag
 workflow builds the Forever item database and selects only the Forever
 CurseForge game version under the existing project. Run the full suite and
 inspect the Forever zip before pushing the tag. Push the Forever branch first,
-then tag its commit. Confirm the GitHub prerelease, zip contents, completed
+then tag its commit. Confirm the GitHub release, zip contents, completed
 upload step, and Forever file on CurseForge. For a failed publish, fix this
 branch and use the next Forever tag; never reuse the failed tag.
 

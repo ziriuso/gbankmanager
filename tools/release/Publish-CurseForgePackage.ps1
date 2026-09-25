@@ -120,8 +120,13 @@ $interfaceValue = Get-TocInterfaceVersion -Path $resolvedTocPath -ReleaseTarget 
 $versionIds = Resolve-GameVersionIds -Token $ApiToken -InterfaceValue $interfaceValue -ConfiguredIds $GameVersionIds
 
 $display = if ([string]::IsNullOrWhiteSpace($DisplayName)) { "GBankManager $TagName" } else { $DisplayName }
+$changelog = if ($Target -eq "Forever") {
+    "First WoW Forever 1.60.1 build: dedicated Forever item database, Classic auction categories, quality-independent item search and displays, and guild-bank balance and Money Log scans without purchased tabs."
+} else {
+    "Automated $ReleaseType build for $TagName. See the matching GitHub Release for full notes."
+}
 $metadata = @{
-    changelog = "Automated $ReleaseType build for $TagName. See the matching GitHub Release for full notes."
+    changelog = $changelog
     changelogType = "markdown"
     displayName = $display
     gameVersions = [object[]]@($versionIds)

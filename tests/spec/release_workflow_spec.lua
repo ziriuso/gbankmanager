@@ -43,6 +43,7 @@ assert.truthy(string.find(publishScript, "[object[]]@($versionIds)", 1, true) ~=
 assert.truthy(string.find(publishScript, "releaseType", 1, true) ~= nil, "publish script should submit the derived CurseForge release type")
 assert.truthy(string.find(publishScript, "(\\d{6})(?:\\s*,\\s*\\d{5,6})*", 1, true) ~= nil, "publish script should accept a Forever interface after Retail values and use the first Retail value for CurseForge resolution")
 assert.truthy(string.find(publishScript, "16001", 1, true) ~= nil, "publish script should resolve the Forever client interface")
+assert.truthy(string.find(publishScript, "WoW Forever", 1, true) ~= nil, "Forever file should have a meaningful CurseForge changelog")
 assert.truthy(string.find(releaseDoc, "forever-v", 1, true) ~= nil, "release workflow doc should describe Forever tags")
 
 assert.truthy(string.find(releaseDoc, "CF_API_TOKEN", 1, true) ~= nil, "release workflow doc should explain which GitHub secret stores the CurseForge token")

@@ -64,8 +64,8 @@ end
 
 assert.equal("## Interface: 16001", interfaceLine, "Forever branch main toc should advertise only the Forever beta interface")
 assert.equal("## Interface: 120100, 120007, 120005", itemDataInterfaceLine, "item-data toc should advertise the current retail and PTR interface versions")
-assert.equal("## Version: 1.6.0-beta.1", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
-assert.equal("## X-Release-Tag: forever-v1.6.0-beta.1", releaseTagLine, "toc should advertise the current tagged release for the About panel")
+assert.equal("## Version: 1.6.0", versionLine, "toc should advertise the current addon version for release metadata and the About panel")
+assert.equal("## X-Release-Tag: forever-v1.6.0", releaseTagLine, "toc should advertise the current tagged release for the About panel")
 assert.equal("## Category: Guild", categoryLine, "toc should place the addon under the Guild category in game")
 assert.truthy(#duplicateEntries == 0, "toc should not contain duplicate file loads")
 
@@ -101,7 +101,7 @@ _G.GBankManagerNamespace = originalNamespace
 _G.dofile = originalDofile
 
 assert.truthy(itemDataNamespace ~= mainNamespace, "toc smoke should keep companion and main addon namespace tables distinct")
-assert.equal("1.6.0-beta.1", mainNamespace.constants.ADDON_VERSION, "metadata-free addon loads should use the current release version fallback")
+assert.equal("1.6.0", mainNamespace.constants.ADDON_VERSION, "metadata-free addon loads should use the current release version fallback")
 assert.truthy(type(mainNamespace.modules.craftedQuality) == "table", "main addon namespace should own craftedQuality")
 assert.truthy(
     type(mainNamespace.modules.craftedQuality.GetNonInventoryDisplayAtlasForItem) == "function",

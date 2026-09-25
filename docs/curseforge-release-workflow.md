@@ -3,13 +3,14 @@
 ## Forever branch
 
 Keep Forever on its own long-lived branch in the same GitHub repository. This
-branch's `.github/workflows/release-curseforge.yml` reacts only to tags named
-`forever-vX.Y.Z-beta.N` (or a later Forever alpha or stable tag). A pushed tag
-from this branch runs the full Lua suite, builds
-`GBankManager-Forever-X.Y.Z-beta.N.zip`, uploads it to the **existing**
-GuildBankManager CurseForge project as a file tagged only for WoW Forever, and
-attaches the same zip to a GitHub prerelease. The CurseForge file type is beta
-for a `-beta` tag. Retail tags and packages continue to come from `master`.
+branch's `.github/workflows/release-curseforge.yml` reacts only to
+`forever-v*` tags. The first tag is `forever-v1.6.0`. A pushed tag from this
+branch runs the full Lua suite, builds `GBankManager-Forever-1.6.0.zip`,
+uploads it to the **existing** GuildBankManager CurseForge project as a file
+tagged only for WoW Forever, and attaches the same zip to a GitHub Release.
+This first file uses CurseForge's `Release` channel so the app can install it
+by default for Forever. A later `-beta` tag creates an opt-in Beta file.
+Retail tags and packages continue to come from `master`.
 
 The Forever zip has two top-level addon folders: `GBankManager/` and
 `GBankManager_ItemData/`. The latter is copied from
@@ -24,7 +25,7 @@ Before tagging a Forever release:
    tree is clean. Keep Forever-specific changes off `master`.
 2. Run `.\tools\lua\lua.exe .\tests\run_all.lua`.
 3. Build the proposed package locally with
-   `.\tools\release\Build-CurseForgePackage.ps1 -TagName forever-vX.Y.Z-beta.N -Target Forever`
+   `.\tools\release\Build-CurseForgePackage.ps1 -TagName forever-v1.6.0 -Target Forever`
    and inspect the zip: exactly the two addon folders, both TOCs at interface
    `16001`, the expected Forever item count, and no Retail data.
 4. Push the Forever branch. Create and push the Forever tag on its verified

@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: GBankManager
-## Version: 1.6.0-beta.1
-## X-Release-Tag: forever-v1.6.0-beta.1
+## Version: 1.6.0
+## X-Release-Tag: forever-v1.6.0
 ## Notes: Guild bank inventory and procurement manager
 ## Category: Guild
 ## Author: ziriuso
